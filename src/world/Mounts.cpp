@@ -62,6 +62,22 @@ void validateAtmosphere(const Json &profile) {
         for (auto v : group)
             need(v.get<double>() >= 0 && v.get<double>() <= 10000, "invalid radiance");
 }
+Spawn areaSpawn(const World &w, const std::string &id) {
+    auto area = std::find_if(w.areas.begin(), w.areas.end(), [&](auto &a) { return a.at("id") == id; });
+    need(area != w.areas.end(), "bound area missing after world update");
+    if (area->contains("spawnId"))
+        return w.spawn(area->at("spawnId"));
+    auto anchor = std::find_if(w.anchors.begin(), w.anchors.end(),
+                               [&](auto &a) { return a.at("id") == area->at("primaryAnchor"); });
+    need(anchor != w.anchors.end(), "primary mount missing");
+    auto q = anchor->at("pose").at("rotation").get<std::array<float, 4>>();
+    auto normal = rotate(q, {0, 0, 1});
+    auto p = anchor->at("pose").at("position");
+    Vec3 eye{p[0], p[1], p[2]};
+    eye += normal * std::max(16.f, anchor->at("size")[0].get<float>() * .55f);
+    auto forward = normal * -1;
+    return {id, eye - Vec3{0, 1.7f, 0}, std::atan2(forward.x, -forward.z), std::asin(std::clamp(forward.y, -1.f, 1.f))};
+}
 void loadMounts(World &w, size_t nodes) {
     auto &j = w.manifest;
     w.areas = j.value("areas", Json::array());
@@ -71,6 +87,20 @@ void loadMounts(World &w, size_t nodes) {
     for (auto a : originals) {
         need(anchors.emplace(a.at("id"), a).second, "duplicate anchor");
         pose(a.at("pose"));
+    }
+    for (auto o : j.value("dataObjects", Json::array())) {
+        pose(o.at("pose"));
+        need(o.at("mount").at("role") == "data-object" && o.at("mount").at("interaction") == "none",
+             "data object role/interaction mismatch");
+        if (o.contains("node"))
+            need(o.at("node").get<size_t>() < nodes, "unknown data object node");
+        if (o.at("mount").contains("frameNode"))
+            need(o.at("mount").at("frameNode").get<size_t>() < nodes, "unknown object frame node");
+        w.objects.push_back({{"id", o.at("id")},
+                             {"areaId", o.at("areaId")},
+                             {"pose", o.at("pose")},
+                             {"mountType", o.at("mount").at("type")},
+                             {"sourceId", nullptr}});
     }
     auto ext = j.value("extensions", Json::object());
     if (ext.contains("com.hyprune.lumen-reach.placement")) {
@@ -166,8 +196,10 @@ void loadMounts(World &w, size_t nodes) {
                  "inverted placement zone");
     }
     for (auto &a : w.areas)
-        for (auto &id : a.value("freePlacementZones", Json::array()))
+        for (auto &id : a.value("freePlacementZones", Json::array())) {
+            need(id.is_string(), "areas.freePlacementZones must contain zone IDs, not objects");
             need(zoneIds.contains(id), "area references unknown placement zone");
+        }
     normalized["formatVersion"] = "0.3";
     normalized["areas"] = w.areas;
     normalized["anchors"] = Json::array();
@@ -204,6 +236,14 @@ void loadMounts(World &w, size_t nodes) {
         normalized["anchors"].push_back(a);
     }
     validateManifest(normalized);
+    for (const auto &area : w.areas) {
+        auto spawn = areaSpawn(w, area.at("id"));
+        sim::Camera camera;
+        camera.position = spawn.position + Vec3{0, 1.7f, 0};
+        auto before = camera.position;
+        sim::resolveCapsule(camera, w.collision);
+        need(length(camera.position - before) < .015f, "area arrival capsule obstructed");
+    }
     need(w.areas.dump().size() + w.anchors.dump().size() + w.objects.dump().size() <= 65536,
          "mount metadata IPC budget");
 }

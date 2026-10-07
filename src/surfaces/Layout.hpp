@@ -28,6 +28,7 @@ class Layout {
 
   private:
     std::map<std::string, int> recalled;
+    std::map<std::string, std::string> temporaryAnchors;
     Json rule(const Instance &) const;
     bool matches(const Json &, const Instance &) const;
     const Json *saved(const Instance &, const world::World *) const;

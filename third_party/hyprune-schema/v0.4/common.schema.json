@@ -444,6 +444,34 @@
         "clearance"
       ],
       "additionalProperties": false
+    },
+    "dataObject": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/slug"
+        },
+        "areaId": {
+          "$ref": "common.schema.json#/$defs/slug"
+        },
+        "pose": {
+          "$ref": "common.schema.json#/$defs/pose"
+        },
+        "mount": {
+          "$ref": "common.schema.json#/$defs/mount"
+        },
+        "node": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "areaId",
+        "pose",
+        "mount"
+      ],
+      "additionalProperties": false
     }
   }
 }

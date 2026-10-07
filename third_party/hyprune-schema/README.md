@@ -10,3 +10,6 @@ new keywords require code and conformance tests before updating.
 IPC 0.3 reference bytes under `v0.3/` are pinned to schema commit
 `4facaa1a66d01986e0d469762e9f93ac48858892`. Runtime world formats remain 0.1/0.2;
 these IPC bytes support conformance tooling and do not change embedded world schemas.
+
+M2 world 0.3 and IPC 0.4 bytes are pinned to `9dde810b2a817de2f1e775577d0551ab703da55d`.
+Regenerate embedded world contracts with `python3 dev/embed-schema.py`.

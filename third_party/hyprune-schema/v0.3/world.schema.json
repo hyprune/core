@@ -366,6 +366,13 @@
         "$ref": "common.schema.json#/$defs/placementZone"
       },
       "maxItems": 32
+    },
+    "dataObjects": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "$ref": "common.schema.json#/$defs/dataObject"
+      }
     }
   },
   "required": [

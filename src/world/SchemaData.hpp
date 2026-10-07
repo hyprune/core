@@ -362,8 +362,7 @@ inline constexpr const char *worldSchema = R"schema({
     "attribution"
   ],
   "additionalProperties": false
-}
-)schema";
+})schema";
 inline constexpr const char *commonSchema = R"schema({
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0/common.schema.json",
@@ -448,11 +447,7 @@ inline constexpr const char *commonSchema = R"schema({
       "maximum": 9007199254740991
     }
   }
-}
-)schema";
-} // namespace hyprune::world
-
-namespace hyprune::world {
+})schema";
 inline constexpr const char *worldSchema02 = R"schema({
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.2/world.schema.json",
@@ -815,8 +810,7 @@ inline constexpr const char *worldSchema02 = R"schema({
     "attribution"
   ],
   "additionalProperties": false
-}
-)schema";
+})schema";
 inline constexpr const char *commonSchema02 = R"schema({
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.2/common.schema.json",
@@ -902,12 +896,8 @@ inline constexpr const char *commonSchema02 = R"schema({
       "maximum": 9007199254740991
     }
   }
-}
-)schema";
-} // namespace hyprune::world
-
-namespace hyprune::world {
-inline constexpr auto commonSchema03 = R"M2SCHEMA({
+})schema";
+inline constexpr const char *commonSchema03 = R"schema({
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.3/common.schema.json",
   "title": "Hyprune 0.3 common",
@@ -1353,11 +1343,38 @@ inline constexpr auto commonSchema03 = R"M2SCHEMA({
         "clearance"
       ],
       "additionalProperties": false
+    },
+    "dataObject": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/slug"
+        },
+        "areaId": {
+          "$ref": "common.schema.json#/$defs/slug"
+        },
+        "pose": {
+          "$ref": "common.schema.json#/$defs/pose"
+        },
+        "mount": {
+          "$ref": "common.schema.json#/$defs/mount"
+        },
+        "node": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "areaId",
+        "pose",
+        "mount"
+      ],
+      "additionalProperties": false
     }
   }
-}
-)M2SCHEMA";
-inline constexpr auto worldSchema03 = R"M2SCHEMA({
+})schema";
+inline constexpr const char *worldSchema03 = R"schema({
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.3/world.schema.json",
   "title": "Hyprune 0.2 world",
@@ -1725,6 +1742,13 @@ inline constexpr auto worldSchema03 = R"M2SCHEMA({
         "$ref": "common.schema.json#/$defs/placementZone"
       },
       "maxItems": 32
+    },
+    "dataObjects": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "$ref": "common.schema.json#/$defs/dataObject"
+      }
     }
   },
   "required": [
@@ -1739,6 +1763,5 @@ inline constexpr auto worldSchema03 = R"M2SCHEMA({
     "attribution"
   ],
   "additionalProperties": false
-}
-)M2SCHEMA";
+})schema";
 } // namespace hyprune::world

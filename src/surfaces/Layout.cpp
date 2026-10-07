@@ -11,13 +11,13 @@ Vec3 vec(const Json &p) {
     return {p[0], p[1], p[2]};
 }
 // Triangle/OBB separating-axis test: no corner-only tunnelling through thin geometry.
-bool triangleBox(const Triangle &t, const Surface &s, float depth) {
+bool triangleBox(const Triangle &t, const Surface &s, float depth, float xyMargin = .04f) {
     auto local = [&](Vec3 p) {
         p = p - s.center;
         return Vec3{dot(p, s.right()), dot(p, s.up()), dot(p, s.normal())};
     };
     Vec3 v[3] = {local(t.a), local(t.b), local(t.c)}, edges[3] = {v[1] - v[0], v[2] - v[1], v[0] - v[2]};
-    Vec3 half{s.width * .5f + depth, s.height * .5f + depth, depth};
+    Vec3 half{s.width * .5f + xyMargin, s.height * .5f + xyMargin, depth};
     auto separates = [&](Vec3 axis) {
         float a = dot(axis, v[0]), b = dot(axis, v[1]), c = dot(axis, v[2]);
         float r = std::abs(axis.x) * half.x + std::abs(axis.y) * half.y + std::abs(axis.z) * half.z;
@@ -51,15 +51,26 @@ float ray(Vec3 o, Vec3 d, const Triangle &t) {
 } // namespace
 bool overlaps(const Surface &s, std::span<const Triangle> triangles, float margin) {
     for (const auto &t : triangles)
-        if (triangleBox(t, s, margin))
+        if (triangleBox(t, s, margin, margin))
             return true;
     return false;
 }
 bool pushOut(Surface &s, std::span<const Triangle> triangles) {
-    // Never accept an intersecting result. Authored front +Z determines the escape direction.
+    // Sweep the full rectangle along its authored approach. A re-exported anchor
+    // behind a wall is invalid even when its final plane does not intersect it.
     auto start = s.center;
+    auto approach = s;
+    approach.center += s.normal() * 2.f;
+    float shift = 0;
+    for (const auto &t : triangles)
+        if (triangleBox(t, approach, 2.f)) {
+            float front =
+                std::max({dot(t.a - start, s.normal()), dot(t.b - start, s.normal()), dot(t.c - start, s.normal())});
+            if (front >= -.04f && front <= 4.f)
+                shift = std::max(shift, front + .05f);
+        }
     for (int i = 0; i <= 40; i++) {
-        s.center = start + s.normal() * (i * .05f);
+        s.center = start + s.normal() * (shift + i * .05f);
         if (!overlaps(s, triangles))
             return true;
     }
@@ -99,8 +110,33 @@ Surface carryPlane(const sim::Camera &camera, float width, float height, std::sp
                 }
             }
         s.center = camera.position + (s.center - camera.position) * (limit / distance);
-        if (!overlaps(s, triangles))
-            return s;
+        auto end = s.center;
+        auto swept = [&](float fraction) {
+            auto displacement = (end - camera.position) * fraction;
+            auto volume = s;
+            volume.center = camera.position + displacement * .5f;
+            volume.width += std::abs(dot(displacement, s.right()));
+            volume.height += std::abs(dot(displacement, s.up()));
+            float depth = .04f + std::abs(dot(displacement, s.normal())) * .5f;
+            return std::any_of(triangles.begin(), triangles.end(),
+                               [&](auto &t) { return triangleBox(t, volume, depth); });
+        };
+        // A full swept OBB also catches slivers between the support rays.
+        if (!swept(0)) {
+            float lo = 0, hi = 1;
+            if (swept(1)) {
+                for (int step = 0; step < 14; step++) {
+                    float mid = (lo + hi) * .5f;
+                    if (swept(mid))
+                        hi = mid;
+                    else
+                        lo = mid;
+                }
+                s.center = camera.position + (end - camera.position) * lo;
+            }
+            if (!overlaps(s, triangles))
+                return s;
+        }
         s.width *= .7f;
         s.height *= .7f;
         distance *= .8f;
@@ -186,15 +222,24 @@ void Layout::restore(const Json &data) {
              -32602, "invalid saved placement");
     bindings = b;
     placements = p;
+    temporaryAnchors.clear();
 }
 void Layout::pull(const Instance &i, const world::World *w) {
     need(binding(i.workspaceId, w), -32003, "window has no area home");
     need(carried.empty() || carried == i.id, -32004, "already carrying a tool");
     carried = i.id;
     recalled.erase(i.id);
+    temporaryAnchors.erase(i.id);
 }
 bool Layout::pulled(const Instance &i, const world::World *w) const {
-    return carried == i.id || recalled.contains(i.id) || saved(i, w);
+    if (carried == i.id || recalled.contains(i.id) || saved(i, w))
+        return true;
+    if (!w)
+        if (auto b = binding(i.workspaceId, nullptr))
+            return std::any_of(placements.begin(), placements.end(), [&](auto &p) {
+                return p.at("worldId") == b->at("worldId") && p.at("areaId") == b->at("areaId") && matches(p, i);
+            });
+    return false;
 }
 std::string Layout::place(const Instance &i, const std::string &requested, const world::World *w) {
     auto b = binding(i.workspaceId, w);
@@ -222,6 +267,7 @@ std::string Layout::place(const Instance &i, const std::string &requested, const
     placements.push_back({{"worldId", w->id}, {"areaId", b->at("areaId")}, {"anchorId", id}, {"rule", rule(i)}});
     carried.clear();
     recalled.erase(i.id);
+    temporaryAnchors.erase(i.id);
     return id;
 }
 void Layout::release(const Instance &i, const world::World *w) {
@@ -233,6 +279,7 @@ void Layout::release(const Instance &i, const world::World *w) {
     if (carried == i.id)
         carried.clear();
     recalled.erase(i.id);
+    temporaryAnchors.erase(i.id);
 }
 void Layout::recall(std::span<const Instance> live) {
     int n = 0;
@@ -243,6 +290,8 @@ void Layout::recall(std::span<const Instance> live) {
 std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, const sim::Camera &camera, int pw,
                                       int ph) {
     auto b = binding(i.workspaceId, w);
+    if (!b && recalled.contains(i.id))
+        b = binding(i.workspaceId, nullptr);
     if (!b)
         return {};
     Surface s;
@@ -255,7 +304,7 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
     if (carried == i.id || recalled.contains(i.id))
         s = carryPlane(camera, 1.4f, 1.4f * ph / pw, w->collision, recalled.contains(i.id) ? recalled[i.id] : 0);
     else if (p) {
-        anchorId = p->at("anchorId");
+        anchorId = temporaryAnchors.contains(i.id) ? temporaryAnchors[i.id] : p->at("anchorId").get<std::string>();
         auto a = anchor(anchorId, w);
         bool valid = false;
         auto area =
@@ -275,6 +324,8 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
         bool occupied = std::any_of(instances.begin(), instances.end(), [&](auto &v) {
             return v.value("anchorId", "") == anchorId && v.at("surfaceId") != i.id;
         });
+        if (occupied)
+            valid = false;
         if (a && !occupied && a->at("areaId") == b->at("areaId") && a->at("mount").at("role") == "tool-mount")
             try {
                 anchorPlane(s, *a, pw, ph);
@@ -302,9 +353,12 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
             if (free) {
                 auto old = anchorId;
                 anchorId = free->at("id");
-                for (auto &entry : placements)
-                    if (&entry == p)
-                        entry["anchorId"] = anchorId;
+                if (occupied)
+                    temporaryAnchors[i.id] = anchorId;
+                else
+                    for (auto &entry : placements)
+                        if (&entry == p)
+                            entry["anchorId"] = anchorId;
                 events.push_back({"runtime.notice",
                                   {{"level", "warning"},
                                    {"code", "placement.relocated"},
@@ -317,7 +371,10 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                 if (area != w->areas.end())
                     for (auto &id : area->value("freePlacementZones", Json::array()))
                         for (auto &zone : w->placementZones)
-                            if (zone.at("id") == id) {
+                            if (zone.at("id") == id && !std::any_of(instances.begin(), instances.end(), [&](auto &v) {
+                                    return v.value("anchorId", "") == id.get<std::string>() &&
+                                           v.at("surfaceId") != i.id;
+                                })) {
                                 auto lo = vec(zone["bounds"]["min"]), hi = vec(zone["bounds"]["max"]);
                                 float margin = zone.at("clearance");
                                 s.center = (lo + hi) * .5f;
@@ -332,7 +389,9 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                                     break;
                                 }
                             }
-                if (zoned) {
+                if (zoned && occupied)
+                    temporaryAnchors[i.id] = anchorId;
+                else if (zoned) {
                     for (auto &entry : placements)
                         if (&entry == p)
                             entry["anchorId"] = anchorId;
@@ -343,10 +402,12 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                 }
                 if (!zoned)
                     anchorId.clear();
-                events.push_back({"runtime.notice",
-                                  {{"level", "warning"},
-                                   {"code", "placement.recalled"},
-                                   {"message", "No safe free mount; recalled " + i.title + " in front of player"}}});
+                events.push_back(
+                    {"runtime.notice",
+                     {{"level", "warning"},
+                      {"code", zoned ? "placement.relocated" : "placement.recalled"},
+                      {"message", zoned ? "Relocated " + i.title + " into its area free zone"
+                                        : "No safe free mount; recalled " + i.title + " in front of player"}}});
             }
         }
     } else
