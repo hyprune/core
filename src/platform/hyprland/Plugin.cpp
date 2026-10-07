@@ -48,7 +48,9 @@ struct Runtime {
     bool toggleAfterLoad = false;
     std::chrono::steady_clock::time_point loadDeadline;
     double accumulator = 0;
-    std::string focused, lastError;
+    std::string focused, lastError, grabbed;
+    std::set<uint32_t> buttons;
+    void cancelGrab();
     std::set<uint32_t> keys;
     SP<CEventLoopTimer> timer;
     std::vector<CHyprSignalListener> listeners;
@@ -86,8 +88,11 @@ template <class F> void safe(F f) {
         std::fprintf(stderr, "[hyprune] unknown callback exception\n");
     }
 }
+bool ownsInput() {
+    return runtime && runtime->active && !locked() && runtime->monitor == Desktop::focusState()->monitor();
+}
 void motion(void *self, const Vector2D &delta) {
-    if (runtime && runtime->active && !locked()) {
+    if (ownsInput()) {
         runtime->camera.yaw += float(delta.x) * .0025f;
         runtime->camera.pitch = std::clamp(runtime->camera.pitch - float(delta.y) * .0025f, -1.48f, 1.48f);
         return;
@@ -100,7 +105,39 @@ std::optional<std::pair<std::string, surfaces::Hit>> aim() {
         if (auto h = surfaces::intersect(entry.surface, runtime->camera.position, runtime->camera.forward());
             h && (!best || h->distance < best->second.distance))
             best = {{entry.surface.id, *h}};
+    if (best && runtime->world)
+        for (const auto &t : runtime->world->collision) {
+            auto direction = runtime->camera.forward();
+            auto edge1 = t.b - t.a, edge2 = t.c - t.a, p = cross(direction, edge2);
+            float det = dot(edge1, p);
+            if (std::abs(det) < 1e-7f)
+                continue;
+            float inv = 1 / det;
+            auto offset = runtime->camera.position - t.a;
+            float u = dot(offset, p) * inv;
+            if (u < 0 || u > 1)
+                continue;
+            auto q = cross(offset, edge1);
+            float v = dot(direction, q) * inv;
+            if (v < 0 || u + v > 1)
+                continue;
+            float d = dot(edge2, q) * inv;
+            if (d > 0 && d < best->second.distance - .01f)
+                return std::nullopt;
+        }
     return best;
+}
+void Runtime::cancelGrab() {
+    if (!buttons.empty() && capture.find(grabbed)) {
+        auto now =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+                .count();
+        for (auto button : buttons)
+            g_pSeatManager->sendPointerButton(now, button, WL_POINTER_BUTTON_STATE_RELEASED);
+        g_pSeatManager->sendPointerFrame();
+    }
+    buttons.clear();
+    grabbed.clear();
 }
 void Runtime::publish() {
     if (!ipc)
@@ -120,7 +157,7 @@ void Runtime::publish() {
                   {"world", world ? Json{{"id", world->id}, {"spawnId", world->defaultSpawn}} : Json(nullptr)},
                   {"surfaces", surfaces},
                   {"movement",
-                   {{"modeId", movement == &walk ? "org.hyprune.walk" : "org.hyprune.fly"},
+                   {{"modeId", movement == &walk ? "com.hyprune.walk" : "com.hyprune.fly"},
                     {"position", {camera.position.x, camera.position.y, camera.position.z}},
                     {"orientation", {cy * sp, sy * cp, -sy * sp, cy * cp}}}},
                   {"shell", {{"leases", Json::array()}}}});
@@ -184,6 +221,8 @@ void Runtime::toggle(const std::string &output) {
     }
     if (locked())
         return;
+    if (!ipc->healthy())
+        throw std::runtime_error("hypruned unavailable; reload core to start a fresh session");
     if (!world) {
         load("org.hyprune.atrium");
         toggleAfterLoad = true;
@@ -203,9 +242,10 @@ void Runtime::toggle(const std::string &output) {
     typing = false;
     keys.clear();
     lastTick = std::chrono::steady_clock::now();
-    // This entry is only called by the event loop or deferred dispatcher.
-    // setCursorHidden can recursively render on hardware-cursor outputs.
-    g_pHyprRenderer->setCursorHidden(true);
+    // Keep Hyprland's cursor lifecycle untouched. A frozen native cursor and
+    // the rendered reticle are intentional in M0; hardware cursor rendering
+    // must be tested on a dedicated DRM session before adding cursor gates.
+    Render::GL::g_pHyprOpenGL->makeEGLCurrent();
     capture.refresh(chosen);
     publish();
 }
@@ -216,8 +256,8 @@ void Runtime::exit() {
     typing = false;
     focused.clear();
     keys.clear();
+    cancelGrab();
     capture.release();
-    g_pHyprRenderer->setCursorHidden(false);
     if (savedFocus && savedFocus->m_isMapped)
         Desktop::focusState()->rawWindowFocus(savedFocus.lock(), Desktop::FOCUS_REASON_OTHER);
     if (monitor)
@@ -257,13 +297,14 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &param
         if (params.size() != 1)
             throw ipc::Error(-32602, "invalid movement params");
         std::string mode = params.at("modeId");
-        if (mode == "org.hyprune.walk" && world && !world->collision.empty())
+        if (mode == "com.hyprune.walk" && world && !world->collision.empty())
             movement = &walk;
-        else if (mode == "org.hyprune.fly")
+        else if (mode == "com.hyprune.fly")
             movement = &fly;
         else
             throw ipc::Error(-32007, "unsupported movement mode");
         camera.verticalSpeed = 0;
+        keys.clear();
     } else if (method == "surface.focus") {
         if (params.size() != 2 || (params.at("intent") != "pointer" && params.at("intent") != "keyboard"))
             throw ipc::Error(-32602, "invalid focus params");
@@ -288,6 +329,13 @@ void Runtime::tick() {
     float dt = std::chrono::duration<float>(now - lastTick).count();
     lastTick = now;
     if (active && monitor) {
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        if (!ownsInput()) {
+            keys.clear();
+            cancelGrab();
+        }
+        if (!grabbed.empty() && !capture.find(grabbed))
+            cancelGrab();
         sim::Intent intent;
         if (!typing) {
             intent.forward = float(keys.contains(KEY_W)) - float(keys.contains(KEY_S));
@@ -306,6 +354,11 @@ void Runtime::tick() {
             camera.verticalSpeed = 0;
         }
         capture.refresh(monitor.lock());
+        if (!focused.empty() && !capture.find(focused)) {
+            typing = false;
+            focused.clear();
+            keys.clear();
+        }
         if (typing)
             if (auto hit = aim())
                 if (auto *e = capture.find(hit->first)) {
@@ -381,6 +434,12 @@ int luaCamera(lua_State *state) {
               {"frames", runtime->renderer.frames},
               {"error", runtime->lastError},
               {"active", runtime->active}};
+    j["captures"] = Json::array();
+    for (auto &e : runtime->capture.entries)
+        j["captures"].push_back({{"id", e.surface.id},
+                                 {"title", e.surface.title},
+                                 {"commits", *e.commits},
+                                 {"position", {e.surface.center.x, e.surface.center.y, e.surface.center.z}}});
     lua_pushstring(state, j.dump().c_str());
     return 1;
 }
@@ -436,13 +495,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     }));
     runtime->listeners.push_back(
         Event::bus()->m_events.input.mouse.move.listen([](Vector2D, Event::SCallbackInfo &info) {
-            if (runtime->active && !locked())
+            if (ownsInput())
                 info.cancelled = true;
         }));
     runtime->listeners.push_back(
         Event::bus()->m_events.input.keyboard.key.listen([](IKeyboard::SKeyEvent event, Event::SCallbackInfo &info) {
             safe([&] {
-                if (!runtime->active || locked())
+                if (!ownsInput())
                     return;
                 auto keyboard = g_pSeatManager->m_keyboard.lock();
                 if (!keyboard || !keyboard->m_xkbSymState)
@@ -480,6 +539,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 if (action == KEY_ESC) {
                     info.cancelled = true;
                     if (event.state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+                        runtime->cancelGrab();
                         runtime->typing = false;
                         runtime->focused.clear();
                         runtime->keys.clear();
@@ -494,6 +554,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 }
                 if (runtime->typing)
                     return;
+                if (xkb_state_mod_name_is_active(keyboard->m_xkbState, XKB_MOD_NAME_LOGO, XKB_STATE_MODS_EFFECTIVE) ||
+                    xkb_state_mod_name_is_active(keyboard->m_xkbState, XKB_MOD_NAME_ALT, XKB_STATE_MODS_EFFECTIVE)) {
+                    runtime->keys.clear();
+                    return;
+                }
                 if (action == KEY_W || action == KEY_A || action == KEY_S || action == KEY_D || action == KEY_SPACE ||
                     action == KEY_LEFTCTRL) {
                     info.cancelled = true;
@@ -504,24 +569,55 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 }
             });
         }));
-    runtime->listeners.push_back(Event::bus()->m_events.input.mouse.button.listen([](IPointer::SButtonEvent event,
-                                                                                     Event::SCallbackInfo &info) {
-        safe([&] {
-            if (!runtime->active || locked())
-                return;
-            info.cancelled = true;
-            if (auto hit = aim()) {
-                if (event.state == WL_POINTER_BUTTON_STATE_PRESSED)
-                    runtime->focus(hit->first, true);
-                if (auto *e = runtime->capture.find(hit->first)) {
-                    g_pSeatManager->setPointerFocus(e->window->resource(), {hit->second.u * e->surface.pixelWidth,
-                                                                            hit->second.v * e->surface.pixelHeight});
-                    g_pSeatManager->sendPointerButton(event.timeMs, event.button, event.state);
+    runtime->listeners.push_back(
+        Event::bus()->m_events.input.mouse.button.listen([](IPointer::SButtonEvent event, Event::SCallbackInfo &info) {
+            safe([&] {
+                if (!ownsInput())
+                    return;
+                info.cancelled = true;
+                auto hit = aim();
+                if (!runtime->grabbed.empty())
+                    if (auto *held = runtime->capture.find(runtime->grabbed)) {
+                        if (auto h = hyprune::surfaces::intersect(held->surface, runtime->camera.position,
+                                                                  runtime->camera.forward(), false))
+                            hit = {{held->surface.id, *h}};
+                    }
+                if (event.state == WL_POINTER_BUTTON_STATE_PRESSED && hit) {
+                    if (runtime->grabbed.empty()) {
+                        runtime->focus(hit->first, true);
+                        runtime->grabbed = hit->first;
+                    }
+                    runtime->buttons.insert(event.button);
+                }
+                if (!runtime->grabbed.empty())
+                    if (auto *e = runtime->capture.find(runtime->grabbed)) {
+                        if (hit && hit->first == runtime->grabbed)
+                            g_pSeatManager->setPointerFocus(
+                                e->window->resource(),
+                                {hit->second.u * e->surface.pixelWidth, hit->second.v * e->surface.pixelHeight});
+                        g_pSeatManager->sendPointerButton(event.timeMs, event.button, event.state);
+                        g_pSeatManager->sendPointerFrame();
+                    }
+                if (event.state == WL_POINTER_BUTTON_STATE_RELEASED) {
+                    runtime->buttons.erase(event.button);
+                    if (runtime->buttons.empty())
+                        runtime->grabbed.clear();
+                }
+            });
+        }));
+    runtime->listeners.push_back(
+        Event::bus()->m_events.input.mouse.axis.listen([](IPointer::SAxisEvent event, Event::SCallbackInfo &info) {
+            safe([&] {
+                if (!ownsInput())
+                    return;
+                info.cancelled = true;
+                if (runtime->typing) {
+                    g_pSeatManager->sendPointerAxis(event.timeMs, event.axis, event.delta, event.deltaDiscrete / 120,
+                                                    event.deltaDiscrete, event.source, event.relativeDirection);
                     g_pSeatManager->sendPointerFrame();
                 }
-            }
-        });
-    }));
+            });
+        }));
     runtime->listeners.push_back(Event::bus()->m_events.monitor.removed.listen([](PHLMONITOR monitor) {
         safe([&] {
             if (runtime->monitor == monitor)

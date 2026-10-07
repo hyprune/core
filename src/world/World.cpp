@@ -120,9 +120,14 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
         std::string p = relative == "." ? uri : (relative / std::string(uri)).generic_string();
         return safePath(root, p);
     };
-    for (size_t i = 0; i < raw->buffers_count; i++)
+    size_t bufferBytes = 0;
+    for (size_t i = 0; i < raw->buffers_count; i++) {
+        require(raw->buffers[i].size <= 128 * 1024 * 1024, "buffer exceeds per-file limit");
+        bufferBytes += raw->buffers[i].size;
+        require(bufferBytes <= 512 * 1024 * 1024, "CPU buffer budget exceeded");
         if (raw->buffers[i].uri)
             asset(raw->buffers[i].uri);
+    }
     // Validate parent chains before cgltf_node_transform_world follows them.
     for (size_t i = 0; i < raw->nodes_count; i++) {
         std::set<cgltf_node *> seen;
@@ -139,6 +144,24 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     for (size_t i = 0; i < raw->textures_count; i++) {
         auto *img = raw->textures[i].image;
         require(img, "missing texture image");
+        bool irradiance = false;
+        for (auto &l : j.value("lightmaps", Json::array()))
+            if (l.at("texture").get<size_t>() == i)
+                irradiance = true;
+        if (irradiance) {
+            static const unsigned char png[8] = {137, 80, 78, 71, 13, 10, 26, 10};
+            if (img->uri) {
+                auto path = asset(img->uri);
+                std::ifstream input(path, std::ios::binary);
+                unsigned char magic[8]{};
+                input.read(reinterpret_cast<char *>(magic), 8);
+                require(input.gcount() == 8 && std::equal(magic, magic + 8, png), "lightmap must be PNG");
+            } else {
+                require(img->buffer_view && img->buffer_view->size >= 8, "missing PNG lightmap");
+                auto *bytes = (const unsigned char *)img->buffer_view->buffer->data + img->buffer_view->offset;
+                require(std::equal(bytes, bytes + 8, png), "lightmap must be PNG");
+            }
+        }
         int w = 0, h = 0, n = 0;
         unsigned char *pixels = nullptr;
         if (img->uri) {
@@ -196,6 +219,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
         unsigned node = c.at("node");
         require(node < raw->nodes_count && c.at("shape") == "mesh" && c.at("layer") == "static",
                 "M0 supports static mesh collision only");
+        require(raw->nodes[node].mesh, "collision node has no mesh");
         collisionNodes.insert(node);
     }
     std::set<cgltf_node *> visible;
@@ -220,11 +244,13 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
         for (size_t pi = 0; pi < node.mesh->primitives_count; pi++) {
             auto &p = node.mesh->primitives[pi];
             require(p.type == cgltf_primitive_type_triangles, "M0 requires triangle primitives");
-            const cgltf_accessor *pos = nullptr, *uv = nullptr, *uv1 = nullptr;
+            const cgltf_accessor *pos = nullptr, *uv = nullptr, *uv1 = nullptr, *normal = nullptr;
             for (size_t a = 0; a < p.attributes_count; a++) {
                 auto &attr = p.attributes[a];
                 if (attr.type == cgltf_attribute_type_position)
                     pos = attr.data;
+                if (attr.type == cgltf_attribute_type_normal)
+                    normal = attr.data;
                 if (attr.type == cgltf_attribute_type_texcoord) {
                     if (attr.index == 0)
                         uv = attr.data;
@@ -251,13 +277,24 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
                     require(cgltf_accessor_read_float(uv, index, vert.uv, 2), "invalid UV0");
                 if (uv1)
                     require(cgltf_accessor_read_float(uv1, index, vert.uv1, 2), "invalid UV1");
+                if (normal) {
+                    float n[3];
+                    require(cgltf_accessor_read_float(normal, index, n, 3), "invalid normal");
+                    Vec3 a{transform.v[0], transform.v[1], transform.v[2]},
+                        b{transform.v[4], transform.v[5], transform.v[6]},
+                        c{transform.v[8], transform.v[9], transform.v[10]};
+                    float det = dot(a, cross(b, c));
+                    require(std::abs(det) > 1e-8f, "singular node transform");
+                    vert.normal = normalized((cross(b, c) * n[0] + cross(c, a) * n[1] + cross(a, b) * n[2]) / det);
+                }
                 mesh.vertices.push_back(vert);
             }
             for (size_t i = 0; i < count; i += 3) {
                 Triangle t{mesh.vertices[i].position, mesh.vertices[i + 1].position, mesh.vertices[i + 2].position};
                 Vec3 n = normalized(cross(t.b - t.a, t.c - t.a));
-                for (int k = 0; k < 3; k++)
-                    mesh.vertices[i + k].normal = n;
+                if (!normal)
+                    for (int k = 0; k < 3; k++)
+                        mesh.vertices[i + k].normal = n;
                 if (collisionNodes.contains(ni) && length(n) > .1f)
                     result->collision.push_back(t);
             }

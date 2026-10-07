@@ -145,7 +145,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
         if (request.is_object() && request.contains("id") && request["id"].is_string() &&
             !request["id"].get<std::string>().empty() && request["id"].get<std::string>().size() <= 128)
             id = request["id"];
-        check(!id.is_null() && request.size() == 4 && request.value("jsonrpc", "") == "2.0" &&
+        check(!id.is_null() && request.size() == 4 && request.contains("jsonrpc") && request["jsonrpc"] == "2.0" &&
                   request.contains("method") && request["method"].is_string() && request.contains("params") &&
                   request["params"].is_object(),
               -32600, "invalid request profile");
@@ -157,17 +157,42 @@ void Server::frame(Peer &p, const std::string &bytes) {
         if (!p.hello) {
             check(method == "session.hello", -32600, "hello required");
             exact(params, {"protocols", "client", "capabilities"}, {"token"});
+            check(params["protocols"].is_array() && !params["protocols"].empty(), -32602, "invalid protocols");
+            std::set<std::string> protocols;
+            for (auto &value : params["protocols"]) {
+                check(value.is_string(), -32602, "invalid protocol");
+                auto protocol = value.get<std::string>();
+                check(!protocol.empty() && protocol.size() <= 256 && protocols.insert(protocol).second, -32602,
+                      "invalid protocol list");
+            }
             check(params["protocols"].is_array() && std::find(params["protocols"].begin(), params["protocols"].end(),
                                                               Json("0.1")) != params["protocols"].end(),
                   -32001, "incompatible protocol");
             exact(params["client"], {"id", "name"});
+            check(params["client"]["id"].is_string() && params["client"]["name"].is_string(), -32602,
+                  "invalid client identity");
+            auto clientId = params["client"]["id"].get<std::string>(),
+                 clientName = params["client"]["name"].get<std::string>();
+            check(clientId.size() <= 128 &&
+                      std::regex_match(clientId, std::regex("[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+")) &&
+                      !clientName.empty() && clientName.size() <= 256,
+                  -32602, "invalid client identity");
             check(params["capabilities"].is_array(), -32602, "invalid capabilities");
-            for (auto &cap : params["capabilities"])
+            const std::set<std::string> known{"state.read",       "world.control", "surface.control",
+                                              "movement.control", "shell.control", "runtime.control"};
+            std::set<std::string> requested;
+            for (auto &cap : params["capabilities"]) {
                 check(cap.is_string(), -32602, "invalid capability");
+                auto name = cap.get<std::string>();
+                check(known.contains(name) && requested.insert(name).second, -32602, "invalid capability list");
+            }
             if (params.contains("token")) {
+                check(params["token"].is_string() &&
+                          std::regex_match(params["token"].get<std::string>(), std::regex("[a-f0-9]{64}")),
+                      -32602, "invalid token format");
                 bool valid = false;
                 for (auto it = tokens_.begin(); it != tokens_.end(); ++it)
-                    if (it->token == params["token"].get<std::string>() &&
+                    if (it->expires > Clock::now() && it->token == params["token"].get<std::string>() &&
                         it->client == params["client"]["id"].get<std::string>()) {
                         for (auto &c : params["capabilities"])
                             if (it->capabilities.contains(c.get<std::string>()))

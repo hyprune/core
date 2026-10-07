@@ -136,6 +136,20 @@ int main() {
             c.sendJson(req("first", "session.ping"));
             check(c.receive()["error"]["code"] == -32600, "hello sequencing");
         }
+        {
+            Client c(server.path());
+            auto h = hello();
+            h["params"]["capabilities"] = {"state.read", "state.read"};
+            c.sendJson(h);
+            check(c.receive()["error"]["code"] == -32602, "duplicate grant request accepted");
+        }
+        {
+            Client c(server.path());
+            auto h = hello();
+            h["params"]["client"]["name"] = std::string(256, 'x');
+            c.sendJson(h);
+            check(c.receive().contains("result"), "valid maximum client name rejected");
+        }
         stop = true;
         loop.join();
         std::filesystem::remove_all(dir);

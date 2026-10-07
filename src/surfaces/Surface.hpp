@@ -14,5 +14,5 @@ struct Surface {
 struct Hit {
     float distance, u, v;
 };
-std::optional<Hit> intersect(const Surface &, Vec3 origin, Vec3 direction);
+std::optional<Hit> intersect(const Surface &, Vec3 origin, Vec3 direction, bool clip = true);
 } // namespace hyprune::surfaces

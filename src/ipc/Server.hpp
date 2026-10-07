@@ -15,6 +15,7 @@ struct Error : std::runtime_error {
 struct LaunchGrant {
     std::string token, client;
     std::set<std::string> capabilities;
+    std::chrono::steady_clock::time_point expires = std::chrono::steady_clock::now() + std::chrono::seconds(30);
 };
 class Server {
   public:

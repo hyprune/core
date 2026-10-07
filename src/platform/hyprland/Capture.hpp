@@ -2,6 +2,7 @@
 #include "surfaces/Surface.hpp"
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/render/Texture.hpp>
+#include <memory>
 #include <vector>
 namespace hyprune::platform {
 class Capture {
@@ -10,6 +11,8 @@ class Capture {
         PHLWINDOWREF window;
         SP<Render::ITexture> texture;
         surfaces::Surface surface;
+        std::shared_ptr<uint64_t> commits = std::make_shared<uint64_t>(0);
+        CHyprSignalListener commitListener;
     };
     std::vector<Entry> entries;
     void refresh(PHLMONITOR monitor);
