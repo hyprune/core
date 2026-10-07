@@ -102,10 +102,14 @@ Json Server::snapshot() const {
     return {{"sessionId", session_}, {"revision", revision_}, {"state", state_}};
 }
 Json Server::visibleState(const Peer &p) const {
-    if (p.protocol == "0.3")
+    if (p.protocol == "0.4")
         return state_;
     Json state = state_;
     if (state.is_object()) {
+        state.erase("mounts");
+        state.erase("presentation");
+        if (p.protocol == "0.3")
+            return state;
         state.erase("spatial");
         state.erase("workspaces");
         if (p.protocol == "0.2")
@@ -119,10 +123,13 @@ Json Server::snapshot(const Peer &p) const {
     return {{"sessionId", session_}, {"revision", revision_}, {"state", visibleState(p)}};
 }
 void Server::notify(const std::string &event, Json params) {
-    params["sessionId"] = session_;
-    params["revision"] = revision_;
+    if (event != "runtime.notice") {
+        params["sessionId"] = session_;
+        params["revision"] = revision_;
+    }
     for (auto &p : peers_)
-        if (p.hello && !p.closing && p.protocol != "0.1" && !p.subscription.empty())
+        if (p.hello && !p.closing && p.protocol != "0.1" && !p.subscription.empty() &&
+            (p.protocol == "0.4" || (event != "mounts.changed" && event != "presentation.changed")))
             queue(p, {{"jsonrpc", "2.0"}, {"method", event}, {"params", params}});
 }
 void Server::publish(Json state) {
@@ -190,9 +197,13 @@ void Server::frame(Peer &p, const std::string &bytes) {
                 check(!protocol.empty() && protocol.size() <= 256 && protocols.insert(protocol).second, -32602,
                       "invalid protocol list");
             }
-            check(protocols.contains("0.3") || protocols.contains("0.2") || protocols.contains("0.1"), -32001,
-                  "incompatible protocol");
-            p.protocol = protocols.contains("0.3") ? "0.3" : protocols.contains("0.2") ? "0.2" : "0.1";
+            check(protocols.contains("0.4") || protocols.contains("0.3") || protocols.contains("0.2") ||
+                      protocols.contains("0.1"),
+                  -32001, "incompatible protocol");
+            p.protocol = protocols.contains("0.4")   ? "0.4"
+                         : protocols.contains("0.3") ? "0.3"
+                         : protocols.contains("0.2") ? "0.2"
+                                                     : "0.1";
             exact(params["client"], {"id", "name"});
             check(params["client"]["id"].is_string() && params["client"]["name"].is_string(), -32602,
                   "invalid client identity");
@@ -241,17 +252,27 @@ void Server::frame(Peer &p, const std::string &bytes) {
                                                "shell.claim", "shell.release", "shell.overlay"};
             for (auto &[m, grant] : methods_)
                 if (p.grants.contains(grant) && (p.protocol != "0.1" || legacy.contains(m)) &&
-                    (p.protocol == "0.3" || (m != "shell.bind" && m != "workspace.activate")))
+                    (p.protocol == "0.4" ||
+                     ((m != "workspace.bind" && m != "workspace.focus" && m != "workspace.unfocus" &&
+                       m != "surface.pull" && m != "surface.place" && m != "surface.return" && m != "surfaces.recall" &&
+                       m != "placements.list" && m != "placements.remove" && m != "data.object.bind" &&
+                       m != "camera.fov" && m != "atmosphere.get" && m != "atmosphere.set") &&
+                      (p.protocol == "0.3" || (m != "shell.bind" && m != "workspace.activate")))))
                     methods.push_back(m);
             result = {{"protocol", p.protocol},
                       {"sessionId", session_},
                       {"capabilities", p.grants},
                       {"methods", methods},
-                      {"events", p.grants.contains("state.read")
-                                     ? (p.protocol != "0.1" ? Json::array({"state.delta", "location.transition",
-                                                                           "ui.opened", "ui.closed", "data.updated"})
-                                                            : Json::array({"state.delta"}))
-                                     : Json::array()}};
+                      {"events",
+                       p.grants.contains("state.read")
+                           ? (p.protocol != "0.1"
+                                  ? p.protocol == "0.4"
+                                        ? Json::array({"state.delta", "location.transition", "ui.opened", "ui.closed",
+                                                       "data.updated", "mounts.changed", "presentation.changed"})
+                                        : Json::array({"state.delta", "location.transition", "ui.opened", "ui.closed",
+                                                       "data.updated"})
+                                  : Json::array({"state.delta"}))
+                           : Json::array()}};
         } else if (method == "session.hello")
             throw Error(-32600, "hello already completed");
         else if (method == "session.ping") {
@@ -302,8 +323,14 @@ void Server::frame(Peer &p, const std::string &bytes) {
             const std::set<std::string> legacy{"world.load",  "surface.focus", "movement.set", "runtime.exit",
                                                "shell.claim", "shell.release", "shell.overlay"};
             check(p.protocol != "0.1" || legacy.contains(method), -32601, "method not advertised for protocol");
-            check(p.protocol == "0.3" || (method != "shell.bind" && method != "workspace.activate"), -32601,
-                  "method not advertised for protocol");
+            check(p.protocol == "0.4" ||
+                      ((method != "workspace.bind" && method != "workspace.focus" && method != "workspace.unfocus" &&
+                        method != "surface.pull" && method != "surface.place" && method != "surface.return" &&
+                        method != "surfaces.recall" && method != "placements.list" && method != "placements.remove" &&
+                        method != "data.object.bind" && method != "camera.fov" && method != "atmosphere.get" &&
+                        method != "atmosphere.set") &&
+                       (p.protocol == "0.3" || (method != "shell.bind" && method != "workspace.activate"))),
+                  -32601, "method not advertised for protocol");
             Json command = params;
             check(!command.contains("_actor") && !command.contains("_client") && !command.contains("_pid") &&
                       !command.contains("_protocol"),

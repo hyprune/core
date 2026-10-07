@@ -1,3 +1,4 @@
+#include "LayoutStore.hpp"
 #include "ipc/Server.hpp"
 #include <csignal>
 #include <cstdio>
@@ -36,6 +37,8 @@ int main() {
             throw std::runtime_error("hypruned needs inherited private bridge");
         int fd = std::stoi(bridge);
         std::string epoch;
+        hyprune::daemon::LayoutStore layouts;
+        bool layoutSent = false, persistReady = false;
         uint64_t command = 0;
         Server *server = nullptr;
         auto receive = [&]() -> Json {
@@ -61,9 +64,17 @@ int main() {
                 throw std::runtime_error("bridge write failed");
         };
         auto apply = [&](const Json &j) {
-            if (j.at("type") == "state")
+            if (j.at("type") == "layout.ready")
+                persistReady = true;
+            if (j.at("type") == "hello" && !layoutSent) {
+                send({{"type", "layout"}, {"layout", layouts.load()}});
+                layoutSent = true;
+            }
+            if (j.at("type") == "state") {
+                if (persistReady && j.at("state").contains("mounts"))
+                    layouts.save(j.at("state").at("mounts"));
                 server->publish(j.at("state"));
-            else if (j.at("type") == "event") {
+            } else if (j.at("type") == "event") {
                 server->notify(j.at("event"), j.at("params"));
                 server->flush();
             } else if (j.at("type") == "methods")

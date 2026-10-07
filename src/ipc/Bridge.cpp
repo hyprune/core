@@ -110,6 +110,11 @@ void Bridge::poll() {
         if (j.at("epoch") != epoch_)
             throw std::runtime_error("private epoch mismatch");
         heartbeat_ = std::chrono::steady_clock::now();
+        if (j.at("type") == "layout") {
+            handler_("_layout.restore", j.at("layout"));
+            send({{"type", "layout.ready"}});
+            continue;
+        }
         if (j.at("type") == "heartbeat")
             continue;
         if (j.at("type") == "cancel") {

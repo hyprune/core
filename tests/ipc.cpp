@@ -75,11 +75,14 @@ int main() {
     std::atomic<bool> stop = false;
     std::thread loop;
     try {
-        auto token = randomId(), token02 = randomId();
+        auto token = randomId(), token02 = randomId(), token03 = randomId(), token04 = randomId();
         std::atomic<int> disconnected = 0;
+        std::atomic<bool> notice = false;
         Server server(dir, "test",
                       {{token, "org.hyprune.test", {"state.read"}},
-                       {token02, "org.hyprune.test", {"state.read", "data.publish"}}},
+                       {token02, "org.hyprune.test", {"state.read", "data.publish"}},
+                       {token03, "org.hyprune.test", {"state.read"}},
+                       {token04, "org.hyprune.test", {"state.read"}}},
                       [&](const auto &method, const auto &params) {
                           check(params.contains("_actor") && params.contains("_client"), "missing trusted context");
                           if (method == "_connection.closed")
@@ -87,13 +90,22 @@ int main() {
                           return Json{{"actor", params["_actor"]}, {"client", params["_client"]}};
                       });
         server.contextual(true);
-        server.advertise({{"camera.get", "state.read"}, {"data.publish", "data.publish"}});
+        server.advertise(
+            {{"camera.get", "state.read"}, {"data.publish", "data.publish"}, {"placements.list", "state.read"}});
         server.publish({{"runtime", {{"active", false}}},
                         {"location", {{"waypoint", nullptr}}},
-                        {"integrations", {{"sources", Json::array()}}}});
+                        {"integrations", {{"sources", Json::array()}}},
+                        {"spatial", Json::object()},
+                        {"workspaces", Json::object()},
+                        {"mounts", Json::object()},
+                        {"presentation", Json::object()}});
         loop = std::thread([&] {
             while (!stop) {
                 server.poll();
+                if (notice.exchange(false))
+                    server.notify("runtime.notice", {{"level", "warning"},
+                                                     {"code", "placement.relocated"},
+                                                     {"message", "Tool moved to a free mount"}});
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         });
@@ -181,6 +193,30 @@ int main() {
             check(c.receive()["error"]["code"] == -32602, "actor spoof accepted");
             c.sendJson(req("pub", "data.publish"));
             check(c.receive().contains("result"), "publishing grant absent");
+        }
+        for (auto [protocol, tokenValue] : {std::pair{"0.3", token03}, std::pair{"0.4", token04}}) {
+            Client c(server.path());
+            auto h = hello(tokenValue);
+            h["params"]["protocols"] = {protocol};
+            c.sendJson(h);
+            auto negotiated = c.receive()["result"];
+            check(negotiated["protocol"] == protocol, "M2 negotiation");
+            bool m2 = std::string(protocol) == "0.4";
+            check(std::find(negotiated["methods"].begin(), negotiated["methods"].end(), "placements.list") !=
+                          negotiated["methods"].end()
+                      ? m2
+                      : !m2,
+                  "M2 method version isolation");
+            c.sendJson(req("version-sub", "state.subscribe", {{"topics", {"state"}}}));
+            auto state = c.receive()["result"]["snapshot"]["state"];
+            check(state.contains("spatial") && state.contains("mounts") == m2 && state.contains("presentation") == m2,
+                  "frozen projection isolation");
+            c.sendJson(req("placement-list", "placements.list"));
+            auto response = c.receive();
+            check(m2 ? response.contains("result") : response["error"]["code"] == -32601, "M2 direct method isolation");
+            notice = true;
+            auto event = c.receive();
+            check(event["method"] == "runtime.notice" && event["params"].size() == 3, "frozen notice fields widened");
         }
         for (int i = 0; i < 100 && disconnected < 2; i++)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));

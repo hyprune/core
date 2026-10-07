@@ -1,4 +1,5 @@
 #include "control/Control.hpp"
+#include "world/Mounts.hpp"
 #include "world/Spatial.hpp"
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
@@ -40,6 +41,12 @@ HANDLE handle = nullptr;
 struct Runtime {
     render::Renderer renderer;
     Capture capture;
+    surfaces::Layout layout;
+    float pointerX = .5f, pointerY = .5f;
+    std::string pendingArea;
+    void refresh();
+    void home(const Json &, bool travel);
+    void unfocus();
     sim::Camera camera;
     control::Control control;
     sim::Walk walk;
@@ -64,6 +71,8 @@ struct Runtime {
     std::vector<CHyprSignalListener> listeners;
     CFunctionHook *motionHook = nullptr;
     uint64_t deferred = 0, tickDeferred = 0;
+    std::vector<uint64_t> inputDeferred;
+    void deferInput(std::function<void()>);
     std::chrono::steady_clock::time_point lastTick = std::chrono::steady_clock::now();
     std::filesystem::path installed;
     struct Binding {
@@ -109,27 +118,41 @@ template <class F> void safe(F f) {
 }
 bool ownsInput() {
     return runtime && runtime->active && !runtime->loading && !runtime->control.uiVisible() && !locked() &&
-           runtime->monitor == Desktop::focusState()->monitor();
+           runtime->monitor == Desktop::focusState()->monitor() && runtime->layout.desktop.is_null();
 }
 void motion(void *self, const Vector2D &delta) {
     if (runtime && runtime->active && runtime->control.uiVisible() && !runtime->directorSurface())
         return;
     if (ownsInput()) {
+        if (runtime->typing) {
+            runtime->pointerX =
+                std::clamp(runtime->pointerX + float(delta.x) / float(runtime->monitor->m_pixelSize.x), 0.f, 1.f);
+            runtime->pointerY =
+                std::clamp(runtime->pointerY + float(delta.y) / float(runtime->monitor->m_pixelSize.y), 0.f, 1.f);
+            return;
+        }
         runtime->camera.yaw += float(delta.x) * .0025f;
         runtime->camera.pitch = std::clamp(runtime->camera.pitch - float(delta.y) * .0025f, -1.48f, 1.48f);
         return;
     }
     originalMove(self, delta);
 }
+Vec3 pointerRay() {
+    auto forward = runtime->camera.forward(), right = normalized(cross(forward, {0, 1, 0})), up = cross(right, forward);
+    float tan = std::tan(runtime->camera.fov * .01745329252f / 2),
+          aspect = runtime->monitor ? runtime->monitor->m_pixelSize.x / float(runtime->monitor->m_pixelSize.y) : 1;
+    return normalized(forward + right * (((runtime->typing ? runtime->pointerX : .5f) * 2 - 1) * tan * aspect) +
+                      up * ((1 - (runtime->typing ? runtime->pointerY : .5f) * 2) * tan));
+}
 std::optional<std::pair<std::string, surfaces::Hit>> aim() {
     std::optional<std::pair<std::string, surfaces::Hit>> best;
-    for (auto &entry : runtime->capture.entries)
-        if (auto h = surfaces::intersect(entry.surface, runtime->camera.position, runtime->camera.forward());
+    for (auto &surface : runtime->capture.visible())
+        if (auto h = surfaces::intersect(surface, runtime->camera.position, pointerRay());
             h && (!best || h->distance < best->second.distance))
-            best = {{entry.surface.id, *h}};
+            best = {{surface.id, *h}};
     if (best && runtime->world)
         for (const auto &t : runtime->world->collision) {
-            auto direction = runtime->camera.forward();
+            auto direction = pointerRay();
             auto edge1 = t.b - t.a, edge2 = t.c - t.a, p = cross(direction, edge2);
             float det = dot(edge1, p);
             if (std::abs(det) < 1e-7f)
@@ -148,6 +171,18 @@ std::optional<std::pair<std::string, surfaces::Hit>> aim() {
                 return std::nullopt;
         }
     return best;
+}
+void Runtime::deferInput(std::function<void()> operation) {
+    auto id = std::make_shared<uint64_t>(0);
+    *id = g_pEventLoopManager->doLater([id, operation = std::move(operation)] {
+        if (!runtime)
+            return;
+        std::erase(runtime->inputDeferred, *id);
+        if (runtime->renderDepth)
+            throw std::runtime_error("deferred input inside render pass");
+        safe(operation);
+    });
+    inputDeferred.push_back(*id);
 }
 void Runtime::cancelGrab() {
     if (!buttons.empty() && capture.find(grabbed)) {
@@ -193,10 +228,73 @@ SP<CWLSurfaceResource> Runtime::directorSurface() {
     }
     return nullptr;
 }
+void Runtime::refresh() {
+    if (renderDepth)
+        throw std::runtime_error("capture inside render pass");
+    if (monitor && world) {
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        capture.refresh(monitor.lock(), world.get(), &layout, &camera);
+    }
+}
+void Runtime::home(const Json &binding, bool travel) {
+    if (!world || binding.at("worldId") != world->id)
+        return;
+    auto area = std::find_if(world->areas.begin(), world->areas.end(),
+                             [&](auto &a) { return a.at("id") == binding.at("areaId"); });
+    if (area == world->areas.end())
+        throw ipc::Error(-32003, "bound area missing after world update");
+    auto spawn = world::areaSpawn(*world, binding.at("areaId"));
+    auto position = spawn.position + Vec3{0, 1.7f, 0};
+    auto yaw = spawn.yaw, pitch = spawn.pitch;
+    sim::Camera test = camera;
+    test.position = position;
+    sim::resolveCapsule(test, world->collision);
+    if (length(test.position - position) > .02f)
+        throw ipc::Error(-32005, "area arrival obstructed");
+    typing = false;
+    keys.clear();
+    cancelGrab();
+    pointerX = pointerY = .5f;
+    layout.desktop = nullptr;
+    camera.yaw = yaw;
+    camera.pitch = pitch;
+    if (travel)
+        control.execute("travel.start",
+                        {{"to", {{"position", {position.x, position.y, position.z}}}}, {"durationMs", 600}}, "core",
+                        "com.hyprune.core", world.get(), camera, Json::array());
+    else
+        camera.position = position;
+}
+void Runtime::unfocus() {
+    layout.desktop = nullptr;
+    typing = false;
+    keys.clear();
+    cancelGrab();
+    pointerX = pointerY = .5f;
+    publish();
+}
 void Runtime::workspaceLocation() {
     if (!active || !monitor || !monitor->m_activeWorkspace)
         return;
     auto id = monitor->m_activeWorkspace->m_id;
+    if (auto b = layout.binding(id, nullptr)) {
+        std::string key =
+            std::to_string(id) + ":" + b->at("worldId").get<std::string>() + ":" + b->at("areaId").get<std::string>();
+        if (key == resolvedLocation)
+            return;
+        if (loading) {
+            loadCancelled = true;
+            return;
+        }
+        resolvedLocation = key;
+        if (world && b->at("worldId") == world->id)
+            home(*b, true);
+        else {
+            pendingArea = b->at("areaId");
+            load(b->at("worldId"));
+        }
+        return;
+    }
     for (const auto &entry : locations)
         if (entry.at("id") == id) {
             auto key = std::to_string(id) + ":" + entry.at("worldId").get<std::string>() + ":" +
@@ -208,9 +306,14 @@ void Runtime::workspaceLocation() {
                 return;
             }
             resolvedLocation = key;
-            if (!world || world->id != entry.at("worldId").get<std::string>() ||
-                world->defaultSpawn != entry.at("spawnId").get<std::string>())
+            if (!world || world->id != entry.at("worldId").get<std::string>())
                 load(entry.at("worldId"), entry.at("spawnId"));
+            else {
+                auto sp = world->spawn(entry.at("spawnId"));
+                control.execute("travel.start",
+                                {{"to", {{"position", {sp.position.x, sp.position.y + 1.7f, sp.position.z}}}}}, "core",
+                                "com.hyprune.core", world.get(), camera, Json::array());
+            }
             return;
         }
 }
@@ -225,8 +328,29 @@ void Runtime::publish() {
                             {"title", e.surface.title},
                             {"logicalSize", {e.surface.pixelWidth, e.surface.pixelHeight}},
                             {"focused", e.surface.id == focused}});
+    for (auto &f : capture.workspaces)
+        surfaces.push_back({{"id", f.surface.id},
+                            {"kind", "workspace"},
+                            {"title", f.surface.title},
+                            {"logicalSize", {f.surface.pixelWidth, f.surface.pixelHeight}},
+                            {"focused", !layout.desktop.is_null() && layout.desktop == f.workspaceId}});
     float sy = std::sin(-camera.yaw / 2), cy = std::cos(-camera.yaw / 2), sp = std::sin(camera.pitch / 2),
           cp = std::cos(camera.pitch / 2);
+    Json homes = locations;
+    for (auto &b : layout.bindings) {
+        std::erase_if(homes.get_ref<Json::array_t &>(), [&](auto &v) { return v.at("id") == b.at("id"); });
+        std::string spawnId = "arrival";
+        if (world && b.at("worldId") == world->id) {
+            auto area = std::find_if(world->areas.begin(), world->areas.end(),
+                                     [&](auto &a) { return a.at("id") == b.at("areaId"); });
+            if (area != world->areas.end())
+                spawnId = area->value("spawnId", world->defaultSpawn);
+        }
+        homes.push_back(
+            {{"id", b.at("id")}, {"label", b.at("areaId")}, {"worldId", b.at("worldId")}, {"spawnId", spawnId}});
+    }
+    while (homes.size() > 32)
+        homes.erase(homes.begin());
     Json spatial = {
         {"world", world ? Json{{"id", world->id}, {"name", world->name}, {"places", world->places}} : Json(nullptr)},
         {"map", world ? world->map : Json(nullptr)},
@@ -249,12 +373,17 @@ void Runtime::publish() {
                 {"markers",
                  world::projectMarkers(*world, camera, float(monitor->m_pixelSize.x) / monitor->m_pixelSize.y)}};
     }
-    ipc->publish({{"spatial", spatial},
+    ipc->publish({{"mounts", layout.state(world.get())},
+                  {"presentation",
+                   {{"profile", world ? renderer.profile : Json(nullptr)},
+                    {"fov", camera.fov},
+                    {"quality", renderer.intelQuality ? "intel" : "high"}}},
+                  {"spatial", spatial},
                   {"workspaces",
                    {{"currentId", monitor && monitor->m_activeWorkspace && monitor->m_activeWorkspace->m_id > 0
                                       ? Json(monitor->m_activeWorkspace->m_id)
                                       : Json(nullptr)},
-                    {"locations", locations}}},
+                    {"locations", homes}}},
                   {"runtime",
                    {{"active", active},
                     {"outputs", monitor ? Json::array({"output-" + std::to_string(monitor->m_id)}) : Json::array()}}},
@@ -267,6 +396,9 @@ void Runtime::publish() {
                   {"shell", {{"leases", control.leases}}},
                   {"location", control.location},
                   {"integrations", {{"sources", control.sources}}}});
+    for (auto &[event, params] : layout.events)
+        ipc->notify(event, params);
+    layout.events.clear();
     for (auto &[event, params] : control.events)
         ipc->notify(event, params);
     control.events.clear();
@@ -305,7 +437,7 @@ void Runtime::finishLoad() {
             throw ipc::Error(-32004, "world load cancelled");
         if (!ipc->healthy() || std::chrono::steady_clock::now() > loadDeadline)
             throw ipc::Error(-32006, "world load expired");
-        const auto spawn = candidate->spawn(pendingSpawn);
+        auto spawn = pendingArea.empty() ? candidate->spawn(pendingSpawn) : world::areaSpawn(*candidate, pendingArea);
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         renderer.prepare(candidate);
         world = std::move(candidate);
@@ -315,10 +447,15 @@ void Runtime::finishLoad() {
         control.location["transition"] = transition;
         control.endLoad(true);
         world->defaultSpawn = spawn.id;
+        float lens = camera.fov;
         camera = {};
+        camera.fov = lens;
         camera.position = spawn.position + Vec3{0, 1.7f, 0};
         camera.yaw = spawn.yaw;
         camera.pitch = spawn.pitch;
+        layout.carried.clear();
+        layout.desktop = nullptr;
+        pendingArea.clear();
         movement = world->collision.empty() ? static_cast<sim::MotionStrategy *>(&fly) : &walk;
         publish();
         ipc->complete(Json{{"revision", ipc->revision()}});
@@ -332,17 +469,23 @@ void Runtime::finishLoad() {
         ipc->fail(e.code, e.what());
         error(e);
         toggleAfterLoad = false;
+        pendingArea.clear();
     } catch (const std::exception &e) {
         control.endLoad(false, loadCancelled || locked());
         publish();
         ipc->fail(-32602, e.what());
         error(e);
         toggleAfterLoad = false;
+        pendingArea.clear();
     }
 }
 
 void Runtime::toggle(const std::string &output) {
     if (active) {
+        if (!layout.desktop.is_null()) {
+            unfocus();
+            return;
+        }
         exit();
         return;
     }
@@ -376,7 +519,7 @@ void Runtime::toggle(const std::string &output) {
     // the rendered reticle are intentional in M0; hardware cursor rendering
     // must be tested on a dedicated DRM session before adding cursor gates.
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
-    capture.refresh(chosen, world.get());
+    refresh();
     publish();
 }
 void Runtime::exit() {
@@ -385,6 +528,7 @@ void Runtime::exit() {
     if (!active)
         return;
     active = false;
+    layout.desktop = nullptr;
     control.stop();
     for (auto &[actor, b] : bindings)
         control.associate(actor, false);
@@ -401,6 +545,21 @@ void Runtime::exit() {
     publish();
 }
 void Runtime::focus(const std::string &id, bool keyboard) {
+    if (renderDepth)
+        throw std::runtime_error("focus inside render pass");
+    if (auto frame = capture.workspace(id)) {
+        Desktop::focusState()->rawMonitorFocus(monitor.lock());
+        auto result = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(frame->workspaceId));
+        if (!result.success)
+            throw ipc::Error(-32004, "workspace focus failed");
+        control.stop();
+        layout.desktop = frame->workspaceId;
+        typing = false;
+        keys.clear();
+        cancelGrab();
+        publish();
+        return;
+    }
     auto *entry = capture.find(id);
     if (!entry)
         throw ipc::Error(-32003, "unknown surface");
@@ -426,6 +585,11 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     auto protocol = params.value("_protocol", "0.1");
     params.erase("_pid");
     params.erase("_protocol");
+    if (method == "_layout.restore") {
+        layout.restore(params);
+        publish();
+        return Json::object();
+    }
     if (method == "_operation.cancel") {
         loadCancelled = true;
         return Json::object();
@@ -438,6 +602,149 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     }
     if (locked())
         throw ipc::Error(-32005, "session locked");
+    if (method == "workspace.bind") {
+        if (params.size() != 3 || !params.at("id").is_number_integer())
+            throw ipc::Error(-32602, "invalid area binding");
+        layout.bind(params.at("id"), params.at("worldId"), params.at("areaId"), world.get());
+        refresh();
+        publish();
+        return Json{{"revision", ipc->revision()}};
+    }
+    if (method == "workspace.focus") {
+        if (params.size() != 1 || !params.at("id").is_number_integer())
+            throw ipc::Error(-32602, "invalid workspace focus");
+        focus("workspace-" + std::to_string(params.at("id").get<int>()), true);
+        return Json{{"revision", ipc->revision()}};
+    }
+    if (method == "workspace.unfocus") {
+        if (!params.empty())
+            throw ipc::Error(-32602, "unexpected params");
+        unfocus();
+        return Json{{"revision", ipc->revision()}};
+    }
+    if (method == "placements.list") {
+        if (!params.empty())
+            throw ipc::Error(-32602, "unexpected params");
+        return Json{{"placements", layout.placements}};
+    }
+    if (method == "placements.remove") {
+        if (params.size() != 3 || !params.at("rule").is_object())
+            throw ipc::Error(-32602, "invalid placement rule");
+        std::erase_if(layout.placements.get_ref<Json::array_t &>(), [&](auto &p) {
+            return p.at("worldId") == params.at("worldId") && p.at("areaId") == params.at("areaId") &&
+                   p.at("rule") == params.at("rule");
+        });
+        refresh();
+        publish();
+        return Json{{"revision", ipc->revision()}};
+    }
+    if (method == "surfaces.recall") {
+        if (!params.empty())
+            throw ipc::Error(-32602, "unexpected params");
+        std::vector<surfaces::Instance> live;
+        for (auto &e : capture.entries)
+            if (layout.pulled(e.instance, nullptr))
+                live.push_back(e.instance);
+        layout.recall(live);
+        typing = false;
+        keys.clear();
+        cancelGrab();
+        refresh();
+        publish();
+        return Json{{"revision", ipc->revision()}};
+    }
+    if (method == "surface.pull" || method == "surface.place" || method == "surface.return") {
+        if (!active || !world || !layout.desktop.is_null())
+            throw ipc::Error(-32005, "exploration inactive");
+        if (params.size() != (params.contains("anchorId") ? 2u : 1u) || !params.at("surfaceId").is_string() ||
+            (params.contains("anchorId") && method != "surface.place"))
+            throw ipc::Error(-32602, "invalid tool mutation");
+        auto e = capture.find(params.at("surfaceId"));
+        if (!e)
+            throw ipc::Error(-32003, "unknown window");
+        typing = false;
+        keys.clear();
+        cancelGrab();
+        if (method == "surface.pull") {
+            auto safe = surfaces::carryPlane(camera, 1.4f, 1.4f * e->surface.pixelHeight / e->surface.pixelWidth,
+                                             world->collision);
+            (void)safe;
+            layout.pull(e->instance, world.get());
+        }
+        if (method == "surface.place") {
+            auto before = layout.placements;
+            auto carried = layout.carried;
+            try {
+                auto id = layout.place(e->instance, params.value("anchorId", ""), world.get());
+                surfaces::Surface plane;
+                surfaces::anchorPlane(plane, *layout.anchor(id, world.get()), e->surface.pixelWidth,
+                                      e->surface.pixelHeight);
+                if (!surfaces::pushOut(plane, world->collision))
+                    throw ipc::Error(-32005, "mount blocked by geometry");
+            } catch (...) {
+                layout.placements = before;
+                layout.carried = carried;
+                throw;
+            }
+        }
+        if (method == "surface.return")
+            layout.release(e->instance, world.get());
+        refresh();
+        publish();
+        ipc->notify("mounts.changed", {{"mounts", layout.state(world.get())}});
+        return Json{{"revision", ipc->revision()}};
+    }
+    if (method == "data.object.bind") {
+        if (params.size() != 2 || !world)
+            throw ipc::Error(-32602, "invalid object binding");
+        std::string source = params.at("sourceId");
+        if (source != client && !source.starts_with(client + "."))
+            throw ipc::Error(-32002, "data source namespace not owned");
+        auto o = std::find_if(world->objects.begin(), world->objects.end(),
+                              [&](auto &o) { return o.at("id") == params.at("objectId"); });
+        if (o == world->objects.end())
+            throw ipc::Error(-32003, "unknown data object");
+        (*o)["sourceId"] = source;
+        publish();
+        return Json{{"revision", ipc->revision()}};
+    }
+    if (method == "camera.fov") {
+        if (params.size() != 1 || !params.at("degrees").is_number())
+            throw ipc::Error(-32602, "invalid FOV");
+        float f = params.at("degrees");
+        if (!std::isfinite(f) || f < 30 || f > 110)
+            throw ipc::Error(-32602, "FOV outside 30..110 degrees");
+        camera.fov = f;
+        publish();
+        ipc->notify("presentation.changed", {{"presentation",
+                                              {{"profile", world ? renderer.profile : Json(nullptr)},
+                                               {"fov", camera.fov},
+                                               {"quality", renderer.intelQuality ? "intel" : "high"}}}});
+        return Json{{"revision", ipc->revision()}};
+    }
+    if (method == "atmosphere.get") {
+        if (!params.empty())
+            throw ipc::Error(-32602, "unexpected params");
+        return Json{{"profile", world ? renderer.profile : Json(nullptr)},
+                    {"quality", renderer.intelQuality ? "intel" : "high"}};
+    }
+    if (method == "atmosphere.set") {
+        if (params.size() != 1 || !world)
+            throw ipc::Error(-32602, "invalid atmosphere");
+        try {
+            world::validateAtmosphere(params.at("profile"));
+        } catch (const std::exception &e) {
+            throw ipc::Error(-32602, e.what());
+        }
+        auto before = renderer.profile;
+        // Pixel assets remain immutable; no IPC path is opened. Sky/environment changes require a world reload.
+        if (params["profile"]["sky"] != before["sky"] ||
+            params["profile"].value("environment", Json(nullptr)) != before.value("environment", Json(nullptr)))
+            throw ipc::Error(-32007, "sky/environment edits require package reload");
+        renderer.profile = params["profile"];
+        publish();
+        return Json{{"revision", ipc->revision()}};
+    }
     if (method == "shell.bind") {
         if (params.size() != 2 || !params.contains("pid") || !params.at("pid").is_number_integer() ||
             !params.contains("leaseId") || !params.at("leaseId").is_string())
@@ -478,7 +785,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             throw ipc::Error(-32602, "invalid workspace");
         auto entry = std::find_if(locations.begin(), locations.end(),
                                   [&](const Json &v) { return v.at("id") == params.at("id"); });
-        if (entry == locations.end())
+        if (entry == locations.end() && !layout.binding(params.at("id"), nullptr))
             throw ipc::Error(-32003, "unmapped workspace");
         if (!active || !monitor)
             throw ipc::Error(-32005, "world mode inactive");
@@ -486,11 +793,13 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         auto result = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(params.at("id").get<int>()));
         if (!result.success)
             throw ipc::Error(-32004, "workspace activation failed");
+        workspaceLocation();
         publish();
         return Json{{"revision", ipc->revision()}};
     }
     if (control::Control::methods().contains(method)) {
-        if (method == "shell.overlay" && params.value("exclusiveInput", false) && protocol != "0.3")
+        if (method == "shell.overlay" && params.value("exclusiveInput", false) &&
+            (protocol != "0.3" && protocol != "0.4"))
             throw ipc::Error(-32007, "verified association requires IPC 0.3");
         if ((method == "travel.start" || method == "autodrive.start") && !active)
             throw ipc::Error(-32005, "world mode inactive");
@@ -591,7 +900,7 @@ void Runtime::tick() {
         cancelGrab();
         typing = false;
     }
-    if (active && monitor) {
+    if (active && monitor && layout.desktop.is_null()) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         if (!ownsInput()) {
             if (monitor != Desktop::focusState()->monitor())
@@ -619,14 +928,21 @@ void Runtime::tick() {
             camera.position = s.position + Vec3{0, 1.7f, 0};
             camera.verticalSpeed = 0;
         }
-        capture.refresh(monitor.lock(), world.get());
+        refresh();
         if (!focused.empty() && !capture.find(focused)) {
             typing = false;
             focused.clear();
             keys.clear();
         }
+        renderer.pointerX = typing ? pointerX : .5f;
+        renderer.pointerY = typing ? pointerY : .5f;
+        auto pointerHit = aim();
+        if (!grabbed.empty())
+            if (auto e = capture.find(grabbed))
+                if (auto h = surfaces::intersect(e->surface, camera.position, pointerRay(), false))
+                    pointerHit = {{grabbed, *h}};
         if (typing)
-            if (auto hit = aim())
+            if (auto hit = pointerHit)
                 if (auto *e = capture.find(hit->first)) {
                     auto r = e->window->resource();
                     g_pSeatManager->setPointerFocus(
@@ -648,15 +964,13 @@ class Pass final : public IPassElement {
   public:
     std::vector<UP<IPassElement>> draw() override {
         safe([] {
-            if (!runtime || !runtime->active || locked())
+            if (!runtime || !runtime->active || locked() || !runtime->layout.desktop.is_null())
                 return;
             auto &data = g_pHyprRenderer->m_renderData;
             auto *fb = dynamic_cast<Render::GL::CGLFramebuffer *>(data.currentFB.get());
             if (!fb)
                 return;
-            std::vector<surfaces::Surface> surfaces;
-            for (auto &e : runtime->capture.entries)
-                surfaces.push_back(e.surface);
+            auto surfaces = runtime->capture.visible();
             runtime->renderer.draw(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y, runtime->camera,
                                    surfaces, runtime->typing);
         });
@@ -698,14 +1012,20 @@ int luaCamera(lua_State *state) {
               {"yaw", runtime->camera.yaw},
               {"pitch", runtime->camera.pitch},
               {"frames", runtime->renderer.frames},
+              {"grabbed", runtime->grabbed},
+              {"pressedButtons", runtime->buttons.size()},
               {"error", runtime->lastError},
               {"active", runtime->active}};
     j["captures"] = Json::array();
     for (auto &e : runtime->capture.entries)
-        j["captures"].push_back({{"id", e.surface.id},
-                                 {"title", e.surface.title},
-                                 {"commits", *e.commits},
-                                 {"position", {e.surface.center.x, e.surface.center.y, e.surface.center.z}}});
+        j["captures"].push_back(
+            {{"id", e.surface.id},
+             {"title", e.surface.title},
+             {"commits", *e.commits},
+             {"visible", e.visible},
+             {"size", {e.surface.width, e.surface.height}},
+             {"collision", runtime->world && e.visible && surfaces::overlaps(e.surface, runtime->world->collision)},
+             {"position", {e.surface.center.x, e.surface.center.y, e.surface.center.z}}});
     lua_pushstring(state, j.dump().c_str());
     return 1;
 }
@@ -744,7 +1064,20 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         }
     }
     auto methods = hyprune::control::Control::methods();
-    methods.insert({{"shell.bind", "shell.control"},
+    methods.insert({{"workspace.bind", "world.control"},
+                    {"workspace.focus", "surface.control"},
+                    {"workspace.unfocus", "surface.control"},
+                    {"surface.pull", "surface.control"},
+                    {"surface.place", "surface.control"},
+                    {"surface.return", "surface.control"},
+                    {"surfaces.recall", "surface.control"},
+                    {"placements.list", "state.read"},
+                    {"placements.remove", "surface.control"},
+                    {"data.object.bind", "data.publish"},
+                    {"atmosphere.get", "state.read"},
+                    {"atmosphere.set", "world.control"},
+                    {"camera.fov", "movement.control"},
+                    {"shell.bind", "shell.control"},
                     {"workspace.activate", "world.control"},
                     {"world.load", "world.control"},
                     {"surface.focus", "surface.control"},
@@ -785,7 +1118,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     runtime->listeners.push_back(
         Event::bus()->m_events.input.keyboard.key.listen([](IKeyboard::SKeyEvent event, Event::SCallbackInfo &info) {
             safe([&] {
-                if (!runtime->active || locked() || runtime->monitor != Desktop::focusState()->monitor())
+                if (!runtime->active || locked() || runtime->monitor != Desktop::focusState()->monitor() ||
+                    !runtime->layout.desktop.is_null())
                     return;
                 auto keyboard = g_pSeatManager->m_keyboard.lock();
                 if (!keyboard || !keyboard->m_xkbSymState)
@@ -875,23 +1209,33 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 }
             });
         }));
-    runtime->listeners.push_back(
-        Event::bus()->m_events.input.mouse.button.listen([](IPointer::SButtonEvent event, Event::SCallbackInfo &info) {
+    runtime->listeners.push_back(Event::bus()->m_events.input.mouse.button.listen([](IPointer::SButtonEvent event,
+                                                                                     Event::SCallbackInfo &info) {
+        if (runtime->active && runtime->control.uiVisible() && !runtime->directorSurface()) {
+            info.cancelled = true;
+            return;
+        }
+        if (!ownsInput())
+            return;
+        info.cancelled = true;
+        runtime->deferInput([event] {
+            if (!runtime || !ownsInput())
+                return;
             safe([&] {
-                if (runtime->active && runtime->control.uiVisible() && !runtime->directorSurface()) {
-                    info.cancelled = true;
-                    return;
-                }
-                if (!ownsInput())
-                    return;
-                info.cancelled = true;
+                if (runtime->renderDepth)
+                    throw std::runtime_error("pointer dispatch inside render pass");
                 auto hit = aim();
                 if (!runtime->grabbed.empty())
                     if (auto *held = runtime->capture.find(runtime->grabbed)) {
-                        if (auto h = hyprune::surfaces::intersect(held->surface, runtime->camera.position,
-                                                                  runtime->camera.forward(), false))
+                        if (auto h = hyprune::surfaces::intersect(held->surface, runtime->camera.position, pointerRay(),
+                                                                  false))
                             hit = {{held->surface.id, *h}};
                     }
+                if (event.state == WL_POINTER_BUTTON_STATE_PRESSED && hit && runtime->capture.workspace(hit->first)) {
+                    auto id = hit->first;
+                    runtime->focus(id, true);
+                    return;
+                }
                 if (event.state == WL_POINTER_BUTTON_STATE_PRESSED && hit) {
                     if (runtime->grabbed.empty()) {
                         runtime->focus(hit->first, true);
@@ -914,7 +1258,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                         runtime->grabbed.clear();
                 }
             });
-        }));
+        });
+    }));
     runtime->listeners.push_back(
         Event::bus()->m_events.input.mouse.axis.listen([](IPointer::SAxisEvent event, Event::SCallbackInfo &info) {
             safe([&] {
@@ -965,7 +1310,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         nullptr);
     g_pEventLoopManager->addTimer(runtime->timer);
     runtime->publish();
-    return {"hyprune-core", "World-driven desktop runtime", "Hyprune contributors", "0.2.0"};
+    return {"hyprune-core", "World-driven desktop runtime", "Hyprune contributors", "0.3.0"};
 }
 APICALL EXPORT void PLUGIN_EXIT() {
     if (!runtime)
@@ -974,6 +1319,9 @@ APICALL EXPORT void PLUGIN_EXIT() {
         g_pEventLoopManager->removeDoLater(runtime->deferred);
     if (runtime->tickDeferred)
         g_pEventLoopManager->removeDoLater(runtime->tickDeferred);
+    for (auto id : runtime->inputDeferred)
+        g_pEventLoopManager->removeDoLater(id);
+    runtime->inputDeferred.clear();
     runtime->listeners.clear();
     if (runtime->timer)
         g_pEventLoopManager->removeTimer(runtime->timer);
