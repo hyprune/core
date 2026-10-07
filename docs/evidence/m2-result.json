@@ -1,13 +1,8 @@
 {
   "passed": true,
   "typed": "M2 mounted terminal input\n",
-  "frames": 4162,
+  "frames": 1239,
   "bindings": [
-    {
-      "areaId": "sun-court",
-      "id": 12,
-      "worldId": "org.hyprune.m2.remote"
-    },
     {
       "areaId": "sun-court",
       "id": 10,
@@ -16,6 +11,11 @@
     {
       "areaId": "array-hall",
       "id": 11,
+      "worldId": "com.hyprune.lumen-reach"
+    },
+    {
+      "areaId": "rime-vault",
+      "id": 12,
       "worldId": "com.hyprune.lumen-reach"
     }
   ],
