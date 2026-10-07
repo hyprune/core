@@ -109,9 +109,22 @@ void loadSpatial(World &w, const std::filesystem::path &package) {
                 check(v.is_number() && std::isfinite(v.get<double>()) && std::abs(v.get<double>()) <= 100000,
                       "invalid map place coordinate");
             position[1] = position[1].get<float>() + 1.7f;
-            if (lumenRoutes)
+            if (lumenRoutes) {
+                check(!n.contains("waypoint") || n.at("waypoint").is_boolean(), "route waypoint must be boolean");
+                std::string label = id;
+                if (n.contains("label")) {
+                    check(n.at("label").is_string(), "route label must be string");
+                    label = n.at("label").get<std::string>();
+                    size_t chars = 0;
+                    for (unsigned char c : label)
+                        if ((c & 0xc0) != 0x80)
+                            ++chars;
+                    check(chars > 0 && chars <= 256, "route label length must be 1..256 characters");
+                }
                 w.walkingNodes.push_back({{"id", id}, {"position", position}});
-            if (!id.starts_with("junction-"))
+                if (n.value("waypoint", true))
+                    w.places.push_back({{"id", id}, {"name", label}, {"position", position}});
+            } else if (!id.starts_with("junction-"))
                 w.places.push_back({{"id", n.at("id")}, {"name", n.at("id")}, {"position", position}});
         }
         if (lumenRoutes) {

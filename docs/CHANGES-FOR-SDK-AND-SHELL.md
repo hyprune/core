@@ -77,6 +77,10 @@ Sun Court/01, Array Hall/02, Rime Vault/03, Signal Rise/04.
 
 `com.hyprune.lumen-reach.routes` version 1 validates up to 64 feet-position nodes
 and 256 bidirectional edges `{from,to,width}`. Places add the 1.7 m eye offset.
+Nodes optionally declare `label` (1–256 characters) and boolean `waypoint`.
+All nodes remain in pathfinding; only nodes with `waypoint` absent or true appear
+in `spatial.world.places`. Their `name` uses `label` when supplied, otherwise the
+stable node ID. Omitted fields retain the default visibility and ID label.
 A single `route.set` destination at a declared node expands along the shortest
 graph path from the nearest node to the camera. Explicit multi-point and off-graph
 routes retain their behavior. Disconnected destinations fail; capsule collision

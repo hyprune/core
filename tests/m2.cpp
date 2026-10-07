@@ -124,6 +124,28 @@ int main(int argc, char **argv) {
                                           {{"from", "bend"}, {"to", "finish"}, {"width", 3}}})}};
         world::loadSpatial(routed, argv[1]);
         check(routed.walkingNodes.size() == 3 && routed.places.size() == 3, "Lumen routing adapter");
+        check(routed.places[1]["name"] == "bend", "unlabelled route node compatibility");
+        auto &routeNodes = routed.manifest["extensions"]["com.hyprune.lumen-reach.routes"]["nodes"];
+        routeNodes[0]["label"] = "Sun Court arrival";
+        routeNodes[0]["waypoint"] = true;
+        routeNodes[1]["waypoint"] = false;
+        world::loadSpatial(routed, argv[1]);
+        check(routed.walkingNodes.size() == 3 && routed.walkingEdges.size() == 2 && routed.places.size() == 2,
+              "hidden waypoint removed pathfinding node or edge");
+        check(routed.places[0]["id"] == "start" && routed.places[0]["name"] == "Sun Court arrival" &&
+                  routed.places[1]["id"] == "finish" && routed.places[1]["name"] == "finish",
+              "landmark labels or default waypoint visibility");
+        for (auto bad : {world::Json("false"), world::Json(0), world::Json(nullptr)}) {
+            routeNodes[1]["waypoint"] = bad;
+            rejects([&] { world::loadSpatial(routed, argv[1]); });
+        }
+        routeNodes[1]["waypoint"] = false;
+        for (auto bad : {world::Json(1), world::Json(""), world::Json(std::string(257, 'x'))}) {
+            routeNodes[0]["label"] = bad;
+            rejects([&] { world::loadSpatial(routed, argv[1]); });
+        }
+        routeNodes[0]["label"] = "Sun Court arrival";
+        world::loadSpatial(routed, argv[1]);
         auto path = world::walkingRoute(routed, {0, 1.7, 5}, {0, 4.7, -7});
         check(path.size() == 3 && std::abs(path[1].y - 3.2f) < .001, "graph omitted ramp bend or feet offset");
         auto backwards = world::walkingRoute(routed, {0, 4.7, -7}, {0, 1.7, 5});
