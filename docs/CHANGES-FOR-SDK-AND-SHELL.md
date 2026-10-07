@@ -1,5 +1,9 @@
 # Core M1 contract changes
 
+The IPC 0.3 first-session amendment supersedes the exclusive-input, map and
+workspace gaps in this historical M1 report. See [FIRST-SESSION.md](FIRST-SESSION.md)
+and RFC-0003/0004/0008. Frozen 0.1/0.2 behavior below is retained.
+
 Negotiated IPC **0.2** is implemented. Core still serves exact **0.1**, with only
 its original state keys/events/methods. `0.1-mock.1` remains mock-only. Select
 `schema.validate('ipc', frame, responseMethod, '0.2')`; defaults remain 0.1.

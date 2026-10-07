@@ -2,12 +2,14 @@
 import argparse, json, os, pathlib, secrets, shutil, signal, socket, struct, subprocess, sys, time
 HERE=pathlib.Path(__file__).resolve().parent;ROOT=HERE.parent.parent;STATE=HERE/'.state'
 sys.path.insert(0,str(HERE))
+# Keep dynamically imported integration helpers on this exact harness module.
+sys.modules.setdefault('session',sys.modules[__name__])
 from ctl import verified
 class Client:
     def __init__(self,path,token=None,protocol="0.1"):
         self.socket=socket.socket(socket.AF_UNIX);self.socket.settimeout(5);self.socket.connect(path);self.count=0;self.events=[];self.transcript=[]
         params={'protocols':[protocol],'client':{'id':'org.hyprune.nested','name':'Nested test'},'capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}
-        if protocol=='0.2':params['capabilities']+=['shell.control','data.publish']
+        if protocol in ['0.2','0.3']:params['capabilities']+=['shell.control','data.publish']
         if token:params['token']=token
         self.hello=self.call('session.hello',params)
     def receive(self):
@@ -43,6 +45,11 @@ def camera():
     return json.loads(path.read_text())
 
 def run(args):
+    global STATE
+    if not hasattr(args,'integration'): args.integration=False
+    if args.integration:
+        STATE=HERE/'.integration-state'
+        os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     STATE.mkdir(exist_ok=True);os.chmod(STATE,0o700)
     subprocess.run([sys.executable,str(ROOT/'tests/fixtures/generate.py')],check=True,stdout=subprocess.DEVNULL)
     installed=STATE/'worlds';installed.mkdir(exist_ok=True)
@@ -52,11 +59,23 @@ def run(args):
     if args.m1:
         subprocess.run([sys.executable,str(ROOT/'tests/fixtures/materials.py')],check=True,stdout=subprocess.DEVNULL)
         shutil.copytree(ROOT/'tests/fixtures/materials',installed/'org.hyprune.materials',dirs_exist_ok=True)
+    if args.integration:
+        source=pathlib.Path(os.environ.get('HYPRUNE_SWITCHYARD_PACKAGE',str(ROOT.parent/'worlds/dist/com.hyprune.switchyard')))
+        if not (source/'world.json').is_file(): raise RuntimeError('Build Switchyard per worlds/switchyard/README.md first')
+        shutil.copytree(source,installed/'com.hyprune.switchyard',dirs_exist_ok=True)
+        quiet=installed/'org.hyprune.quiet'
+        shutil.copytree(ROOT/'tests/fixtures/atrium',quiet,dirs_exist_ok=True)
+        manifest=json.loads((quiet/'world.json').read_text());manifest['id']='org.hyprune.quiet';manifest['name']='Quiet observatory';(quiet/'world.json').write_text(json.dumps(manifest,indent=2)+'\n')
+        mappings=[{'id':10,'label':'Switchyard','worldId':'com.hyprune.switchyard','spawnId':'arrival'}, {'id':11,'label':'Quiet observatory','worldId':'org.hyprune.quiet','spawnId':manifest['defaultSpawn']}]
+        (STATE/'locations.json').write_text(json.dumps(mappings))
     token=secrets.token_hex(32)
     grants=[{'token':token,'client':'org.hyprune.nested','capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}]
-    if args.m1:grants[0]['capabilities']+=['shell.control','data.publish']
+    if args.m1 or args.integration:grants[0]['capabilities']+=['shell.control','data.publish']
+    shell_token=secrets.token_hex(32)
+    if args.integration: grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control']})
     read,write=os.pipe();os.write(write,json.dumps(grants).encode());os.close(write)
     environment=os.environ.copy();environment.update(AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read))
+    if args.integration: environment['HYPRUNE_WORKSPACE_LOCATIONS']=str(STATE/'locations.json')
     config=str(HERE/'hyprland.lua');log=open(STATE/'hyprland.log','w')
     process=subprocess.Popen(['Hyprland','-c',config],env=environment,pass_fds=(read,),stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True);os.close(read)
     children=[];client=None
@@ -82,8 +101,14 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,"0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
+        if args.integration:
+            from integration import first_session
+            first_session(client,children,args,shell_token,socketpath)
+            (STATE/'transcript.json').write_text(json.dumps(client.transcript))
+            (STATE/'notifications.json').write_text(json.dumps(client.events))
+            return
         if args.serve:
             print('Nested ready; dev/nested/ctl.py targets only this session.',flush=True)
             while process.poll() is None:time.sleep(.5)
@@ -291,5 +316,6 @@ def m1(client):
     print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--serve',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m1',action='store_true');args=parser.parse_args()
-    run(args)
+    parser=argparse.ArgumentParser();parser.add_argument('--serve',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
+    try:run(args)
+    except KeyboardInterrupt:print("Nested session stopped.",flush=True)

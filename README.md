@@ -11,7 +11,8 @@ separate repositories. This repository contains no proprietary game assets.
 
 Requires CMake 3.27+, a C++23 compiler, Ninja, pkg-config, matching Hyprland plugin
 headers (including generated protocols), GLES3/EGL, Wayland client/server and
-scanner, libdrm, pixman, xkbcommon, hyprgraphics, pangocairo, Lua, and Python 3.
+scanner, libdrm, pixman, xkbcommon, hyprgraphics, pangocairo, Lua, libxml2, OpenSSL,
+and Python 3.
 The `hyprland.pc` include paths must point at the headers for the running build;
 this machine uses the headers installed by hyprpm. cgltf, nlohmann/json and
 stb_image are vendored with their licenses. Builds do not download dependencies.
@@ -75,6 +76,33 @@ The native cursor remains under Hyprland's control; a small rendered reticle mar
 the picking ray. Core does not show/hide/replace hardware cursor images. M0 has
 **not** been tested on a dedicated DRM/hardware-cursor session.
 
+
+## First real session
+
+```sh
+dev/hyprune-dev up       # nested Hyprland + real core + real shell + Switchyard/apps
+dev/hyprune-dev smoke    # automated end-to-end acceptance, then exit
+dev/hyprune-dev record   # 45–75 second 1080p showcase and smoke acceptance
+```
+
+Build core first and consume `../worlds/dist/com.hyprune.switchyard` built per its
+README (remote Blender only). `HYPRUNE_SWITCHYARD_PACKAGE` overrides the package
+directory. The launcher copies that package unchanged and installs an original CC0
+quiet-observatory fixture as workspace 11; workspace 10 is Switchyard. It starts
+Quickshell over authenticated IPC 0.3, two live terminals (including btop) and a
+private-profile Chromium page. All nested session lifetimes hold
+`flock /tmp/worldshell-nested.lock`; the verified controller is the only compositor
+control entry point. No owner-session command is used. `up` runs smoke acceptance
+and remains interactive on the visible nested Wayland output; Ctrl+C stops it.
+`smoke --visible` verifies that same output; recording uses 1920×1080 HEADLESS-1. See
+[contracts and verification](docs/FIRST-SESSION.md).
+
+This session uses `dev/nested/.integration-state/`, separate from the legacy
+fixture harness. For interactive control, prefix each `dev/nested/ctl.py` command
+with `HYPRUNE_NESTED_STATE_DIR="$PWD/dev/nested/.integration-state"`.
+The integration additionally requires `btop`, Quickshell, and shell's Python
+requirements; Chromium is optional.
+
 ## Module boundaries
 
 | Module | Owns | Does not own |
@@ -137,9 +165,7 @@ operation IDs, output, phase/progress, destination and monotonic timestamps.
 Built-in mode IDs remain `com.hyprune.walk` and `com.hyprune.fly`.
 
 Hold Tab for 350 ms in exploration mode to request the leased shell's overview;
-release leaves it open. Escape dismisses it; F12 exits. Core implements nonexclusive
-leases only: exclusive shell input returns -32007 until trusted Wayland-client
-association exists. This is not full RFC-0008 shell conformance.
+release leaves it open. Escape dismisses it; F12 exits. IPC 0.3 adds verified Wayland-child binding and exclusive Director input; 0.1/0.2 retain their exact contracts. See [the first-session report](docs/FIRST-SESSION.md).
 
 Same-UID alone grants no state access. Launch tokens are one-use and connection
 bound. Publishing needs the separate `data.publish` capability and authenticated

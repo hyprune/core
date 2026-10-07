@@ -1,0 +1,172 @@
+{
+  "verifiedAt": "2026-10-07T20:07:01.989896+00:00",
+  "schemaCommit": "4facaa1a66d01986e0d469762e9f93ac48858892",
+  "protocol": "0.3",
+  "versions": {
+    "core": "0.2.0",
+    "shell": "0.2.0",
+    "sdk": "0.3.0"
+  },
+  "smoke": {
+    "passed": true,
+    "runs": [
+      "HEADLESS-1 1920x1080",
+      "WAYLAND-1 1600x900"
+    ],
+    "latestHudOutputs": [
+      "WAYLAND-1"
+    ],
+    "repliesValidated": 106,
+    "notificationsValidated": 778,
+    "result": {
+      "passed": true,
+      "shell": {
+        "status": "live",
+        "protocol": "0.3",
+        "screen": "",
+        "lease": "",
+        "director": false,
+        "revision": 962,
+        "tab": 0,
+        "warp": false,
+        "phase": "failed",
+        "world": "com.hyprune.switchyard",
+        "map": true,
+        "places": [
+          {
+            "id": "concourse",
+            "name": "concourse",
+            "position": [
+              -4,
+              1.7000000476837158,
+              4.5
+            ]
+          },
+          {
+            "id": "build",
+            "name": "build",
+            "position": [
+              -14.67,
+              1.7000000476837158,
+              -5
+            ]
+          },
+          {
+            "id": "studio",
+            "name": "studio",
+            "position": [
+              -14.67,
+              1.7000000476837158,
+              -19
+            ]
+          },
+          {
+            "id": "research",
+            "name": "research",
+            "position": [
+              -2.67,
+              1.7000000476837158,
+              -5
+            ]
+          },
+          {
+            "id": "systems",
+            "name": "systems",
+            "position": [
+              -2.67,
+              1.7000000476837158,
+              -19
+            ]
+          },
+          {
+            "id": "commons",
+            "name": "commons",
+            "position": [
+              9.33,
+              1.7000000476837158,
+              -5
+            ]
+          },
+          {
+            "id": "archive",
+            "name": "archive",
+            "position": [
+              9.33,
+              1.7000000476837158,
+              -19
+            ]
+          }
+        ],
+        "markers": 0
+      },
+      "frames": 757,
+      "typed": "typed in Switchyard\n"
+    },
+    "acceptanceLog": "/tmp/hyprune-visible-smoke.log"
+  },
+  "legacyNestedM1": {
+    "passed": true,
+    "watchdogRestoreSeconds": 0.053,
+    "activeUnloadReloadCycles": 3
+  },
+  "tests": {
+    "core": {
+      "pass": 4,
+      "fail": 0
+    },
+    "schema": {
+      "pass": 73,
+      "fail": 0
+    },
+    "shell": {
+      "pass": 36,
+      "fail": 0
+    },
+    "sdkNodeWithRealDaemon": {
+      "pass": 53,
+      "fail": 0,
+      "skipped": 0
+    },
+    "sdkBun": {
+      "pass": 50,
+      "fail": 0
+    },
+    "docsBuildAndSchemaLinks": true,
+    "switchyardAuthorValidation": true,
+    "docsBrowser": true
+  },
+  "package": {
+    "id": "com.hyprune.switchyard",
+    "source": "worlds/dist/com.hyprune.switchyard",
+    "copiedUnchanged": true,
+    "treeSha256": "d26ecd63535afc214c2895abdc633f3d2c9bd83b055fad7ea90d7bcf2ba7b458",
+    "treeHashAlgorithm": "sorted relative UTF-8 path + NUL + raw file SHA-256 digest"
+  },
+  "video": {
+    "path": "/home/rick/workspace/rick-the-alien/worldshell-gallery/videos/hyprune-first-session.mp4",
+    "durationSeconds": 61.433333,
+    "bytes": 22226000,
+    "codec": "h264",
+    "pixelFormat": "yuv420p",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "fastStart": true,
+    "boxOrder": [
+      "ftyp",
+      "moov",
+      "free",
+      "mdat"
+    ],
+    "sha256": "f142f47bf75398f89d91b61a0a5d4549f2f9d9c8bde2f498fe4e3ef2f2746d05",
+    "framesReviewed": true,
+    "metadataPath": "/home/rick/workspace/rick-the-alien/worldshell-gallery/videos/hyprune-first-session.json"
+  },
+  "commits": {
+    "schema": "4facaa1a66d01986e0d469762e9f93ac48858892",
+    "docs": "62185c6",
+    "coreImplementation": "f189d74",
+    "shell": "6b195c6",
+    "sdk": "6332325"
+  }
+}

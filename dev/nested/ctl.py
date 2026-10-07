@@ -4,7 +4,8 @@ import json, os, pathlib, subprocess, sys
 HERE=pathlib.Path(__file__).resolve().parent
 STATE=HERE/'.state/session.json'
 def verified():
-    state=json.loads(STATE.read_text());pid=state['pid']
+    path=pathlib.Path(os.environ.get('HYPRUNE_NESTED_STATE_DIR', str(HERE/'.state')))/'session.json'
+    state=json.loads(path.read_text());pid=state['pid']
     cmd=pathlib.Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
     assert state['config'].encode() in cmd and b'Hyprland' in pathlib.Path(os.fsdecode(cmd[0])).name.encode(), 'PID is not our nested compositor'
     assert pathlib.Path(f'/proc/{pid}/stat').read_text().split()[21]==state['startTime'], 'PID was reused'

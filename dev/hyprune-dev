@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+set -euo pipefail
+root="$(dirname "$(dirname "$(realpath "$0")")")"
+command="${1:-up}"
+if (($#)); then shift; fi
+case "$command" in
+  up) exec "$root/dev/nested/run.sh" --integration --serve "$@" ;;
+  smoke) exec "$root/dev/nested/run.sh" --integration "$@" ;;
+  record) exec "$root/dev/nested/run.sh" --integration --record "$@" ;;
+  *) echo 'Usage: dev/hyprune-dev up|smoke|record' >&2; exit 2 ;;
+esac

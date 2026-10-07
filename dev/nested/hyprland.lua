@@ -5,7 +5,7 @@ hl.config({
     decoration = { rounding = 4 },
     animations = { enabled = false },
     cursor = { no_hardware_cursors = true },
-    misc = { disable_hyprland_logo = true, disable_splash_rendering = true },
+    misc = { disable_hyprland_logo = true, disable_splash_rendering = true, disable_watchdog_warning = true },
 })
 hl.bind("SUPER + RETURN", hl.dsp.exec_cmd("kitty"))
 hl.bind("SUPER + Q", hl.dsp.window.close())
