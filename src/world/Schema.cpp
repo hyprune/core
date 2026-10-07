@@ -98,6 +98,10 @@ void validate(const Json &value, const Json &schema, const Json &common, const s
 } // namespace
 void validateManifest(const Json &value) {
     static const auto common = Json::parse(commonSchema), schema = Json::parse(worldSchema);
-    validate(value, schema, common, "world");
+    static const auto common02 = Json::parse(commonSchema02), schema02 = Json::parse(worldSchema02);
+    if (value.value("formatVersion", "") == "0.2")
+        validate(value, schema02, common02, "world");
+    else
+        validate(value, schema, common, "world");
 }
 } // namespace hyprune::world

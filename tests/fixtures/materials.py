@@ -5,7 +5,8 @@ base=pathlib.Path(__file__).parent
 runpy.run_path(str(base/'generate.py'))
 root=base/'materials';shutil.copytree(base/'atrium',root,dirs_exist_ok=True)
 g=json.loads((root/'scene.gltf').read_text());w=json.loads((root/'world.json').read_text())
-w.update(id='org.hyprune.materials',name='Material laboratory')
+w.update(id='org.hyprune.materials',name='Material laboratory',formatVersion='0.2')
+w['zones']=[{'id':'gallery','name':'Material gallery','bounds':{'min':[-3,0,-5],'max':[3,4,-3]}}]
 w['spawns'][0]['pose']['position']=[0,0,6]
 def png(name,fn):
     n=256

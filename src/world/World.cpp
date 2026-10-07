@@ -67,7 +67,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
         return true;
     });
     validateManifest(j);
-    require(j.at("formatVersion") == "0.1", "unsupported world format");
+    require((j.at("formatVersion") == "0.1" || j.at("formatVersion") == "0.2"), "unsupported world format");
     require(std::regex_match(j.at("id").get<std::string>(), std::regex("[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+")),
             "invalid world ID");
     for (auto &field : {"version", "name", "license", "scene", "defaultSpawn"})
@@ -84,6 +84,15 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     }
     require(covered, "M0 requires baseline attribution for all assets");
     require(j.value("requiredExtensions", Json::array()).empty(), "unsupported required world extension");
+    auto zones = j.value("zones", Json::array());
+    require(zones.size() <= 128 && zones.dump().size() <= 65536, "zone metadata exceeds IPC budget");
+    std::set<std::string> zoneIds;
+    for (const auto &zone : zones) {
+        require(zoneIds.insert(zone.at("id").get<std::string>()).second, "duplicate zone ID");
+        for (int axis = 0; axis < 3; axis++)
+            require(zone.at("bounds").at("min")[axis].get<double>() < zone.at("bounds").at("max")[axis].get<double>(),
+                    "inverted zone bounds");
+    }
     auto result = std::make_shared<World>();
     result->manifest = j;
     result->id = j["id"];
@@ -195,7 +204,8 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     }
     auto slot = [&](const cgltf_texture_view &view) {
         TextureSlot out;
-        if (!view.texture) return out;
+        if (!view.texture)
+            return out;
         out.texture = view.texture - raw->textures;
         out.texCoord = view.texcoord;
         if (view.has_transform) {
@@ -203,10 +213,12 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
             std::copy_n(t.offset, 2, out.offset);
             std::copy_n(t.scale, 2, out.scale);
             out.rotation = t.rotation;
-            if (t.has_texcoord) out.texCoord = t.texcoord;
+            if (t.has_texcoord)
+                out.texCoord = t.texcoord;
         }
         require(out.texCoord == 0 || out.texCoord == 1, "material requires unsupported UV set (only UV0/UV1)");
-        require(std::isfinite(out.offset[0]+out.offset[1]+out.scale[0]+out.scale[1]+out.rotation), "nonfinite UV transform");
+        require(std::isfinite(out.offset[0] + out.offset[1] + out.scale[0] + out.scale[1] + out.rotation),
+                "nonfinite UV transform");
         return out;
     };
     for (size_t i = 0; i < raw->materials_count; i++) {
@@ -311,7 +323,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
                     require(cgltf_accessor_read_float(uv, index, vert.uv, 2), "invalid UV0");
                 if (uv1)
                     require(cgltf_accessor_read_float(uv1, index, vert.uv1, 2), "invalid UV1");
-                require(std::isfinite(vert.uv[0]+vert.uv[1]+vert.uv1[0]+vert.uv1[1]), "nonfinite UV");
+                require(std::isfinite(vert.uv[0] + vert.uv[1] + vert.uv1[0] + vert.uv1[1]), "nonfinite UV");
                 if (normal) {
                     float n[3];
                     require(cgltf_accessor_read_float(normal, index, n, 3), "invalid normal");
