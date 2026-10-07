@@ -59,7 +59,7 @@ void main(){
  if(surface!=0){lit=base;}else if(baked!=0){vec3 lm=texture(lightmap,lightUV).rgb;if(lightSrgb!=0)lm=decode(lm);lit=base*lm*intensity+emission;}
  else if(unlit!=0){lit=base+emission;}else{float diffuse=.24+.76*max(dot(normalize(n),normalize(vec3(.3,1,.5))),0.);lit=base*diffuse+emission;}
  if(surface==0){float fog=1.-exp(-length(worldPosition.xz)*.008);lit=mix(lit,vec3(.028,.045,.065),fog);}
- result=vec4(lit,1);
+ result=vec4(lit,surface!=0?0.:1.);
 }
 )";
 const char *screenVertex = R"(#version 300 es
@@ -71,7 +71,7 @@ const char *toneFragment = R"(#version 300 es
 precision highp float;
 in vec2 uv;uniform sampler2D frame;uniform vec2 resolution;uniform int typing;out vec4 result;
 vec3 encode(vec3 x){return mix(12.92*x,1.055*pow(x,vec3(1./2.4))-.055,step(vec3(.0031308),x));}
-void main(){vec3 x=texture(frame,uv).rgb;vec3 mapped=clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);vec3 c=encode(mapped);
+void main(){vec4 sampleColor=texture(frame,vec2(uv.x,1.-uv.y));vec3 x=sampleColor.rgb;vec3 mapped=mix(x,clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.),sampleColor.a);vec3 c=encode(mapped);
  vec2 p=abs(gl_FragCoord.xy-resolution*.5);if((p.x<1.&&p.y<7.)||(p.y<1.&&p.x<7.))c=typing!=0?vec3(.5,1.,.65):vec3(.9);
  result=vec4(c,1);}
 )";

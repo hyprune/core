@@ -19,7 +19,7 @@ extern "C" {
 #include <lua.h>
 }
 #include "Capture.hpp"
-#include "ipc/Server.hpp"
+#include "ipc/Bridge.hpp"
 #include "render/Renderer.hpp"
 #include <fcntl.h>
 #include <fstream>
@@ -38,16 +38,22 @@ struct Runtime {
     sim::Fly fly;
     sim::MotionStrategy *movement = &walk;
     std::shared_ptr<world::World> world;
-    std::unique_ptr<ipc::Server> ipc;
+    std::unique_ptr<ipc::Bridge> ipc;
     PHLMONITORREF monitor;
     PHLWINDOWREF savedFocus;
     bool active = false, typing = false, loading = false;
+    int renderDepth = 0;
+    std::future<std::shared_ptr<world::World>> pendingWorld;
+    std::string pendingSpawn, pendingToggle;
+    bool toggleAfterLoad = false;
+    std::chrono::steady_clock::time_point loadDeadline;
+    double accumulator = 0;
     std::string focused, lastError;
     std::set<uint32_t> keys;
     SP<CEventLoopTimer> timer;
     std::vector<CHyprSignalListener> listeners;
     CFunctionHook *motionHook = nullptr;
-    uint64_t deferred = 0;
+    uint64_t deferred = 0, tickDeferred = 0;
     std::chrono::steady_clock::time_point lastTick = std::chrono::steady_clock::now();
     std::filesystem::path installed;
     void publish();
@@ -56,7 +62,8 @@ struct Runtime {
     void tick();
     void focus(const std::string &, bool keyboard);
     void load(const std::string &, const std::string &spawn = "");
-    Json method(const std::string &, const Json &);
+    std::optional<Json> method(const std::string &, const Json &);
+    void finishLoad();
 };
 std::unique_ptr<Runtime> runtime;
 using Move = void (*)(void *, const Vector2D &);
@@ -122,21 +129,54 @@ void Runtime::load(const std::string &id, const std::string &spawnId) {
     if (id.empty() || id.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789.-") != std::string::npos ||
         id == "." || id == "..")
         throw ipc::Error(-32602, "invalid installed world ID");
-    auto candidate = world::load(installed / id);
-    if (candidate->id != id)
-        throw ipc::Error(-32602, "installed ID mismatch");
-    const auto spawn = candidate->spawn(spawnId);
-    Render::GL::g_pHyprOpenGL->makeEGLCurrent();
-    renderer.prepare(candidate);
-    world = std::move(candidate);
-    world->defaultSpawn = spawn.id;
-    camera = {};
-    camera.position = spawn.position + Vec3{0, 1.7f, 0};
-    camera.yaw = spawn.yaw;
-    camera.pitch = spawn.pitch;
-    movement = world->collision.empty() ? static_cast<sim::MotionStrategy *>(&fly) : &walk;
-    publish();
+    if (loading)
+        throw ipc::Error(-32004, "world load already pending");
+    loading = true;
+    pendingSpawn = spawnId;
+    loadDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(28);
+    auto package = installed / id;
+    pendingWorld = std::async(std::launch::async, [package, id] {
+        auto candidate = world::load(package);
+        if (candidate->id != id)
+            throw std::runtime_error("installed ID mismatch");
+        return candidate;
+    });
 }
+void Runtime::finishLoad() {
+    if (!loading || pendingWorld.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        return;
+    loading = false;
+    try {
+        auto candidate = pendingWorld.get();
+        if (!ipc->healthy() || std::chrono::steady_clock::now() > loadDeadline)
+            throw ipc::Error(-32006, "world load expired");
+        const auto spawn = candidate->spawn(pendingSpawn);
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        renderer.prepare(candidate);
+        world = std::move(candidate);
+        world->defaultSpawn = spawn.id;
+        camera = {};
+        camera.position = spawn.position + Vec3{0, 1.7f, 0};
+        camera.yaw = spawn.yaw;
+        camera.pitch = spawn.pitch;
+        movement = world->collision.empty() ? static_cast<sim::MotionStrategy *>(&fly) : &walk;
+        publish();
+        ipc->complete(Json{{"revision", ipc->revision()}});
+        if (toggleAfterLoad) {
+            toggleAfterLoad = false;
+            toggle(pendingToggle);
+        }
+    } catch (const ipc::Error &e) {
+        ipc->fail(e.code, e.what());
+        error(e);
+        toggleAfterLoad = false;
+    } catch (const std::exception &e) {
+        ipc->fail(-32602, e.what());
+        error(e);
+        toggleAfterLoad = false;
+    }
+}
+
 void Runtime::toggle(const std::string &output) {
     if (active) {
         exit();
@@ -144,8 +184,12 @@ void Runtime::toggle(const std::string &output) {
     }
     if (locked())
         return;
-    if (!world)
+    if (!world) {
         load("org.hyprune.atrium");
+        toggleAfterLoad = true;
+        pendingToggle = output;
+        return;
+    }
     PHLMONITOR chosen = Desktop::focusState()->monitor();
     if (!output.empty())
         for (auto &m : State::monitorState()->monitors())
@@ -197,7 +241,7 @@ void Runtime::focus(const std::string &id, bool keyboard) {
     g_pSeatManager->setPointerFocus(w->resource(), {entry->surface.pixelWidth * .5, entry->surface.pixelHeight * .5});
     publish();
 }
-Json Runtime::method(const std::string &method, const Json &params) {
+std::optional<Json> Runtime::method(const std::string &method, const Json &params) {
     if (locked())
         throw ipc::Error(-32005, "session locked");
     if (method == "runtime.exit") {
@@ -208,6 +252,7 @@ Json Runtime::method(const std::string &method, const Json &params) {
         if (!params.contains("worldId") || params.size() > (params.contains("spawnId") ? 2u : 1u))
             throw ipc::Error(-32602, "invalid load params");
         load(params.at("worldId"), params.value("spawnId", ""));
+        return std::nullopt;
     } else if (method == "movement.set") {
         if (params.size() != 1)
             throw ipc::Error(-32602, "invalid movement params");
@@ -225,9 +270,18 @@ Json Runtime::method(const std::string &method, const Json &params) {
         focus(params.at("surfaceId"), params.at("intent") == "keyboard");
     }
     publish();
-    return {{"revision", ipc->revision()}};
+    return Json{{"revision", ipc->revision()}};
 }
 void Runtime::tick() {
+    if (renderDepth != 0)
+        throw std::runtime_error("deferred work inside compositor render pass");
+    ipc->poll();
+    if (!ipc->healthy()) {
+        if (active)
+            exit();
+        return;
+    }
+    finishLoad();
     if (locked() && active)
         exit();
     auto now = std::chrono::steady_clock::now();
@@ -241,7 +295,11 @@ void Runtime::tick() {
             intent.up = float(keys.contains(KEY_SPACE)) - float(keys.contains(KEY_LEFTCTRL));
             intent.jump = keys.contains(KEY_SPACE);
         }
-        movement->step(camera, intent, dt, world->collision);
+        accumulator = std::min(accumulator + double(dt), 4.0 / 60.0);
+        while (accumulator >= 1.0 / 60.0) {
+            movement->step(camera, intent, 1.f / 60.f, world->collision);
+            accumulator -= 1.0 / 60.0;
+        }
         if (camera.position.y < -30) {
             auto s = world->spawn();
             camera.position = s.position + Vec3{0, 1.7f, 0};
@@ -326,23 +384,7 @@ int luaCamera(lua_State *state) {
     lua_pushstring(state, j.dump().c_str());
     return 1;
 }
-std::vector<ipc::LaunchGrant> grants() {
-    std::vector<ipc::LaunchGrant> result;
-    const char *fdEnv = getenv("HYPRUNE_LAUNCH_FD");
-    if (!fdEnv)
-        return result;
-    int fd = std::stoi(fdEnv);
-    char buffer[8192];
-    ssize_t size = read(fd, buffer, sizeof buffer);
-    close(fd);
-    unsetenv("HYPRUNE_LAUNCH_FD");
-    if (size <= 0)
-        return result;
-    auto j = Json::parse(buffer, buffer + size);
-    for (auto &t : j)
-        result.push_back({t.at("token"), t.at("client"), t.at("capabilities").get<std::set<std::string>>()});
-    return result;
-}
+
 } // namespace
 } // namespace hyprune::platform
 using namespace hyprune::platform;
@@ -350,7 +392,7 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
     return HYPRLAND_API_VERSION;
 }
 APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
-    if (__hyprland_api_get_hash() != __hyprland_api_get_client_hash())
+    if (std::string(__hyprland_api_get_hash()) != std::string(__hyprland_api_get_client_hash()))
         throw std::runtime_error("Hyprune: Hyprland ABI mismatch");
     handle = pluginHandle;
     runtime = std::make_unique<Runtime>();
@@ -360,8 +402,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     const char *sig = getenv("HYPRLAND_INSTANCE_SIGNATURE");
     if (!dir || !sig)
         throw std::runtime_error("Hyprune: missing session environment");
-    runtime->ipc = std::make_unique<hyprune::ipc::Server>(
-        dir, sig, grants(), [](auto &method, auto &params) { return runtime->method(method, params); });
+    runtime->ipc = std::make_unique<hyprune::ipc::Bridge>(
+        HYPRUNE_DAEMON_PATH, [](auto &method, auto &params) { return runtime->method(method, params); });
     runtime->ipc->advertise({{"world.load", "world.control"},
                              {"surface.focus", "surface.control"},
                              {"movement.set", "movement.control"},
@@ -372,7 +414,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     });
     HyprlandAPI::addLuaFunction(handle, "hyprune", "toggle", luaToggle);
     HyprlandAPI::addLuaFunction(handle, "hyprune", "camera", luaCamera);
-    for (auto &match : HyprlandAPI::findFunctionsByName(handle, "CPointerManager::move"))
+    for (auto &match : HyprlandAPI::findFunctionsByName(handle, "CPointerManager4move"))
         if (match.demangled.find("CPointerManager::move(") != std::string::npos) {
             runtime->motionHook = HyprlandAPI::createFunctionHook(handle, match.address, (void *)motion);
             if (runtime->motionHook && runtime->motionHook->hook())
@@ -383,7 +425,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         throw std::runtime_error("Hyprune: pointer motion hook unavailable");
     runtime->listeners.push_back(Event::bus()->m_events.render.stage.listen([](eRenderStage stage) {
         safe([&] {
-            if (stage == RENDER_LAST_MOMENT && runtime->active && !locked() &&
+            if (stage == RENDER_PRE)
+                ++runtime->renderDepth;
+            if (stage == RENDER_POST && runtime->renderDepth > 0)
+                --runtime->renderDepth;
+            if (stage == RENDER_POST_WINDOWS && runtime->active && !locked() &&
                 g_pHyprRenderer->m_renderData.pMonitor == runtime->monitor)
                 g_pHyprRenderer->addPassElement(makeUnique<Pass>());
         });
@@ -398,7 +444,40 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
             safe([&] {
                 if (!runtime->active || locked())
                     return;
-                if (event.keycode == KEY_ESC) {
+                auto keyboard = g_pSeatManager->m_keyboard.lock();
+                if (!keyboard || !keyboard->m_xkbSymState)
+                    return;
+                auto sym = xkb_keysym_to_lower(xkb_state_key_get_one_sym(keyboard->m_xkbSymState, event.keycode + 8));
+                uint32_t action = 0;
+                switch (sym) {
+                case XKB_KEY_w:
+                    action = KEY_W;
+                    break;
+                case XKB_KEY_s:
+                    action = KEY_S;
+                    break;
+                case XKB_KEY_a:
+                    action = KEY_A;
+                    break;
+                case XKB_KEY_d:
+                    action = KEY_D;
+                    break;
+                case XKB_KEY_space:
+                    action = KEY_SPACE;
+                    break;
+                case XKB_KEY_Control_L:
+                    action = KEY_LEFTCTRL;
+                    break;
+                case XKB_KEY_Escape:
+                    action = KEY_ESC;
+                    break;
+                case XKB_KEY_F12:
+                    action = KEY_F12;
+                    break;
+                default:
+                    break;
+                }
+                if (action == KEY_ESC) {
                     info.cancelled = true;
                     if (event.state == WL_KEYBOARD_KEY_STATE_PRESSED) {
                         runtime->typing = false;
@@ -407,7 +486,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     }
                     return;
                 }
-                if (event.keycode == KEY_F12) {
+                if (action == KEY_F12) {
                     info.cancelled = true;
                     if (event.state == WL_KEYBOARD_KEY_STATE_PRESSED)
                         deferToggle("");
@@ -415,13 +494,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 }
                 if (runtime->typing)
                     return;
-                if (event.keycode == KEY_W || event.keycode == KEY_A || event.keycode == KEY_S ||
-                    event.keycode == KEY_D || event.keycode == KEY_SPACE || event.keycode == KEY_LEFTCTRL) {
+                if (action == KEY_W || action == KEY_A || action == KEY_S || action == KEY_D || action == KEY_SPACE ||
+                    action == KEY_LEFTCTRL) {
                     info.cancelled = true;
                     if (event.state == WL_KEYBOARD_KEY_STATE_PRESSED)
-                        runtime->keys.insert(event.keycode);
+                        runtime->keys.insert(action);
                     else
-                        runtime->keys.erase(event.keycode);
+                        runtime->keys.erase(action);
                 }
             });
         }));
@@ -452,7 +531,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     runtime->timer = makeShared<CEventLoopTimer>(
         std::chrono::milliseconds(16),
         [](SP<CEventLoopTimer> self, void *) {
-            safe([] { runtime->tick(); });
+            if (!runtime->tickDeferred)
+                runtime->tickDeferred = g_pEventLoopManager->doLater([] {
+                    if (!runtime)
+                        return;
+                    runtime->tickDeferred = 0;
+                    safe([] { runtime->tick(); });
+                });
             self->updateTimeout(std::chrono::milliseconds(16));
         },
         nullptr);
@@ -465,6 +550,8 @@ APICALL EXPORT void PLUGIN_EXIT() {
         return;
     if (runtime->deferred)
         g_pEventLoopManager->removeDoLater(runtime->deferred);
+    if (runtime->tickDeferred)
+        g_pEventLoopManager->removeDoLater(runtime->tickDeferred);
     runtime->listeners.clear();
     if (runtime->timer)
         g_pEventLoopManager->removeTimer(runtime->timer);
