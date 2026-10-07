@@ -83,13 +83,13 @@ int main(int argc, char **argv) {
         check(active == GL_TEXTURE5 && bound == int(app), "texture state leaked");
         check(glIsEnabled(GL_BLEND) && glIsEnabled(GL_SCISSOR_TEST), "enable state leaked");
         check(!mask[1] && !mask[3] && !depth, "write masks leaked");
-        GLint cull, front, cube, sampler;
+        GLint cull, frontFaceState, cube, sampler;
         glGetIntegerv(GL_CULL_FACE_MODE, &cull);
-        glGetIntegerv(GL_FRONT_FACE, &front);
+        glGetIntegerv(GL_FRONT_FACE, &frontFaceState);
         glActiveTexture(GL_TEXTURE6);
         glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &cube);
         glGetIntegerv(GL_SAMPLER_BINDING, &sampler);
-        check(cull == GL_FRONT && front == GL_CW && cube == int(savedCube) && sampler == int(savedSampler),
+        check(cull == GL_FRONT && frontFaceState == GL_CW && cube == int(savedCube) && sampler == int(savedSampler),
               "IBL/culling state leaked");
         glActiveTexture(GL_TEXTURE5);
         unsigned char pixel[4];
