@@ -1,19 +1,22 @@
 {
-  "addedMedianMs": 0.36540800000000007,
+  "addedMedianMs": 0.6124479999999999,
   "anisotropyMax": 8,
+  "baseline": "M1 diffuse, samplers/transforms enabled, normal/MR/specular disabled",
   "diffuse": {
-    "medianMs": 0.55904,
-    "p95Ms": 0.5856
+    "medianMs": 0.95232,
+    "p95Ms": 0.990912
   },
   "materials": {
-    "medianMs": 0.924448,
-    "p95Ms": 0.993216
+    "medianMs": 1.564768,
+    "p95Ms": 1.654144
   },
   "msaa": 4,
+  "pairedAddedMedianMs": 0.6131200000000001,
+  "pairedAddedP95Ms": 0.6797120000000001,
   "renderer": "NVIDIA GeForce RTX 5090 Laptop GPU/PCIe/SSE2",
   "resolution": [
     3840,
     2160
   ],
-  "samplesPerMode": 60
+  "samplesPerMode": 300
 }

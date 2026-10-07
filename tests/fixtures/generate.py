@@ -12,6 +12,8 @@ materials = [
  {'name':'mint light', 'pbrMetallicRoughness':{'baseColorFactor':[.05,.4,.29,1]},'emissiveFactor':[.1,.9,.6]},
  {'name':'blue light', 'pbrMetallicRoughness':{'baseColorFactor':[.05,.2,.45,1]},'emissiveFactor':[.12,.4,1]},
 ]
+for index,material in enumerate(materials):
+    material['pbrMetallicRoughness'].update(metallicFactor=.7 if index==3 else 0,roughnessFactor=.7)
 vertices=[[] for _ in materials]
 def quad(a,b,c,d,mat):
     for p,uv in [(a,(0,0)),(b,(1,0)),(c,(1,1)),(a,(0,0)),(c,(1,1)),(d,(0,1))]:

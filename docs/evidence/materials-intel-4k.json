@@ -1,19 +1,22 @@
 {
-  "addedMedianMs": 4.033593999999999,
+  "addedMedianMs": 2.7188030000000003,
   "anisotropyMax": 8,
+  "baseline": "M1 diffuse, samplers/transforms enabled, normal/MR/specular disabled",
   "diffuse": {
-    "medianMs": 6.218593,
-    "p95Ms": 8.551979
+    "medianMs": 6.151822,
+    "p95Ms": 7.746666
   },
   "materials": {
-    "medianMs": 10.252187,
-    "p95Ms": 11.991093
+    "medianMs": 8.870625,
+    "p95Ms": 9.985416
   },
   "msaa": 4,
+  "pairedAddedMedianMs": 2.7557289999999997,
+  "pairedAddedP95Ms": 4.361092999999999,
   "renderer": "Mesa Intel(R) Graphics (PTL)",
   "resolution": [
     3840,
     2160
   ],
-  "samplesPerMode": 60
+  "samplesPerMode": 300
 }

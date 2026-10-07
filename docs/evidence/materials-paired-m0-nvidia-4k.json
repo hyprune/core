@@ -1,0 +1,22 @@
+{
+  "addedMedianMs": 0.773792,
+  "anisotropyMax": 8,
+  "baseline": "M0 renderer 6aa79e2 (no samplers/transforms/PBR)",
+  "diffuse": {
+    "medianMs": 0.746912,
+    "p95Ms": 0.82384
+  },
+  "materials": {
+    "medianMs": 1.520704,
+    "p95Ms": 1.586144
+  },
+  "msaa": 4,
+  "pairedAddedMedianMs": 0.758336,
+  "pairedAddedP95Ms": 0.8124800000000001,
+  "renderer": "NVIDIA GeForce RTX 5090 Laptop GPU/PCIe/SSE2",
+  "resolution": [
+    3840,
+    2160
+  ],
+  "samplesPerMode": 300
+}

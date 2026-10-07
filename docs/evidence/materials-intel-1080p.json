@@ -1,0 +1,22 @@
+{
+  "addedMedianMs": 1.2797919999999998,
+  "anisotropyMax": 8,
+  "baseline": "M1 diffuse, samplers/transforms enabled, normal/MR/specular disabled",
+  "diffuse": {
+    "medianMs": 1.729166,
+    "p95Ms": 3.128437
+  },
+  "materials": {
+    "medianMs": 3.008958,
+    "p95Ms": 3.679843
+  },
+  "msaa": 4,
+  "pairedAddedMedianMs": 0.6342190000000001,
+  "pairedAddedP95Ms": 2.428437,
+  "renderer": "Mesa Intel(R) Graphics (PTL)",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "samplesPerMode": 300
+}

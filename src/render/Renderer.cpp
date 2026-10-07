@@ -160,6 +160,24 @@ void Renderer::freeWorld() {
 void Renderer::prepare(std::shared_ptr<const world::World> world) {
     GLState state;
     init();
+    size_t gpuBytes = 0;
+    for (const auto &mesh : world->meshes)
+        gpuBytes += mesh.vertices.size() * sizeof(world::Vertex);
+    for (size_t i = 0; i < world->images.size(); ++i) {
+        bool color = false;
+        for (const auto &m : world->materials)
+            color |= m.slots[0].texture == int(i) || m.slots[4].texture == int(i);
+        int w = world->images[i].width, h = world->images[i].height;
+        do {
+            gpuBytes += size_t(w) * h * 4 * (color ? 2 : 1);
+            if (w == 1 && h == 1)
+                break;
+            w = std::max(1, w / 2);
+            h = std::max(1, h / 2);
+        } while (true);
+    }
+    if (gpuBytes > 512 * 1024 * 1024)
+        throw std::runtime_error("world GPU budget exceeded including material mip chains");
     std::vector<Batch> batches;
     std::vector<GLuint> textures, colors, samplers;
     try {
@@ -174,7 +192,8 @@ void Renderer::prepare(std::shared_ptr<const world::World> world) {
             anisotropy |= e == "GL_EXT_texture_filter_anisotropic" || e == "GL_ARB_texture_filter_anisotropic";
         }
         float maximum = 1;
-        if (anisotropy) glGetFloatv(0x84FF, &maximum);
+        if (anisotropy)
+            glGetFloatv(0x84FF, &maximum);
         for (size_t i = 0; i < world->images.size(); ++i) {
             const auto &image = world->images[i];
             bool color = false;
@@ -325,17 +344,20 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glUniform1f(glGetUniformLocation(scene_, "roughness"), m.roughness);
         glUniform1f(glGetUniformLocation(scene_, "normalScale"), m.normalScale);
         glUniform1f(glGetUniformLocation(scene_, "occlusionStrength"), m.occlusionStrength);
-        float matrices[45]; GLint sets[5], present[5];
+        float matrices[45];
+        GLint sets[5], present[5];
         for (int i = 0; i < 5; ++i) {
             const auto &slot = m.slots[i];
             float c = std::cos(slot.rotation), s = std::sin(slot.rotation);
-            float matrix[9]{c*slot.scale[0], s*slot.scale[0], 0, -s*slot.scale[1], c*slot.scale[1], 0,
-                            slot.offset[0], slot.offset[1], 1};
-            std::copy_n(matrix, 9, matrices+i*9);
-            sets[i] = slot.texCoord; present[i] = slot.texture >= 0;
-            int unit = i == 0 ? 0 : i+1;
-            glActiveTexture(GL_TEXTURE0+unit);
-            glBindTexture(GL_TEXTURE_2D, present[i] ? (i == 0 || i == 4 ? colorTextures_ : textures_)[slot.texture] : 0);
+            float matrix[9]{c * slot.scale[0], s * slot.scale[0], 0, -s * slot.scale[1], c * slot.scale[1], 0,
+                            slot.offset[0],    slot.offset[1],    1};
+            std::copy_n(matrix, 9, matrices + i * 9);
+            sets[i] = slot.texCoord;
+            present[i] = slot.texture >= 0;
+            int unit = i == 0 ? 0 : i + 1;
+            glActiveTexture(GL_TEXTURE0 + unit);
+            glBindTexture(GL_TEXTURE_2D,
+                          present[i] ? (i == 0 || i == 4 ? colorTextures_ : textures_)[slot.texture] : 0);
             glBindSampler(unit, present[i] ? samplers_[slot.texture] : repeat_);
         }
         glUniformMatrix3fv(glGetUniformLocation(scene_, "uvMatrix"), 5, GL_FALSE, matrices);

@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
         glScissor(2, 4, 17, 19);
         glDepthMask(GL_FALSE);
         glColorMask(GL_TRUE, GL_FALSE, GL_TRUE, GL_FALSE);
-        glActiveTexture(GL_TEXTURE1);
+        glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_2D, app);
         renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
         GLint viewport[4], bound, active;
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
         glGetBooleanv(GL_COLOR_WRITEMASK, mask);
         glGetBooleanv(GL_DEPTH_WRITEMASK, &depth);
         check(viewport[0] == 3 && viewport[1] == 5 && viewport[2] == 100 && viewport[3] == 90, "viewport leaked");
-        check(active == GL_TEXTURE1 && bound == int(app), "texture state leaked");
+        check(active == GL_TEXTURE5 && bound == int(app), "texture state leaked");
         check(glIsEnabled(GL_BLEND) && glIsEnabled(GL_SCISSOR_TEST), "enable state leaked");
         check(!mask[1] && !mask[3] && !depth, "write masks leaked");
         unsigned char pixel[4];
@@ -80,48 +80,97 @@ int main(int argc, char **argv) {
         check(glGetError() == GL_NO_ERROR, "GL error");
         // Compare transformed UV1 against explicitly transformed UV0 for every material slot.
         auto materialWorld = std::make_shared<world::World>();
-        world::Image pattern{2, 2, {255,20,10,255, 30,220,40,255, 20,40,240,255, 220,210,30,255}};
+        world::Image pattern{2, 2, {255, 20, 10, 255, 30, 220, 40, 255, 20, 40, 240, 255, 220, 210, 30, 255}};
         materialWorld->images.push_back(pattern);
-        materialWorld->samplers.push_back({10497,10497,9728,9728});
+        materialWorld->samplers.push_back({10497, 10497, 9728, 9728});
         world::Mesh mesh;
-        float coords[6][2]={{0,0},{1,0},{1,1},{0,0},{1,1},{0,1}};
+        float coords[6][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
         for (auto &xy : coords) {
             world::Vertex v;
-            v.position={-2+xy[0]*4,.2f+xy[1]*3,-2};v.normal={0,0,1};
-            v.uv[0]=xy[0];v.uv[1]=xy[1];v.uv1[0]=xy[0]*2;v.uv1[1]=xy[1]*2;
+            v.position = {-2 + xy[0] * 4, .2f + xy[1] * 3, -2};
+            v.normal = {0, 0, 1};
+            v.uv[0] = xy[0];
+            v.uv[1] = xy[1];
+            v.uv1[0] = xy[0] * 2;
+            v.uv1[1] = xy[1] * 2;
             mesh.vertices.push_back(v);
         }
         materialWorld->meshes.push_back(mesh);
         auto pixels = [&] {
             renderer.prepare(materialWorld);
-            renderer.draw(fbo,320,180,camera,{},false);
-            std::vector<unsigned char> data(320*180*4);
-            glReadPixels(0,0,320,180,GL_RGBA,GL_UNSIGNED_BYTE,data.data());
+            renderer.draw(fbo, 320, 180, camera, {}, false);
+            std::vector<unsigned char> data(320 * 180 * 4);
+            glReadPixels(0, 0, 320, 180, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
             return data;
         };
-        for(int slot=0;slot<5;slot++) {
-            materialWorld->meshes[0]=mesh;
-            world::Material m;m.metallic=.4f;m.roughness=.6f;m.emissive={.2f,.2f,.2f};
-            auto &t=m.slots[slot];t.texture=0;t.texCoord=1;t.offset[0]=.17f;t.offset[1]=.23f;
-            t.scale[0]=1.7f;t.scale[1]=.6f;t.rotation=.4f;
-            materialWorld->materials={m};auto transformed=pixels();
-            for(auto &v:materialWorld->meshes[0].vertices) {
-                float x=v.uv1[0]*t.scale[0],y=v.uv1[1]*t.scale[1];
-                v.uv[0]=std::cos(t.rotation)*x-std::sin(t.rotation)*y+t.offset[0];
-                v.uv[1]=std::sin(t.rotation)*x+std::cos(t.rotation)*y+t.offset[1];
+        for (int slot = 0; slot < 5; slot++) {
+            materialWorld->meshes[0] = mesh;
+            world::Material m;
+            m.metallic = .4f;
+            m.roughness = .6f;
+            m.emissive = {.2f, .2f, .2f};
+            auto &t = m.slots[slot];
+            t.texture = 0;
+            t.texCoord = 1;
+            t.offset[0] = .17f;
+            t.offset[1] = .23f;
+            t.scale[0] = 1.7f;
+            t.scale[1] = .6f;
+            t.rotation = .4f;
+            materialWorld->materials = {m};
+            auto transformed = pixels();
+            for (auto &v : materialWorld->meshes[0].vertices) {
+                float x = v.uv1[0] * t.scale[0], y = v.uv1[1] * t.scale[1];
+                v.uv[0] = std::cos(t.rotation) * x - std::sin(t.rotation) * y + t.offset[0];
+                v.uv[1] = std::sin(t.rotation) * x + std::cos(t.rotation) * y + t.offset[1];
             }
-            materialWorld->materials[0].slots[slot]=world::TextureSlot{0};auto baked=pixels();
-            size_t different=0;
-            for(size_t i=0;i<baked.size();i++)different+=std::abs(int(baked[i])-int(transformed[i]))>2;
-            check(different<500,"KHR_texture_transform disagrees with baked UVs");
+            materialWorld->materials[0].slots[slot] = world::TextureSlot{0};
+            auto baked = pixels();
+            size_t different = 0;
+            for (size_t i = 0; i < baked.size(); i++)
+                different += std::abs(int(baked[i]) - int(transformed[i])) > 2;
+            check(different < 500, "KHR_texture_transform disagrees with baked UVs");
         }
-        materialWorld->meshes[0]=mesh;
-        world::Material m;m.unlit=true;m.slots[0].texture=0;m.slots[0].texCoord=1;
-        materialWorld->materials={m};auto repeat=pixels();
-        materialWorld->samplers[0].wrapS=33648;auto mirror=pixels();
-        materialWorld->samplers[0].wrapS=33071;auto clamp=pixels();
-        check(repeat!=mirror && mirror!=clamp && repeat!=clamp,"sampler wrap modes not honored");
-        check(glGetError()==GL_NO_ERROR,"material GL error");
+        materialWorld->meshes[0] = mesh;
+        world::Material m;
+        m.unlit = true;
+        m.slots[0].texture = 0;
+        m.slots[0].texCoord = 1;
+        materialWorld->materials = {m};
+        auto repeat = pixels();
+        materialWorld->samplers[0].wrapS = 33648;
+        auto mirror = pixels();
+        materialWorld->samplers[0].wrapS = 33071;
+        auto clamp = pixels();
+        check(repeat != mirror && mirror != clamp && repeat != clamp, "sampler wrap modes not honored");
+        materialWorld->images.push_back({1, 1, {0, 0, 0, 255}});
+        materialWorld->samplers.push_back({});
+        auto &dark = materialWorld->materials[0];
+        dark.unlit = false;
+        dark.lightmap = 1;
+        dark.slots[1].texture = 0;
+        dark.metallic = .8f;
+        dark.roughness = .15f;
+        renderer.materialDetails = false;
+        auto diffuse = pixels();
+        renderer.materialDetails = true;
+        auto shaded = pixels();
+        check(diffuse == shaded, "specular illuminated black lightmap");
+        dark.lightmap = -1;
+        dark.unlit = true;
+        for (int minFilter : {9728, 9729, 9984, 9985, 9986, 9987}) {
+            materialWorld->samplers[0].minFilter = minFilter;
+            for (int magFilter : {9728, 9729}) {
+                materialWorld->samplers[0].magFilter = magFilter;
+                auto filtered = pixels();
+                check(filtered[4 * (90 * 320 + 180)] + filtered[4 * (90 * 320 + 180) + 1] +
+                              filtered[4 * (90 * 320 + 180) + 2] >
+                          150,
+                      "incomplete texture/filter combination");
+                check(glGetError() == GL_NO_ERROR, "glTF filter combination failed");
+            }
+        }
+        check(glGetError() == GL_NO_ERROR, "material GL error");
         renderer.destroy();
         glDeleteTextures(1, &app);
         glDeleteTextures(1, &texture);
