@@ -85,6 +85,8 @@ def first_session(client,children,args,shell_token,socketpath):
     except AssertionError:
         print('shell failed:',status(),flush=True);raise
     print('shell ready:',status(),flush=True)
+    wait_for(lambda:not status().get('warp'))
+    wait_for(lambda:'hyprune-hud' in json.dumps(json.loads(ctl('layers','-j'))[world_output]))
     shot('session-arrival.png')
     assert status()['screen']==world_output and status()['map']
     assert any('btop' in s['title'] for s in state()['surfaces']), 'btop terminal failed to map'

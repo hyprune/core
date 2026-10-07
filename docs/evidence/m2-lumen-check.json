@@ -1,0 +1,59 @@
+{
+  "anchors": 14,
+  "areas": [
+    {
+      "dataAnchors": [
+        "sun-court-slot-01-globe-01",
+        "sun-court-slot-01-crate-01",
+        "sun-court-slot-01-crate-02",
+        "sun-court-slot-01-crate-03",
+        "sun-court-slot-01-crate-04",
+        "sun-court-slot-01-crate-05",
+        "sun-court-slot-01-crate-06"
+      ],
+      "freePlacementZones": [
+        "sun-court-open-work"
+      ],
+      "id": "sun-court",
+      "primaryAnchor": "sun-court-slot-01-facade-wall-01",
+      "spawnId": "sun-court",
+      "theme": "sun-court",
+      "toolAnchors": [
+        "sun-court-slot-01-operator-desk-01",
+        "sun-court-slot-01-operator-desk-02",
+        "sun-court-slot-01-field-rig-01",
+        "sun-court-slot-01-field-rig-02",
+        "sun-court-slot-01-kiosk-pillar-01"
+      ],
+      "workspaceSlot": "01"
+    },
+    {
+      "dataAnchors": [
+        "array-hall-slot-02-crate-01",
+        "array-hall-slot-02-crate-02"
+      ],
+      "freePlacementZones": [
+        "array-hall-open-work"
+      ],
+      "id": "array-hall",
+      "primaryAnchor": "array-hall-slot-02-hanging-wall-01",
+      "spawnId": "array-hall",
+      "theme": "array-hall",
+      "toolAnchors": [
+        "array-hall-slot-02-lectern-01",
+        "array-hall-slot-02-lectern-02",
+        "array-hall-slot-02-banner-01",
+        "array-hall-slot-02-banner-02",
+        "array-hall-slot-02-operator-desk-01",
+        "array-hall-slot-02-operator-desk-02",
+        "array-hall-slot-02-operator-desk-03"
+      ],
+      "workspaceSlot": "02"
+    }
+  ],
+  "collisionTriangles": 3600,
+  "estimatedGpuBytes": 393675268,
+  "objects": 9,
+  "placementZones": 2,
+  "worldId": "com.hyprune.lumen-reach"
+}

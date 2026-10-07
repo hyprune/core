@@ -8,5 +8,8 @@ case "$command" in
   up) exec "$root/dev/nested/run.sh" --integration --serve "$@" ;;
   smoke) exec "$root/dev/nested/run.sh" --integration "$@" ;;
   record) exec "$root/dev/nested/run.sh" --integration --record "$@" ;;
-  *) echo 'Usage: dev/hyprune-dev up|smoke|record' >&2; exit 2 ;;
+  m2) exec "$root/dev/nested/run.sh" --m2 --serve "$@" ;;
+  m2-smoke) exec "$root/dev/nested/run.sh" --m2 "$@" ;;
+  m2-record) exec "$root/dev/nested/run.sh" --m2 --record "$@" ;;
+  *) echo 'Usage: dev/hyprune-dev up|smoke|record|m2|m2-smoke|m2-record' >&2; exit 2 ;;
 esac

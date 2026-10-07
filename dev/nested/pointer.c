@@ -16,7 +16,15 @@ int main(int argc,char** argv){
     struct wl_display* display=wl_display_connect(NULL);if(!display)return 2;
     struct wl_registry* registry=wl_display_get_registry(display);const struct wl_registry_listener listener={global,removed};wl_registry_add_listener(registry,&listener,NULL);wl_display_roundtrip(display);if(!manager)return 3;
     struct zwlr_virtual_pointer_v1* pointer=zwlr_virtual_pointer_manager_v1_create_virtual_pointer(manager,NULL);
-    if(argc==3){zwlr_virtual_pointer_v1_motion(pointer,1,wl_fixed_from_double(atof(argv[1])),wl_fixed_from_double(atof(argv[2])));zwlr_virtual_pointer_v1_frame(pointer);}
+    if(argc==3 && !strcmp(argv[1],"scroll")){
+        zwlr_virtual_pointer_v1_axis_source(pointer,WL_POINTER_AXIS_SOURCE_WHEEL);
+        zwlr_virtual_pointer_v1_axis_discrete(pointer,1,WL_POINTER_AXIS_VERTICAL_SCROLL,wl_fixed_from_double(atof(argv[2])*15),atoi(argv[2]));
+        zwlr_virtual_pointer_v1_frame(pointer);
+    } else if(argc==4 && !strcmp(argv[1],"drag")){
+        zwlr_virtual_pointer_v1_button(pointer,1,272,WL_POINTER_BUTTON_STATE_PRESSED);zwlr_virtual_pointer_v1_frame(pointer);wl_display_roundtrip(display);usleep(60000);
+        zwlr_virtual_pointer_v1_motion(pointer,61,wl_fixed_from_double(atof(argv[2])),wl_fixed_from_double(atof(argv[3])));zwlr_virtual_pointer_v1_frame(pointer);wl_display_roundtrip(display);usleep(60000);
+        zwlr_virtual_pointer_v1_button(pointer,121,272,WL_POINTER_BUTTON_STATE_RELEASED);zwlr_virtual_pointer_v1_frame(pointer);
+    } else if(argc==3){zwlr_virtual_pointer_v1_motion(pointer,1,wl_fixed_from_double(atof(argv[1])),wl_fixed_from_double(atof(argv[2])));zwlr_virtual_pointer_v1_frame(pointer);}
     else {zwlr_virtual_pointer_v1_button(pointer,1,272,WL_POINTER_BUTTON_STATE_PRESSED);zwlr_virtual_pointer_v1_frame(pointer);wl_display_roundtrip(display);usleep(60000);zwlr_virtual_pointer_v1_button(pointer,61,272,WL_POINTER_BUTTON_STATE_RELEASED);zwlr_virtual_pointer_v1_frame(pointer);}
     wl_display_roundtrip(display);zwlr_virtual_pointer_v1_destroy(pointer);wl_display_roundtrip(display);wl_display_disconnect(display);return 0;
 }

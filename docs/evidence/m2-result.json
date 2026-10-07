@@ -1,0 +1,33 @@
+{
+  "passed": true,
+  "typed": "M2 mounted terminal input\n",
+  "frames": 4162,
+  "bindings": [
+    {
+      "areaId": "sun-court",
+      "id": 12,
+      "worldId": "org.hyprune.m2.remote"
+    },
+    {
+      "areaId": "sun-court",
+      "id": 10,
+      "worldId": "com.hyprune.lumen-reach"
+    },
+    {
+      "areaId": "array-hall",
+      "id": 11,
+      "worldId": "com.hyprune.lumen-reach"
+    }
+  ],
+  "placements": [
+    {
+      "anchorId": "sun-court-slot-01-operator-desk-01",
+      "areaId": "sun-court",
+      "rule": {
+        "appClass": "hyprune-m2-terminal",
+        "title": "M2 terminal"
+      },
+      "worldId": "org.hyprune.m2"
+    }
+  ]
+}

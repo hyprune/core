@@ -196,3 +196,12 @@ Core excludes QML UI, official world art and SDK tooling. See the proposed
 [roadmap](https://hyprune.com/roadmap/),
 [organization contributing guide](https://github.com/hyprune/.github/blob/main/CONTRIBUTING.md)
 and [Code of Conduct](https://github.com/hyprune/.github/blob/main/CODE_OF_CONDUCT.md).
+
+
+Core M2 adds workspace homes, pulled tools, collision recovery, persistent layouts,
+IPC 0.4 and world format 0.3. See [docs/M2.md](docs/M2.md) and
+[SDK/shell changes](docs/CHANGES-FOR-SDK-AND-SHELL.md). Run `dev/hyprune-dev m2-smoke`
+for locked acceptance or `dev/hyprune-dev m2-record` for the gallery demo. Set
+`HYPRUNE_M2_PACKAGE` to a built Lumen Reach directory to load it unchanged after
+acceptance; `dev/hyprune-dev m2` keeps the isolated session available for captures.
+`build/hyprune-world-check <package-directory>` validates packages without a compositor.

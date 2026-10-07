@@ -8,3 +8,5 @@ __pycache__/
 /dev/nested/.integration-state/
 
 /tests/fixtures/m2/
+
+/dev/nested/.m2-state/
