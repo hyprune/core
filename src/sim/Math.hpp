@@ -24,6 +24,10 @@ inline Vec3 normalized(Vec3 a) {
     float l = length(a);
     return l > 1e-8f ? a / l : Vec3{};
 }
+inline Vec3 rotate(const std::array<float, 4> &q, Vec3 v) {
+    Vec3 u{q[0], q[1], q[2]};
+    return v + cross(u, v) * (2 * q[3]) + cross(u, cross(u, v)) * 2;
+}
 struct Mat4 {
     std::array<float, 16> v{};
     static Mat4 identity() {

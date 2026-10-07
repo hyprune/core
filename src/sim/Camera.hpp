@@ -5,7 +5,7 @@
 namespace hyprune::sim {
 struct Camera {
     Vec3 position{0, 1.7f, 4};
-    float yaw = 0, pitch = 0, verticalSpeed = 0;
+    float yaw = 0, pitch = 0, verticalSpeed = 0, fov = 60;
     bool grounded = false;
     Vec3 forward() const {
         return {std::sin(yaw) * std::cos(pitch), std::sin(pitch), -std::cos(yaw) * std::cos(pitch)};

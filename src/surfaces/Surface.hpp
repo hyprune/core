@@ -7,6 +7,10 @@ struct Surface {
     std::string id, title;
     Vec3 center;
     float width = 3.2f, height = 1.8f, yaw = 0;
+    std::array<float, 4> rotation{0, 0, 0, 1};
+    Vec3 right() const { return rotate(rotation, {std::cos(yaw), 0, -std::sin(yaw)}); }
+    Vec3 up() const { return rotate(rotation, {0, 1, 0}); }
+    Vec3 normal() const { return cross(right(), up()); }
     int pixelWidth = 1, pixelHeight = 1;
     unsigned texture = 0;
     bool focused = false;

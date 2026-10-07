@@ -25,7 +25,9 @@ struct TextureSlot {
 };
 struct Material {
     Vec3 color{1, 1, 1}, emissive{};
-    float alpha = 1;
+    float alpha = 1, alphaCutoff = .5f;
+    int alphaMode = 0; // 0 opaque, 1 mask, 2 blend
+    bool doubleSided = false;
     int baseTexture = -1, lightmap = -1; // baseTexture retained for inspection compatibility
     // base color, normal, metallic-roughness, occlusion, emissive
     std::array<TextureSlot, 5> slots;
@@ -42,6 +44,10 @@ struct Spawn {
     Vec3 position;
     float yaw = 0, pitch = 0;
 };
+struct CubeLevel {
+    int size;
+    std::array<std::vector<float>, 6> faces;
+};
 struct World {
     std::string id, name, defaultSpawn;
     std::vector<Spawn> spawns;
@@ -51,6 +57,10 @@ struct World {
     std::vector<Image> images;
     std::vector<Sampler> samplers;
     Json manifest, map = nullptr, places = Json::array();
+    Json areas = Json::array(), anchors = Json::array(), objects = Json::array(), placementZones = Json::array(),
+         atmosphere;
+    std::array<Image, 6> environment;
+    std::vector<CubeLevel> environmentHigh, environmentLow;
     const Spawn &spawn(const std::string &id = "") const;
 };
 std::filesystem::path safePath(const std::filesystem::path &root, const std::string &path);

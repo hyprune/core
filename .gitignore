@@ -6,3 +6,5 @@ __pycache__/
 /tests/fixtures/materials/
 
 /dev/nested/.integration-state/
+
+/tests/fixtures/m2/

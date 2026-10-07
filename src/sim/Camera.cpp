@@ -90,9 +90,20 @@ void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) c
     int steps = std::max(1, int(std::ceil(dt / .002f)));
     float h = dt / steps;
     for (int k = 0; k < steps; k++) {
+        bool supported = c.grounded && !i.jump;
         c.verticalSpeed -= 9.81f * h;
         c.position += d * (3.5f * h) + Vec3{0, c.verticalSpeed * h, 0};
         resolveCapsule(c, mesh);
+        // Follow continuous descending ramps without alternating airborne frames.
+        // This bounded support snap does not climb stair risers or cross walls.
+        if (supported && !c.grounded && c.verticalSpeed <= 0) {
+            auto candidate = c;
+            candidate.position.y -= .025f;
+            resolveCapsule(candidate, mesh);
+            if (candidate.grounded && candidate.position.y <= c.position.y &&
+                candidate.position.y > c.position.y - .025f)
+                c = candidate;
+        }
     }
 }
 void Fly::step(Camera &c, Intent i, float dt, std::span<const Triangle>) const {

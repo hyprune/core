@@ -98,6 +98,11 @@ void validate(const Json &value, const Json &schema, const Json &common, const s
 } // namespace
 void validateManifest(const Json &value) {
     static const auto common = Json::parse(commonSchema), schema = Json::parse(worldSchema);
+    static const auto common03 = Json::parse(commonSchema03), schema03 = Json::parse(worldSchema03);
+    if (value.value("formatVersion", "") == "0.3") {
+        validate(value, schema03, common03, "world");
+        return;
+    }
     static const auto common02 = Json::parse(commonSchema02), schema02 = Json::parse(worldSchema02);
     if (value.value("formatVersion", "") == "0.2")
         validate(value, schema02, common02, "world");

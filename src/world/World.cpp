@@ -1,4 +1,6 @@
 #include "World.hpp"
+#include "Environment.hpp"
+#include "Mounts.hpp"
 #include "Schema.hpp"
 #include "Spatial.hpp"
 #define CGLTF_IMPLEMENTATION
@@ -68,7 +70,8 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
         return true;
     });
     validateManifest(j);
-    require((j.at("formatVersion") == "0.1" || j.at("formatVersion") == "0.2"), "unsupported world format");
+    require((j.at("formatVersion") == "0.1" || j.at("formatVersion") == "0.2" || j.at("formatVersion") == "0.3"),
+            "unsupported world format");
     require(std::regex_match(j.at("id").get<std::string>(), std::regex("[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+")),
             "invalid world ID");
     for (auto &field : {"version", "name", "license", "scene", "defaultSpawn"})
@@ -84,7 +87,8 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
             safePath(root, a.at("path"));
     }
     require(covered, "M0 requires baseline attribution for all assets");
-    require(j.value("requiredExtensions", Json::array()).empty(), "unsupported required world extension");
+    for (const auto &ext : j.value("requiredExtensions", Json::array()))
+        require(ext == "com.hyprune.lumen-reach.mounts", "unsupported required world extension");
     auto zones = j.value("zones", Json::array());
     require(zones.size() <= 128 && zones.dump().size() <= 65536, "zone metadata exceeds IPC budget");
     std::set<std::string> zoneIds;
@@ -124,7 +128,8 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     require(raw->nodes_count < 10000 && raw->meshes_count < 10000, "scene too complex");
     for (size_t i = 0; i < raw->extensions_required_count; i++)
         require((std::string(raw->extensions_required[i]) == "KHR_materials_unlit" ||
-                 std::string(raw->extensions_required[i]) == "KHR_texture_transform"),
+                 std::string(raw->extensions_required[i]) == "KHR_texture_transform" ||
+                 std::string(raw->extensions_required[i]) == "KHR_materials_emissive_strength"),
                 "unsupported required glTF extension");
     auto relative = std::filesystem::relative(scene.parent_path(), root);
     auto asset = [&](const char *uri) {
@@ -238,6 +243,12 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
         }
         out.emissive = {m.emissive_factor[0], m.emissive_factor[1], m.emissive_factor[2]};
         out.unlit = m.unlit;
+        out.alphaMode = m.alpha_mode == cgltf_alpha_mode_blend ? 2 : m.alpha_mode == cgltf_alpha_mode_mask ? 1 : 0;
+        out.alphaCutoff = m.alpha_cutoff;
+        out.doubleSided = m.double_sided;
+        if (m.has_emissive_strength)
+            out.emissive = out.emissive * m.emissive_strength.emissive_strength;
+        require(std::isfinite(out.emissive.x + out.emissive.y + out.emissive.z), "invalid emission");
         out.slots[1] = slot(m.normal_texture);
         out.slots[3] = slot(m.occlusion_texture);
         out.slots[4] = slot(m.emissive_texture);
@@ -361,6 +372,26 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     }
     require(!result->meshes.empty(), "empty scene");
     loadSpatial(*result, root);
+    loadMounts(*result, raw->nodes_count);
+    result->atmosphere = j.value("atmosphere", defaultAtmosphere());
+    validateAtmosphere(result->atmosphere);
+    if (result->atmosphere.contains("environment")) {
+        int i = 0;
+        for (const auto &face : result->atmosphere["environment"]["faces"]) {
+            auto path = safePath(root, face);
+            int w, h, n;
+            require(stbi_info(path.c_str(), &w, &h, &n) && w == h && w <= 2048, "environment face dimensions");
+            auto pixels = stbi_load(path.c_str(), &w, &h, &n, 4);
+            require(pixels, "environment face decode");
+            result->environment[i++] = {w, h, {pixels, pixels + size_t(w) * h * 4}};
+            stbi_image_free(pixels);
+        }
+    }
+    int resolution = result->atmosphere.contains("environment")
+                         ? std::min(128, result->atmosphere["environment"]["maxResolution"].get<int>())
+                         : 128;
+    result->environmentHigh = prefilterEnvironment(*result, resolution);
+    result->environmentLow = prefilterEnvironment(*result, std::min(64, resolution));
     return result;
 }
 } // namespace hyprune::world

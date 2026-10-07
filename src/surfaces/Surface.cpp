@@ -1,7 +1,7 @@
 #include "Surface.hpp"
 namespace hyprune::surfaces {
 std::optional<Hit> intersect(const Surface &s, Vec3 origin, Vec3 direction, bool clip) {
-    Vec3 normal{std::sin(s.yaw), 0, std::cos(s.yaw)}, right{std::cos(s.yaw), 0, -std::sin(s.yaw)};
+    Vec3 normal = s.normal(), right = s.right(), up = s.up();
     float d = dot(direction, normal);
     if (d >= -1e-5f)
         return {};
@@ -9,7 +9,7 @@ std::optional<Hit> intersect(const Surface &s, Vec3 origin, Vec3 direction, bool
     if (t <= 0)
         return {};
     Vec3 p = origin + direction * t - s.center;
-    float u = dot(p, right) / s.width + .5f, v = .5f - p.y / s.height;
+    float u = dot(p, right) / s.width + .5f, v = .5f - dot(p, up) / s.height;
     if (clip && (u < 0 || u > 1 || v < 0 || v > 1))
         return {};
     return Hit{t, u, v};

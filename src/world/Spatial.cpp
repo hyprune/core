@@ -143,7 +143,7 @@ void loadSpatial(World &w, const std::filesystem::path &package) {
 Json projectMarkers(const World &w, const sim::Camera &camera, float aspect) {
     Json result = Json::array();
     auto view = camera.view();
-    float f = 1 / std::tan(1.04719755f / 2);
+    float f = 1 / std::tan(camera.fov * .01745329252f / 2);
     for (const auto &p : w.places) {
         auto pos = xyz(p.at("position"));
         auto eye = view.point(pos);
