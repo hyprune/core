@@ -564,8 +564,23 @@ void Runtime::focus(const std::string &id, bool keyboard) {
     if (!entry)
         throw ipc::Error(-32003, "unknown surface");
     auto w = entry->window.lock();
-    if (keyboard && w->m_workspace && !w->m_workspace->isVisible())
-        throw ipc::Error(-32007, "hidden workspace keyboard focus is unsupported");
+    if (keyboard && w->m_workspace && !w->m_workspace->isVisible()) {
+        auto b = layout.binding(entry->instance.workspaceId, world.get());
+        if (!b || !world || world->areas.empty() || !layout.pulled(entry->instance, world.get()))
+            throw ipc::Error(-32007, "hidden workspace keyboard focus is unsupported");
+        // Clicking a tool at its physical location selects its native workspace,
+        // while retaining this camera rather than starting another home journey.
+        auto previous = resolvedLocation;
+        resolvedLocation = std::to_string(entry->instance.workspaceId) + ":" + b->at("worldId").get<std::string>() +
+                           ":" + b->at("areaId").get<std::string>();
+        Desktop::focusState()->rawMonitorFocus(monitor.lock());
+        auto result = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(entry->instance.workspaceId));
+        if (!result.success) {
+            resolvedLocation = previous;
+            throw ipc::Error(-32004, "tool workspace activation failed");
+        }
+        control.stop();
+    }
     if (keyboard) {
         Desktop::focusState()->rawWindowFocus(w, Desktop::FOCUS_REASON_CLICK);
         g_pSeatManager->setKeyboardFocus(w->resource());

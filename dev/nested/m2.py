@@ -72,6 +72,18 @@ def acceptance(client,children,args,shell_token,socketpath):
  before=state()['movement']['position'];client.call('workspace.focus',{'id':10});assert state()['mounts']['desktopWorkspaceId']==10
  keys("printf 'stock desktop still works\\n'");keys('-k','Return');client.call('workspace.unfocus',{})
  assert state()['mounts']['desktopWorkspaceId'] is None and state()['movement']['position']==before
+ # A tool reached by walking is usable even while another workspace is selected.
+ s.ctl('dispatch','hl.dsp.focus({ workspace = "11" })');time.sleep(.8)
+ children.append(s.envrun('kitty','--class','hyprune-m2-other','--title','M2 other','bash','--noprofile','--norc',stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
+ other=wait(lambda:next((x for x in state()['surfaces'] if x['title']=='M2 other'),None))
+ client.call('surface.pull',{'surfaceId':other['id']});client.call('surface.place',{'surfaceId':other['id'],'anchorId':'array-hall-slot-02-banner-01'})
+ client.call('workspace.activate',{'id':10});time.sleep(.8);pose(client,[5,2,-1.5]);time.sleep(.15)
+ before=state()['movement']['position'];pointer();wait(lambda:state()['workspaces']['currentId']==11)
+ assert state()['movement']['position']==before,'tool click unexpectedly travelled away from its mount'
+ other_marker=s.STATE/'m2-other-typed.txt';other_marker.unlink(missing_ok=True)
+ keys(f"printf 'M2 other home input\\n' > {other_marker}");keys('-k','Return');wait(lambda:other_marker.exists())
+ assert other_marker.read_text()=='M2 other home input\n';keys('-k','Escape')
+ client.call('surface.return',{'surfaceId':other['id']});client.call('workspace.activate',{'id':10});time.sleep(.8)
  # Same-world workspace changes use travel and retain the same package.
  client.call('workspace.activate',{'id':11});wait(lambda:state()['location']['transition'] and state()['location']['transition']['phase']=='arrived')
  assert state()['world']['id']=='org.hyprune.m2' and abs(state()['movement']['position'][0]-3)<.01
@@ -120,7 +132,8 @@ def acceptance(client,children,args,shell_token,socketpath):
  print('PASS M2 nested: workspace walls, pull/carry wall clamp, owned desk placement, real click/type, relaunch restore, stock focus, same-world travel, cross-world warp, FOV/profile, changed-package relocation, Director and recall',flush=True)
  if args.record:record(client,state,ui)
  if os.environ.get('HYPRUNE_M2_PACKAGE'):
-  package=pathlib.Path(os.environ['HYPRUNE_M2_PACKAGE']);manifest=json.loads((package/'world.json').read_text());client.call('world.load',{'worldId':manifest['id']})
+  installed=json.loads((s.STATE/'package-install.json').read_text())
+  package=s.STATE/'worlds'/installed['worldId'];manifest=json.loads((package/'world.json').read_text());client.call('world.load',{'worldId':manifest['id']})
   for index,area in enumerate(state()['mounts']['areas']):
    client.call('workspace.bind',{'id':10+index,'worldId':manifest['id'],'areaId':area['id']})
   client.call('workspace.activate',{'id':10});time.sleep(2)

@@ -66,6 +66,7 @@ def run(args):
         remote_manifest=json.loads((remote/'world.json').read_text());remote_manifest['id']='org.hyprune.m2.remote';(remote/'world.json').write_text(json.dumps(remote_manifest))
         if os.environ.get('HYPRUNE_M2_PACKAGE'):
             source=pathlib.Path(os.environ['HYPRUNE_M2_PACKAGE']);manifest=json.loads((source/'world.json').read_text());shutil.copytree(source,installed/manifest['id'],dirs_exist_ok=True)
+            (STATE/'package-install.json').write_text(json.dumps({'worldId':manifest['id']}))
     if args.m1:
         subprocess.run([sys.executable,str(ROOT/'tests/fixtures/materials.py')],check=True,stdout=subprocess.DEVNULL)
         shutil.copytree(ROOT/'tests/fixtures/materials',installed/'org.hyprune.materials',dirs_exist_ok=True)

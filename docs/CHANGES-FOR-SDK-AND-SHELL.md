@@ -57,7 +57,9 @@ volume, then safe recall. Mount quaternions drive rendering and pointer projecti
 including tilted lecterns. In-place mouse motion, clicks, scroll and drag go to
 native seat input; text uses the original keyboard path. No public input-injection
 RPC exists. Focus/workspace/button mutations run outside rendering; pending
-input callbacks are cancelled on unload. Apps retain their original workspaces.
+input callbacks are cancelled on unload. Apps retain their original workspaces. Clicking a pulled tool in a different
+home activates its native workspace while preserving the camera at that mount;
+keybind/Director workspace selection still travels to the home.
 
 `atmosphere.set` changes fog, exposure, tone mapping and bloom immediately.
 Changing sky/environment assets requires package reload and returns -32007 here;
