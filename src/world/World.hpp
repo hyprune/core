@@ -1,6 +1,7 @@
 #pragma once
 #include "sim/Camera.hpp"
 #include <filesystem>
+#include <array>
 #include <json.hpp>
 #include <memory>
 #include <vector>
@@ -14,10 +15,21 @@ struct Image {
     int width = 0, height = 0;
     std::vector<unsigned char> rgba;
 };
+// Texture indices refer to images and samplers together; color space belongs to a slot.
+struct Sampler {
+    int wrapS = 10497, wrapT = 10497, minFilter = 9987, magFilter = 9729;
+};
+struct TextureSlot {
+    int texture = -1, texCoord = 0;
+    float offset[2]{}, scale[2]{1, 1}, rotation = 0;
+};
 struct Material {
     Vec3 color{1, 1, 1}, emissive{};
     float alpha = 1;
-    int baseTexture = -1, lightmap = -1;
+    int baseTexture = -1, lightmap = -1; // baseTexture retained for inspection compatibility
+    // base color, normal, metallic-roughness, occlusion, emissive
+    std::array<TextureSlot, 5> slots;
+    float metallic = 1, roughness = 1, normalScale = 1, occlusionStrength = 1;
     bool lightmapSrgb = false, unlit = false;
     float intensity = 1;
 };
@@ -37,6 +49,7 @@ struct World {
     std::vector<Triangle> collision;
     std::vector<Material> materials;
     std::vector<Image> images;
+    std::vector<Sampler> samplers;
     Json manifest;
     const Spawn &spawn(const std::string &id = "") const;
 };

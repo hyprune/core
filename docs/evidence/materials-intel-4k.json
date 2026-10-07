@@ -1,0 +1,19 @@
+{
+  "addedMedianMs": 4.033593999999999,
+  "anisotropyMax": 8,
+  "diffuse": {
+    "medianMs": 6.218593,
+    "p95Ms": 8.551979
+  },
+  "materials": {
+    "medianMs": 10.252187,
+    "p95Ms": 11.991093
+  },
+  "msaa": 4,
+  "renderer": "Mesa Intel(R) Graphics (PTL)",
+  "resolution": [
+    3840,
+    2160
+  ],
+  "samplesPerMode": 60
+}

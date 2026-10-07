@@ -113,7 +113,8 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     std::unique_ptr<cgltf_data, decltype(&cgltf_free)> data(raw, cgltf_free);
     require(raw->nodes_count < 10000 && raw->meshes_count < 10000, "scene too complex");
     for (size_t i = 0; i < raw->extensions_required_count; i++)
-        require(std::string(raw->extensions_required[i]) == "KHR_materials_unlit",
+        require((std::string(raw->extensions_required[i]) == "KHR_materials_unlit" ||
+                 std::string(raw->extensions_required[i]) == "KHR_texture_transform"),
                 "unsupported required glTF extension");
     auto relative = std::filesystem::relative(scene.parent_path(), root);
     auto asset = [&](const char *uri) {
@@ -142,6 +143,12 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     require(cgltf_validate(raw) == cgltf_result_success, "invalid glTF");
     size_t memory = 0;
     for (size_t i = 0; i < raw->textures_count; i++) {
+        Sampler sampler;
+        if (auto *s = raw->textures[i].sampler) {
+            sampler = {int(s->wrap_s), int(s->wrap_t), s->min_filter ? int(s->min_filter) : 9987,
+                       s->mag_filter ? int(s->mag_filter) : 9729};
+        }
+        result->samplers.push_back(sampler);
         auto *img = raw->textures[i].image;
         require(img, "missing texture image");
         bool irradiance = false;
@@ -186,6 +193,22 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
         stbi_image_free(pixels);
         result->images.push_back(std::move(image));
     }
+    auto slot = [&](const cgltf_texture_view &view) {
+        TextureSlot out;
+        if (!view.texture) return out;
+        out.texture = view.texture - raw->textures;
+        out.texCoord = view.texcoord;
+        if (view.has_transform) {
+            const auto &t = view.transform;
+            std::copy_n(t.offset, 2, out.offset);
+            std::copy_n(t.scale, 2, out.scale);
+            out.rotation = t.rotation;
+            if (t.has_texcoord) out.texCoord = t.texcoord;
+        }
+        require(out.texCoord == 0 || out.texCoord == 1, "material requires unsupported UV set (only UV0/UV1)");
+        require(std::isfinite(out.offset[0]+out.offset[1]+out.scale[0]+out.scale[1]+out.rotation), "nonfinite UV transform");
+        return out;
+    };
     for (size_t i = 0; i < raw->materials_count; i++) {
         auto &m = raw->materials[i];
         Material out;
@@ -193,11 +216,20 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
             auto &p = m.pbr_metallic_roughness;
             out.color = {p.base_color_factor[0], p.base_color_factor[1], p.base_color_factor[2]};
             out.alpha = p.base_color_factor[3];
+            out.slots[0] = slot(p.base_color_texture);
+            out.slots[2] = slot(p.metallic_roughness_texture);
+            out.metallic = p.metallic_factor;
+            out.roughness = p.roughness_factor;
             if (p.base_color_texture.texture)
                 out.baseTexture = p.base_color_texture.texture - raw->textures;
         }
         out.emissive = {m.emissive_factor[0], m.emissive_factor[1], m.emissive_factor[2]};
         out.unlit = m.unlit;
+        out.slots[1] = slot(m.normal_texture);
+        out.slots[3] = slot(m.occlusion_texture);
+        out.slots[4] = slot(m.emissive_texture);
+        out.normalScale = m.normal_texture.scale;
+        out.occlusionStrength = m.occlusion_texture.scale;
         result->materials.push_back(out);
     }
     result->materials.push_back(Material{});
@@ -262,6 +294,8 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
             Mesh mesh;
             mesh.material = p.material ? p.material - raw->materials : raw->materials_count;
             require(result->materials[mesh.material].lightmap < 0 || uv1, "declared lightmap needs TEXCOORD_1");
+            for (const auto &slot : result->materials[mesh.material].slots)
+                require(slot.texture < 0 || (slot.texCoord == 0 ? uv : uv1), "material references missing UV set");
             size_t count = p.indices ? p.indices->count : pos->count;
             require(count % 3 == 0 && count < 3000000, "invalid triangle count");
             memory += count * sizeof(Vertex);
@@ -277,6 +311,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
                     require(cgltf_accessor_read_float(uv, index, vert.uv, 2), "invalid UV0");
                 if (uv1)
                     require(cgltf_accessor_read_float(uv1, index, vert.uv1, 2), "invalid UV1");
+                require(std::isfinite(vert.uv[0]+vert.uv[1]+vert.uv1[0]+vert.uv1[1]), "nonfinite UV");
                 if (normal) {
                     float n[3];
                     require(cgltf_accessor_read_float(normal, index, n, 3), "invalid normal");

@@ -2,3 +2,5 @@
 /dev/nested/.state/
 /tests/fixtures/atrium/
 __pycache__/
+
+/tests/fixtures/materials/

@@ -10,7 +10,7 @@ class GLState {
     GLboolean colorMask[4], depthMask;
     struct Unit {
         GLint texture, sampler;
-    } units[2];
+    } units[6];
     static constexpr std::array<GLenum, 8> caps{GL_BLEND,
                                                 GL_DEPTH_TEST,
                                                 GL_SCISSOR_TEST,
@@ -32,7 +32,7 @@ class GLState {
         glGetIntegerv(GL_ACTIVE_TEXTURE, &active);
         glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpack);
         glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &pbo);
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 6; i++) {
             glActiveTexture(GL_TEXTURE0 + i);
             glGetIntegerv(GL_TEXTURE_BINDING_2D, &units[i].texture);
             glGetIntegerv(GL_SAMPLER_BINDING, &units[i].sampler);
@@ -62,7 +62,7 @@ class GLState {
         glBindVertexArray(vao);
         glBindBuffer(GL_ARRAY_BUFFER, array);
         glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 6; i++) {
             glActiveTexture(GL_TEXTURE0 + i);
             glBindTexture(GL_TEXTURE_2D, units[i].texture);
             glBindSampler(i, units[i].sampler);
