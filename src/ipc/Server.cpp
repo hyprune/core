@@ -1,0 +1,326 @@
+#include "Server.hpp"
+#include <cstring>
+#include <fcntl.h>
+#include <filesystem>
+#include <regex>
+#include <sys/random.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/un.h>
+#include <unistd.h>
+namespace hyprune::ipc {
+namespace {
+constexpr size_t MaxFrame = 1048576, MaxQueue = 4 * 1048576;
+using Clock = std::chrono::steady_clock;
+void check(bool ok, int code, const char *message) {
+    if (!ok)
+        throw Error(code, message);
+}
+void exact(const Json &j, std::initializer_list<const char *> required,
+           std::initializer_list<const char *> optional = {}) {
+    check(j.is_object(), -32602, "params must be an object");
+    std::set<std::string> keys;
+    for (auto k : required) {
+        check(j.contains(k), -32602, "missing parameter");
+        keys.insert(k);
+    }
+    for (auto k : optional)
+        keys.insert(k);
+    for (auto it = j.begin(); it != j.end(); ++it)
+        check(keys.contains(it.key()), -32602, "unknown parameter");
+}
+void directory(const std::string &path) {
+    if (mkdir(path.c_str(), 0700) < 0 && errno != EEXIST)
+        throw std::runtime_error("cannot create IPC directory");
+    struct stat s{};
+    if (lstat(path.c_str(), &s) || !S_ISDIR(s.st_mode) || s.st_uid != getuid() || (s.st_mode & 077) != 0)
+        throw std::runtime_error("unsafe IPC directory");
+}
+} // namespace
+std::string randomId() {
+    unsigned char bytes[32];
+    if (getrandom(bytes, sizeof bytes, 0) != sizeof bytes)
+        throw std::runtime_error("getrandom failed");
+    static const char *digits = "0123456789abcdef";
+    std::string id;
+    for (auto b : bytes) {
+        id += digits[b >> 4];
+        id += digits[b & 15];
+    }
+    return id;
+}
+Server::Server(const std::string &runtime, const std::string &instance, std::vector<LaunchGrant> grants,
+               Handler handler)
+    : tokens_(std::move(grants)), handler_(std::move(handler)) {
+    if (runtime.empty() || runtime[0] != '/' || !std::regex_match(instance, std::regex("[A-Za-z0-9_.-]+")) ||
+        instance == "." || instance == "..")
+        throw std::runtime_error("unsafe IPC environment");
+    directory(runtime + "/hyprune");
+    directory(runtime + "/hyprune/" + instance);
+    path_ = runtime + "/hyprune/" + instance + "/control.sock";
+    sockaddr_un address{};
+    address.sun_family = AF_UNIX;
+    if (path_.size() >= sizeof address.sun_path)
+        throw std::runtime_error("IPC path too long");
+    std::strcpy(address.sun_path, path_.c_str());
+    struct stat s{};
+    if (lstat(path_.c_str(), &s) == 0) {
+        if (!S_ISSOCK(s.st_mode) || s.st_uid != getuid())
+            throw std::runtime_error("unsafe existing IPC path");
+        int probe = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+        int result = connect(probe, (sockaddr *)&address, sizeof address);
+        int error = errno;
+        close(probe);
+        if (result == 0 || error != ECONNREFUSED)
+            throw std::runtime_error("IPC listener already exists");
+        if (unlink(path_.c_str()))
+            throw std::runtime_error("cannot remove stale IPC socket");
+    }
+    fd_ = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+    if (fd_ < 0)
+        throw std::runtime_error("socket failed");
+    mode_t previous = umask(0077);
+    int bound = bind(fd_, (sockaddr *)&address, sizeof address);
+    umask(previous);
+    if (bound || listen(fd_, 16)) {
+        close(fd_);
+        fd_ = -1;
+        throw std::runtime_error("IPC bind/listen failed");
+    }
+    session_ = randomId();
+}
+Server::~Server() {
+    for (auto &p : peers_)
+        close(p.fd);
+    if (fd_ >= 0) {
+        close(fd_);
+        unlink(path_.c_str());
+    }
+}
+Json Server::snapshot() const {
+    return {{"sessionId", session_}, {"revision", revision_}, {"state", state_}};
+}
+void Server::publish(Json state) {
+    if (state == state_)
+        return;
+    if (state.dump().size() > MaxFrame - 4096)
+        throw Error(-32008, "snapshot resource limit");
+    state_ = std::move(state);
+    ++revision_;
+}
+void Server::queue(Peer &p, const Json &value) {
+    auto s = value.dump();
+    if (s.size() > MaxFrame || p.output.size() + s.size() + 4 > MaxQueue) {
+        p.closing = true;
+        p.output.clear();
+        return;
+    }
+    uint32_t size = s.size();
+    for (int shift = 24; shift >= 0; shift -= 8)
+        p.output += char(size >> shift);
+    p.output += s;
+}
+void Server::frame(Peer &p, const std::string &bytes) {
+    Json id = nullptr, request;
+    try {
+        std::vector<std::set<std::string>> stack;
+        auto callback = [&](int depth, Json::parse_event_t event, Json &parsed) {
+            if (depth > 64)
+                throw std::runtime_error("too deep");
+            if (event == Json::parse_event_t::object_start)
+                stack.emplace_back();
+            if (event == Json::parse_event_t::key && !stack.back().insert(parsed.get<std::string>()).second)
+                throw std::runtime_error("duplicate key");
+            if (event == Json::parse_event_t::object_end)
+                stack.pop_back();
+            return true;
+        };
+        request = Json::parse(bytes, callback);
+    } catch (...) {
+        queue(p, {{"jsonrpc", "2.0"}, {"id", nullptr}, {"error", {{"code", -32700}, {"message", "invalid JSON"}}}});
+        p.closing = true;
+        return;
+    }
+    try {
+        if (request.is_object() && request.contains("id") && request["id"].is_string() &&
+            !request["id"].get<std::string>().empty() && request["id"].get<std::string>().size() <= 128)
+            id = request["id"];
+        check(!id.is_null() && request.size() == 4 && request.value("jsonrpc", "") == "2.0" &&
+                  request.contains("method") && request["method"].is_string() && request.contains("params") &&
+                  request["params"].is_object(),
+              -32600, "invalid request profile");
+        check(p.ids.insert(id.get<std::string>()).second, -32600, "request ID reused");
+        check(p.ids.size() <= 65536, -32008, "connection request limit");
+        std::string method = request["method"];
+        const auto &params = request["params"];
+        Json result;
+        if (!p.hello) {
+            check(method == "session.hello", -32600, "hello required");
+            exact(params, {"protocols", "client", "capabilities"}, {"token"});
+            check(params["protocols"].is_array() && std::find(params["protocols"].begin(), params["protocols"].end(),
+                                                              Json("0.1")) != params["protocols"].end(),
+                  -32001, "incompatible protocol");
+            exact(params["client"], {"id", "name"});
+            check(params["capabilities"].is_array(), -32602, "invalid capabilities");
+            for (auto &cap : params["capabilities"])
+                check(cap.is_string(), -32602, "invalid capability");
+            if (params.contains("token")) {
+                bool valid = false;
+                for (auto it = tokens_.begin(); it != tokens_.end(); ++it)
+                    if (it->token == params["token"].get<std::string>() &&
+                        it->client == params["client"]["id"].get<std::string>()) {
+                        for (auto &c : params["capabilities"])
+                            if (it->capabilities.contains(c.get<std::string>()))
+                                p.grants.insert(c.get<std::string>());
+                        tokens_.erase(it);
+                        valid = true;
+                        break;
+                    }
+                check(valid, -32002, "invalid launch token");
+            }
+            p.hello = true;
+            Json methods = Json::array({"session.hello", "session.ping"});
+            if (p.grants.contains("state.read"))
+                for (auto s : {"state.subscribe", "state.snapshot", "state.unsubscribe"})
+                    methods.push_back(s);
+            for (auto &[m, grant] : methods_)
+                if (p.grants.contains(grant))
+                    methods.push_back(m);
+            result = {{"protocol", "0.1"},
+                      {"sessionId", session_},
+                      {"capabilities", p.grants},
+                      {"methods", methods},
+                      {"events", p.grants.contains("state.read") ? Json::array({"state.delta"}) : Json::array()}};
+        } else if (method == "session.hello")
+            throw Error(-32600, "hello already completed");
+        else if (method == "session.ping") {
+            exact(params, {});
+            result = {{"monotonicMs",
+                       std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count()}};
+        } else if (method.starts_with("state.") &&
+                   (method == "state.subscribe" || method == "state.snapshot" || method == "state.unsubscribe")) {
+            check(p.grants.contains("state.read"), -32601, "method not advertised");
+            if (method == "state.subscribe") {
+                exact(params, {"topics"});
+                check(params["topics"] == Json::array({"state"}), -32602, "unsupported topics");
+                check(p.subscription.empty(), -32004, "already subscribed");
+                p.subscription = "subscription-" + std::to_string(++subscriptions_);
+                p.baseline = revision_;
+                result = {{"subscriptionId", p.subscription}, {"snapshot", snapshot()}};
+            } else {
+                exact(params, {"subscriptionId"});
+                check(!p.subscription.empty() && params["subscriptionId"] == p.subscription, -32003,
+                      "unknown subscription");
+                if (method == "state.unsubscribe") {
+                    p.subscription.clear();
+                    result = {{"ok", true}};
+                } else {
+                    p.baseline = revision_;
+                    result = {{"snapshot", snapshot()}};
+                }
+            }
+        } else {
+            auto it = methods_.find(method);
+            check(it != methods_.end() && p.grants.contains(it->second), -32601, "method not advertised");
+            result = handler_(method, params);
+        }
+        queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"result", result}});
+    } catch (const Error &e) {
+        queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"error", {{"code", e.code}, {"message", e.what()}}}});
+        if (!p.hello)
+            p.closing = true;
+    } catch (const Json::exception &) {
+        queue(p,
+              {{"jsonrpc", "2.0"}, {"id", id}, {"error", {{"code", -32602}, {"message", "invalid parameter type"}}}});
+    } catch (...) {
+        queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"error", {{"code", -32603}, {"message", "operation failed"}}}});
+    }
+}
+void Server::poll() {
+    for (int i = 0; i < 8; i++) {
+        int fd = accept4(fd_, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
+        if (fd < 0)
+            break;
+        ucred credential{};
+        socklen_t size = sizeof credential;
+        if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &credential, &size) || credential.uid != getuid() ||
+            peers_.size() >= 32) {
+            close(fd);
+            continue;
+        }
+        Peer peer;
+        peer.fd = fd;
+        peers_.push_back(std::move(peer));
+    }
+    auto now = Clock::now();
+    for (auto &p : peers_) {
+        if ((!p.hello && now - p.accepted > std::chrono::seconds(5)) ||
+            (!p.input.empty() && now - p.frameStart > std::chrono::seconds(10))) {
+            p.closing = true;
+            p.output.clear();
+        }
+        if (!p.closing) {
+            char buffer[16384];
+            ssize_t count = recv(p.fd, buffer, sizeof buffer, 0);
+            if (count > 0) {
+                if (p.input.empty())
+                    p.frameStart = now;
+                p.input.append(buffer, count);
+            } else if (count == 0 || (count < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
+                p.closing = true;
+                p.output.clear();
+            }
+            for (int frames = 0; frames < 16 && p.input.size() >= 4 && !p.closing; frames++) {
+                uint32_t length = 0;
+                for (int i = 0; i < 4; i++)
+                    length = (length << 8) | (unsigned char)p.input[i];
+                if (!length || length > MaxFrame) {
+                    p.closing = true;
+                    p.output.clear();
+                    break;
+                }
+                if (p.input.size() < length + 4)
+                    break;
+                auto bytes = p.input.substr(4, length);
+                p.input.erase(0, length + 4);
+                p.frameStart = now;
+                frame(p, bytes);
+            }
+            if (!p.subscription.empty() && p.baseline != revision_ &&
+                now - p.lastDelta >= std::chrono::milliseconds(34) && p.output.empty()) {
+                queue(p, {{"jsonrpc", "2.0"},
+                          {"method", "state.delta"},
+                          {"params",
+                           {{"subscriptionId", p.subscription},
+                            {"sessionId", session_},
+                            {"baseRevision", p.baseline},
+                            {"revision", revision_},
+                            {"changes", state_}}}});
+                p.baseline = revision_;
+                p.lastDelta = now;
+            }
+        }
+        if (!p.output.empty()) {
+            auto n = send(p.fd, p.output.data() + p.written, std::min<size_t>(65536, p.output.size() - p.written),
+                          MSG_NOSIGNAL);
+            if (n > 0) {
+                p.written += n;
+                if (p.written == p.output.size()) {
+                    p.output.clear();
+                    p.written = 0;
+                }
+            } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                p.closing = true;
+                p.output.clear();
+            }
+        }
+    }
+    std::erase_if(peers_, [](Peer &p) {
+        if (p.closing && p.output.empty()) {
+            close(p.fd);
+            return true;
+        }
+        return false;
+    });
+}
+} // namespace hyprune::ipc

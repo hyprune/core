@@ -1,0 +1,4 @@
+/build*/
+/dev/nested/.state/
+/tests/fixtures/atrium/
+__pycache__/
