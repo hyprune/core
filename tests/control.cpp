@@ -66,6 +66,16 @@ int main(int argc, char **argv) {
                 {{"sourceId", "org.other.metrics"}, {"sequence", uint64_t(1)}, {"values", Json::object()}}, -32002);
         control.disconnect("a");
         check(control.leases.empty() && control.sources.empty(), "disconnect cleanup");
+        auto removed = call("shell.claim", {{"outputs", {"output"}}});
+        control.retainOutputs(Json::array());
+        check(control.leases.empty(), "output removal retained lease");
+        control.beginLoad({{"worldId", "org.hyprune.next"}}, "output");
+        auto transition = control.location["transition"];
+        check(transition["phase"] == "loading" && transition["progress"].is_null(), "indeterminate loading");
+        control.endLoad(false);
+        check(control.location["transition"]["id"] == transition["id"] &&
+                  control.location["transition"]["phase"] == "failed",
+              "load failure identity");
         std::cout << "PASS: camera, routes, travel, ownership, hold timing, data grants and disconnect cleanup\n";
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';

@@ -241,6 +241,7 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
         int ms = p.value("durationMs", 600);
         require(ms >= 0 && ms <= 10000, -32602, "duration out of bounds");
         require(!driving(), -32004, "movement already in progress");
+        stop(); // Departing closes Director overlays before passive warp presentation.
         travelFrom = camera.position;
         travelTo = to;
         elapsed = 0;
@@ -267,6 +268,7 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
         require(!driving(), -32004, "movement already in progress");
         speed = p.value("speed", 3.5f);
         require(std::isfinite(speed) && speed >= .1f && speed <= 10, -32602, "speed out of bounds");
+        stop();
         routeIndex = 0;
         location["autodrive"] = true;
     } else if (m == "autodrive.stop") {

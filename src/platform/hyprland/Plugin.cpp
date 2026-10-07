@@ -730,7 +730,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         nullptr);
     g_pEventLoopManager->addTimer(runtime->timer);
     runtime->publish();
-    return {"hyprune-core", "World-driven desktop runtime", "Hyprune contributors", "0.0.1"};
+    return {"hyprune-core", "World-driven desktop runtime", "Hyprune contributors", "0.1.0"};
 }
 APICALL EXPORT void PLUGIN_EXIT() {
     if (!runtime)
