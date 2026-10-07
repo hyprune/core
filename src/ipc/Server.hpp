@@ -36,7 +36,7 @@ class Server {
 
   private:
     struct Peer {
-        int fd = -1;
+        int fd = -1, pid = -1;
         std::string input, output;
         size_t written = 0;
         bool hello = false, closing = false;

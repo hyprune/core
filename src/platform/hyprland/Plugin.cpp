@@ -1,13 +1,18 @@
 #include "control/Control.hpp"
+#include "world/Spatial.hpp"
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
+#include <hyprland/src/desktop/state/LayerState.hpp>
+#include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/src/event/EventBus.hpp>
+#include <hyprland/src/managers/KeybindManager.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/plugins/HookSystem.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
+#include <hyprland/src/protocols/LayerShell.hpp>
 #include <hyprland/src/protocols/core/Compositor.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
 #include <hyprland/src/render/Renderer.hpp>
@@ -15,6 +20,7 @@
 #include <hyprland/src/render/pass/PassElement.hpp>
 #include <hyprland/src/state/MonitorState.hpp>
 #include <hyprutils/memory/UniquePtr.hpp>
+#include <sstream>
 extern "C" {
 #include <lauxlib.h>
 #include <lua.h>
@@ -46,7 +52,7 @@ struct Runtime {
     bool active = false, typing = false, loading = false, loadCancelled = false;
     int renderDepth = 0;
     std::future<std::shared_ptr<world::World>> pendingWorld;
-    std::string pendingSpawn, pendingToggle;
+    std::string pendingSpawn, pendingToggle, resolvedLocation;
     bool toggleAfterLoad = false;
     std::chrono::steady_clock::time_point loadDeadline;
     double accumulator = 0;
@@ -60,6 +66,17 @@ struct Runtime {
     uint64_t deferred = 0, tickDeferred = 0;
     std::chrono::steady_clock::time_point lastTick = std::chrono::steady_clock::now();
     std::filesystem::path installed;
+    struct Binding {
+        int pid;
+        std::string start;
+        wl_client *client;
+        std::string lease;
+        std::chrono::steady_clock::time_point seen;
+    };
+    std::map<std::string, Binding> bindings;
+    Json locations = Json::array();
+    void workspaceLocation();
+    SP<CWLSurfaceResource> directorSurface();
     void publish();
     void toggle(const std::string &output = "");
     void exit();
@@ -95,6 +112,8 @@ bool ownsInput() {
            runtime->monitor == Desktop::focusState()->monitor();
 }
 void motion(void *self, const Vector2D &delta) {
+    if (runtime && runtime->active && runtime->control.uiVisible() && !runtime->directorSurface())
+        return;
     if (ownsInput()) {
         runtime->camera.yaw += float(delta.x) * .0025f;
         runtime->camera.pitch = std::clamp(runtime->camera.pitch - float(delta.y) * .0025f, -1.48f, 1.48f);
@@ -142,6 +161,59 @@ void Runtime::cancelGrab() {
     buttons.clear();
     grabbed.clear();
 }
+std::pair<int, std::string> processIdentity(int pid) {
+    std::ifstream f("/proc/" + std::to_string(pid) + "/stat");
+    std::string line;
+    std::getline(f, line);
+    auto end = line.rfind(')');
+    if (end == std::string::npos)
+        return {-1, ""};
+    std::istringstream rest(line.substr(end + 2));
+    std::string value, start;
+    int parent = -1;
+    for (int field = 3; field <= 22 && rest >> value; field++) {
+        if (field == 4)
+            parent = std::stoi(value);
+        if (field == 22)
+            start = value;
+    }
+    return {parent, start};
+}
+SP<CWLSurfaceResource> Runtime::directorSurface() {
+    for (auto &layer : Desktop::layerState()->layers()) {
+        if (!layer->m_mapped || layer->m_monitor != monitor || layer->m_namespace != "hyprune-director")
+            continue;
+        auto resource = layer->m_layerSurface.lock();
+        auto surface = resource ? resource->m_surface.lock() : nullptr;
+        if (!surface)
+            continue;
+        for (auto &[actor, b] : bindings)
+            if (surface->client() == b.client && layer->getPID() == b.pid && control.ownsLease(actor, b.lease))
+                return surface;
+    }
+    return nullptr;
+}
+void Runtime::workspaceLocation() {
+    if (!active || !monitor || !monitor->m_activeWorkspace)
+        return;
+    auto id = monitor->m_activeWorkspace->m_id;
+    for (const auto &entry : locations)
+        if (entry.at("id") == id) {
+            auto key = std::to_string(id) + ":" + entry.at("worldId").get<std::string>() + ":" +
+                       entry.at("spawnId").get<std::string>();
+            if (key == resolvedLocation)
+                return;
+            if (loading) {
+                loadCancelled = true;
+                return;
+            }
+            resolvedLocation = key;
+            if (!world || world->id != entry.at("worldId").get<std::string>() ||
+                world->defaultSpawn != entry.at("spawnId").get<std::string>())
+                load(entry.at("worldId"), entry.at("spawnId"));
+            return;
+        }
+}
 void Runtime::publish() {
     if (!ipc)
         return;
@@ -155,7 +227,35 @@ void Runtime::publish() {
                             {"focused", e.surface.id == focused}});
     float sy = std::sin(-camera.yaw / 2), cy = std::cos(-camera.yaw / 2), sp = std::sin(camera.pitch / 2),
           cp = std::cos(camera.pitch / 2);
-    ipc->publish({{"runtime",
+    Json spatial = {
+        {"world", world ? Json{{"id", world->id}, {"name", world->name}, {"places", world->places}} : Json(nullptr)},
+        {"map", world ? world->map : Json(nullptr)},
+        {"output", nullptr},
+        {"projection", nullptr}};
+    if (monitor) {
+        auto output = "output-" + std::to_string(monitor->m_id);
+        spatial["output"] = {{"id", output},
+                             {"name", monitor->m_name},
+                             {"width", int(monitor->m_pixelSize.x)},
+                             {"height", int(monitor->m_pixelSize.y)},
+                             {"scale", monitor->m_scale}};
+        if (active && world)
+            spatial["projection"] = {
+                {"outputId", output},
+                {"worldId", world->id},
+                {"monotonicMs", std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now().time_since_epoch())
+                                    .count()},
+                {"markers",
+                 world::projectMarkers(*world, camera, float(monitor->m_pixelSize.x) / monitor->m_pixelSize.y)}};
+    }
+    ipc->publish({{"spatial", spatial},
+                  {"workspaces",
+                   {{"currentId", monitor && monitor->m_activeWorkspace && monitor->m_activeWorkspace->m_id > 0
+                                      ? Json(monitor->m_activeWorkspace->m_id)
+                                      : Json(nullptr)},
+                    {"locations", locations}}},
+                  {"runtime",
                    {{"active", active},
                     {"outputs", monitor ? Json::array({"output-" + std::to_string(monitor->m_id)}) : Json::array()}}},
                   {"world", world ? Json{{"id", world->id}, {"spawnId", world->defaultSpawn}} : Json(nullptr)},
@@ -209,6 +309,7 @@ void Runtime::finishLoad() {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         renderer.prepare(candidate);
         world = std::move(candidate);
+        capture.release();
         auto transition = control.location["transition"];
         control.reset(world.get());
         control.location["transition"] = transition;
@@ -262,6 +363,8 @@ void Runtime::toggle(const std::string &output) {
                 chosen = m;
     if (!chosen)
         throw std::runtime_error("no output");
+    if (chosen->m_transform != WL_OUTPUT_TRANSFORM_NORMAL)
+        throw ipc::Error(-32007, "transformed world outputs unsupported");
     monitor = chosen;
     control.outputId = "output-" + std::to_string(chosen->m_id);
     savedFocus = Desktop::focusState()->window();
@@ -273,7 +376,7 @@ void Runtime::toggle(const std::string &output) {
     // the rendered reticle are intentional in M0; hardware cursor rendering
     // must be tested on a dedicated DRM session before adding cursor gates.
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
-    capture.refresh(chosen);
+    capture.refresh(chosen, world.get());
     publish();
 }
 void Runtime::exit() {
@@ -283,6 +386,9 @@ void Runtime::exit() {
         return;
     active = false;
     control.stop();
+    for (auto &[actor, b] : bindings)
+        control.associate(actor, false);
+    bindings.clear();
     typing = false;
     focused.clear();
     keys.clear();
@@ -316,22 +422,84 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     std::string actor = params.value("_actor", ""), client = params.value("_client", "");
     params.erase("_actor");
     params.erase("_client");
+    int peerPid = params.value("_pid", -1);
+    auto protocol = params.value("_protocol", "0.1");
+    params.erase("_pid");
+    params.erase("_protocol");
     if (method == "_operation.cancel") {
         loadCancelled = true;
         return Json::object();
     }
     if (method == "_connection.closed") {
+        bindings.erase(actor);
         control.disconnect(actor);
         publish();
         return Json::object();
     }
     if (locked())
         throw ipc::Error(-32005, "session locked");
+    if (method == "shell.bind") {
+        if (params.size() != 2 || !params.contains("pid") || !params.at("pid").is_number_integer() ||
+            !params.contains("leaseId") || !params.at("leaseId").is_string())
+            throw ipc::Error(-32602, "invalid shell binding");
+        auto value = params.at("pid").get<int64_t>();
+        if (value <= 0 || value > 2147483647)
+            throw ipc::Error(-32602, "invalid shell PID");
+        int pid = value;
+        auto identity = processIdentity(pid);
+        std::string lease = params.at("leaseId");
+        if (!active || pid <= 0 || identity.first != peerPid || identity.second.empty() ||
+            !control.ownsLease(actor, lease))
+            throw ipc::Error(-32002, "shell must be authenticated peer's direct child with an owned lease");
+        wl_client *verified = nullptr;
+        for (auto &layer : Desktop::layerState()->layers()) {
+            if (layer->m_monitor != monitor || !layer->m_mapped || layer->m_namespace != "hyprune-hud")
+                continue;
+            auto resource = layer->m_layerSurface.lock();
+            auto surface = resource ? resource->m_surface.lock() : nullptr;
+            if (!surface)
+                continue;
+            pid_t waylandPid;
+            uid_t uid;
+            gid_t gid;
+            wl_client_get_credentials(surface->client(), &waylandPid, &uid, &gid);
+            if (waylandPid == pid && uid == getuid())
+                verified = surface->client();
+        }
+        if (!verified)
+            throw ipc::Error(-32002, "no credential-matched HUD on leased output");
+        bindings[actor] = {pid, identity.second, verified, lease, std::chrono::steady_clock::now()};
+        control.associate(actor, true);
+        publish();
+        return Json{{"revision", ipc->revision()}};
+    }
+    if (method == "workspace.activate") {
+        if (params.size() != 1 || !params.contains("id") || !params.at("id").is_number_integer())
+            throw ipc::Error(-32602, "invalid workspace");
+        auto entry = std::find_if(locations.begin(), locations.end(),
+                                  [&](const Json &v) { return v.at("id") == params.at("id"); });
+        if (entry == locations.end())
+            throw ipc::Error(-32003, "unmapped workspace");
+        if (!active || !monitor)
+            throw ipc::Error(-32005, "world mode inactive");
+        Desktop::focusState()->rawMonitorFocus(monitor.lock());
+        auto result = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(params.at("id").get<int>()));
+        if (!result.success)
+            throw ipc::Error(-32004, "workspace activation failed");
+        publish();
+        return Json{{"revision", ipc->revision()}};
+    }
     if (control::Control::methods().contains(method)) {
+        if (method == "shell.overlay" && params.value("exclusiveInput", false) && protocol != "0.3")
+            throw ipc::Error(-32007, "verified association requires IPC 0.3");
         if ((method == "travel.start" || method == "autodrive.start") && !active)
             throw ipc::Error(-32005, "world mode inactive");
         auto outputs = monitor ? Json::array({"output-" + std::to_string(monitor->m_id)}) : Json::array();
         auto result = control.execute(method, params, actor, client, world.get(), camera, outputs);
+        if (method == "shell.release") {
+            bindings.erase(actor);
+            control.associate(actor, false);
+        }
         if (control.uiVisible() || control.driving()) {
             keys.clear();
             cancelGrab();
@@ -380,12 +548,43 @@ void Runtime::tick() {
             exit();
         return;
     }
+    // Observe workspace changes before committing a ready asynchronous load.
+    // This also lets a newer location cancel an in-flight mapping request.
+    safe([&] { workspaceLocation(); });
     finishLoad();
     if (locked() && active)
         exit();
     auto now = std::chrono::steady_clock::now();
     float dt = std::chrono::duration<float>(now - lastTick).count();
     lastTick = now;
+    for (auto it = bindings.begin(); it != bindings.end();) {
+        bool live = false;
+        if (processIdentity(it->second.pid).second == it->second.start &&
+            control.ownsLease(it->first, it->second.lease))
+            for (auto &layer : Desktop::layerState()->layers()) {
+                auto resource = layer->m_layerSurface.lock();
+                auto surface = resource ? resource->m_surface.lock() : nullptr;
+                if (surface && surface->client() == it->second.client && layer->getPID() == it->second.pid &&
+                    layer->m_monitor == monitor) {
+                    live = true;
+                    break;
+                }
+            }
+        // Layer switches may destroy the HUD immediately before mapping Director.
+        // The process identity and client are checked again before routing any key.
+        if (live)
+            it->second.seen = now;
+        if (processIdentity(it->second.pid).second != it->second.start ||
+            (!live && now - it->second.seen > std::chrono::milliseconds(500))) {
+            control.associate(it->first, false);
+            it = bindings.erase(it);
+        } else
+            ++it;
+    }
+    if (control.exclusive()) {
+        if (auto surface = directorSurface())
+            g_pSeatManager->setKeyboardFocus(surface);
+    }
     control.tick(dt, camera, world.get());
     if (control.uiVisible()) {
         keys.clear();
@@ -420,7 +619,7 @@ void Runtime::tick() {
             camera.position = s.position + Vec3{0, 1.7f, 0};
             camera.verticalSpeed = 0;
         }
-        capture.refresh(monitor.lock());
+        capture.refresh(monitor.lock(), world.get());
         if (!focused.empty() && !capture.find(focused)) {
             typing = false;
             focused.clear();
@@ -530,8 +729,24 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         throw std::runtime_error("Hyprune: missing session environment");
     runtime->ipc = std::make_unique<hyprune::ipc::Bridge>(
         HYPRUNE_DAEMON_PATH, [](auto &method, auto &params) { return runtime->method(method, params); });
+    if (const char *file = getenv("HYPRUNE_WORKSPACE_LOCATIONS")) {
+        std::ifstream input(file);
+        input >> runtime->locations;
+        if (!runtime->locations.is_array() || runtime->locations.size() > 32)
+            throw std::runtime_error("invalid workspace mapping");
+        std::set<int> ids;
+        for (auto &entry : runtime->locations) {
+            if (entry.size() != 4 || !entry.at("id").is_number_integer() || entry.at("id").get<int>() <= 0 ||
+                !ids.insert(entry.at("id").get<int>()).second || !entry.at("label").is_string() ||
+                entry.at("label").get<std::string>().size() > 256 || !entry.at("worldId").is_string() ||
+                !entry.at("spawnId").is_string())
+                throw std::runtime_error("invalid workspace mapping entry");
+        }
+    }
     auto methods = hyprune::control::Control::methods();
-    methods.insert({{"world.load", "world.control"},
+    methods.insert({{"shell.bind", "shell.control"},
+                    {"workspace.activate", "world.control"},
+                    {"world.load", "world.control"},
                     {"surface.focus", "surface.control"},
                     {"movement.set", "movement.control"},
                     {"runtime.exit", "runtime.control"}});
@@ -562,11 +777,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 g_pHyprRenderer->addPassElement(makeUnique<Pass>());
         });
     }));
-    runtime->listeners.push_back(
-        Event::bus()->m_events.input.mouse.move.listen([](Vector2D, Event::SCallbackInfo &info) {
-            if (ownsInput())
-                info.cancelled = true;
-        }));
+    runtime->listeners.push_back(Event::bus()->m_events.input.mouse.move.listen([](Vector2D,
+                                                                                   Event::SCallbackInfo &info) {
+        if (ownsInput() || (runtime && runtime->active && runtime->control.uiVisible() && !runtime->directorSurface()))
+            info.cancelled = true;
+    }));
     runtime->listeners.push_back(
         Event::bus()->m_events.input.keyboard.key.listen([](IKeyboard::SKeyEvent event, Event::SCallbackInfo &info) {
             safe([&] {
@@ -576,7 +791,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 if (!keyboard || !keyboard->m_xkbSymState)
                     return;
                 auto sym = xkb_keysym_to_lower(xkb_state_key_get_one_sym(keyboard->m_xkbSymState, event.keycode + 8));
-                if (sym == XKB_KEY_Tab && !runtime->typing) {
+                if (sym == XKB_KEY_Tab && !runtime->typing && !runtime->control.uiVisible()) {
                     runtime->control.hold(event.state == WL_KEYBOARD_KEY_STATE_PRESSED);
                     info.cancelled = true;
                     return;
@@ -633,8 +848,14 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     info.cancelled = true;
                     return;
                 }
-                if (runtime->control.uiVisible())
+                if (runtime->control.uiVisible()) {
+                    auto surface = runtime->control.exclusive() ? runtime->directorSurface() : nullptr;
+                    if (!surface)
+                        info.cancelled = true;
+                    else
+                        g_pSeatManager->setKeyboardFocus(surface);
                     return;
+                }
                 if (action && event.state == WL_KEYBOARD_KEY_STATE_PRESSED && runtime->control.driving())
                     runtime->control.stop();
                 if (runtime->typing)
@@ -657,6 +878,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     runtime->listeners.push_back(
         Event::bus()->m_events.input.mouse.button.listen([](IPointer::SButtonEvent event, Event::SCallbackInfo &info) {
             safe([&] {
+                if (runtime->active && runtime->control.uiVisible() && !runtime->directorSurface()) {
+                    info.cancelled = true;
+                    return;
+                }
                 if (!ownsInput())
                     return;
                 info.cancelled = true;
@@ -693,11 +918,21 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     runtime->listeners.push_back(
         Event::bus()->m_events.input.mouse.axis.listen([](IPointer::SAxisEvent event, Event::SCallbackInfo &info) {
             safe([&] {
+                if (runtime->active && runtime->control.uiVisible() && !runtime->directorSurface()) {
+                    info.cancelled = true;
+                    return;
+                }
                 if (!ownsInput())
                     return;
                 info.cancelled = true;
-                if (runtime->control.uiVisible())
+                if (runtime->control.uiVisible()) {
+                    auto surface = runtime->control.exclusive() ? runtime->directorSurface() : nullptr;
+                    if (!surface)
+                        info.cancelled = true;
+                    else
+                        g_pSeatManager->setKeyboardFocus(surface);
                     return;
+                }
                 if (runtime->typing) {
                     g_pSeatManager->sendPointerAxis(event.timeMs, event.axis, event.delta, event.deltaDiscrete / 120,
                                                     event.deltaDiscrete, event.source, event.relativeDirection);
@@ -730,7 +965,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         nullptr);
     g_pEventLoopManager->addTimer(runtime->timer);
     runtime->publish();
-    return {"hyprune-core", "World-driven desktop runtime", "Hyprune contributors", "0.1.0"};
+    return {"hyprune-core", "World-driven desktop runtime", "Hyprune contributors", "0.2.0"};
 }
 APICALL EXPORT void PLUGIN_EXIT() {
     if (!runtime)

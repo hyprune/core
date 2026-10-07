@@ -83,7 +83,7 @@ Server::Server(const std::string &runtime, const std::string &instance, std::vec
     mode_t previous = umask(0077);
     int bound = bind(fd_, (sockaddr *)&address, sizeof address);
     umask(previous);
-    if (bound || listen(fd_, 16)) {
+    if (bound || chmod(path_.c_str(), 0600) || listen(fd_, 16)) {
         close(fd_);
         fd_ = -1;
         throw std::runtime_error("IPC bind/listen failed");
@@ -102,10 +102,14 @@ Json Server::snapshot() const {
     return {{"sessionId", session_}, {"revision", revision_}, {"state", state_}};
 }
 Json Server::visibleState(const Peer &p) const {
-    if (p.protocol == "0.2")
+    if (p.protocol == "0.3")
         return state_;
     Json state = state_;
     if (state.is_object()) {
+        state.erase("spatial");
+        state.erase("workspaces");
+        if (p.protocol == "0.2")
+            return state;
         state.erase("location");
         state.erase("integrations");
     }
@@ -118,7 +122,7 @@ void Server::notify(const std::string &event, Json params) {
     params["sessionId"] = session_;
     params["revision"] = revision_;
     for (auto &p : peers_)
-        if (p.hello && !p.closing && p.protocol == "0.2" && !p.subscription.empty())
+        if (p.hello && !p.closing && p.protocol != "0.1" && !p.subscription.empty())
             queue(p, {{"jsonrpc", "2.0"}, {"method", event}, {"params", params}});
 }
 void Server::publish(Json state) {
@@ -186,8 +190,9 @@ void Server::frame(Peer &p, const std::string &bytes) {
                 check(!protocol.empty() && protocol.size() <= 256 && protocols.insert(protocol).second, -32602,
                       "invalid protocol list");
             }
-            check(protocols.contains("0.2") || protocols.contains("0.1"), -32001, "incompatible protocol");
-            p.protocol = protocols.contains("0.2") ? "0.2" : "0.1";
+            check(protocols.contains("0.3") || protocols.contains("0.2") || protocols.contains("0.1"), -32001,
+                  "incompatible protocol");
+            p.protocol = protocols.contains("0.3") ? "0.3" : protocols.contains("0.2") ? "0.2" : "0.1";
             exact(params["client"], {"id", "name"});
             check(params["client"]["id"].is_string() && params["client"]["name"].is_string(), -32602,
                   "invalid client identity");
@@ -204,7 +209,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
             for (auto &cap : params["capabilities"]) {
                 check(cap.is_string(), -32602, "invalid capability");
                 auto name = cap.get<std::string>();
-                check(known.contains(name) && (p.protocol == "0.2" || name != "data.publish") &&
+                check(known.contains(name) && (p.protocol != "0.1" || name != "data.publish") &&
                           requested.insert(name).second,
                       -32602, "invalid capability list");
             }
@@ -235,14 +240,15 @@ void Server::frame(Peer &p, const std::string &bytes) {
             const std::set<std::string> legacy{"world.load",  "surface.focus", "movement.set", "runtime.exit",
                                                "shell.claim", "shell.release", "shell.overlay"};
             for (auto &[m, grant] : methods_)
-                if (p.grants.contains(grant) && (p.protocol == "0.2" || legacy.contains(m)))
+                if (p.grants.contains(grant) && (p.protocol != "0.1" || legacy.contains(m)) &&
+                    (p.protocol == "0.3" || (m != "shell.bind" && m != "workspace.activate")))
                     methods.push_back(m);
             result = {{"protocol", p.protocol},
                       {"sessionId", session_},
                       {"capabilities", p.grants},
                       {"methods", methods},
                       {"events", p.grants.contains("state.read")
-                                     ? (p.protocol == "0.2" ? Json::array({"state.delta", "location.transition",
+                                     ? (p.protocol != "0.1" ? Json::array({"state.delta", "location.transition",
                                                                            "ui.opened", "ui.closed", "data.updated"})
                                                             : Json::array({"state.delta"}))
                                      : Json::array()}};
@@ -295,12 +301,18 @@ void Server::frame(Peer &p, const std::string &bytes) {
             check(it != methods_.end() && p.grants.contains(it->second), -32601, "method not advertised");
             const std::set<std::string> legacy{"world.load",  "surface.focus", "movement.set", "runtime.exit",
                                                "shell.claim", "shell.release", "shell.overlay"};
-            check(p.protocol == "0.2" || legacy.contains(method), -32601, "method not advertised for protocol");
+            check(p.protocol != "0.1" || legacy.contains(method), -32601, "method not advertised for protocol");
+            check(p.protocol == "0.3" || (method != "shell.bind" && method != "workspace.activate"), -32601,
+                  "method not advertised for protocol");
             Json command = params;
-            check(!command.contains("_actor") && !command.contains("_client"), -32602, "reserved parameter");
+            check(!command.contains("_actor") && !command.contains("_client") && !command.contains("_pid") &&
+                      !command.contains("_protocol"),
+                  -32602, "reserved parameter");
             if (contextual_) {
                 command["_actor"] = p.actor;
                 command["_client"] = p.client;
+                command["_pid"] = p.pid;
+                command["_protocol"] = p.protocol;
             }
             result = handler_(method, command);
         }
@@ -362,6 +374,7 @@ void Server::poll() {
         }
         Peer peer;
         peer.fd = fd;
+        peer.pid = credential.pid;
         peers_.push_back(std::move(peer));
     }
     auto now = Clock::now();

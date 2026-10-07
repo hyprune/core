@@ -1,7 +1,7 @@
 #pragma once
 #include "sim/Camera.hpp"
-#include <filesystem>
 #include <array>
+#include <filesystem>
 #include <json.hpp>
 #include <memory>
 #include <vector>
@@ -50,7 +50,7 @@ struct World {
     std::vector<Material> materials;
     std::vector<Image> images;
     std::vector<Sampler> samplers;
-    Json manifest;
+    Json manifest, map = nullptr, places = Json::array();
     const Spawn &spawn(const std::string &id = "") const;
 };
 std::filesystem::path safePath(const std::filesystem::path &root, const std::string &path);

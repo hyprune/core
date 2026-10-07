@@ -129,7 +129,33 @@ void Control::reset(const world::World *w) {
                 {"autodrive", false},
                 {"transition", nullptr}};
 }
+void Control::associate(const std::string &actor, bool verified) {
+    if (verified)
+        associations.insert(actor);
+    else {
+        associations.erase(actor);
+        for (auto &l : leases)
+            if (owners.at(l.at("id").get<std::string>()) == actor)
+                for (auto &o : l["overlays"]) {
+                    if (o["visible"] == true)
+                        events.emplace_back("ui.closed", Json{{"leaseId", l["id"]}, {"outputId", o["outputId"]}});
+                    o["visible"] = false;
+                    o["exclusiveInput"] = false;
+                }
+    }
+}
+bool Control::ownsLease(const std::string &actor, const std::string &lease) const {
+    return owners.contains(lease) && owners.at(lease) == actor;
+}
+bool Control::exclusive() const {
+    for (const auto &l : leases)
+        for (const auto &o : l["overlays"])
+            if (o["exclusiveInput"] == true)
+                return true;
+    return false;
+}
 void Control::disconnect(const std::string &actor) {
+    associations.erase(actor);
     eraseJson(leases, [&](const Json &l) { return owners[l.at("id").get<std::string>()] == actor; });
     eraseJson(sources, [&](const Json &s) { return owners[s.at("sourceId").get<std::string>()] == actor; });
     std::erase_if(owners, [&](const auto &o) {
@@ -316,8 +342,8 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
         if (m == "shell.overlay") {
             require(p["visible"].is_boolean() && p["exclusiveInput"].is_boolean(), -32602, "invalid overlay flags");
             require(p["visible"] == true || p["exclusiveInput"] == false, -32602, "hidden overlay cannot grab input");
-            require(p["exclusiveInput"] == false, -32007,
-                    "exclusive input requires launcher Wayland association, unavailable in M1");
+            require(p["exclusiveInput"] == false || associations.contains(actor), -32007,
+                    "exclusive input requires verified Wayland association");
         }
         bool found = false;
         for (auto &l : leases)
@@ -326,7 +352,7 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
                     if (o["outputId"] == p["outputId"]) {
                         found = true;
                         o["visible"] = m == "ui.open" || (m == "shell.overlay" && p["visible"] == true);
-                        o["exclusiveInput"] = false;
+                        o["exclusiveInput"] = m == "shell.overlay" && p["exclusiveInput"] == true;
                     }
         require(found, -32003, "output not leased");
         if (m == "ui.open" || m == "ui.close")

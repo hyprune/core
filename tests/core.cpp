@@ -1,5 +1,6 @@
 #include "surfaces/Surface.hpp"
 #include "world/Schema.hpp"
+#include "world/Spatial.hpp"
 #include "world/World.hpp"
 #include <filesystem>
 #include <fstream>
@@ -26,6 +27,25 @@ int main(int argc, char **argv) {
         return 1;
     auto temp = std::filesystem::temp_directory_path() / ("hyprune-unit-" + std::to_string(getpid()));
     try {
+        world::validateMapSvg("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><path d=\"M 0 0 L 10 "
+                              "10\" stroke=\"#fff\"/></svg>");
+        for (const auto &bad :
+             {"<svg><script/></svg>", "<!DOCTYPE svg [<!ENTITY x SYSTEM 'file:///etc/passwd'>]><svg/>",
+              "<svg><image href='https://bad'/></svg>", "<svg onload='bad()'/>",
+              "<svg><rect fill='url(https://bad)'/></svg>", "<?xml version='1.0'?><svg/>",
+              "<svg><foreignObject/></svg>"})
+            rejects([&] { world::validateMapSvg(bad); }, "unsafe SVG accepted");
+        world::World projected;
+        projected.places =
+            world::Json::array({world::Json{{"id", "front"}, {"name", "Front"}, {"position", {0, 1.7, -5}}},
+                                world::Json{{"id", "behind"}, {"name", "Behind"}, {"position", {0, 1.7, 5}}}});
+        sim::Camera viewer;
+        viewer.position = {0, 1.7, 0};
+        auto markers = world::projectMarkers(projected, viewer, 16.f / 9);
+        check(markers.size() == 1 && markers[0]["id"] == "front" && std::abs(markers[0]["x"].get<float>() - .5f) < .001,
+              "projection clipping/convention");
+        projected.collision.push_back({{-2, 0, -2}, {2, 0, -2}, {0, 4, -2}});
+        check(world::projectMarkers(projected, viewer, 16.f / 9)[0]["occluded"] == true, "marker collision occlusion");
         auto w = world::load(argv[1]);
         check(w->meshes.size() == 6, "fixture mesh count");
         check(!w->collision.empty(), "explicit collision loaded");

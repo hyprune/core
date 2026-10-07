@@ -1,5 +1,6 @@
 #pragma once
 #include "surfaces/Surface.hpp"
+#include "world/World.hpp"
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/render/Texture.hpp>
 #include <memory>
@@ -15,7 +16,7 @@ class Capture {
         CHyprSignalListener commitListener;
     };
     std::vector<Entry> entries;
-    void refresh(PHLMONITOR monitor);
+    void refresh(PHLMONITOR monitor, const world::World *world = nullptr);
     void release();
     Entry *find(const std::string &id);
 

@@ -8,7 +8,7 @@
 namespace hyprune::platform {
 // Runs on the event loop, never from IPassElement::draw. Read-only texture
 // leases avoid snapshot FBOs and compositor recursion entirely for M0.
-void Capture::refresh(PHLMONITOR monitor) {
+void Capture::refresh(PHLMONITOR monitor, const world::World *world) {
     std::erase_if(entries, [&](Entry &e) {
         bool remove = !e.window || !e.window->m_isMapped || e.window->m_monitor != monitor;
         if (remove && e.window && e.window->m_isMapped) {
@@ -60,6 +60,21 @@ void Capture::refresh(PHLMONITOR monitor) {
         it->surface.pixelWidth = std::max(1, int(surface->m_current.size.x));
         it->surface.pixelHeight = std::max(1, int(surface->m_current.size.y));
         it->surface.height = it->surface.width * float(it->surface.pixelHeight) / it->surface.pixelWidth;
+        if (world) {
+            auto anchors = world->manifest.value("anchors", world::Json::array());
+            size_t index = std::distance(entries.begin(), it);
+            if (index < anchors.size() && anchors[index].at("screenType") == "com.hyprune.window") {
+                auto &a = anchors[index];
+                auto pos = a.at("pose").at("position"), q = a.at("pose").at("rotation");
+                it->surface.center = {pos[0], pos[1], pos[2]};
+                it->surface.yaw =
+                    std::atan2(2 * (q[3].get<float>() * q[1].get<float>() + q[0].get<float>() * q[2].get<float>()),
+                               1 - 2 * (q[1].get<float>() * q[1].get<float>() + q[2].get<float>() * q[2].get<float>()));
+                float ratio = float(it->surface.pixelWidth) / it->surface.pixelHeight;
+                it->surface.width = std::min(a.at("size")[0].get<float>(), a.at("size")[1].get<float>() * ratio);
+                it->surface.height = it->surface.width / ratio;
+            }
+        }
         w->setSuspended(false);
         surface->frame(std::chrono::steady_clock::now());
     }

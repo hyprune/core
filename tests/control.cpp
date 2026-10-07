@@ -46,6 +46,14 @@ int main(int argc, char **argv) {
         rejects("ui.open", {{"leaseId", lease}, {"outputId", "output"}, {"panel", "overview"}}, -32004, "b");
         rejects("shell.overlay",
                 {{"leaseId", lease}, {"outputId", "output"}, {"visible", true}, {"exclusiveInput", true}}, -32007);
+        control.associate("a", true);
+        call("shell.overlay",
+             {{"leaseId", lease}, {"outputId", "output"}, {"visible", true}, {"exclusiveInput", true}});
+        check(control.exclusive(), "verified overlay not exclusive");
+        control.associate("a", false);
+        check(!control.exclusive() && !control.uiVisible(), "association loss retained input");
+        rejects("shell.overlay",
+                {{"leaseId", lease}, {"outputId", "output"}, {"visible", true}, {"exclusiveInput", true}}, -32007);
         call("ui.open", {{"leaseId", lease}, {"outputId", "output"}, {"panel", "overview"}});
         check(control.uiVisible(), "ui open");
         call("ui.close", {{"leaseId", lease}, {"outputId", "output"}});

@@ -1,5 +1,6 @@
 #include "World.hpp"
 #include "Schema.hpp"
+#include "Spatial.hpp"
 #define CGLTF_IMPLEMENTATION
 #include <cgltf.h>
 #define STB_IMAGE_IMPLEMENTATION
@@ -359,6 +360,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
         require(length(c.position - before) < .015f, "spawn capsule obstructed");
     }
     require(!result->meshes.empty(), "empty scene");
+    loadSpatial(*result, root);
     return result;
 }
 } // namespace hyprune::world

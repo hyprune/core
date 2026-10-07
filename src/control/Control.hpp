@@ -22,6 +22,9 @@ class Control {
     Json outputId = nullptr;
     void stop();
     void disconnect(const std::string &);
+    void associate(const std::string &actor, bool verified);
+    bool ownsLease(const std::string &actor, const std::string &lease) const;
+    bool exclusive() const;
     void retainOutputs(const Json &);
     bool driving() const;
     bool uiVisible() const;
@@ -30,6 +33,7 @@ class Control {
 
   private:
     std::map<std::string, std::string> owners;
+    std::set<std::string> associations;
     std::map<std::string, std::chrono::steady_clock::time_point> publications, expiry;
     Vec3 travelFrom{}, travelTo{};
     float elapsed = 0, duration = 0, speed = 3.5f, held = 0;
