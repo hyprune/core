@@ -63,7 +63,10 @@ int main() {
         auto apply = [&](const Json &j) {
             if (j.at("type") == "state")
                 server->publish(j.at("state"));
-            else if (j.at("type") == "methods")
+            else if (j.at("type") == "event") {
+                server->notify(j.at("event"), j.at("params"));
+                server->flush();
+            } else if (j.at("type") == "methods")
                 server->advertise(j.at("methods").get<std::map<std::string, std::string>>());
         };
         auto handler = [&](const std::string &method, const Json &params) -> Json {
@@ -75,10 +78,16 @@ int main() {
                   {"params", params},
                   {"deadlineMs",
                    std::chrono::duration_cast<std::chrono::milliseconds>(deadline.time_since_epoch()).count()}});
+            bool cancelled = false;
             while (running && std::chrono::steady_clock::now() < deadline) {
                 pollfd p{fd, POLLIN, 0};
                 ::poll(&p, 1, 50);
                 send({{"type", "heartbeat"}});
+                if (!cancelled && method != "_connection.closed" && params.contains("_actor") &&
+                    !server->connected(params.at("_actor"))) {
+                    send({{"type", "cancel"}});
+                    cancelled = true;
+                }
                 if (auto j = receive(); !j.is_null()) {
                     if (j.at("type") == "reply" && j.at("id") == id) {
                         if (j.contains("error"))
@@ -100,6 +109,7 @@ int main() {
             throw std::runtime_error("missing session environment");
         Server endpoint(dir, sig, grants(), handler);
         server = &endpoint;
+        endpoint.contextual(true);
         auto heartbeat = std::chrono::steady_clock::now();
         while (running) {
             pollfd p{fd, POLLIN, 0};

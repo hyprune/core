@@ -112,6 +112,10 @@ void Bridge::poll() {
         heartbeat_ = std::chrono::steady_clock::now();
         if (j.at("type") == "heartbeat")
             continue;
+        if (j.at("type") == "cancel") {
+            handler_("_operation.cancel", Json::object());
+            continue;
+        }
         if (j.at("type") != "command")
             throw std::runtime_error("invalid private message");
         if (!pending_.empty())

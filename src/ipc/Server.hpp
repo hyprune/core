@@ -23,8 +23,12 @@ class Server {
     Server(const std::string &runtime, const std::string &instance, std::vector<LaunchGrant>, Handler);
     ~Server();
     Server(const Server &) = delete;
+    void flush();
+    bool connected(const std::string &actor) const;
     void poll(); // Called only outside the render pass; bounded nonblocking I/O.
     void publish(Json state);
+    void notify(const std::string &event, Json params);
+    void contextual(bool enabled) { contextual_ = enabled; }
     Json snapshot() const;
     void advertise(std::map<std::string, std::string> methods) { methods_ = std::move(methods); }
     const std::string &path() const { return path_; }
@@ -36,7 +40,7 @@ class Server {
         std::string input, output;
         size_t written = 0;
         bool hello = false, closing = false;
-        std::string subscription;
+        std::string subscription, protocol, actor, client;
         std::set<std::string> ids, grants;
         uint64_t baseline = 0;
         std::chrono::steady_clock::time_point accepted = std::chrono::steady_clock::now(), frameStart = accepted,
@@ -48,6 +52,9 @@ class Server {
     std::vector<LaunchGrant> tokens_;
     std::map<std::string, std::string> methods_;
     Handler handler_;
+    bool contextual_ = false;
+    Json snapshot(const Peer &) const;
+    Json visibleState(const Peer &) const;
     Json state_;
     uint64_t revision_ = 0, subscriptions_ = 0;
     void frame(Peer &, const std::string &);

@@ -75,10 +75,22 @@ int main() {
     std::atomic<bool> stop = false;
     std::thread loop;
     try {
-        auto token = randomId();
-        Server server(dir, "test", {{token, "org.hyprune.test", {"state.read"}}},
-                      [](auto &, auto &) { return Json{}; });
-        server.publish({{"runtime", {{"active", false}}}});
+        auto token = randomId(), token02 = randomId();
+        std::atomic<int> disconnected = 0;
+        Server server(dir, "test",
+                      {{token, "org.hyprune.test", {"state.read"}},
+                       {token02, "org.hyprune.test", {"state.read", "data.publish"}}},
+                      [&](const auto &method, const auto &params) {
+                          check(params.contains("_actor") && params.contains("_client"), "missing trusted context");
+                          if (method == "_connection.closed")
+                              ++disconnected;
+                          return Json{{"actor", params["_actor"]}, {"client", params["_client"]}};
+                      });
+        server.contextual(true);
+        server.advertise({{"camera.get", "state.read"}, {"data.publish", "data.publish"}});
+        server.publish({{"runtime", {{"active", false}}},
+                        {"location", {{"waypoint", nullptr}}},
+                        {"integrations", {{"sources", Json::array()}}}});
         loop = std::thread([&] {
             while (!stop) {
                 server.poll();
@@ -93,6 +105,7 @@ int main() {
             c.sendJson(req("sub", "state.subscribe", {{"topics", {"state"}}}));
             auto result = c.receive();
             check(result.contains("result"), "subscribe");
+            check(!result["result"]["snapshot"]["state"].contains("location"), "0.2 state leaked to 0.1");
             auto sub = result["result"]["subscriptionId"];
             c.sendJson(req("sub2", "state.subscribe", {{"topics", {"state"}}}));
             check(c.receive()["error"]["code"] == -32004, "duplicate subscription");
@@ -150,6 +163,28 @@ int main() {
             c.sendJson(h);
             check(c.receive().contains("result"), "valid maximum client name rejected");
         }
+        {
+            Client c(server.path());
+            auto h = hello(token02);
+            h["params"]["protocols"] = {"0.1", "0.2"};
+            h["params"]["capabilities"] = {"state.read", "data.publish"};
+            c.sendJson(h);
+            auto result = c.receive();
+            check(result["result"]["protocol"] == "0.2", "minor negotiation");
+            c.sendJson(req("sub02", "state.subscribe", {{"topics", {"state"}}}));
+            check(c.receive()["result"]["snapshot"]["state"].contains("location"), "0.2 state missing");
+            c.sendJson(req("camera", "camera.get"));
+            auto camera = c.receive();
+            check(camera["result"]["client"] == "org.hyprune.test", "authenticated identity");
+            check(!camera["result"]["actor"].get<std::string>().empty(), "connection identity");
+            c.sendJson(req("spoof", "camera.get", {{"_actor", "forged"}}));
+            check(c.receive()["error"]["code"] == -32602, "actor spoof accepted");
+            c.sendJson(req("pub", "data.publish"));
+            check(c.receive().contains("result"), "publishing grant absent");
+        }
+        for (int i = 0; i < 100 && disconnected < 2; i++)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        check(disconnected >= 2, "disconnect ownership cleanup callback missing");
         stop = true;
         loop.join();
         std::filesystem::remove_all(dir);

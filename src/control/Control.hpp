@@ -1,0 +1,42 @@
+#pragma once
+#include "ipc/Server.hpp"
+#include "world/World.hpp"
+namespace hyprune::control {
+// World authority, independent of Hyprland and GL. Invoked only by the owner event loop.
+class Control {
+  public:
+    using Json = ipc::Json;
+    Json location = {{"zones", Json::array()},
+                     {"waypoint", nullptr},
+                     {"route", Json::array()},
+                     {"autodrive", false},
+                     {"transition", nullptr}};
+    Json leases = Json::array(), sources = Json::array();
+    std::vector<std::pair<std::string, Json>> events;
+    Json execute(const std::string &, const Json &, const std::string &actor, const std::string &client,
+                 const world::World *, sim::Camera &, const Json &outputs);
+    void tick(float dt, sim::Camera &, const world::World *);
+    void reset(const world::World *);
+    void beginLoad(const Json &to, const Json &output);
+    void endLoad(bool success, bool cancelled = false);
+    Json outputId = nullptr;
+    void stop();
+    void disconnect(const std::string &);
+    void retainOutputs(const Json &);
+    bool driving() const;
+    bool uiVisible() const;
+    void hold(bool pressed); // Owner owns hold-to-open timing, never the shell.
+    static std::map<std::string, std::string> methods();
+
+  private:
+    std::map<std::string, std::string> owners;
+    std::map<std::string, std::chrono::steady_clock::time_point> publications, expiry;
+    Vec3 travelFrom{}, travelTo{};
+    float elapsed = 0, duration = 0, speed = 3.5f, held = 0;
+    bool holding = false, opened = false;
+    size_t routeIndex = 0;
+    uint64_t transitions = 0;
+    Vec3 target(const Json &, const world::World *) const;
+    void transition(const std::string &, float);
+};
+} // namespace hyprune::control

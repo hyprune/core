@@ -2,6 +2,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <filesystem>
+#include <poll.h>
 #include <regex>
 #include <sys/random.h>
 #include <sys/socket.h>
@@ -100,6 +101,26 @@ Server::~Server() {
 Json Server::snapshot() const {
     return {{"sessionId", session_}, {"revision", revision_}, {"state", state_}};
 }
+Json Server::visibleState(const Peer &p) const {
+    if (p.protocol == "0.2")
+        return state_;
+    Json state = state_;
+    if (state.is_object()) {
+        state.erase("location");
+        state.erase("integrations");
+    }
+    return state;
+}
+Json Server::snapshot(const Peer &p) const {
+    return {{"sessionId", session_}, {"revision", revision_}, {"state", visibleState(p)}};
+}
+void Server::notify(const std::string &event, Json params) {
+    params["sessionId"] = session_;
+    params["revision"] = revision_;
+    for (auto &p : peers_)
+        if (p.hello && !p.closing && p.protocol == "0.2" && !p.subscription.empty())
+            queue(p, {{"jsonrpc", "2.0"}, {"method", event}, {"params", params}});
+}
 void Server::publish(Json state) {
     if (state == state_)
         return;
@@ -165,9 +186,8 @@ void Server::frame(Peer &p, const std::string &bytes) {
                 check(!protocol.empty() && protocol.size() <= 256 && protocols.insert(protocol).second, -32602,
                       "invalid protocol list");
             }
-            check(params["protocols"].is_array() && std::find(params["protocols"].begin(), params["protocols"].end(),
-                                                              Json("0.1")) != params["protocols"].end(),
-                  -32001, "incompatible protocol");
+            check(protocols.contains("0.2") || protocols.contains("0.1"), -32001, "incompatible protocol");
+            p.protocol = protocols.contains("0.2") ? "0.2" : "0.1";
             exact(params["client"], {"id", "name"});
             check(params["client"]["id"].is_string() && params["client"]["name"].is_string(), -32602,
                   "invalid client identity");
@@ -178,13 +198,15 @@ void Server::frame(Peer &p, const std::string &bytes) {
                       !clientName.empty() && clientName.size() <= 256,
                   -32602, "invalid client identity");
             check(params["capabilities"].is_array(), -32602, "invalid capabilities");
-            const std::set<std::string> known{"state.read",       "world.control", "surface.control",
-                                              "movement.control", "shell.control", "runtime.control"};
+            const std::set<std::string> known{"state.read",    "world.control",   "surface.control", "movement.control",
+                                              "shell.control", "runtime.control", "data.publish"};
             std::set<std::string> requested;
             for (auto &cap : params["capabilities"]) {
                 check(cap.is_string(), -32602, "invalid capability");
                 auto name = cap.get<std::string>();
-                check(known.contains(name) && requested.insert(name).second, -32602, "invalid capability list");
+                check(known.contains(name) && (p.protocol == "0.2" || name != "data.publish") &&
+                          requested.insert(name).second,
+                      -32602, "invalid capability list");
             }
             if (params.contains("token")) {
                 check(params["token"].is_string() &&
@@ -204,18 +226,26 @@ void Server::frame(Peer &p, const std::string &bytes) {
                 check(valid, -32002, "invalid launch token");
             }
             p.hello = true;
+            p.client = clientId;
+            p.actor = randomId();
             Json methods = Json::array({"session.hello", "session.ping"});
             if (p.grants.contains("state.read"))
                 for (auto s : {"state.subscribe", "state.snapshot", "state.unsubscribe"})
                     methods.push_back(s);
+            const std::set<std::string> legacy{"world.load",  "surface.focus", "movement.set", "runtime.exit",
+                                               "shell.claim", "shell.release", "shell.overlay"};
             for (auto &[m, grant] : methods_)
-                if (p.grants.contains(grant))
+                if (p.grants.contains(grant) && (p.protocol == "0.2" || legacy.contains(m)))
                     methods.push_back(m);
-            result = {{"protocol", "0.1"},
+            result = {{"protocol", p.protocol},
                       {"sessionId", session_},
                       {"capabilities", p.grants},
                       {"methods", methods},
-                      {"events", p.grants.contains("state.read") ? Json::array({"state.delta"}) : Json::array()}};
+                      {"events", p.grants.contains("state.read")
+                                     ? (p.protocol == "0.2" ? Json::array({"state.delta", "location.transition",
+                                                                           "ui.opened", "ui.closed", "data.updated"})
+                                                            : Json::array({"state.delta"}))
+                                     : Json::array()}};
         } else if (method == "session.hello")
             throw Error(-32600, "hello already completed");
         else if (method == "session.ping") {
@@ -231,7 +261,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
                 check(p.subscription.empty(), -32004, "already subscribed");
                 p.subscription = "subscription-" + std::to_string(++subscriptions_);
                 p.baseline = revision_;
-                result = {{"subscriptionId", p.subscription}, {"snapshot", snapshot()}};
+                result = {{"subscriptionId", p.subscription}, {"snapshot", snapshot(p)}};
             } else {
                 exact(params, {"subscriptionId"});
                 check(!p.subscription.empty() && params["subscriptionId"] == p.subscription, -32003,
@@ -240,14 +270,39 @@ void Server::frame(Peer &p, const std::string &bytes) {
                     p.subscription.clear();
                     result = {{"ok", true}};
                 } else {
+                    // Keep already-written/partial frames, discard only wholly unsent deltas.
+                    std::string retained;
+                    for (size_t at = 0; at + 4 <= p.output.size();) {
+                        uint32_t n = 0;
+                        for (int i = 0; i < 4; i++)
+                            n = (n << 8) | (unsigned char)p.output[at + i];
+                        bool discard = false;
+                        if (at >= p.written) {
+                            auto frame = Json::parse(p.output.substr(at + 4, n));
+                            discard = frame.value("method", "") == "state.delta";
+                        }
+                        if (!discard)
+                            retained.append(p.output, at, n + 4);
+                        at += n + 4;
+                    }
+                    p.output = std::move(retained);
                     p.baseline = revision_;
-                    result = {{"snapshot", snapshot()}};
+                    result = {{"snapshot", snapshot(p)}};
                 }
             }
         } else {
             auto it = methods_.find(method);
             check(it != methods_.end() && p.grants.contains(it->second), -32601, "method not advertised");
-            result = handler_(method, params);
+            const std::set<std::string> legacy{"world.load",  "surface.focus", "movement.set", "runtime.exit",
+                                               "shell.claim", "shell.release", "shell.overlay"};
+            check(p.protocol == "0.2" || legacy.contains(method), -32601, "method not advertised for protocol");
+            Json command = params;
+            check(!command.contains("_actor") && !command.contains("_client"), -32602, "reserved parameter");
+            if (contextual_) {
+                command["_actor"] = p.actor;
+                command["_client"] = p.client;
+            }
+            result = handler_(method, command);
         }
         queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"result", result}});
     } catch (const Error &e) {
@@ -260,6 +315,38 @@ void Server::frame(Peer &p, const std::string &bytes) {
     } catch (...) {
         queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"error", {{"code", -32603}, {"message", "operation failed"}}}});
     }
+}
+bool Server::connected(const std::string &actor) const {
+    for (const auto &p : peers_)
+        if (p.actor == actor && !p.closing) {
+            pollfd descriptor{p.fd, POLLRDHUP, 0};
+            if (::poll(&descriptor, 1, 0) > 0 && (descriptor.revents & (POLLRDHUP | POLLHUP | POLLERR)))
+                return false;
+            char byte;
+            auto n = recv(p.fd, &byte, 1, MSG_PEEK | MSG_DONTWAIT);
+            return n > 0 || (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK));
+        }
+    return false;
+}
+void Server::flush() {
+    // Also used while an asynchronous plugin operation is pending: loading events
+    // must be observable before its completion. Never read or recurse into handlers.
+    for (auto &p : peers_)
+        if (!p.output.empty()) {
+            auto n = send(p.fd, p.output.data() + p.written, std::min<size_t>(65536, p.output.size() - p.written),
+                          MSG_NOSIGNAL);
+            if (n > 0) {
+                p.written += n;
+                if (p.written == p.output.size()) {
+                    p.output.clear();
+                    p.written = 0;
+                }
+            } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                p.closing = true;
+                p.output.clear();
+                p.written = 0;
+            }
+        }
 }
 void Server::poll() {
     for (int i = 0; i < 8; i++) {
@@ -320,7 +407,7 @@ void Server::poll() {
                             {"sessionId", session_},
                             {"baseRevision", p.baseline},
                             {"revision", revision_},
-                            {"changes", state_}}}});
+                            {"changes", visibleState(p)}}}});
                 p.baseline = revision_;
                 p.lastDelta = now;
             }
@@ -340,8 +427,14 @@ void Server::poll() {
             }
         }
     }
-    std::erase_if(peers_, [](Peer &p) {
+    std::erase_if(peers_, [&](Peer &p) {
         if (p.closing && p.output.empty()) {
+            if (contextual_ && p.hello) {
+                try {
+                    handler_("_connection.closed", {{"_actor", p.actor}, {"_client", p.client}});
+                } catch (...) {
+                }
+            }
             close(p.fd);
             return true;
         }

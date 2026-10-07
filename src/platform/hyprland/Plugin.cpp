@@ -1,3 +1,4 @@
+#include "control/Control.hpp"
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/event/EventBus.hpp>
@@ -34,6 +35,7 @@ struct Runtime {
     render::Renderer renderer;
     Capture capture;
     sim::Camera camera;
+    control::Control control;
     sim::Walk walk;
     sim::Fly fly;
     sim::MotionStrategy *movement = &walk;
@@ -41,7 +43,7 @@ struct Runtime {
     std::unique_ptr<ipc::Bridge> ipc;
     PHLMONITORREF monitor;
     PHLWINDOWREF savedFocus;
-    bool active = false, typing = false, loading = false;
+    bool active = false, typing = false, loading = false, loadCancelled = false;
     int renderDepth = 0;
     std::future<std::shared_ptr<world::World>> pendingWorld;
     std::string pendingSpawn, pendingToggle;
@@ -89,7 +91,8 @@ template <class F> void safe(F f) {
     }
 }
 bool ownsInput() {
-    return runtime && runtime->active && !locked() && runtime->monitor == Desktop::focusState()->monitor();
+    return runtime && runtime->active && !runtime->loading && !runtime->control.uiVisible() && !locked() &&
+           runtime->monitor == Desktop::focusState()->monitor();
 }
 void motion(void *self, const Vector2D &delta) {
     if (ownsInput()) {
@@ -142,6 +145,7 @@ void Runtime::cancelGrab() {
 void Runtime::publish() {
     if (!ipc)
         return;
+    control.retainOutputs(monitor ? Json::array({"output-" + std::to_string(monitor->m_id)}) : Json::array());
     Json surfaces = Json::array();
     for (auto &e : capture.entries)
         surfaces.push_back({{"id", e.surface.id},
@@ -160,7 +164,12 @@ void Runtime::publish() {
                    {{"modeId", movement == &walk ? "com.hyprune.walk" : "com.hyprune.fly"},
                     {"position", {camera.position.x, camera.position.y, camera.position.z}},
                     {"orientation", {cy * sp, sy * cp, -sy * sp, cy * cp}}}},
-                  {"shell", {{"leases", Json::array()}}}});
+                  {"shell", {{"leases", control.leases}}},
+                  {"location", control.location},
+                  {"integrations", {{"sources", control.sources}}}});
+    for (auto &[event, params] : control.events)
+        ipc->notify(event, params);
+    control.events.clear();
 }
 void Runtime::load(const std::string &id, const std::string &spawnId) {
     if (id.empty() || id.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789.-") != std::string::npos ||
@@ -168,6 +177,13 @@ void Runtime::load(const std::string &id, const std::string &spawnId) {
         throw ipc::Error(-32602, "invalid installed world ID");
     if (loading)
         throw ipc::Error(-32004, "world load already pending");
+    keys.clear();
+    cancelGrab();
+    typing = false;
+    control.beginLoad(spawnId.empty() ? Json{{"worldId", id}} : Json{{"worldId", id}, {"spawnId", spawnId}},
+                      monitor ? Json("output-" + std::to_string(monitor->m_id)) : Json(nullptr));
+    publish();
+    loadCancelled = false;
     loading = true;
     pendingSpawn = spawnId;
     loadDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(28);
@@ -185,12 +201,18 @@ void Runtime::finishLoad() {
     loading = false;
     try {
         auto candidate = pendingWorld.get();
+        if (loadCancelled || locked())
+            throw ipc::Error(-32004, "world load cancelled");
         if (!ipc->healthy() || std::chrono::steady_clock::now() > loadDeadline)
             throw ipc::Error(-32006, "world load expired");
         const auto spawn = candidate->spawn(pendingSpawn);
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         renderer.prepare(candidate);
         world = std::move(candidate);
+        auto transition = control.location["transition"];
+        control.reset(world.get());
+        control.location["transition"] = transition;
+        control.endLoad(true);
         world->defaultSpawn = spawn.id;
         camera = {};
         camera.position = spawn.position + Vec3{0, 1.7f, 0};
@@ -204,10 +226,14 @@ void Runtime::finishLoad() {
             toggle(pendingToggle);
         }
     } catch (const ipc::Error &e) {
+        control.endLoad(false, loadCancelled || locked());
+        publish();
         ipc->fail(e.code, e.what());
         error(e);
         toggleAfterLoad = false;
     } catch (const std::exception &e) {
+        control.endLoad(false, loadCancelled || locked());
+        publish();
         ipc->fail(-32602, e.what());
         error(e);
         toggleAfterLoad = false;
@@ -237,6 +263,7 @@ void Runtime::toggle(const std::string &output) {
     if (!chosen)
         throw std::runtime_error("no output");
     monitor = chosen;
+    control.outputId = "output-" + std::to_string(chosen->m_id);
     savedFocus = Desktop::focusState()->window();
     active = true;
     typing = false;
@@ -250,9 +277,12 @@ void Runtime::toggle(const std::string &output) {
     publish();
 }
 void Runtime::exit() {
+    if (loading)
+        loadCancelled = true;
     if (!active)
         return;
     active = false;
+    control.stop();
     typing = false;
     focused.clear();
     keys.clear();
@@ -281,9 +311,37 @@ void Runtime::focus(const std::string &id, bool keyboard) {
     g_pSeatManager->setPointerFocus(w->resource(), {entry->surface.pixelWidth * .5, entry->surface.pixelHeight * .5});
     publish();
 }
-std::optional<Json> Runtime::method(const std::string &method, const Json &params) {
+std::optional<Json> Runtime::method(const std::string &method, const Json &wire) {
+    Json params = wire;
+    std::string actor = params.value("_actor", ""), client = params.value("_client", "");
+    params.erase("_actor");
+    params.erase("_client");
+    if (method == "_operation.cancel") {
+        loadCancelled = true;
+        return Json::object();
+    }
+    if (method == "_connection.closed") {
+        control.disconnect(actor);
+        publish();
+        return Json::object();
+    }
     if (locked())
         throw ipc::Error(-32005, "session locked");
+    if (control::Control::methods().contains(method)) {
+        if ((method == "travel.start" || method == "autodrive.start") && !active)
+            throw ipc::Error(-32005, "world mode inactive");
+        auto outputs = monitor ? Json::array({"output-" + std::to_string(monitor->m_id)}) : Json::array();
+        auto result = control.execute(method, params, actor, client, world.get(), camera, outputs);
+        if (control.uiVisible() || control.driving()) {
+            keys.clear();
+            cancelGrab();
+            typing = false;
+        }
+        publish();
+        if (method != "camera.get")
+            result["revision"] = ipc->revision();
+        return result;
+    }
     if (method == "runtime.exit") {
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
@@ -328,9 +386,17 @@ void Runtime::tick() {
     auto now = std::chrono::steady_clock::now();
     float dt = std::chrono::duration<float>(now - lastTick).count();
     lastTick = now;
+    control.tick(dt, camera, world.get());
+    if (control.uiVisible()) {
+        keys.clear();
+        cancelGrab();
+        typing = false;
+    }
     if (active && monitor) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         if (!ownsInput()) {
+            if (monitor != Desktop::focusState()->monitor())
+                control.hold(false);
             keys.clear();
             cancelGrab();
         }
@@ -345,7 +411,8 @@ void Runtime::tick() {
         }
         accumulator = std::min(accumulator + double(dt), 4.0 / 60.0);
         while (accumulator >= 1.0 / 60.0) {
-            movement->step(camera, intent, 1.f / 60.f, world->collision);
+            if (!loading && !control.driving() && !control.uiVisible())
+                movement->step(camera, intent, 1.f / 60.f, world->collision);
             accumulator -= 1.0 / 60.0;
         }
         if (camera.position.y < -30) {
@@ -463,10 +530,12 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         throw std::runtime_error("Hyprune: missing session environment");
     runtime->ipc = std::make_unique<hyprune::ipc::Bridge>(
         HYPRUNE_DAEMON_PATH, [](auto &method, auto &params) { return runtime->method(method, params); });
-    runtime->ipc->advertise({{"world.load", "world.control"},
-                             {"surface.focus", "surface.control"},
-                             {"movement.set", "movement.control"},
-                             {"runtime.exit", "runtime.control"}});
+    auto methods = hyprune::control::Control::methods();
+    methods.insert({{"world.load", "world.control"},
+                    {"surface.focus", "surface.control"},
+                    {"movement.set", "movement.control"},
+                    {"runtime.exit", "runtime.control"}});
+    runtime->ipc->advertise(std::move(methods));
     HyprlandAPI::addDispatcherV2(handle, "hyprune.toggle", [](std::string arg) {
         deferToggle(arg);
         return SDispatchResult{};
@@ -501,12 +570,17 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     runtime->listeners.push_back(
         Event::bus()->m_events.input.keyboard.key.listen([](IKeyboard::SKeyEvent event, Event::SCallbackInfo &info) {
             safe([&] {
-                if (!ownsInput())
+                if (!runtime->active || locked() || runtime->monitor != Desktop::focusState()->monitor())
                     return;
                 auto keyboard = g_pSeatManager->m_keyboard.lock();
                 if (!keyboard || !keyboard->m_xkbSymState)
                     return;
                 auto sym = xkb_keysym_to_lower(xkb_state_key_get_one_sym(keyboard->m_xkbSymState, event.keycode + 8));
+                if (sym == XKB_KEY_Tab && !runtime->typing) {
+                    runtime->control.hold(event.state == WL_KEYBOARD_KEY_STATE_PRESSED);
+                    info.cancelled = true;
+                    return;
+                }
                 uint32_t action = 0;
                 switch (sym) {
                 case XKB_KEY_w:
@@ -539,6 +613,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 if (action == KEY_ESC) {
                     info.cancelled = true;
                     if (event.state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+                        if (runtime->loading)
+                            runtime->loadCancelled = true;
+                        runtime->control.stop();
                         runtime->cancelGrab();
                         runtime->typing = false;
                         runtime->focused.clear();
@@ -552,6 +629,14 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                         deferToggle("");
                     return;
                 }
+                if (runtime->loading) {
+                    info.cancelled = true;
+                    return;
+                }
+                if (runtime->control.uiVisible())
+                    return;
+                if (action && event.state == WL_KEYBOARD_KEY_STATE_PRESSED && runtime->control.driving())
+                    runtime->control.stop();
                 if (runtime->typing)
                     return;
                 if (xkb_state_mod_name_is_active(keyboard->m_xkbState, XKB_MOD_NAME_LOGO, XKB_STATE_MODS_EFFECTIVE) ||
@@ -611,6 +696,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 if (!ownsInput())
                     return;
                 info.cancelled = true;
+                if (runtime->control.uiVisible())
+                    return;
                 if (runtime->typing) {
                     g_pSeatManager->sendPointerAxis(event.timeMs, event.axis, event.delta, event.deltaDiscrete / 120,
                                                     event.deltaDiscrete, event.source, event.relativeDirection);
@@ -620,8 +707,12 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         }));
     runtime->listeners.push_back(Event::bus()->m_events.monitor.removed.listen([](PHLMONITOR monitor) {
         safe([&] {
-            if (runtime->monitor == monitor)
+            if (runtime->monitor == monitor) {
                 runtime->exit();
+                runtime->monitor.reset();
+                runtime->control.outputId = nullptr;
+                runtime->publish();
+            }
         });
     }));
     runtime->timer = makeShared<CEventLoopTimer>(
