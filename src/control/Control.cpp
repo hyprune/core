@@ -1,4 +1,5 @@
 #include "Control.hpp"
+#include "world/Spatial.hpp"
 #include <regex>
 namespace hyprune::control {
 namespace {
@@ -248,6 +249,19 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
         Json points = Json::array();
         for (auto &t : p["points"])
             points.push_back({{"target", t}, {"position", xyz(target(t, w))}});
+        if (points.size() == 1 && w) {
+            std::vector<Vec3> planned;
+            try {
+                planned = world::walkingRoute(*w, camera.position, vector(points[0]["position"]));
+            } catch (const std::runtime_error &e) {
+                throw ipc::Error(-32005, e.what());
+            }
+            if (!planned.empty()) {
+                points = Json::array();
+                for (auto point : planned)
+                    points.push_back({{"target", {{"position", xyz(point)}}}, {"position", xyz(point)}});
+            }
+        }
         location["route"] = points;
         location["autodrive"] = false;
         routeIndex = 0;

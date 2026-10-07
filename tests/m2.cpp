@@ -1,5 +1,8 @@
+#include "control/Control.hpp"
+#include "daemon/LayoutStore.hpp"
 #include "surfaces/Layout.hpp"
 #include "world/Mounts.hpp"
+#include "world/Spatial.hpp"
 #include <iostream>
 using namespace hyprune;
 void check(bool ok, const char *why) {
@@ -34,8 +37,37 @@ int main(int argc, char **argv) {
         plane = layout.locate(terminal, w.get(), camera, 1600, 900);
         check(plane && !surfaces::overlaps(*plane, w->collision), "desk collision");
         rejects([&] { layout.place(terminal, "array-hall-slot-02-banner-01", w.get()); });
+        auto duplicate = terminal;
+        duplicate.id = "duplicate";
+        for (int n = 0; n < 3; n++) {
+            layout.instances = world::Json::array();
+            layout.locate(terminal, w.get(), camera, 1600, 900);
+            layout.locate(duplicate, w.get(), camera, 1600, 900);
+            check(layout.instances[0]["anchorId"] != layout.instances[1]["anchorId"], "duplicate rule occupied mount");
+            check(layout.placements[0]["anchorId"] == id, "duplicate rule rewrote durable placement");
+        }
         auto saved = world::Json{{"bindings", layout.bindings}, {"placements", layout.placements}};
+        auto statePath = std::filesystem::temp_directory_path() / ("hyprune-layout-test-" + ipc::randomId());
+        setenv("HYPRUNE_LAYOUT_FILE", statePath.c_str(), 1);
+        {
+            daemon::LayoutStore store;
+            store.save(saved);
+        }
+        {
+            daemon::LayoutStore store;
+            check(store.load() == saved, "durable layout daemon restart");
+        }
+        std::filesystem::remove(statePath);
+        unsetenv("HYPRUNE_LAYOUT_FILE");
         surfaces::Layout restored;
+        restored.restore(saved);
+        auto remote = *w;
+        remote.id = "org.hyprune.remote";
+        check(restored.pulled(terminal, nullptr), "global recall missed saved tool");
+        restored.recall(std::span(&terminal, 1));
+        check(restored.locate(terminal, &remote, camera, 1600, 900).has_value(), "cross-world recall invisible");
+        check(restored.placements == saved["placements"], "recall rewrote durable layout");
+        restored = surfaces::Layout{};
         restored.restore(saved);
         terminal.id = "relaunched";
         plane = restored.locate(terminal, w.get(), camera, 1600, 900);
@@ -59,6 +91,11 @@ int main(int argc, char **argv) {
         camera.yaw = 0;
         box = surfaces::carryPlane(camera, 3.2, 1.8, wall);
         check(!surfaces::overlaps(box, wall) && box.center.z > .04, "carried tool crossed wall");
+        // A small obstacle between support rays must stop the whole moving rectangle.
+        std::vector<Triangle> sliver = {{{.32f, 1.35f, -1}, {.38f, 1.45f, -1}, {.38f, 1.35f, -1}}};
+        camera.position = {0, 1.7f, 0};
+        box = surfaces::carryPlane(camera, 3.2f, 1.8f, sliver);
+        check(box.center.z > -.96f, "carry tunnelled between support rays");
         surfaces::Surface tilted;
         tilted.rotation = {std::sin(-.35f), 0, 0, std::cos(-.35f)};
         tilted.center = {0, 1.5, -2};
@@ -76,6 +113,34 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 60; i++)
             walk.step(camera, {-1, 0, 0, false}, 1.f / 60, ramp);
         check(camera.position.y < 3.3 && camera.grounded, "descending slope");
+        auto routed = *w;
+        routed.collision = ramp;
+        routed.manifest["extensions"]["com.hyprune.lumen-reach.routes"] = {
+            {"version", 1},
+            {"nodes", world::Json::array({{{"id", "start"}, {"position", {0, 0, 5}}},
+                                          {{"id", "bend"}, {"position", {0, 1.5, -1}}},
+                                          {{"id", "finish"}, {"position", {0, 3, -7}}}})},
+            {"edges", world::Json::array({{{"from", "start"}, {"to", "bend"}, {"width", 3}},
+                                          {{"from", "bend"}, {"to", "finish"}, {"width", 3}}})}};
+        world::loadSpatial(routed, argv[1]);
+        check(routed.walkingNodes.size() == 3 && routed.places.size() == 3, "Lumen routing adapter");
+        auto path = world::walkingRoute(routed, {0, 1.7, 5}, {0, 4.7, -7});
+        check(path.size() == 3 && std::abs(path[1].y - 3.2f) < .001, "graph omitted ramp bend or feet offset");
+        auto backwards = world::walkingRoute(routed, {0, 4.7, -7}, {0, 1.7, 5});
+        check(backwards.size() == 3 && backwards[0].z == -7, "graph not bidirectional");
+        control::Control drive;
+        drive.reset(&routed);
+        camera.position = {0, 1.7, 5};
+        drive.execute("route.set", {{"points", world::Json::array({{{"position", {0, 4.7, -7}}}})}}, "test",
+                      "org.hyprune.test", &routed, camera, world::Json::array());
+        check(drive.location["route"].size() == 3, "Director one-point route bypassed graph");
+        drive.execute("autodrive.start", {{"speed", 4}}, "test", "org.hyprune.test", &routed, camera,
+                      world::Json::array());
+        for (int i = 0; i < 500 && drive.driving(); i++)
+            drive.tick(1.f / 60, camera, &routed);
+        check(length(camera.position - Vec3{0, 4.7, -7}) < .01, "graph autodrive stopped on ramp");
+        routed.manifest["extensions"]["com.hyprune.lumen-reach.routes"]["edges"][0]["to"] = "missing";
+        rejects([&] { world::loadSpatial(routed, argv[1]); });
         std::cout << "PASS M2: area ownership, persistence/relaunch, invalid placement recovery, full OBB, carry wall "
                      "clamp, tilted picking, slopes\n";
         return 0;

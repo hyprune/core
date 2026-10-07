@@ -87,24 +87,46 @@ void validateMapSvg(const std::string &svg) {
 void loadSpatial(World &w, const std::filesystem::path &package) {
     w.places = Json::array();
     w.map = nullptr;
+    w.walkingNodes = Json::array();
+    w.walkingEdges = Json::array();
     const auto ext = w.manifest.value("extensions", Json::object());
-    if (ext.contains("com.hyprune.switchyard.routes")) {
-        auto ns = ext.at("com.hyprune.switchyard.routes").at("nodes");
+    const bool lumenRoutes = ext.contains("com.hyprune.lumen-reach.routes");
+    if (lumenRoutes || ext.contains("com.hyprune.switchyard.routes")) {
+        auto graph = ext.at(lumenRoutes ? "com.hyprune.lumen-reach.routes" : "com.hyprune.switchyard.routes");
+        if (lumenRoutes)
+            check(graph.at("version") == 1, "unsupported Lumen Reach walking graph version");
+        auto ns = graph.at("nodes");
         check(ns.is_array() && ns.size() <= 64, "map place limit");
         std::set<std::string> ids;
         for (auto &n : ns) {
             auto id = n.at("id").get<std::string>();
             check(id.size() <= 64 && std::regex_match(id, std::regex("[a-z][a-z0-9-]*")) && ids.insert(id).second,
                   "invalid map place ID");
-            if (id.starts_with("junction-"))
-                continue;
+
             auto position = n.at("position");
             check(position.is_array() && position.size() == 3, "invalid map place");
             for (auto &v : position)
                 check(v.is_number() && std::isfinite(v.get<double>()) && std::abs(v.get<double>()) <= 100000,
                       "invalid map place coordinate");
             position[1] = position[1].get<float>() + 1.7f;
-            w.places.push_back({{"id", n.at("id")}, {"name", n.at("id")}, {"position", position}});
+            if (lumenRoutes)
+                w.walkingNodes.push_back({{"id", id}, {"position", position}});
+            if (!id.starts_with("junction-"))
+                w.places.push_back({{"id", n.at("id")}, {"name", n.at("id")}, {"position", position}});
+        }
+        if (lumenRoutes) {
+            auto edges = graph.at("edges");
+            check(edges.is_array() && edges.size() <= 256, "walking edge limit");
+            std::set<std::pair<std::string, std::string>> pairs;
+            for (auto &edge : edges) {
+                auto a = edge.at("from").get<std::string>(), b = edge.at("to").get<std::string>();
+                double width = edge.at("width");
+                check(a != b && ids.contains(a) && ids.contains(b) && std::isfinite(width) && width >= .6 &&
+                          width <= 100,
+                      "invalid walking edge or capsule clearance");
+                check(pairs.emplace(std::min(a, b), std::max(a, b)).second, "duplicate walking edge");
+                w.walkingEdges.push_back({{"from", a}, {"to", b}, {"width", width}});
+            }
         }
     } else
         for (auto &s : w.spawns)
@@ -139,6 +161,64 @@ void loadSpatial(World &w, const std::filesystem::path &package) {
         hash += hex[byte & 15];
     }
     w.map = {{"svg", svg}, {"sha256", hash}, {"bounds", b}, {"worldToMap", transform}};
+}
+std::vector<Vec3> walkingRoute(const World &w, Vec3 from, Vec3 to) {
+    if (w.walkingNodes.empty())
+        return {};
+    const size_t count = w.walkingNodes.size();
+    auto position = [&](size_t i) { return xyz(w.walkingNodes[i].at("position")); };
+    auto nearest = [&](Vec3 point) {
+        size_t best = 0;
+        for (size_t i = 1; i < count; i++)
+            if (length(position(i) - point) < length(position(best) - point))
+                best = i;
+        return best;
+    };
+    size_t start = nearest(from), goal = nearest(to);
+    // Only expand declared destinations. Explicit off-graph routes keep their old semantics.
+    if (length(position(goal) - to) > .25f)
+        return {};
+    std::vector<float> distance(count, INFINITY);
+    std::vector<size_t> previous(count, count);
+    std::vector<bool> visited(count, false);
+    distance[start] = 0;
+    for (size_t n = 0; n < count; n++) {
+        size_t current = count;
+        for (size_t i = 0; i < count; i++)
+            if (!visited[i] && (current == count || distance[i] < distance[current]))
+                current = i;
+        if (current == count || !std::isfinite(distance[current]))
+            break;
+        visited[current] = true;
+        if (current == goal)
+            break;
+        for (auto &edge : w.walkingEdges) {
+            std::string nextId;
+            if (edge.at("from") == w.walkingNodes[current].at("id"))
+                nextId = edge.at("to");
+            else if (edge.at("to") == w.walkingNodes[current].at("id"))
+                nextId = edge.at("from");
+            else
+                continue;
+            for (size_t next = 0; next < count; next++)
+                if (w.walkingNodes[next].at("id") == nextId) {
+                    float candidate = distance[current] + length(position(next) - position(current));
+                    if (candidate < distance[next]) {
+                        distance[next] = candidate;
+                        previous[next] = current;
+                    }
+                }
+        }
+    }
+    check(std::isfinite(distance[goal]), "walking destination is disconnected");
+    std::vector<Vec3> route;
+    for (size_t i = goal;; i = previous[i]) {
+        route.push_back(position(i));
+        if (i == start)
+            break;
+    }
+    std::reverse(route.begin(), route.end());
+    return route;
 }
 Json projectMarkers(const World &w, const sim::Camera &camera, float aspect) {
     Json result = Json::array();

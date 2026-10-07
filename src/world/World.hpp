@@ -57,6 +57,7 @@ struct World {
     std::vector<Image> images;
     std::vector<Sampler> samplers;
     Json manifest, map = nullptr, places = Json::array();
+    Json walkingNodes = Json::array(), walkingEdges = Json::array();
     Json areas = Json::array(), anchors = Json::array(), objects = Json::array(), placementZones = Json::array(),
          atmosphere;
     std::array<Image, 6> environment;
