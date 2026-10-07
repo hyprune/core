@@ -4,9 +4,10 @@ HERE=pathlib.Path(__file__).resolve().parent;ROOT=HERE.parent.parent;STATE=HERE/
 sys.path.insert(0,str(HERE))
 from ctl import verified
 class Client:
-    def __init__(self,path,token=None):
+    def __init__(self,path,token=None,protocol="0.1"):
         self.socket=socket.socket(socket.AF_UNIX);self.socket.settimeout(5);self.socket.connect(path);self.count=0;self.events=[];self.transcript=[]
-        params={'protocols':['0.1'],'client':{'id':'org.hyprune.nested','name':'Nested test'},'capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}
+        params={'protocols':[protocol],'client':{'id':'org.hyprune.nested','name':'Nested test'},'capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}
+        if protocol=='0.2':params['capabilities']+=['shell.control','data.publish']
         if token:params['token']=token
         self.hello=self.call('session.hello',params)
     def receive(self):
@@ -48,8 +49,12 @@ def run(args):
     package=installed/'org.hyprune.atrium'
     if package.exists():shutil.rmtree(package)
     shutil.copytree(ROOT/'tests/fixtures/atrium',package)
+    if args.m1:
+        subprocess.run([sys.executable,str(ROOT/'tests/fixtures/materials.py')],check=True,stdout=subprocess.DEVNULL)
+        shutil.copytree(ROOT/'tests/fixtures/materials',installed/'org.hyprune.materials',dirs_exist_ok=True)
     token=secrets.token_hex(32)
     grants=[{'token':token,'client':'org.hyprune.nested','capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}]
+    if args.m1:grants[0]['capabilities']+=['shell.control','data.publish']
     read,write=os.pipe();os.write(write,json.dumps(grants).encode());os.close(write)
     environment=os.environ.copy();environment.update(AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read))
     config=str(HERE/'hyprland.lua');log=open(STATE/'hyprland.log','w')
@@ -77,14 +82,15 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token)
+        client=Client(str(socketpath),token,"0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
         if args.serve:
             print('Nested ready; dev/nested/ctl.py targets only this session.',flush=True)
             while process.poll() is None:time.sleep(.5)
             return
         smoke(client,children,args)
-        if args.record:record(client)
+        if args.m1:m1(client)
+        if args.record:record(client,args.m1)
         failures(client,copy,socketpath,process.pid)
         (STATE/'transcript.json').write_text(json.dumps(client.transcript))
         (STATE/'notifications.json').write_text(json.dumps(client.events))
@@ -192,9 +198,10 @@ def failures(client,plugin,socketpath,pid):
     assert ctl('plugin','unload',str(plugin))=='ok'
     print('PASS: rejected reload, modes, anonymous denial, watchdog, 3 active unload/reload cycles',flush=True)
 
-def record(client):
+def record(client,materials=False):
     gallery=pathlib.Path.home()/'workspace/rick-the-alien/worldshell-gallery/videos';gallery.mkdir(parents=True,exist_ok=True)
-    output=gallery/'hyprune-core-m0.mp4';raw=STATE/'capture.mkv'
+    stem='hyprune-core-materials' if materials else 'hyprune-core-m0'
+    output=gallery/(stem+'.mp4');raw=STATE/'capture.mkv'
     # The previous smoke leaves desktop mode active. Capture only HEADLESS-1.
     log=open(STATE/'recorder.log','w')
     recorder=envrun('wf-recorder','-o','HEADLESS-1','-r','30','-D','--no-dmabuf','-c','libx264','-p','preset=ultrafast','-p','crf=20','-x','yuv420p','-f',str(raw),stdout=log,stderr=subprocess.STDOUT)
@@ -206,6 +213,21 @@ def record(client):
         while time.monotonic()<until:sample();time.sleep(.12)
     def type_keys(*args):subprocess.run([str(HERE/'ctl.py'),'env','wtype',*args],check=True)
     try:
+        if materials:
+            record_material_tour(client,pause)
+        else:
+            record_m0_tour(client,pause,type_keys,sample,started)
+    finally:
+        recorder.send_signal(signal.SIGINT);recorder.wait(timeout=15);log.close()
+    subprocess.run(['ffmpeg','-y','-loglevel','error','-i',str(raw),'-an','-vf','scale=1920:1080:flags=lanczos:in_range=pc:out_range=tv','-r','30','-c:v','libx264','-preset','medium','-crf','22','-pix_fmt','yuv420p','-color_range','tv','-movflags','+faststart',str(output)],check=True)
+    probe=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(output)]))
+    stream=probe['streams'][0];assert stream['codec_name']=='h264' and stream['pix_fmt']=='yuv420p' and stream['width']==1920 and stream['height']==1080
+    assert 20<=float(probe['format']['duration'])<=40 and output.stat().st_size<40_000_000,probe['format']
+    notes='Original CC0 material laboratory. UV0 tiling/trim sheets, independent UV1 irradiance, transformed normal maps, copper and ceramic roughness samples. GLES3 4x MSAA, 8x anisotropy, key/sky specular. Authenticated IPC 0.2 camera tour in isolated nested Hyprland 0.56.2.' if materials else 'Original CC0 atrium: walking, live terminals and authenticated IPC 0.1 in nested Hyprland.'
+    (gallery/(stem+'.json')).write_text(json.dumps({'title':'Hyprune core materials' if materials else 'Hyprune core M0','tag':'core','notes':notes},indent=2)+'\n')
+    (STATE/'video-probe.json').write_text(json.dumps(probe,indent=2));print('video:',output,output.stat().st_size,'bytes',flush=True)
+
+def record_m0_tour(client,pause,type_keys,sample,started):
         pause(2)
         ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")');pause(2)
         type_keys('-P','w','-s','450','-p','w');pause(.5)
@@ -223,15 +245,51 @@ def record(client):
         for _ in range(10):subprocess.run([str(HERE/'ctl.py'),'env',str(ROOT/'build/nested-pointer'),'-10','0'],check=True);pause(.12)
         pause(max(0,27-(time.monotonic()-started)))
         client.call('runtime.exit',{});pause(2)
-    finally:
-        recorder.send_signal(signal.SIGINT);recorder.wait(timeout=15);log.close()
-    subprocess.run(['ffmpeg','-y','-loglevel','error','-i',str(raw),'-an','-vf','scale=1920:1080:flags=lanczos:in_range=pc:out_range=tv','-r','30','-c:v','libx264','-preset','medium','-crf','22','-pix_fmt','yuv420p','-color_range','tv','-movflags','+faststart',str(output)],check=True)
-    probe=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(output)]))
-    stream=probe['streams'][0];assert stream['codec_name']=='h264' and stream['pix_fmt']=='yuv420p' and stream['width']==1920 and stream['height']==1080
-    assert 20<=float(probe['format']['duration'])<=40 and output.stat().st_size<40_000_000,probe['format']
-    (gallery/'hyprune-core-m0.json').write_text(json.dumps({'title':'Hyprune core M0','tag':'core','notes':'Original CC0 atrium. Hyprland 0.56.2 nested session: toggle, capsule walking, live floating terminals, real pointer click and typing, authenticated IPC 0.1 state stream, return to desktop. GLES3 4x MSAA, linear lighting, tone mapping with preserved application colors. No real-session control or proprietary assets.'},indent=2)+'\n')
-    (STATE/'video-probe.json').write_text(json.dumps(probe,indent=2));print('video:',output,output.stat().st_size,'bytes',flush=True)
+def record_material_tour(client,pause):
+    import math
+    client.call('world.load',{'worldId':'org.hyprune.materials'})
+    pause(1)
+    ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")')
+    client.call('movement.set',{'modeId':'com.hyprune.fly'})
+    start=time.monotonic()
+    while time.monotonic()-start<26:
+        t=time.monotonic()-start
+        # Begin beyond the live terminal quads, then inspect floor, trim and the roughness gallery.
+        x=1.5*math.sin(t*.22);y=2.2+.6*math.sin(t*.17);z=-1.9-.7*math.sin(t*.13)
+        yaw=-x*.13;pitch=.03+.08*math.sin(t*.3)
+        sy=math.sin(-yaw/2);cy=math.cos(-yaw/2);sp=math.sin(pitch/2);cp=math.cos(pitch/2)
+        client.call('camera.set',{'position':[x,y,z],'orientation':[cy*sp,sy*cp,-sy*sp,cy*cp]})
+        pause(.06)
+    client.call('runtime.exit',{});pause(1)
+
+def m1(client):
+    client.call('world.load',{'worldId':'org.hyprune.materials'})
+    ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")');time.sleep(.2)
+    subscription=next(x['response']['result']['subscriptionId'] for x in client.transcript if x['method']=='state.subscribe')
+    def state():return client.call('state.snapshot',{'subscriptionId':subscription})['snapshot']['state']
+    pose=client.call('camera.get',{});client.call('camera.set',pose)
+    client.call('waypoint.set',{'id':'gallery','label':'Gallery','target':{'zoneId':'gallery'}})
+    client.call('route.set',{'points':[{'position':[0,1.7,5]},{'position':[0,1.7,4]}]})
+    client.call('autodrive.start',{'speed':4});time.sleep(.8)
+    assert not state()['location']['autodrive']
+    client.call('travel.start',{'to':{'zoneId':'gallery'},'durationMs':400})
+    time.sleep(.55);assert state()['location']['transition']['phase']=='arrived'
+    assert any(e['method']=='location.transition' for e in client.events)
+    output=state()['runtime']['outputs'][0]
+    lease=client.call('shell.claim',{'outputs':[output]})['leaseId']
+    client.call('ui.open',{'leaseId':lease,'outputId':output,'panel':'overview'})
+    assert state()['shell']['leases'][0]['overlays'][0]['visible']
+    client.call('ui.close',{'leaseId':lease,'outputId':output})
+    subprocess.run([str(HERE/'ctl.py'),'env','wtype','-P','Tab','-s','450','-p','Tab'],check=True)
+    assert state()['shell']['leases'][0]['overlays'][0]['visible'],'core hold timing'
+    client.call('ui.close',{'leaseId':lease,'outputId':output})
+    client.call('data.publish',{'sourceId':'org.hyprune.nested.metrics','sequence':1,'values':{'cpuPercent':12,'status':'live'},'ttlMs':200})
+    assert len(state()['integrations']['sources'])==1
+    time.sleep(.3);assert state()['integrations']['sources']==[]
+    client.call('shell.release',{'leaseId':lease})
+    client.call('runtime.exit',{})
+    print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--serve',action='store_true');parser.add_argument('--record',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--serve',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m1',action='store_true');args=parser.parse_args()
     run(args)

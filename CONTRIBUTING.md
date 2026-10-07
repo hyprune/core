@@ -1,8 +1,8 @@
 # Contributing
 
 Read the current sibling `hyprune/docs` RFCs 0002, 0003 and 0004 and the
-`hyprune/schema/v0` contracts before changing boundaries. Record the commits used
-for interface work. Public `0.1` methods must agree with their schema and be
+`hyprune/schema/v0` and `v0.2` contracts before changing boundaries. Record the commits used
+for interface work. Public negotiated methods must agree with their schema and be
 advertised only when implemented. Do not silently extend the version.
 
 Use C++23, the repository clang-format configuration, and small commits. Keep
@@ -16,15 +16,16 @@ copy.
 Before submitting:
 
 ```sh
-python3 tests/fixtures/generate.py
+python3 tests/fixtures/materials.py
 cmake -S . -B build -G Ninja
 cmake --build build -j 3
 ctest --test-dir build --output-on-failure
-dev/nested/run.sh
+dev/nested/run.sh --m1
+node tests/validate-wire.mjs ../schema 0.2
 ```
 
 For render/input changes, inspect `.state/world.png` from the nested harness.
-Use `--record` when updating demo evidence. Tests must exercise behavior (state
+Use `--m1 --record` when updating demo evidence. Tests must exercise behavior (state
 restoration, framing failures, real Wayland input), not duplicate implementation.
 Do not add a test suite for prose-only changes.
 
@@ -52,3 +53,5 @@ with this trailer:
 ```
 Co-Authored-By: Krombopulos Michael <Krombopulos.Michael@mail99.me>
 ```
+
+For material costs, compare both the M1 diffuse baseline and the historical M0 renderer in one EGL context. `flock /tmp/worldshell-nested.lock python3 dev/benchmark-materials.py 0` builds the historical renderer in a temporary directory and reports paired GPU timings; the EGL device index is machine-specific. Record GL_RENDERER, resolution, sample count and percentiles. Do not infer Intel or desktop-GPU performance from a laptop GPU measurement.

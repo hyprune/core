@@ -1,0 +1,54 @@
+{
+  "responses": 32,
+  "notifications": 150,
+  "transitionPhases": {
+    "transition-2": [
+      "loading",
+      "arrived"
+    ],
+    "transition-3": [
+      "departing",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "travelling",
+      "arrived"
+    ],
+    "transition-4": [
+      "loading",
+      "failed"
+    ]
+  },
+  "schemaVersion": "0.2",
+  "ctestSuites": 4,
+  "sanitizerSuites": 3,
+  "nested": "passed; no crash",
+  "video": {
+    "durationSeconds": 28.233333,
+    "bytes": 6582648,
+    "width": 1920,
+    "height": 1080,
+    "codec": "h264",
+    "pixelFormat": "yuv420p"
+  }
+}

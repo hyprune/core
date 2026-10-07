@@ -2,7 +2,7 @@
 
 “What if the computer itself were an explorable world?”
 
-Hyprune core integrates a small 3D runtime with Hyprland. This is the M0 developer
+Hyprune core integrates a small 3D runtime with Hyprland. This is the M1 developer
 implementation, pinned to **Hyprland 0.56.x** and checked against the exact running
 compositor ABI hash. The shell, worlds, SDK, documentation and schemas live in
 separate repositories. This repository contains no proprietary game assets.
@@ -17,7 +17,7 @@ this machine uses the headers installed by hyprpm. cgltf, nlohmann/json and
 stb_image are vendored with their licenses. Builds do not download dependencies.
 
 ```sh
-python3 tests/fixtures/generate.py
+python3 tests/fixtures/materials.py  # generates both original CC0 fixtures
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build -j 3
 ctest --test-dir build --output-on-failure
@@ -35,7 +35,8 @@ requires `wf-recorder`, `ffmpeg` and `ffprobe`.
 
 ```sh
 dev/nested/run.sh                 # automated smoke and failure tests; then exits
-dev/nested/run.sh --record        # also produces the gallery video
+dev/nested/run.sh --m1            # also checks IPC 0.2 navigation/UI/data
+dev/nested/run.sh --m1 --record   # records the material laboratory
 dev/nested/run.sh --serve         # interactive nested session, Ctrl+C to stop
 ```
 
@@ -83,6 +84,7 @@ the picking ray. Core does not show/hide/replace hardware cursor images. M0 has
 | `world` | Offline schema checks, safe package paths, cgltf decode, images, explicit collision meshes, spawn checks | GL objects or compositor handles |
 | `sim` | Fixed 60 Hz camera state, walk/fly strategies, static mesh capsule queries | Seat dispatch or window identity |
 | `surfaces` | Stable surface descriptors and front-facing ray/quad math | Capturing pixels or granting focus |
+| `control` | Camera commands, route following, travel lifecycle, connection-owned leases/data, core UI hold timing | GL, compositor APIs or host metrics collection |
 | `ipc` | Bounded framed JSON-RPC, grants, snapshots/deltas; private build-pinned bridge | Pixels or raw public input injection |
 | `daemon` | Public socket and launch grants, command acknowledgements, session revisions | GL or compositor calls |
 
@@ -108,7 +110,9 @@ path. The nested harness installs its generated fixture there. `world.load` acce
 only an ID and optional spawn ID, never a path, URI or executable.
 
 Supported: static glTF 2.0 triangles, glTF node world transforms and selected scene,
-base color factors/textures, emissive factors, `KHR_materials_unlit`, explicit
+base color/emissive textures, all glTF samplers and mipmaps, up to 8× anisotropy,
+`KHR_texture_transform` on all five material slots, derivative-frame normal maps,
+metallic/roughness and lightmap-modulated key/sky specular, occlusion, `KHR_materials_unlit`, explicit
 static triangle collision, PNG lightmaps, linear or sRGB irradiance encoding and
 independent UV0/UV1. Baked diffuse is albedo × irradiance × intensity + emission;
 it receives no duplicate direct diffuse term. The world is tone mapped once.
@@ -125,23 +129,29 @@ boundary when larger worlds, stairs or dynamic bodies justify it.
 
 ## IPC and current limitations
 
-Protocol `0.1` uses the RFC-0003 socket location and 4-byte big-endian length framing.
-It implements hello/ping, subscribe/snapshot/unsubscribe, world.load,
-surface.focus, movement.set and runtime.exit. The returned method list is filtered
-by grants; unadvertised methods return -32601. Snapshots expose camera and surfaces.
-Built-in mode IDs are `com.hyprune.walk` and `com.hyprune.fly`.
+IPC `0.2` adds camera get/set, waypoint/route, timed travel, autodrive, lease-owned
+UI open/close and integration publishing. It keeps `0.1` compatibility with its
+original state shape. Discover methods/events through hello; grants filter both.
+`location` and `integrations` are revisioned state. Warp notifications have stable
+operation IDs, output, phase/progress, destination and monotonic timestamps.
+Built-in mode IDs remain `com.hyprune.walk` and `com.hyprune.fly`.
 
-Same-UID alone grants no state access. For the nested harness, the supervisor
-passes one-use random credentials through an inherited pipe into the helper.
-There is no persistent token file and no token in argv. The supervisor currently
-seeds a finite set at launch; a user-facing grant/policy manager and supervised
-shell launching are M1 work. This is not an extension sandbox.
+Hold Tab for 350 ms in exploration mode to request the leased shell's overview;
+release leaves it open. Escape dismisses it; F12 exits. Core implements nonexclusive
+leases only: exclusive shell input returns -32007 until trusted Wayland-client
+association exists. This is not full RFC-0008 shell conformance.
 
-RFC alignment and the precise acceptance evidence are recorded in
-[docs/M0.md](docs/M0.md). In particular, the current public RFC does not specify
-`camera.get/set`, `surfaces.list` or `ui.open`. Camera/surface reads use snapshots;
-`hl.plugin.hyprune.camera(x,y,z,yaw,pitch)` is a local developer diagnostic/teleport
-helper, not public IPC. There is no shell overlay/`ui.open` bridge yet.
+Same-UID alone grants no state access. Launch tokens are one-use and connection
+bound. Publishing needs the separate `data.publish` capability and authenticated
+source namespace, increasing sequence, bounded scalar values and TTL. No host
+metrics collection or arbitrary filesystem access is granted. The nested launcher
+injects grants through an inherited pipe; a production supervisor/policy manager,
+renewal protocol and extension sandbox remain future work.
+
+See [docs/M1.md](docs/M1.md) for measurements, validation and limitations, and
+[docs/CHANGES-FOR-SDK-AND-SHELL.md](docs/CHANGES-FOR-SDK-AND-SHELL.md) for the exact
+migration contract. [docs/M0.md](docs/M0.md) preserves the earlier acceptance report.
+`hl.plugin.hyprune.camera(x,y,z,yaw,pitch)` remains a local diagnostic helper.
 
 Window capture currently leases the committed root surface's normal 2D texture;
 it does not invoke snapshot FBO rendering. Up to 16 mapped windows on the selected

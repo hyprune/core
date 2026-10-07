@@ -4,13 +4,14 @@ import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 const {validate}=await import(pathToFileURL(resolve(process.argv[2], 'lib/validate.mjs')));
+const version=process.argv[3] || '0.1';
 const messages=JSON.parse(readFileSync('dev/nested/.state/transcript.json','utf8'));
 for(const {method,response} of messages){
-  const result=validate('ipc',response,response.error ? undefined : method);
+  const result=validate('ipc',response,response.error ? undefined : method,version);
   if(!result.valid)throw new Error(`${method}: ${result.errors.join('; ')}`);
 }
-console.log(`PASS: ${messages.length} live IPC responses match the independent v0 schema`);
+console.log(`PASS: ${messages.length} live IPC responses match the independent ${version} schema`);
 
 const events=JSON.parse(readFileSync('dev/nested/.state/notifications.json','utf8'));
-for(const event of events){const result=validate('ipc',event);if(!result.valid)throw new Error(result.errors.join('; '));}
-console.log(`PASS: ${events.length} live notifications match the independent v0 schema`);
+for(const event of events){const result=validate('ipc',event,undefined,version);if(!result.valid)throw new Error(result.errors.join('; '));}
+console.log(`PASS: ${events.length} live notifications match the independent ${version} schema`);

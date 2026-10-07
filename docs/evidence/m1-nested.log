@@ -1,0 +1,13 @@
+load: ok
+hello: 0.2 ['session.hello', 'session.ping', 'state.subscribe', 'state.snapshot', 'state.unsubscribe', 'autodrive.start', 'autodrive.stop', 'camera.get', 'camera.set', 'data.publish', 'data.remove', 'movement.set', 'route.clear', 'route.set', 'runtime.exit', 'shell.claim', 'shell.overlay', 'shell.release', 'surface.focus', 'travel.cancel', 'travel.start', 'ui.close', 'ui.open', 'waypoint.clear', 'waypoint.set', 'world.load']
+world loaded: {'revision': 3}
+toggle: ok
+camera: {'active': True, 'captures': [{'commits': 0, 'id': 'surface-1', 'position': [0.0, 2.0, -2.0], 'title': 'Hyprune event stream'}, {'commits': 0, 'id': 'surface-2', 'position': [-3.799999952316284, 2.0, -2.0], 'title': 'Hyprune workbench'}], 'error': '', 'frames': 92, 'pitch': 0.0, 'position': [0.0, 1.7000000476837158, 4.0], 'yaw': -0.0}
+walk: [0.0, 1.7000000476837158, 4.0] -> [-3.0870206391142574e-09, 1.7000000476837158, 1.4916852712631226]
+surface click: passed
+terminal typing: passed
+PASS: load, hello, snapshot, toggle, render, walk, keyboard routing, events, exit
+PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry
+hidden workspace: captures live, keyboard focus safely rejected
+daemon death: desktop restored in 0.053 s
+PASS: rejected reload, modes, anonymous denial, watchdog, 3 active unload/reload cycles
