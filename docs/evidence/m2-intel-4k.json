@@ -1,0 +1,27 @@
+{
+  "addedMedianMs": 2.9742189999999997,
+  "baseline": "M1 renderer a3bb065c11e7533c6389daa82b4fc8628a750387",
+  "pairedAddedMedianMs": 2.9484889999999986,
+  "pairedAddedP95Ms": 4.925781000000001,
+  "renderer": "Mesa Intel(R) Graphics (PTL)",
+  "resolution": [
+    3840,
+    2160
+  ],
+  "samplesPerMode": 300,
+  "m1": {
+    "medianMs": 8.885781,
+    "p95Ms": 10.08151
+  },
+  "m2": {
+    "medianMs": 11.86,
+    "p95Ms": 14.118072
+  },
+  "m2Quality": "intel",
+  "m1Msaa": 4,
+  "m2Msaa": 2,
+  "m2ProbeResolution": 64,
+  "m2AnisotropyMax": 2,
+  "bloomResolution": "half",
+  "ssr": false
+}

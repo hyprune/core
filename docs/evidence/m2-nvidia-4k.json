@@ -1,0 +1,27 @@
+{
+  "addedMedianMs": 0.250016,
+  "baseline": "M1 renderer a3bb065c11e7533c6389daa82b4fc8628a750387",
+  "pairedAddedMedianMs": 0.23526399999999992,
+  "pairedAddedP95Ms": 0.3094080000000001,
+  "renderer": "NVIDIA GeForce RTX 5090 Laptop GPU/PCIe/SSE2",
+  "resolution": [
+    3840,
+    2160
+  ],
+  "samplesPerMode": 300,
+  "m1": {
+    "medianMs": 1.666144,
+    "p95Ms": 1.717888
+  },
+  "m2": {
+    "medianMs": 1.91616,
+    "p95Ms": 1.987648
+  },
+  "m2Quality": "high",
+  "m1Msaa": 4,
+  "m2Msaa": 4,
+  "m2ProbeResolution": 128,
+  "m2AnisotropyMax": 8,
+  "bloomResolution": "half",
+  "ssr": false
+}

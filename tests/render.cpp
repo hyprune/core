@@ -1,4 +1,5 @@
 #include "render/Renderer.hpp"
+#include "world/Mounts.hpp"
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <iostream>
@@ -60,6 +61,14 @@ int main(int argc, char **argv) {
         glScissor(2, 4, 17, 19);
         glDepthMask(GL_FALSE);
         glColorMask(GL_TRUE, GL_FALSE, GL_TRUE, GL_FALSE);
+        GLuint savedCube, savedSampler;
+        glGenTextures(1, &savedCube);
+        glGenSamplers(1, &savedSampler);
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, savedCube);
+        glBindSampler(6, savedSampler);
+        glCullFace(GL_FRONT);
+        glFrontFace(GL_CW);
         glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_2D, app);
         renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
@@ -74,6 +83,15 @@ int main(int argc, char **argv) {
         check(active == GL_TEXTURE5 && bound == int(app), "texture state leaked");
         check(glIsEnabled(GL_BLEND) && glIsEnabled(GL_SCISSOR_TEST), "enable state leaked");
         check(!mask[1] && !mask[3] && !depth, "write masks leaked");
+        GLint cull, front, cube, sampler;
+        glGetIntegerv(GL_CULL_FACE_MODE, &cull);
+        glGetIntegerv(GL_FRONT_FACE, &front);
+        glActiveTexture(GL_TEXTURE6);
+        glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &cube);
+        glGetIntegerv(GL_SAMPLER_BINDING, &sampler);
+        check(cull == GL_FRONT && front == GL_CW && cube == int(savedCube) && sampler == int(savedSampler),
+              "IBL/culling state leaked");
+        glActiveTexture(GL_TEXTURE5);
         unsigned char pixel[4];
         glReadPixels(180, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
         check(std::abs(int(pixel[0]) - 128) <= 1, "app pixels were tone mapped or gamma decoded twice");
@@ -170,6 +188,86 @@ int main(int argc, char **argv) {
                 check(glGetError() == GL_NO_ERROR, "glTF filter combination failed");
             }
         }
+        // M2 reference fixtures use numerical comparisons, independent of art grading.
+        materialWorld->atmosphere = world::defaultAtmosphere();
+        materialWorld->atmosphere["fog"]["density"] = 0;
+        materialWorld->atmosphere["bloom"]["strength"] = 0;
+        materialWorld->images.clear();
+        materialWorld->samplers.clear();
+        world::Material background;
+        background.unlit = true;
+        background.color = {.1f, .2f, .3f};
+        world::Material glass;
+        glass.unlit = true;
+        glass.color = {1, 0, 0};
+        glass.alpha = .35f;
+        glass.alphaMode = 2;
+        world::Material glass2 = glass;
+        glass2.color = {0, 1, 0};
+        materialWorld->materials = {background, glass, glass2};
+        auto front = mesh, back = mesh, far = mesh;
+        front.material = 1;
+        back.material = 0;
+        far.material = 2;
+        for (auto &v : front.vertices)
+            v.position.z = -1;
+        for (auto &v : back.vertices)
+            v.position.z = -4;
+        for (auto &v : far.vertices)
+            v.position.z = -2;
+        materialWorld->meshes = {front, back, far};
+        auto blendA = pixels();
+        materialWorld->meshes = {far, front, back};
+        auto blendB = pixels();
+        check(blendA == blendB, "transparent primitives not depth sorted");
+        materialWorld->materials[1].alphaMode = 1;
+        materialWorld->materials[1].alphaCutoff = .5f;
+        auto masked = pixels();
+        materialWorld->meshes = {far, back};
+        auto without = pixels();
+        check(masked == without, "MASK factor cutoff did not discard");
+        materialWorld->meshes = {mesh};
+        materialWorld->materials = {background};
+        materialWorld->atmosphere["fog"]["density"] = .2;
+        materialWorld->atmosphere["fog"]["excludeUnlit"] = false;
+        auto fogA = pixels();
+        camera.position.x += 100;
+        for (auto &v : materialWorld->meshes[0].vertices)
+            v.position.x += 100;
+        auto fogB = pixels();
+        check(fogA == fogB, "fog changes with world origin instead of view distance");
+        materialWorld->atmosphere["fog"]["excludeUnlit"] = true;
+        auto skyExcluded = pixels();
+        materialWorld->atmosphere["fog"]["density"] = 0;
+        auto noFog = pixels();
+        check(skyExcluded == noFog && noFog != fogB, "unlit fog exclusion");
+        camera.position.x -= 100;
+        materialWorld->meshes = {mesh};
+        materialWorld->materials[0].unlit = false;
+        materialWorld->materials[0].metallic = 1;
+        materialWorld->materials[0].roughness = .12;
+        auto reflected = pixels();
+        renderer.effects = false;
+        auto analytic = pixels();
+        renderer.effects = true;
+        check(reflected != analytic, "prefiltered environment has no visible reflection");
+        materialWorld->materials[0].unlit = true;
+        materialWorld->materials[0].emissive = {8, 2, .5f};
+        // Small HDR practical with dark surroundings exposes spatial glow beyond its rectangle.
+        for (auto &v : materialWorld->meshes[0].vertices) {
+            v.position.x *= .12f;
+            v.position.y = 1.7f + (v.position.y - 1.7f) * .12f;
+        }
+        materialWorld->atmosphere["bloom"]["strength"] = .7;
+        auto glowing = pixels();
+        materialWorld->atmosphere["bloom"]["strength"] = 0;
+        auto sharp = pixels();
+        check(glowing != sharp, "HDR bloom has no spatial kernel");
+        materialWorld->atmosphere["bloom"]["strength"] = .7;
+        renderer.profile = materialWorld->atmosphere;
+        renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
+        glReadPixels(180, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+        check(std::abs(int(pixel[0]) - 128) <= 1, "world bloom/exposure changed app color");
         check(glGetError() == GL_NO_ERROR, "material GL error");
         renderer.destroy();
         glDeleteTextures(1, &app);

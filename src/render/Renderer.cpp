@@ -1,5 +1,8 @@
 #include "Renderer.hpp"
 #include "GLState.hpp"
+#include "world/Environment.hpp"
+#include "world/Mounts.hpp"
+#include <numeric>
 #include <stdexcept>
 namespace hyprune::render {
 namespace {
@@ -52,6 +55,11 @@ uniform mat3 uvMatrix[5];uniform int uvSet[5];uniform int present[5];
 uniform vec3 color,emission,eye;
 uniform int hasTexture,baked,lightSrgb,unlit,surface,details;
 uniform float intensity,metallic,roughness,normalScale,occlusionStrength;
+uniform samplerCube environmentMap;
+uniform float cubeLevels,envRotation,envIntensity,alpha,alphaCutoff;
+uniform int alphaMode,excludeUnlit,effects;
+uniform vec3 fogColor,sunDirection,sunColor;
+uniform float fogDensity,heightFalloff,baseHeight,sunIntensity;
 out vec4 result;
 vec3 decode(vec3 x){return mix(x/12.92,pow((x+.055)/1.055,vec3(2.4)),step(vec3(.04045),x));}
 vec2 coords(int i){return (uvMatrix[i]*vec3(uvSet[i]==0?uv:lightUV,1)).xy;}
@@ -66,9 +74,11 @@ vec3 mappedNormal(vec3 N,vec2 st){
 }
 void main(){
  if(surface!=0){vec3 texel=hasTexture!=0?decode(texture(albedo,uv).rgb):vec3(1);result=vec4(color*texel,0);return;}
- vec3 base=color*(present[0]!=0?texture(albedo,coords(0)).rgb:vec3(1));
+ vec4 baseSample=present[0]!=0?texture(albedo,coords(0)):vec4(1);
+ float coverage=alpha*baseSample.a;if(alphaMode==1&&coverage<alphaCutoff)discard;
+ vec3 base=color*baseSample.rgb;
  vec3 emissive=emission*(present[4]!=0?texture(emissiveMap,coords(4)).rgb:vec3(1));
- vec3 N=normalize(n),L=normalize(vec3(.3,1,.5));vec3 geometric=N;
+ vec3 N=normalize(gl_FrontFacing?n:-n),L=normalize(sunDirection);vec3 geometric=N;
  if(details!=0&&present[1]!=0)N=mappedNormal(N,coords(1));
  vec3 irradiance=vec3(.24+.76*max(dot(N,L),0.));
  if(baked!=0){irradiance=texture(lightmap,lightUV).rgb;if(lightSrgb!=0)irradiance=decode(irradiance);irradiance*=intensity;}
@@ -84,6 +94,7 @@ void main(){
   vec3 key=F*((power+2.)/25.132741)*pow(nh,power)*nl;
   vec3 R=reflect(-V,N);vec3 sky=mix(vec3(.055,.07,.085),vec3(.32,.43,.58),clamp(R.y*.5+.5,0.,1.));
   sky=mix(sky,vec3(.16,.21,.28),rough*rough);
+  if(effects!=0){float c=cos(envRotation),s=sin(envRotation);R=vec3(c*R.x+s*R.z,R.y,-s*R.x+c*R.z);sky=textureLod(environmentMap,R,rough*(cubeLevels-1.)).rgb*envIntensity;key*=sunColor*sunIntensity;}
   vec3 skyF=F0+(max(vec3(1.-rough),F0)-F0)*pow(1.-nv,5.);
   float visibility=baked!=0?clamp(dot(irradiance,vec3(.2126,.7152,.0722)),0.,1.):1.;
   float detail=baked!=0?clamp(1.+.3*(dot(N,L)-dot(geometric,L)),.7,1.3):1.;
@@ -91,8 +102,13 @@ void main(){
  }
  if(unlit!=0)lit=base;
  lit+=emissive;
- float fog=1.-exp(-length(worldPosition.xz)*.008);lit=mix(lit,vec3(.028,.045,.065),fog);
- result=vec4(lit,1);
+ // Camera-relative integrated height density along the view segment.
+ float dy=(worldPosition.y-eye.y)*heightFalloff;
+ float integral=abs(dy)<.001?1.:clamp((1.-exp(clamp(-dy,-40.,40.)))/dy,0.,1e6);
+ float density=fogDensity*exp(clamp(-(eye.y-baseHeight)*heightFalloff,-40.,40.))*integral;
+ float fog=1.-exp(-length(worldPosition-eye)*density);
+ if(unlit!=0&&excludeUnlit!=0)fog=0.;lit=mix(lit,fogColor,clamp(fog,0.,1.));
+ result=vec4(lit,alphaMode==2?coverage:1.);
 }
 )";
 const char *screenVertex = R"(#version 300 es
@@ -102,11 +118,27 @@ void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));uv=p;gl_
 )";
 const char *toneFragment = R"(#version 300 es
 precision highp float;
-in vec2 uv;uniform sampler2D frame;uniform vec2 resolution;uniform int typing;out vec4 result;
-vec3 encode(vec3 x){return mix(12.92*x,1.055*pow(x,vec3(1./2.4))-.055,step(vec3(.0031308),x));}
-void main(){vec4 sampleColor=texture(frame,vec2(uv.x,1.-uv.y));vec3 x=sampleColor.rgb;vec3 mapped=mix(x,clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.),sampleColor.a);vec3 c=encode(mapped);
- vec2 p=abs(gl_FragCoord.xy-resolution*.5);if((p.x<1.&&p.y<7.)||(p.y<1.&&p.x<7.))c=typing!=0?vec3(.5,1.,.65):vec3(.9);
+in vec2 uv;uniform sampler2D frame,bloomMap;uniform vec2 resolution,pointer;uniform int typing,toneMapping;uniform float exposure,bloomStrength;out vec4 result;
+vec3 encode(vec3 x){return mix(12.92*x,1.055*pow(max(x,vec3(0)),vec3(1./2.4))-.055,step(vec3(.0031308),x));}
+void main(){vec2 st=vec2(uv.x,1.-uv.y);vec4 sampleColor=texture(frame,st);vec3 x=(sampleColor.rgb+texture(bloomMap,st).rgb*bloomStrength)*exposure;
+ vec3 mapped=toneMapping==0?clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.):toneMapping==1?x/(1.+x):clamp(x,0.,1.);
+ vec3 c=encode(mix(sampleColor.rgb,mapped,sampleColor.a));
+ vec2 p=abs(gl_FragCoord.xy-resolution*vec2(pointer.x,1.-pointer.y));if((p.x<1.&&p.y<7.)||(p.y<1.&&p.x<7.))c=typing!=0?vec3(.5,1.,.65):vec3(.9);
  result=vec4(c,1);}
+)";
+const char *bloomFragment = R"(#version 300 es
+precision highp float;
+in vec2 uv;uniform sampler2D image;uniform vec2 stepSize;uniform float threshold;uniform int extract;out vec4 result;
+vec3 tap(vec2 st){vec4 c=texture(image,st);return c.rgb*(extract!=0?c.a:1.);}
+void main(){vec3 c;
+ if(extract!=0){c=(tap(uv+stepSize*vec2(-.5,-.5))+tap(uv+stepSize*vec2(.5,-.5))+tap(uv+stepSize*vec2(-.5,.5))+tap(uv+stepSize*vec2(.5,.5)))*.25;float l=max(max(c.r,c.g),c.b);c*=max(0.,l-threshold)/max(l,.0001);}
+ else c=tap(uv)*.227027027+ (tap(uv+stepSize*1.384615384)+tap(uv-stepSize*1.384615384))*.316216216+(tap(uv+stepSize*3.23076923)+tap(uv-stepSize*3.23076923))*.07027027;
+ result=vec4(c,1);}
+)";
+const char *skyFragment = R"(#version 300 es
+precision highp float;
+in vec2 uv;uniform samplerCube environmentMap;uniform vec3 forward,right,up;uniform float tanFov,aspect,rotation;out vec4 result;
+void main(){vec3 d=normalize(forward+right*((uv.x*2.-1.)*tanFov*aspect)+up*((uv.y*2.-1.)*tanFov));float c=cos(rotation),s=sin(rotation);d=vec3(c*d.x+s*d.z,d.y,-s*d.x+c*d.z);result=vec4(textureLod(environmentMap,d,0.).rgb,1);}
 )";
 void layout(GLuint &vao, GLuint &vbo) {
     glGenVertexArrays(1, &vao);
@@ -132,6 +164,10 @@ void Renderer::init() {
         return;
     scene_ = program(vertex, fragment);
     tone_ = program(screenVertex, toneFragment);
+    bloom_ = program(screenVertex, bloomFragment);
+    sky_ = program(screenVertex, skyFragment);
+    auto gpu = std::string(reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
+    intelQuality = intelQuality || gpu.find("Intel") != std::string::npos;
     layout(quadVao_, quadVbo_);
     glGenVertexArrays(1, &screenVao_);
     glGenSamplers(1, &repeat_);
@@ -155,6 +191,8 @@ void Renderer::freeWorld() {
     colorTextures_.clear();
     glDeleteSamplers(samplers_.size(), samplers_.data());
     samplers_.clear();
+    glDeleteTextures(1, &environment_);
+    environment_ = 0;
     world_.reset();
 }
 void Renderer::prepare(std::shared_ptr<const world::World> world) {
@@ -180,6 +218,17 @@ void Renderer::prepare(std::shared_ptr<const world::World> world) {
         throw std::runtime_error("world GPU budget exceeded including material mip chains");
     std::vector<Batch> batches;
     std::vector<GLuint> textures, colors, samplers;
+    GLuint cube = 0;
+    auto newProfile = world->atmosphere.is_object() ? world->atmosphere : world::defaultAtmosphere();
+    int resolution = intelQuality ? 64 : 128;
+    if (newProfile.contains("environment"))
+        resolution = std::min(resolution, newProfile["environment"]["maxResolution"].get<int>());
+    const auto &cached = intelQuality ? world->environmentLow : world->environmentHigh;
+    auto levels = cached.empty() ? world::prefilterEnvironment(*world, resolution) : cached;
+    for (auto &level : levels)
+        gpuBytes += size_t(level.size) * level.size * 6 * 8;
+    if (gpuBytes > 512 * 1024 * 1024)
+        throw std::runtime_error("environment exceeds world GPU budget");
     try {
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -220,13 +269,30 @@ void Renderer::prepare(std::shared_ptr<const world::World> world) {
             glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, settings.wrapT);
             // Preserve explicit nearest filtering; anisotropy is a runtime quality choice.
             if (anisotropy && settings.magFilter == GL_LINEAR && settings.minFilter == GL_LINEAR_MIPMAP_LINEAR)
-                glSamplerParameterf(sampler, 0x84FE, std::min(8.f, maximum));
+                glSamplerParameterf(sampler, 0x84FE, std::min(intelQuality ? 2.f : 8.f, maximum));
         }
+        glGenTextures(1, &cube);
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cube);
+        glBindSampler(6, 0);
+        for (size_t mip = 0; mip < levels.size(); mip++)
+            for (int face = 0; face < 6; face++)
+                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, mip, GL_RGBA16F, levels[mip].size, levels[mip].size,
+                             0, GL_RGBA, GL_FLOAT, levels[mip].faces[face].data());
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
         for (auto &mesh : world->meshes) {
             Batch b;
             layout(b.vao, b.vbo);
             b.count = mesh.vertices.size();
             b.material = mesh.material;
+            for (auto &v : mesh.vertices)
+                b.center += v.position;
+            if (!mesh.vertices.empty())
+                b.center = b.center / float(mesh.vertices.size());
             batches.push_back(b);
             glBufferData(GL_ARRAY_BUFFER, mesh.vertices.size() * sizeof(world::Vertex), mesh.vertices.data(),
                          GL_STATIC_DRAW);
@@ -238,6 +304,7 @@ void Renderer::prepare(std::shared_ptr<const world::World> world) {
             glDeleteBuffers(1, &b.vbo);
             glDeleteVertexArrays(1, &b.vao);
         }
+        glDeleteTextures(1, &cube);
         glDeleteTextures(textures.size(), textures.data());
         glDeleteTextures(colors.size(), colors.data());
         glDeleteSamplers(samplers.size(), samplers.data());
@@ -249,6 +316,9 @@ void Renderer::prepare(std::shared_ptr<const world::World> world) {
     textures_ = std::move(textures);
     colorTextures_ = std::move(colors);
     samplers_ = std::move(samplers);
+    environment_ = cube;
+    cubeLevels_ = levels.size();
+    profile = newProfile;
 }
 void Renderer::freeTargets() {
     glDeleteFramebuffers(1, &msaa_);
@@ -257,6 +327,9 @@ void Renderer::freeTargets() {
     glDeleteRenderbuffers(1, &depth_);
     glDeleteTextures(1, &resolveTexture_);
     msaa_ = resolve_ = color_ = depth_ = resolveTexture_ = 0;
+    glDeleteFramebuffers(2, bloomFbo_);
+    glDeleteTextures(2, bloomTexture_);
+    bloomFbo_[0] = bloomFbo_[1] = bloomTexture_[0] = bloomTexture_[1] = 0;
     width_ = height_ = 0;
 }
 void Renderer::targets(int w, int h) {
@@ -265,7 +338,7 @@ void Renderer::targets(int w, int h) {
     freeTargets();
     GLint maxSamples = 0;
     glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-    samples_ = std::min(4, maxSamples);
+    samples_ = std::min(intelQuality ? 2 : 4, maxSamples);
     glGenFramebuffers(1, &msaa_);
     glBindFramebuffer(GL_FRAMEBUFFER, msaa_);
     glGenRenderbuffers(1, &color_);
@@ -290,6 +363,21 @@ void Renderer::targets(int w, int h) {
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, resolveTexture_, 0);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         throw std::runtime_error("HDR resolve framebuffer unavailable");
+    glGenFramebuffers(2, bloomFbo_);
+    glGenTextures(2, bloomTexture_);
+    for (int i = 0; i < 2; i++) {
+        glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[i]);
+        glBindTexture(GL_TEXTURE_2D, bloomTexture_[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, std::max(1, w / 2), std::max(1, h / 2), 0, GL_RGBA, GL_HALF_FLOAT,
+                     nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloomTexture_[i], 0);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+            throw std::runtime_error("bloom target unavailable");
+    }
     width_ = w;
     height_ = h;
 }
@@ -304,6 +392,8 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glDisable(GL_BLEND);
     glDisable(GL_STENCIL_TEST);
     glDisable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW);
     glDisable(GL_RASTERIZER_DISCARD);
     glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
     glDisable(GL_SAMPLE_COVERAGE);
@@ -317,8 +407,27 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glClearColor(.028f, .045f, .065f, 1);
     glClearDepthf(1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    auto fog = profile.at("fog"), sky = profile.at("sky"), sun = sky.at("sun"), bloom = profile.at("bloom");
+    auto vec = [](const world::Json &j) { return Vec3{j[0], j[1], j[2]}; };
+    float rotation = profile.contains("environment") ? profile["environment"]["rotation"].get<float>() : 0;
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, environment_);
+    glBindSampler(6, 0);
+    glDisable(GL_DEPTH_TEST);
+    glUseProgram(sky_);
+    uniform(sky_, "environmentMap", 6);
+    auto forward = camera.forward(), right = normalized(cross(forward, {0, 1, 0})), up = cross(right, forward);
+    uniform(sky_, "forward", forward);
+    uniform(sky_, "right", right);
+    uniform(sky_, "up", up);
+    glUniform1f(glGetUniformLocation(sky_, "tanFov"), std::tan(camera.fov * .01745329252f / 2));
+    glUniform1f(glGetUniformLocation(sky_, "aspect"), float(w) / h);
+    glUniform1f(glGetUniformLocation(sky_, "rotation"), rotation);
+    glBindVertexArray(screenVao_);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glEnable(GL_DEPTH_TEST);
     glUseProgram(scene_);
-    auto vp = perspective(float(w) / h) * camera.view();
+    auto vp = perspective(float(w) / h, camera.fov * .01745329252f) * camera.view();
     glUniformMatrix4fv(glGetUniformLocation(scene_, "vp"), 1, GL_FALSE, vp.v.data());
     uniform(scene_, "albedo", 0);
     uniform(scene_, "lightmap", 1);
@@ -329,10 +438,50 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     uniform(scene_, "emissiveMap", 5);
     uniform(scene_, "eye", camera.position);
     uniform(scene_, "details", materialDetails);
+    uniform(scene_, "effects", effects);
+    uniform(scene_, "environmentMap", 6);
+    uniform(scene_, "excludeUnlit", fog["excludeUnlit"].get<bool>());
+    uniform(scene_, "fogColor", vec(fog["color"]));
+    uniform(scene_, "sunDirection", vec(sun["direction"]));
+    uniform(scene_, "sunColor", vec(sun["color"]));
+    glUniform1f(glGetUniformLocation(scene_, "fogDensity"), fog["density"].get<float>());
+    glUniform1f(glGetUniformLocation(scene_, "heightFalloff"), fog["heightFalloff"].get<float>());
+    glUniform1f(glGetUniformLocation(scene_, "baseHeight"), fog["baseHeight"].get<float>());
+    glUniform1f(glGetUniformLocation(scene_, "sunIntensity"), sun["intensity"].get<float>());
+    glUniform1f(glGetUniformLocation(scene_, "cubeLevels"), cubeLevels_);
+    glUniform1f(glGetUniformLocation(scene_, "envRotation"), rotation);
+    glUniform1f(glGetUniformLocation(scene_, "envIntensity"), 1);
     glBindSampler(0, repeat_);
     glBindSampler(1, clamp_);
-    for (auto b : batches_) {
+    std::vector<size_t> order(batches_.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        bool ta = world_->materials[batches_[a].material].alphaMode == 2,
+             tb = world_->materials[batches_[b].material].alphaMode == 2;
+        if (ta != tb)
+            return !ta;
+        return ta && length(batches_[a].center - camera.position) > length(batches_[b].center - camera.position);
+    });
+    for (auto index : order) {
+        auto b = batches_[index];
         const auto &m = world_->materials[b.material];
+        if (m.alphaMode == 2) {
+            glEnable(GL_BLEND);
+            glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+            glDepthMask(GL_FALSE);
+        } else {
+            glDisable(GL_BLEND);
+            glDepthMask(GL_TRUE);
+        }
+        // Material doubleSided controls culling, with back-face normal reversal in shader.
+        if (m.doubleSided)
+            glDisable(GL_CULL_FACE);
+        else
+            glEnable(GL_CULL_FACE);
+        glUniform1f(glGetUniformLocation(scene_, "alpha"), m.alpha);
+        glUniform1f(glGetUniformLocation(scene_, "alphaCutoff"), m.alphaCutoff);
+        uniform(scene_, "alphaMode", m.alphaMode);
         uniform(scene_, "color", m.color);
         uniform(scene_, "emission", m.emissive);
         uniform(scene_, "hasTexture", m.baseTexture >= 0);
@@ -368,13 +517,16 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glBindVertexArray(b.vao);
         glDrawArrays(GL_TRIANGLES, 0, b.count);
     }
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    glDepthMask(GL_TRUE);
     glBindSampler(0, clamp_);
     uniform(scene_, "baked", 0);
     uniform(scene_, "unlit", 1);
     uniform(scene_, "surface", 1);
     uniform(scene_, "emission", Vec3{});
     for (const auto &s : surfaces) {
-        Vec3 right{std::cos(s.yaw), 0, -std::sin(s.yaw)}, up{0, 1, 0}, normal{std::sin(s.yaw), 0, std::cos(s.yaw)};
+        Vec3 right = s.right(), up = s.up(), normal = s.normal();
         auto quad = [&](float width, float height, Vec3 center, bool border) {
             world::Vertex vertices[6];
             const float xy[6][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
@@ -400,12 +552,45 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa_);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolve_);
     glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    // Application pixels carry alpha zero and never contribute to world bloom.
+    glDisable(GL_DEPTH_TEST);
+    glUseProgram(bloom_);
+    uniform(bloom_, "image", 0);
+    glBindVertexArray(screenVao_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindSampler(0, clamp_);
+    glViewport(0, 0, std::max(1, w / 2), std::max(1, h / 2));
+    glUniform1f(glGetUniformLocation(bloom_, "threshold"), effects ? bloom["threshold"].get<float>() : 1e20f);
+    float radius = bloom["radius"];
+    for (int pass = 0; pass < 3; pass++) {
+        glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[pass == 1 ? 1 : 0]);
+        glBindTexture(GL_TEXTURE_2D, pass == 0 ? resolveTexture_ : bloomTexture_[pass == 1 ? 0 : 1]);
+        uniform(bloom_, "extract", pass == 0);
+        glUniform2f(glGetUniformLocation(bloom_, "stepSize"),
+                    pass == 2   ? 0
+                    : pass == 0 ? 1.f / w
+                                : radius / w,
+                    pass == 1   ? 0
+                    : pass == 0 ? 1.f / h
+                                : radius / h);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
+    glViewport(0, 0, w, h);
     glBindFramebuffer(GL_FRAMEBUFFER, target);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glUseProgram(tone_);
     uniform(tone_, "frame", 0);
     uniform(tone_, "typing", typing);
+    uniform(tone_, "bloomMap", 1);
+    auto curve = profile["toneMapping"].get<std::string>();
+    uniform(tone_, "toneMapping", curve == "aces" ? 0 : curve == "reinhard" ? 1 : 2);
+    glUniform1f(glGetUniformLocation(tone_, "exposure"), profile["exposure"].get<float>());
+    glUniform1f(glGetUniformLocation(tone_, "bloomStrength"), effects ? bloom["strength"].get<float>() : 0);
+    glUniform2f(glGetUniformLocation(tone_, "pointer"), pointerX, pointerY);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, bloomTexture_[0]);
+    glBindSampler(1, clamp_);
     glUniform2f(glGetUniformLocation(tone_, "resolution"), w, h);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, resolveTexture_);
@@ -419,11 +604,13 @@ void Renderer::destroy() {
     freeTargets();
     glDeleteProgram(scene_);
     glDeleteProgram(tone_);
+    glDeleteProgram(bloom_);
+    glDeleteProgram(sky_);
     glDeleteBuffers(1, &quadVbo_);
     glDeleteVertexArrays(1, &quadVao_);
     glDeleteVertexArrays(1, &screenVao_);
     glDeleteSamplers(1, &repeat_);
     glDeleteSamplers(1, &clamp_);
-    scene_ = tone_ = quadVbo_ = quadVao_ = screenVao_ = repeat_ = clamp_ = 0;
+    scene_ = tone_ = bloom_ = sky_ = quadVbo_ = quadVao_ = screenVao_ = repeat_ = clamp_ = 0;
 }
 } // namespace hyprune::render

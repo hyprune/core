@@ -5,12 +5,12 @@ namespace hyprune::render {
 // Every state changed by Renderer or its uploads is restored, even on exceptions.
 class GLState {
     GLint draw, read, program, vao, array, renderbuffer, active, unpack, pbo;
-    GLint viewport[4], scissor[4], depthFunc, srcRGB, dstRGB, srcAlpha, dstAlpha, eqRGB, eqAlpha;
+    GLint viewport[4], scissor[4], depthFunc, cullMode, frontFace, srcRGB, dstRGB, srcAlpha, dstAlpha, eqRGB, eqAlpha;
     GLfloat clearColor[4], clearDepth, depthRange[2];
     GLboolean colorMask[4], depthMask;
     struct Unit {
-        GLint texture, sampler;
-    } units[6];
+        GLint texture, cube, sampler;
+    } units[7];
     static constexpr std::array<GLenum, 8> caps{GL_BLEND,
                                                 GL_DEPTH_TEST,
                                                 GL_SCISSOR_TEST,
@@ -32,15 +32,18 @@ class GLState {
         glGetIntegerv(GL_ACTIVE_TEXTURE, &active);
         glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpack);
         glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &pbo);
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 7; i++) {
             glActiveTexture(GL_TEXTURE0 + i);
             glGetIntegerv(GL_TEXTURE_BINDING_2D, &units[i].texture);
+            glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &units[i].cube);
             glGetIntegerv(GL_SAMPLER_BINDING, &units[i].sampler);
         }
         glActiveTexture(active);
         glGetIntegerv(GL_VIEWPORT, viewport);
         glGetIntegerv(GL_SCISSOR_BOX, scissor);
         glGetIntegerv(GL_DEPTH_FUNC, &depthFunc);
+        glGetIntegerv(GL_CULL_FACE_MODE, &cullMode);
+        glGetIntegerv(GL_FRONT_FACE, &frontFace);
         glGetIntegerv(GL_BLEND_SRC_RGB, &srcRGB);
         glGetIntegerv(GL_BLEND_DST_RGB, &dstRGB);
         glGetIntegerv(GL_BLEND_SRC_ALPHA, &srcAlpha);
@@ -62,9 +65,10 @@ class GLState {
         glBindVertexArray(vao);
         glBindBuffer(GL_ARRAY_BUFFER, array);
         glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 7; i++) {
             glActiveTexture(GL_TEXTURE0 + i);
             glBindTexture(GL_TEXTURE_2D, units[i].texture);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, units[i].cube);
             glBindSampler(i, units[i].sampler);
         }
         glActiveTexture(active);
@@ -73,6 +77,8 @@ class GLState {
         glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
         glScissor(scissor[0], scissor[1], scissor[2], scissor[3]);
         glDepthFunc(depthFunc);
+        glCullFace(cullMode);
+        glFrontFace(frontFace);
         glDepthMask(depthMask);
         glDepthRangef(depthRange[0], depthRange[1]);
         glColorMask(colorMask[0], colorMask[1], colorMask[2], colorMask[3]);
