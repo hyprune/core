@@ -1,4 +1,5 @@
 #include "World.hpp"
+#include "Schema.hpp"
 #define CGLTF_IMPLEMENTATION
 #include <cgltf.h>
 #define STB_IMAGE_IMPLEMENTATION
@@ -54,7 +55,18 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     auto manifestPath = safePath(root, "world.json");
     require(std::filesystem::file_size(manifestPath) <= 1024 * 1024, "manifest too large");
     std::ifstream in(manifestPath);
-    Json j = Json::parse(in);
+    std::vector<std::set<std::string>> objectKeys;
+    Json j = Json::parse(in, [&](int depth, Json::parse_event_t event, Json &value) {
+        require(depth <= 64, "manifest nesting limit");
+        if (event == Json::parse_event_t::object_start)
+            objectKeys.emplace_back();
+        if (event == Json::parse_event_t::key)
+            require(objectKeys.back().insert(value.get<std::string>()).second, "duplicate manifest key");
+        if (event == Json::parse_event_t::object_end)
+            objectKeys.pop_back();
+        return true;
+    });
+    validateManifest(j);
     require(j.at("formatVersion") == "0.1", "unsupported world format");
     require(std::regex_match(j.at("id").get<std::string>(), std::regex("[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+")),
             "invalid world ID");
@@ -186,6 +198,17 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
                 "M0 supports static mesh collision only");
         collisionNodes.insert(node);
     }
+    std::set<cgltf_node *> visible;
+    std::function<void(cgltf_node *)> visit = [&](cgltf_node *node) {
+        if (!visible.insert(node).second)
+            return;
+        for (size_t i = 0; i < node->children_count; i++)
+            visit(node->children[i]);
+    };
+    auto *sceneGraph = raw->scene ? raw->scene : (raw->scenes_count ? raw->scenes : nullptr);
+    require(sceneGraph, "glTF requires a scene");
+    for (size_t i = 0; i < sceneGraph->nodes_count; i++)
+        visit(sceneGraph->nodes[i]);
     for (size_t ni = 0; ni < raw->nodes_count; ni++) {
         auto &node = raw->nodes[ni];
         if (!node.mesh)
@@ -223,6 +246,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
                 require(cgltf_accessor_read_float(pos, index, v, 3), "invalid position");
                 Vertex vert;
                 vert.position = transform.point({v[0], v[1], v[2]});
+                require(std::isfinite(vert.position.x + vert.position.y + vert.position.z), "nonfinite vertex");
                 if (uv)
                     require(cgltf_accessor_read_float(uv, index, vert.uv, 2), "invalid UV0");
                 if (uv1)
@@ -237,9 +261,11 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
                 if (collisionNodes.contains(ni) && length(n) > .1f)
                     result->collision.push_back(t);
             }
-            result->meshes.push_back(std::move(mesh));
+            if (visible.contains(&node))
+                result->meshes.push_back(std::move(mesh));
         }
     }
+    require(result->collision.size() <= 20000, "M0 collision triangle budget exceeded");
     // Spawn positions are capsule feet; the camera sits 1.7 m above them.
     for (auto &s : result->spawns) {
         sim::Camera c;

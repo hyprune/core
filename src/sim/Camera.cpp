@@ -40,11 +40,19 @@ std::pair<Vec3, Vec3> nearest(Vec3 a, Vec3 b, const Triangle &t) {
             lo = u;
     }
     Vec3 p = a + (b - a) * ((lo + hi) * .5f);
-    return {p, closestTriangle(p, t)};
+    Vec3 q = closestTriangle(p, t);
+    for (auto endpoint : {a, b}) {
+        auto near = closestTriangle(endpoint, t);
+        if (length(endpoint - near) < length(p - q)) {
+            p = endpoint;
+            q = near;
+        }
+    }
+    return {p, q};
 }
 } // namespace
 void resolveCapsule(Camera &c, std::span<const Triangle> mesh) {
-    constexpr float r = .28f;
+    constexpr float r = .3f;
     c.grounded = false;
     for (int iteration = 0; iteration < 4; iteration++)
         for (const auto &t : mesh) {
@@ -58,10 +66,10 @@ void resolveCapsule(Camera &c, std::span<const Triangle> mesh) {
             auto [p, q] = nearest(a, b, t);
             Vec3 d = p - q;
             float l = length(d);
-            if (l >= r)
+            if (l > r + .001f)
                 continue;
             Vec3 n = l > 1e-6f ? d / l : normalized(cross(t.b - t.a, t.c - t.a));
-            c.position += n * (r - l + .0001f);
+            c.position += n * std::max(0.f, r - l);
             if (n.y > .65f) {
                 c.grounded = true;
                 c.verticalSpeed = std::max(0.f, c.verticalSpeed);

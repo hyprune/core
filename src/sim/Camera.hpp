@@ -32,6 +32,6 @@ class Fly final : public MotionStrategy {
     std::string_view name() const override { return "fly"; }
     void step(Camera &, Intent, float, std::span<const Triangle>) const override;
 };
-// Capsule eye height 1.7 m, total height 1.8 m, radius .28 m.
+// Capsule eye height 1.7 m, total height 1.8 m, radius .3 m.
 void resolveCapsule(Camera &, std::span<const Triangle>);
 } // namespace hyprune::sim
