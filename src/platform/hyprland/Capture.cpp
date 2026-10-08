@@ -63,7 +63,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 e.surface.center = {-3.8f, 2, -2};
             if (i == 2)
                 e.surface.center = {3.8f, 2, -2};
-            if (camera && world) {
+            if (camera && world && spawnNew) {
                 e.surface.yaw = -camera->yaw;
                 e.surface.center = camera->position + camera->forward() * spawnDistance;
                 if (auto wall = interaction::raycast(camera->position, camera->forward(), world->collision))

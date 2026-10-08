@@ -53,7 +53,8 @@ struct Runtime {
     interaction::Hands hands;
     Json config = interaction::defaultConfig(), configured = config;
     std::set<std::string> graphicsOverrides;
-    bool superHeld = false, altHeld = false, noclip = false, freeCursor = false, zoomHeld = false;
+    bool superHeld = false, altHeld = false, noclip = false, freeCursor = false, zoomHeld = false,
+         cursorWarpPending = false;
     float zoom = 1, baseFov = 60, lookX = 0, lookY = 0;
     sim::Intent smoothIntent;
     int tool = 1;
@@ -205,7 +206,8 @@ void keyboardInput(void *self, const IKeyboard::SKeyEvent &event, SP<IKeyboard> 
 bool ownsInput() {
     return runtime && runtime->active && !runtime->loading && !runtime->control.uiVisible() && !locked() &&
            runtime->monitor == Desktop::focusState()->monitor() && runtime->layout.desktop.is_null() &&
-           runtime->fullscreen.phase != 2 && !runtime->freeCursor && !runtime->handover.phase;
+           runtime->fullscreen.phase != 2 && (!runtime->freeCursor || runtime->cursorWarpPending) &&
+           !runtime->handover.phase;
 }
 void motion(void *self, const Vector2D &delta) {
     if (runtime && runtime->active && runtime->control.uiVisible() && !runtime->directorSurface())
@@ -223,9 +225,11 @@ void motion(void *self, const Vector2D &delta) {
                     if (m != mon && global.x >= m->m_position.x && global.y >= m->m_position.y &&
                         global.x < m->m_position.x + m->m_size.x && global.y < m->m_position.y + m->m_size.y) {
                         runtime->freeCursor = true;
+                        runtime->cursorWarpPending = true;
                         runtime->deferInput([global] {
                             runtime->cursor();
                             Pointer::pointerController()->warpTo(global, true);
+                            runtime->cursorWarpPending = false;
                         });
                         return;
                     }
@@ -238,6 +242,8 @@ void motion(void *self, const Vector2D &delta) {
         runtime->lookY -= float(delta.y) * runtime->config["player"]["look_sensitivity"].get<float>();
         return;
     }
+    if (runtime && runtime->active && runtime->cursorWarpPending)
+        return;
     originalMove(self, delta);
 }
 Vec3 pointerRay() {
@@ -698,6 +704,7 @@ void Runtime::exit() {
         return;
     active = false;
     pendingCursorHide.reset(); // an old hide request must not outlive cursor restoration
+    cursorWarpPending = false;
     restoreFullscreenWindows();
     fullscreen = {};
     handover = {};
@@ -1471,6 +1478,20 @@ void Runtime::tick() {
             exit();
         return;
     }
+    // Relative pointer delivery can emit the bus notification before the pointer
+    // manager commits its new position. Observe the committed position here too.
+    if (active && typing && freeCursor && !cursorWarpPending && monitor) {
+        auto p = Pointer::mgr()->position();
+        auto m = monitor.lock();
+        if (p.x >= m->m_position.x && p.y >= m->m_position.y && p.x < m->m_position.x + m->m_size.x &&
+            p.y < m->m_position.y + m->m_size.y) {
+            freeCursor = false;
+            pointerX = (p.x - m->m_position.x) / m->m_size.x;
+            pointerY = (p.y - m->m_position.y) / m->m_size.y;
+            Desktop::focusState()->rawMonitorFocus(m);
+            cursor();
+        }
+    }
     // Observe workspace changes before committing a ready asynchronous load.
     // This also lets a newer location cancel an in-flight mapping request.
     safe([&] { workspaceLocation(); });
@@ -1948,20 +1969,24 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     }));
     runtime->listeners.push_back(
         Event::bus()->m_events.input.mouse.move.listen([](Vector2D pos, Event::SCallbackInfo &info) {
-            if (runtime && runtime->active && runtime->typing && runtime->freeCursor && runtime->monitor) {
+            if (runtime && runtime->active && runtime->typing && runtime->freeCursor && !runtime->cursorWarpPending &&
+                runtime->monitor) {
                 auto m = runtime->monitor.lock();
                 if (pos.x >= m->m_position.x && pos.y >= m->m_position.y && pos.x < m->m_position.x + m->m_size.x &&
                     pos.y < m->m_position.y + m->m_size.y) {
                     runtime->freeCursor = false;
                     runtime->pointerX = (pos.x - m->m_position.x) / m->m_size.x;
                     runtime->pointerY = (pos.y - m->m_position.y) / m->m_size.y;
-                    runtime->deferInput([] { runtime->cursor(); });
+                    runtime->deferInput([] {
+                        Desktop::focusState()->rawMonitorFocus(runtime->monitor.lock());
+                        runtime->cursor();
+                    });
                     info.cancelled = true;
                 }
             }
             if (ownsInput() || (runtime->active && runtime->monitor == Desktop::focusState()->monitor() &&
                                 runtime->layout.desktop.is_null() && runtime->fullscreen.phase != 2 &&
-                                !runtime->freeCursor && !runtime->directorSurface()))
+                                (!runtime->freeCursor || runtime->cursorWarpPending) && !runtime->directorSurface()))
                 info.cancelled = true;
         }));
     runtime->listeners.push_back(Event::bus()->m_events.input.keyboard.key.listen([](IKeyboard::SKeyEvent event,
@@ -2174,8 +2199,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                         event.button == runtime->config["input"]["typing_button"].get<uint32_t>() &&
                         !runtime->layout.desktop.is_null();
             bool world = runtime->active && runtime->monitor == Desktop::focusState()->monitor() &&
-                         runtime->layout.desktop.is_null() && runtime->fullscreen.phase != 2 && !runtime->freeCursor &&
-                         !runtime->directorSurface();
+                         runtime->layout.desktop.is_null() && runtime->fullscreen.phase != 2 &&
+                         (!runtime->freeCursor || runtime->cursorWarpPending) && !runtime->directorSurface();
             if (!held && !world && !back)
                 return;
             info.cancelled = true;
@@ -2194,8 +2219,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     runtime->listeners.push_back(
         Event::bus()->m_events.input.mouse.axis.listen([](IPointer::SAxisEvent event, Event::SCallbackInfo &info) {
             bool world = runtime->active && runtime->monitor == Desktop::focusState()->monitor() &&
-                         runtime->layout.desktop.is_null() && runtime->fullscreen.phase != 2 && !runtime->freeCursor &&
-                         !runtime->directorSurface();
+                         runtime->layout.desktop.is_null() && runtime->fullscreen.phase != 2 &&
+                         (!runtime->freeCursor || runtime->cursorWarpPending) && !runtime->directorSurface();
             if (!world)
                 return;
             info.cancelled = true;
