@@ -1866,7 +1866,7 @@ void Runtime::action(interaction::Action a) {
     else if (a.name == "debug")
         debug = !debug;
     else if (a.name == "capture")
-        debugCapture();
+        g_pEventLoopManager->doLater([] { if(runtime) safe([] { runtime->debugCapture(); }); });
     else if (a.name == "noclip") {
         noclip = !noclip;
         camera.verticalSpeed = 0;
