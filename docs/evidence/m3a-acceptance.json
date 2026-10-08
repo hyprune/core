@@ -1,0 +1,1055 @@
+{
+  "carry_offset_distance": {
+    "passed": true,
+    "evidence": {
+      "collision": false,
+      "commits": 14,
+      "floating": true,
+      "id": "surface-2",
+      "parentId": "",
+      "pixels": [
+        1916,
+        1076
+      ],
+      "position": [
+        0.6876300573348999,
+        2.5221407413482666,
+        1.5628793239593506
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "size": [
+        1.399999976158142,
+        0.7862213253974915
+      ],
+      "title": "M3A terminal",
+      "visible": true
+    }
+  },
+  "roll": {
+    "passed": true,
+    "evidence": {
+      "collision": false,
+      "commits": 20,
+      "floating": true,
+      "id": "surface-2",
+      "parentId": "",
+      "pixels": [
+        1916,
+        1076
+      ],
+      "position": [
+        0.6876300573348999,
+        2.5221407413482666,
+        1.5628793239593506
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.6957082748413086,
+        0.7183244228363037
+      ],
+      "size": [
+        1.399999976158142,
+        0.7862213253974915
+      ],
+      "title": "M3A terminal",
+      "visible": true
+    }
+  },
+  "client_resize": {
+    "passed": true,
+    "evidence": {
+      "collision": false,
+      "commits": 155,
+      "floating": true,
+      "id": "surface-2",
+      "parentId": "",
+      "pixels": [
+        642,
+        990
+      ],
+      "position": [
+        0.6876300573348999,
+        2.5221407413482666,
+        1.5628793239593506
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.6957082748413086,
+        0.7183244228363037
+      ],
+      "size": [
+        0.46842777729034424,
+        0.7223418951034546
+      ],
+      "title": "M3A terminal",
+      "visible": true
+    }
+  },
+  "balanced_buttons": {
+    "passed": true,
+    "evidence": null
+  },
+  "zoom": {
+    "passed": true,
+    "evidence": null
+  },
+  "xdg_popup_attached": {
+    "passed": true,
+    "evidence": null
+  },
+  "popup_click": {
+    "passed": true,
+    "evidence": null
+  },
+  "fullscreen_in": {
+    "passed": true,
+    "evidence": null
+  },
+  "fullscreen_out": {
+    "passed": true,
+    "evidence": null
+  },
+  "wayland_dialog_attached": {
+    "passed": true,
+    "evidence": {
+      "collision": false,
+      "commits": 20,
+      "floating": true,
+      "id": "surface-4",
+      "parentId": "surface-1",
+      "pixels": [
+        238,
+        179
+      ],
+      "position": [
+        0.0,
+        2.299222230911255,
+        1.619999885559082
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "size": [
+        0.37022221088409424,
+        0.27844443917274475
+      ],
+      "title": "",
+      "visible": true
+    }
+  },
+  "dialog_keyboard_close": {
+    "passed": true,
+    "evidence": {
+      "active": true,
+      "aim": "surface-1",
+      "captures": [
+        {
+          "collision": false,
+          "commits": 27,
+          "floating": true,
+          "id": "surface-1",
+          "parentId": "",
+          "pixels": [
+            900,
+            560
+          ],
+          "position": [
+            0.0,
+            2.299999952316284,
+            1.5999999046325684
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            1.399999976158142,
+            0.8711110949516296
+          ],
+          "title": "M3A popup laboratory",
+          "visible": true
+        },
+        {
+          "collision": false,
+          "commits": 171,
+          "floating": true,
+          "id": "surface-2",
+          "parentId": "",
+          "pixels": [
+            642,
+            990
+          ],
+          "position": [
+            0.6876300573348999,
+            2.5221407413482666,
+            1.5628793239593506
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.6957082748413086,
+            0.7183244228363037
+          ],
+          "size": [
+            0.46842777729034424,
+            0.7223418951034546
+          ],
+          "title": "M3A terminal",
+          "visible": false
+        }
+      ],
+      "childSurfaces": [],
+      "children": 0,
+      "config": {
+        "graphics": {
+          "bloom_strength": 0.15,
+          "exposure": 1.0,
+          "fov": 60.0,
+          "quality": "auto",
+          "reduced_motion": false
+        },
+        "input": {
+          "bindings": {
+            "back": "s",
+            "down": "Control_L",
+            "fly": "F4",
+            "focus": "f",
+            "forward": "w",
+            "jump": "space",
+            "left": "a",
+            "noclip": "v",
+            "right": "d",
+            "zoom": "c"
+          },
+          "carry_button": 272,
+          "resize_button": 273,
+          "roll_button": 274,
+          "typing_button": 275,
+          "typing_cursor": true
+        },
+        "player": {
+          "fly_speed": 5.0,
+          "jump_speed": 5.0,
+          "look_inertia": 0.03,
+          "look_sensitivity": 0.0025,
+          "move_inertia": 0.05,
+          "respawn_below": 30.0,
+          "run_multiplier": 1.8,
+          "step_height": 0.35,
+          "walk_speed": 3.5
+        },
+        "tools": {
+          "enabled": true,
+          "slots": [
+            "pointer",
+            "mount",
+            "path",
+            "path",
+            "path"
+          ]
+        },
+        "windows": {
+          "scale": 0.002,
+          "spawn_distance": 5.0,
+          "transition_seconds": 0.35,
+          "wheel_factor": 1.06
+        }
+      },
+      "cursor": "virtual",
+      "error": "",
+      "frames": 654,
+      "fullscreen": 0,
+      "fullscreenId": "",
+      "gesture": 0,
+      "gestureId": "surface-2",
+      "grabbed": "",
+      "handover": 0,
+      "keyboardFocus": true,
+      "mode": "typing",
+      "nativeCursorVisible": false,
+      "noclip": false,
+      "ownsInput": true,
+      "pitch": 0.0,
+      "pointer": [
+        0.5,
+        0.5
+      ],
+      "position": [
+        0.0,
+        2.299999952316284,
+        4.0
+      ],
+      "pressedButtons": 0,
+      "savedCursorHidden": false,
+      "seatGrab": false,
+      "superHeld": false,
+      "tool": 1,
+      "yaw": 0.0
+    }
+  },
+  "subsurface_click": {
+    "passed": true,
+    "evidence": null
+  },
+  "x11_menu_attached": {
+    "passed": true,
+    "evidence": {
+      "collision": false,
+      "commits": 0,
+      "floating": true,
+      "id": "surface-8",
+      "parentId": "surface-7",
+      "pixels": [
+        299,
+        62
+      ],
+      "position": [
+        0.2231668382883072,
+        2.2523910999298096,
+        1.619999885559082
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "size": [
+        0.44484591484069824,
+        0.0922423005104065
+      ],
+      "title": "nested-parity-client",
+      "visible": true
+    }
+  },
+  "x11_menu_click": {
+    "passed": true,
+    "evidence": null
+  },
+  "input_swallowed": {
+    "passed": true,
+    "evidence": {
+      "active": true,
+      "aim": "",
+      "captures": [
+        {
+          "collision": false,
+          "commits": 56,
+          "floating": true,
+          "id": "surface-1",
+          "parentId": "",
+          "pixels": [
+            900,
+            560
+          ],
+          "position": [
+            0.0,
+            2.299999952316284,
+            1.5999999046325684
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            1.399999976158142,
+            0.8711110949516296
+          ],
+          "title": "M3A popup laboratory",
+          "visible": false
+        },
+        {
+          "collision": false,
+          "commits": 174,
+          "floating": true,
+          "id": "surface-2",
+          "parentId": "",
+          "pixels": [
+            642,
+            990
+          ],
+          "position": [
+            0.6876300573348999,
+            2.5221407413482666,
+            1.5628793239593506
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.6957082748413086,
+            0.7183244228363037
+          ],
+          "size": [
+            0.46842777729034424,
+            0.7223418951034546
+          ],
+          "title": "M3A terminal",
+          "visible": false
+        },
+        {
+          "collision": false,
+          "commits": 4,
+          "floating": false,
+          "id": "surface-5",
+          "parentId": "",
+          "pixels": [
+            941,
+            1056
+          ],
+          "position": [
+            0.0,
+            2.299999952316284,
+            1.5999999046325684
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            1.399999976158142,
+            1.5710946321487427
+          ],
+          "title": "M3A subsurface laboratory",
+          "visible": false
+        },
+        {
+          "collision": false,
+          "commits": 15,
+          "floating": false,
+          "id": "surface-7",
+          "parentId": "",
+          "pixels": [
+            941,
+            1056
+          ],
+          "position": [
+            0.0,
+            2.299999952316284,
+            1.5999999046325684
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            1.399999976158142,
+            1.5710946321487427
+          ],
+          "title": "M3A X11 laboratory",
+          "visible": false
+        }
+      ],
+      "childSurfaces": [],
+      "children": 0,
+      "config": {
+        "graphics": {
+          "bloom_strength": 0.15,
+          "exposure": 1.0,
+          "fov": 60.0,
+          "quality": "auto",
+          "reduced_motion": false
+        },
+        "input": {
+          "bindings": {
+            "back": "s",
+            "down": "Control_L",
+            "fly": "F4",
+            "focus": "f",
+            "forward": "w",
+            "jump": "space",
+            "left": "a",
+            "noclip": "v",
+            "right": "d",
+            "zoom": "c"
+          },
+          "carry_button": 272,
+          "resize_button": 273,
+          "roll_button": 274,
+          "typing_button": 275,
+          "typing_cursor": true
+        },
+        "player": {
+          "fly_speed": 5.0,
+          "jump_speed": 5.0,
+          "look_inertia": 0.03,
+          "look_sensitivity": 0.0025,
+          "move_inertia": 0.05,
+          "respawn_below": 30.0,
+          "run_multiplier": 1.8,
+          "step_height": 0.35,
+          "walk_speed": 3.5
+        },
+        "tools": {
+          "enabled": true,
+          "slots": [
+            "pointer",
+            "mount",
+            "path",
+            "path",
+            "path"
+          ]
+        },
+        "windows": {
+          "scale": 0.002,
+          "spawn_distance": 5.0,
+          "transition_seconds": 0.35,
+          "wheel_factor": 1.06
+        }
+      },
+      "cursor": "reticle",
+      "error": "",
+      "frames": 858,
+      "fullscreen": 0,
+      "fullscreenId": "",
+      "gesture": 0,
+      "gestureId": "surface-2",
+      "grabbed": "",
+      "handover": 0,
+      "keyboardFocus": false,
+      "mode": "movement",
+      "nativeCursorVisible": false,
+      "noclip": false,
+      "ownsInput": true,
+      "pitch": 1.2000001668930054,
+      "pointer": [
+        0.5456787347793579,
+        0.5173249244689941
+      ],
+      "position": [
+        0.0,
+        2.299999952316284,
+        4.0
+      ],
+      "pressedButtons": 0,
+      "savedCursorHidden": false,
+      "seatGrab": false,
+      "superHeld": false,
+      "tool": 1,
+      "yaw": 0.0
+    }
+  },
+  "typing_toggle": {
+    "passed": true,
+    "evidence": null
+  },
+  "typing_neighbour_cursor": {
+    "passed": true,
+    "evidence": null
+  },
+  "typing_cursor_return": {
+    "passed": true,
+    "evidence": null
+  },
+  "virtual_cursor_typing": {
+    "passed": true,
+    "evidence": null
+  },
+  "focus_wall": {
+    "passed": true,
+    "evidence": null
+  },
+  "focus_back": {
+    "passed": true,
+    "evidence": null
+  },
+  "drag_off_wall": {
+    "passed": true,
+    "evidence": {
+      "active": true,
+      "aim": "surface-7",
+      "captures": [
+        {
+          "collision": false,
+          "commits": 83,
+          "floating": true,
+          "id": "surface-1",
+          "parentId": "",
+          "pixels": [
+            900,
+            560
+          ],
+          "position": [
+            0.0,
+            2.299999952316284,
+            1.5999999046325684
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            1.399999976158142,
+            0.8711110949516296
+          ],
+          "title": "M3A popup laboratory",
+          "visible": false
+        },
+        {
+          "collision": false,
+          "commits": 313,
+          "floating": true,
+          "id": "surface-2",
+          "parentId": "",
+          "pixels": [
+            642,
+            990
+          ],
+          "position": [
+            0.0,
+            2.299999952316284,
+            1.5999999046325684
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            1.399999976158142,
+            2.1588785648345947
+          ],
+          "title": "M3A terminal",
+          "visible": false
+        },
+        {
+          "collision": false,
+          "commits": 4,
+          "floating": false,
+          "id": "surface-5",
+          "parentId": "",
+          "pixels": [
+            941,
+            1056
+          ],
+          "position": [
+            0.0,
+            2.299999952316284,
+            1.5999999046325684
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            1.399999976158142,
+            1.5710946321487427
+          ],
+          "title": "M3A subsurface laboratory",
+          "visible": false
+        },
+        {
+          "collision": false,
+          "commits": 15,
+          "floating": false,
+          "id": "surface-7",
+          "parentId": "",
+          "pixels": [
+            941,
+            1056
+          ],
+          "position": [
+            1.9895833730697632,
+            3.0,
+            -13.739999771118164
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            3.987499952316284,
+            4.4666666984558105
+          ],
+          "title": "M3A X11 laboratory",
+          "visible": true
+        }
+      ],
+      "childSurfaces": [],
+      "children": 0,
+      "config": {
+        "graphics": {
+          "bloom_strength": 0.15,
+          "exposure": 1.0,
+          "fov": 60.0,
+          "quality": "auto",
+          "reduced_motion": false
+        },
+        "input": {
+          "bindings": {
+            "back": "s",
+            "down": "Control_L",
+            "fly": "F4",
+            "focus": "f",
+            "forward": "w",
+            "jump": "space",
+            "left": "a",
+            "noclip": "v",
+            "right": "d",
+            "zoom": "c"
+          },
+          "carry_button": 272,
+          "resize_button": 273,
+          "roll_button": 274,
+          "typing_button": 275,
+          "typing_cursor": true
+        },
+        "player": {
+          "fly_speed": 5.0,
+          "jump_speed": 5.0,
+          "look_inertia": 0.03,
+          "look_sensitivity": 0.0025,
+          "move_inertia": 0.05,
+          "respawn_below": 30.0,
+          "run_multiplier": 1.8,
+          "step_height": 0.35,
+          "walk_speed": 3.5
+        },
+        "tools": {
+          "enabled": true,
+          "slots": [
+            "pointer",
+            "mount",
+            "path",
+            "path",
+            "path"
+          ]
+        },
+        "windows": {
+          "scale": 0.002,
+          "spawn_distance": 5.0,
+          "transition_seconds": 0.35,
+          "wheel_factor": 1.06
+        }
+      },
+      "cursor": "reticle",
+      "error": "",
+      "frames": 1059,
+      "fullscreen": 0,
+      "fullscreenId": "",
+      "gesture": 1,
+      "gestureId": "surface-7",
+      "grabbed": "",
+      "handover": 0,
+      "keyboardFocus": false,
+      "mode": "movement",
+      "nativeCursorVisible": false,
+      "noclip": false,
+      "ownsInput": true,
+      "pitch": 0.0,
+      "pointer": [
+        0.5,
+        0.5
+      ],
+      "position": [
+        0.0,
+        3.0,
+        -7.0
+      ],
+      "pressedButtons": 0,
+      "savedCursorHidden": false,
+      "seatGrab": false,
+      "superHeld": true,
+      "tool": 1,
+      "yaw": 0.0
+    }
+  },
+  "drop_to_tile": {
+    "passed": true,
+    "evidence": null
+  },
+  "mount_tag": {
+    "passed": true,
+    "evidence": null
+  },
+  "arbitrary_mount": {
+    "passed": true,
+    "evidence": [
+      {
+        "anchorId": "",
+        "areaId": "sun-court",
+        "pose": {
+          "position": [
+            -7.658020973205566,
+            1.776249647140503,
+            9.482229232788086
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "rule": {
+          "appClass": "hyprune-m3a-terminal",
+          "title": "M3A terminal"
+        },
+        "size": [
+          1.399999976158142,
+          2.1588785648345947
+        ],
+        "worldId": "com.hyprune.lumen-reach"
+      },
+      {
+        "anchorId": "",
+        "areaId": "sun-court",
+        "pose": {
+          "position": [
+            6.740000247955322,
+            2.0,
+            0.9999997615814209
+          ],
+          "rotation": [
+            0.0,
+            -0.7071067690849304,
+            0.0,
+            0.7071067690849304
+          ]
+        },
+        "rule": {
+          "appClass": "hyprune-m3a-terminal",
+          "title": "M3A terminal"
+        },
+        "size": [
+          1.399999976158142,
+          2.1588785648345947
+        ],
+        "worldId": "org.hyprune.m3a"
+      }
+    ]
+  },
+  "mount_persistence": {
+    "passed": true,
+    "evidence": null
+  },
+  "stairs": {
+    "passed": true,
+    "evidence": [
+      -4.0,
+      2.450000047683716,
+      -0.6049874424934387
+    ]
+  },
+  "noclip_on": {
+    "passed": true,
+    "evidence": null
+  },
+  "noclip_off": {
+    "passed": true,
+    "evidence": null
+  },
+  "fly_toggle": {
+    "passed": true,
+    "evidence": null
+  },
+  "respawn": {
+    "passed": true,
+    "evidence": null
+  },
+  "config_reload": {
+    "passed": true,
+    "evidence": null
+  },
+  "config_rejected": {
+    "passed": true,
+    "evidence": "error: [string \"return hl.plugin.hyprune.config({player={walk...\"]:1: hyprune.config: walk_speed outside supported range\n"
+  },
+  "world_com.hyprune.lumen-reach": {
+    "passed": true,
+    "evidence": null
+  },
+  "hands_com.hyprune.lumen-reach": {
+    "passed": true,
+    "evidence": null
+  },
+  "world_com.hyprune.switchyard": {
+    "passed": true,
+    "evidence": null
+  },
+  "hands_com.hyprune.switchyard": {
+    "passed": true,
+    "evidence": {
+      "collision": false,
+      "commits": 10,
+      "floating": true,
+      "id": "surface-20",
+      "parentId": "",
+      "pixels": [
+        642,
+        990
+      ],
+      "position": [
+        -10.385722160339355,
+        2.3399858474731445,
+        -20.772136688232422
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "size": [
+        1.5304241180419922,
+        2.359999895095825
+      ],
+      "title": "M3A terminal",
+      "visible": true
+    }
+  },
+  "spawn_in_front": {
+    "passed": true,
+    "evidence": {
+      "collision": false,
+      "commits": 83,
+      "floating": false,
+      "id": "surface-26",
+      "parentId": "",
+      "pixels": [
+        1896,
+        1056
+      ],
+      "position": [
+        0.0,
+        2.2984859943389893,
+        -1.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "size": [
+        2.200000047683716,
+        1.3200000524520874
+      ],
+      "title": "M3A spawn",
+      "visible": true
+    }
+  },
+  "typing_button": {
+    "passed": true,
+    "evidence": null
+  },
+  "shell_mode_tools": {
+    "passed": true,
+    "evidence": {
+      "status": "live",
+      "protocol": "0.5",
+      "screen": "HEADLESS-1",
+      "lease": "lease-fb62c735c9ed2644",
+      "director": false,
+      "revision": 2042,
+      "tab": 0,
+      "warp": false,
+      "phase": "failed",
+      "world": "org.hyprune.m3a",
+      "mode": "movement",
+      "tool": 1,
+      "apps": 5,
+      "map": false,
+      "places": [
+        {
+          "id": "entry",
+          "name": "entry",
+          "position": [
+            0,
+            1.7000000476837158,
+            4
+          ]
+        },
+        {
+          "id": "hall",
+          "name": "hall",
+          "position": [
+            3,
+            1.7000000476837158,
+            1
+          ]
+        }
+      ],
+      "markers": 1
+    }
+  },
+  "director_apps": {
+    "passed": true,
+    "evidence": {
+      "status": "live",
+      "protocol": "0.5",
+      "screen": "HEADLESS-1",
+      "lease": "lease-fb62c735c9ed2644",
+      "director": true,
+      "revision": 2125,
+      "tab": 3,
+      "warp": false,
+      "phase": "failed",
+      "world": "org.hyprune.m3a",
+      "mode": "movement",
+      "tool": 1,
+      "apps": 5,
+      "map": false,
+      "places": [
+        {
+          "id": "entry",
+          "name": "entry",
+          "position": [
+            0,
+            1.7000000476837158,
+            4
+          ]
+        },
+        {
+          "id": "hall",
+          "name": "hall",
+          "position": [
+            3,
+            1.7000000476837158,
+            1
+          ]
+        }
+      ],
+      "markers": 1
+    }
+  },
+  "cursor_exit_restore": {
+    "passed": true,
+    "evidence": "desktop"
+  },
+  "hardware_cursor_live": {
+    "passed": false,
+    "status": "requires owner supervised DRM session"
+  },
+  "ipc_0.5_wire": {
+    "passed": true,
+    "evidence": {
+      "responses": 132,
+      "notifications": 794
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "title": "Hyprune core M3A \u2014 hands-on desktop parity",
+  "tag": "core",
+  "tags": [
+    "hyprune",
+    "core",
+    "m3a",
+    "nested"
+  ],
+  "duration": 57.9,
+  "timeline": [
+    {
+      "time": 0.0,
+      "action": "Carry at hit point; wheel distance"
+    },
+    {
+      "time": 4.61,
+      "action": "Roll"
+    },
+    {
+      "time": 9.23,
+      "action": "Configure client resize"
+    },
+    {
+      "time": 14.18,
+      "action": "Real xdg right-click menu"
+    },
+    {
+      "time": 18.41,
+      "action": "Client fullscreen to native 2D"
+    },
+    {
+      "time": 21.47,
+      "action": "Fullscreen back to 3D"
+    },
+    {
+      "time": 24.06,
+      "action": "Typing and virtual cursor"
+    },
+    {
+      "time": 26.83,
+      "action": "F workspace fly-in"
+    },
+    {
+      "time": 28.87,
+      "action": "Super+Alt fly-out"
+    },
+    {
+      "time": 31.46,
+      "action": "Carry and drop into workspace tiling"
+    },
+    {
+      "time": 35.32,
+      "action": "Mount tool: tag window"
+    },
+    {
+      "time": 36.41,
+      "action": "Mount arbitrary wall"
+    },
+    {
+      "time": 38.68,
+      "action": "Discrete stairs"
+    },
+    {
+      "time": 43.12,
+      "action": "Lumen Reach, unchanged author package"
+    },
+    {
+      "time": 49.19,
+      "action": "Switchyard, unchanged author package"
+    }
+  ],
+  "notes": "Real nested seat input and live GTK popup/client fullscreen; generated CC0 discrete-stair fixture plus unchanged Lumen Reach and Switchyard. Native effects deferred; hardware cursor requires supervised live testing.",
+  "sha256": "af36ba7edaa98d782c4e6f21238b79380a7bfc58a33d93d2dfac346363dadaa0",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "credits": "Lumen Reach and Switchyard: Hyprune contributors, CC-BY-4.0, unchanged packages from hyprune/worlds/dist. Hands-on interaction lab and client fixtures: original CC0 test content.",
+  "testedCoreImplementation": "a2826ae",
+  "acceptance": {
+    "passed": 43,
+    "pending": "owner-supervised hardware cursor on DRM",
+    "wireResponses": 132,
+    "wireNotifications": 794
+  }
+}

@@ -189,3 +189,9 @@ material profile explicit (RFC-0004); 0.1 packages remain accepted. UV0 tiles/tr
 UV1 stays independent baked irradiance. Switchyard can use standard glTF samplers,
 KHR_texture_transform, normal, MR, occlusion and emissive slots. No mock names or
 ad-hoc glTF extras are needed for its lightmaps.
+
+## M3A — IPC 0.5
+
+Negotiate exact `0.5` to receive `interaction:{mode,tool,tools,noclip,cursor,taggedSurfaceId}` and `apps:[{surfaceId,workspaceId,title,appClass,icon}]`. Mode is movement/typing/workspace/fullscreen; tool is 1–5, tools contains five pointer/mount/path slot names. The icon is a local theme name derived from class. Group apps by actual workspace ID in the Director. No title/path scraping or mock-only mode channel is needed. Older projections omit the two keys.
+
+Arbitrary placements add a metre `pose` and `size`, with empty `anchorId`, to the existing world/area/class/title rule. Authored placements retain their original shape. 0.1–0.4 peers omit arbitrary rules from state/lists. Existing mutation methods and grants remain; there is no public raw-input or config RPC. Use the local validated Lua `hl.plugin.hyprune.config` API documented in [M3A.md](M3A.md). SDK types and offline validators support 0.4/0.5; the legacy mock still advertises only the versions it implements. Shell mode/slots/apps use authoritative state and method discovery.

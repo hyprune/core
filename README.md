@@ -72,9 +72,10 @@ navigation, and F12 exits the world independently of the daemon. Super/Alt
 shortcuts retain compositor priority. Outside world mode, Super+F12 toggles it
 when the nested Lua config is reloaded after plugin load.
 
-The native cursor remains under Hyprland's control; a small rendered reticle marks
-the picking ray. Core does not show/hide/replace hardware cursor images. M0 has
-**not** been tested on a dedicated DRM/hardware-cursor session.
+M3A defers and coalesces native cursor visibility changes after the frame; a
+rendered reticle or virtual pointer marks the world picking ray. Native cursor
+images stay with Hyprland. Hardware cursor behavior still requires the owner
+supervised checklist in [docs/M3A.md](docs/M3A.md).
 
 
 ## First real session
@@ -181,12 +182,14 @@ migration contract. [docs/M0.md](docs/M0.md) preserves the earlier acceptance re
 
 Window capture currently leases the committed root surface's normal 2D texture;
 it does not invoke snapshot FBO rendering. Up to 16 mapped windows on the selected
-monitor are placed in an automatic development layout and kept live with
-unsuspension and frame callbacks. Root-surface Wayland terminals work. Popups,
-subsurface trees, external textures, transformed/cropped buffers, HDR color
-management and arbitrary app compatibility are not M0 guarantees. Hidden
-workspace textures remain eligible for capture, but hidden-workspace keyboard
-focus is explicitly rejected. See M0.md for what was actually tested.
+monitor are kept live with unsuspension and frame callbacks. Existing clients use
+initial or authored/durable placements; newly mapped windows spawn ahead of the
+player. M3A adds up to 128 attached xdg popup/subsurface planes and parent-attached
+X11 transient menus/dialogs.
+External textures, transformed/cropped buffers and HDR client color management
+remain unavailable. Hidden workspace textures remain eligible for capture;
+keyboard focus requires a pulled tool with a valid workspace binding and deferred
+native workspace activation. See M3A.md for current acceptance and limits.
 
 ## Related repositories
 
@@ -205,3 +208,16 @@ for locked acceptance or `dev/hyprune-dev m2-record` for the gallery demo. Set
 `HYPRUNE_M2_PACKAGE` to a built Lumen Reach directory to load it unchanged after
 acceptance; `dev/hyprune-dev m2` keeps the isolated session available for captures.
 `build/hyprune-world-check <package-directory>` validates packages without a compositor.
+
+## M3A hands-on parity
+
+Super+LMB carries at the hit point, wheel changes distance, Super+middle rolls,
+Super+RMB configures the actual client, and C zooms. Super+Alt or the back button
+switches movement/typing. F focuses the aimed workspace wall; the same mode toggle
+backs out. Drop a carried window onto a wall to tile it. 1–5 selects tools; slot 2
+mounts a tagged window on an arbitrary surface. V toggles noclip and F4 flight.
+The Director HUD and Workspaces app list use frozen IPC 0.5 state.
+
+Run `./dev/nested/run.sh --m3a` for locked real-client acceptance, or add `--record`
+for a temporary 45–75 second demo. [docs/M3A.md](docs/M3A.md) documents every Lua
+config option, parity evidence and the required supervised hardware cursor checks.
