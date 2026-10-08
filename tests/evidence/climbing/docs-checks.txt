@@ -1,0 +1,4 @@
+Astro build: 20 pages passed.
+npm notice run @hyprune/docs@0.1.0 check:links
+npm notice run node scripts/check-links.mjs
+Checked local links/assets in 20 pages, CNAME and 5 schema mirrors.

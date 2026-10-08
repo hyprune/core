@@ -9,6 +9,7 @@ struct Camera {
     float yaw = 0, pitch = 0, verticalSpeed = 0, fov = 60;
     bool grounded = false;
     float eyeHeight = 1.7f;
+    float climbBob = 0; // visual-only, metres; reduced motion sets this to zero
     Vec3 forward() const {
         return {std::sin(yaw) * std::cos(pitch), std::sin(pitch), -std::cos(yaw) * std::cos(pitch)};
     }
@@ -37,7 +38,7 @@ struct Camera {
         float x = (1 + p.x / depth / tangent / aspect) / 2, y = (1 - p.y / depth / tangent) / 2;
         return {x, y, depth, x >= 0 && x <= 1 && y >= 0 && y <= 1};
     }
-    Mat4 view() const { return lookAt(position, forward()); }
+    Mat4 view() const { return lookAt(position + Vec3{0, climbBob, 0}, forward()); }
 };
 struct Intent {
     float forward = 0, right = 0, up = 0;
