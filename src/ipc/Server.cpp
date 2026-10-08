@@ -102,9 +102,18 @@ Json Server::snapshot() const {
     return {{"sessionId", session_}, {"revision", revision_}, {"state", state_}};
 }
 Json Server::visibleState(const Peer &p) const {
-    if (p.protocol == "0.4")
+    if (p.protocol == "0.5")
         return state_;
     Json state = state_;
+    if (state.is_object()) {
+        state.erase("interaction");
+        state.erase("apps");
+    }
+    if (state.contains("mounts") && state["mounts"].contains("placements"))
+        std::erase_if(state["mounts"]["placements"].get_ref<Json::array_t &>(),
+                      [](auto &p) { return p.contains("pose"); });
+    if (p.protocol == "0.4")
+        return state;
     if (state.is_object()) {
         state.erase("mounts");
         state.erase("presentation");
@@ -129,8 +138,15 @@ void Server::notify(const std::string &event, Json params) {
     }
     for (auto &p : peers_)
         if (p.hello && !p.closing && p.protocol != "0.1" && !p.subscription.empty() &&
-            (p.protocol == "0.4" || (event != "mounts.changed" && event != "presentation.changed")))
-            queue(p, {{"jsonrpc", "2.0"}, {"method", event}, {"params", params}});
+            ((p.protocol == "0.5" || p.protocol == "0.4") ||
+             (event != "mounts.changed" && event != "presentation.changed"))) {
+            auto projected = params;
+            if (p.protocol != "0.5" && event == "mounts.changed" && projected.contains("mounts") &&
+                projected["mounts"].contains("placements"))
+                std::erase_if(projected["mounts"]["placements"].get_ref<Json::array_t &>(),
+                              [](auto &placement) { return placement.contains("pose"); });
+            queue(p, {{"jsonrpc", "2.0"}, {"method", event}, {"params", projected}});
+        }
 }
 void Server::publish(Json state) {
     if (state == state_)
@@ -197,10 +213,11 @@ void Server::frame(Peer &p, const std::string &bytes) {
                 check(!protocol.empty() && protocol.size() <= 256 && protocols.insert(protocol).second, -32602,
                       "invalid protocol list");
             }
-            check(protocols.contains("0.4") || protocols.contains("0.3") || protocols.contains("0.2") ||
-                      protocols.contains("0.1"),
+            check(protocols.contains("0.5") || protocols.contains("0.4") || protocols.contains("0.3") ||
+                      protocols.contains("0.2") || protocols.contains("0.1"),
                   -32001, "incompatible protocol");
-            p.protocol = protocols.contains("0.4")   ? "0.4"
+            p.protocol = protocols.contains("0.5")   ? "0.5"
+                         : protocols.contains("0.4") ? "0.4"
                          : protocols.contains("0.3") ? "0.3"
                          : protocols.contains("0.2") ? "0.2"
                                                      : "0.1";
@@ -252,7 +269,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
                                                "shell.claim", "shell.release", "shell.overlay"};
             for (auto &[m, grant] : methods_)
                 if (p.grants.contains(grant) && (p.protocol != "0.1" || legacy.contains(m)) &&
-                    (p.protocol == "0.4" ||
+                    ((p.protocol == "0.5" || p.protocol == "0.4") ||
                      ((m != "workspace.bind" && m != "workspace.focus" && m != "workspace.unfocus" &&
                        m != "surface.pull" && m != "surface.place" && m != "surface.return" && m != "surfaces.recall" &&
                        m != "placements.list" && m != "placements.remove" && m != "data.object.bind" &&
@@ -266,7 +283,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
                       {"events",
                        p.grants.contains("state.read")
                            ? (p.protocol != "0.1"
-                                  ? p.protocol == "0.4"
+                                  ? (p.protocol == "0.5" || p.protocol == "0.4")
                                         ? Json::array({"state.delta", "location.transition", "ui.opened", "ui.closed",
                                                        "data.updated", "mounts.changed", "presentation.changed"})
                                         : Json::array({"state.delta", "location.transition", "ui.opened", "ui.closed",
@@ -323,7 +340,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
             const std::set<std::string> legacy{"world.load",  "surface.focus", "movement.set", "runtime.exit",
                                                "shell.claim", "shell.release", "shell.overlay"};
             check(p.protocol != "0.1" || legacy.contains(method), -32601, "method not advertised for protocol");
-            check(p.protocol == "0.4" ||
+            check((p.protocol == "0.5" || p.protocol == "0.4") ||
                       ((method != "workspace.bind" && method != "workspace.focus" && method != "workspace.unfocus" &&
                         method != "surface.pull" && method != "surface.place" && method != "surface.return" &&
                         method != "surfaces.recall" && method != "placements.list" && method != "placements.remove" &&

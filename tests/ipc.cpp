@@ -75,14 +75,15 @@ int main() {
     std::atomic<bool> stop = false;
     std::thread loop;
     try {
-        auto token = randomId(), token02 = randomId(), token03 = randomId(), token04 = randomId();
+        auto token = randomId(), token02 = randomId(), token03 = randomId(), token04 = randomId(), token05 = randomId();
         std::atomic<int> disconnected = 0;
         std::atomic<bool> notice = false;
         Server server(dir, "test",
                       {{token, "org.hyprune.test", {"state.read"}},
                        {token02, "org.hyprune.test", {"state.read", "data.publish"}},
                        {token03, "org.hyprune.test", {"state.read"}},
-                       {token04, "org.hyprune.test", {"state.read"}}},
+                       {token04, "org.hyprune.test", {"state.read"}},
+                       {token05, "org.hyprune.test", {"state.read"}}},
                       [&](const auto &method, const auto &params) {
                           check(params.contains("_actor") && params.contains("_client"), "missing trusted context");
                           if (method == "_connection.closed")
@@ -97,7 +98,9 @@ int main() {
                         {"integrations", {{"sources", Json::array()}}},
                         {"spatial", Json::object()},
                         {"workspaces", Json::object()},
-                        {"mounts", Json::object()},
+                        {"mounts", {{"placements", Json::array({Json{{"pose", true}}})}}},
+                        {"interaction", {{"mode", "typing"}}},
+                        {"apps", Json::array()},
                         {"presentation", Json::object()}});
         loop = std::thread([&] {
             while (!stop) {
@@ -194,14 +197,15 @@ int main() {
             c.sendJson(req("pub", "data.publish"));
             check(c.receive().contains("result"), "publishing grant absent");
         }
-        for (auto [protocol, tokenValue] : {std::pair{"0.3", token03}, std::pair{"0.4", token04}}) {
+        for (auto [protocol, tokenValue] :
+             {std::pair{"0.3", token03}, std::pair{"0.4", token04}, std::pair{"0.5", token05}}) {
             Client c(server.path());
             auto h = hello(tokenValue);
             h["params"]["protocols"] = {protocol};
             c.sendJson(h);
             auto negotiated = c.receive()["result"];
             check(negotiated["protocol"] == protocol, "M2 negotiation");
-            bool m2 = std::string(protocol) == "0.4";
+            bool m2 = std::string(protocol) == "0.4" || std::string(protocol) == "0.5";
             check(std::find(negotiated["methods"].begin(), negotiated["methods"].end(), "placements.list") !=
                           negotiated["methods"].end()
                       ? m2
@@ -211,6 +215,12 @@ int main() {
             auto state = c.receive()["result"]["snapshot"]["state"];
             check(state.contains("spatial") && state.contains("mounts") == m2 && state.contains("presentation") == m2,
                   "frozen projection isolation");
+            check(state.contains("interaction") == (std::string(protocol) == "0.5") &&
+                      state.contains("apps") == (std::string(protocol) == "0.5"),
+                  "hands state leaked into frozen version");
+            if (m2)
+                check(state["mounts"]["placements"].size() == (std::string(protocol) == "0.5" ? 1 : 0),
+                      "user pose leaked into frozen mounts");
             c.sendJson(req("placement-list", "placements.list"));
             auto response = c.receive();
             check(m2 ? response.contains("result") : response["error"]["code"] == -32601, "M2 direct method isolation");

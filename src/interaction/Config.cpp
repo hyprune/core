@@ -139,6 +139,12 @@ Json configPatch(const Json &current, const Json &patch) {
             result[section][key] = v;
         }
     }
+    std::set<int> buttons;
+    for (auto key : {"typing_button", "carry_button", "resize_button", "roll_button"}) {
+        int value = result["input"][key];
+        if (value && !buttons.insert(value).second)
+            throw std::runtime_error("duplicate mouse button");
+    }
     return result;
 }
 } // namespace hyprune::interaction

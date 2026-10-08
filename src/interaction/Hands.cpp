@@ -20,6 +20,17 @@ std::optional<WorldHit> raycast(Vec3 o, Vec3 d, std::span<const Triangle> mesh) 
     }
     return best;
 }
+std::optional<WorldHit> raycast(Vec3 origin, Vec3 direction, const world::World &world) {
+    auto best = raycast(origin, direction, world.collision);
+    for (auto &mesh : world.meshes)
+        for (size_t i = 0; i + 2 < mesh.vertices.size(); i += 3) {
+            Triangle t{mesh.vertices[i].position, mesh.vertices[i + 1].position, mesh.vertices[i + 2].position};
+            auto hit = raycast(origin, direction, std::span<const Triangle>(&t, 1));
+            if (hit && (!best || hit->distance < best->distance))
+                best = hit;
+        }
+    return best;
+}
 std::array<float, 4> orientation(Vec3 n) {
     n = normalized(n);
     auto axis = cross(Vec3{0, 0, 1}, n);

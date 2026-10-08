@@ -142,10 +142,20 @@ void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) c
         }
     }
 }
-void Fly::step(Camera &c, Intent i, float dt, std::span<const Triangle>) const {
+void Fly::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) const {
     Vec3 r{std::cos(c.yaw), 0, std::sin(c.yaw)};
-    Vec3 d = c.forward() * i.forward + r * i.right + Vec3{0, i.up, 0};
-    c.position += normalized(d) * (5 * i.speed * std::clamp(dt, 0.f, .05f));
+    Vec3 forward{std::sin(c.yaw), 0, -std::cos(c.yaw)};
+    Vec3 d = forward * i.forward + r * i.right + Vec3{0, i.up, 0};
+    if (length(d) > 1)
+        d = normalized(d);
+    dt = std::clamp(dt, 0.f, .05f);
+    int steps = std::max(1, int(std::ceil(dt / .002f)));
+    for (int k = 0; k < steps; ++k) {
+        c.position += d * (5 * i.speed * dt / steps);
+        if (!mesh.empty())
+            resolveCapsule(c, mesh);
+    }
     c.verticalSpeed = 0;
 }
+
 } // namespace hyprune::sim

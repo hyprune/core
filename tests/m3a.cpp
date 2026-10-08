@@ -7,9 +7,10 @@ using namespace hyprune;
 int main() {
     auto c = interaction::defaultConfig();
     assert(interaction::configPatch(c, {{"player", {{"walk_speed", 4.0}}}})["player"]["walk_speed"] == 4);
-    for (auto patch : {world::Json{{"player", {{"walk_speed", -1}}}}, world::Json{{"player", {{"wat", 2}}}},
-                       world::Json{{"input", {{"typing_button", 2.5}}}},
-                       world::Json{{"tools", {{"slots", world::Json::array({"mount"})}}}}}) {
+    for (auto patch :
+         {world::Json{{"player", {{"walk_speed", -1}}}}, world::Json{{"player", {{"wat", 2}}}},
+          world::Json{{"input", {{"typing_button", 2.5}}}}, world::Json{{"input", {{"typing_button", 272}}}},
+          world::Json{{"tools", {{"slots", world::Json::array({"mount"})}}}}}) {
         bool rejected = false;
         try {
             interaction::configPatch(c, patch);
@@ -65,6 +66,16 @@ int main() {
     for (int i = 0; i < 50; i++)
         walk.step(camera, {.forward = 1}, 1.f / 60, stairs);
     assert(camera.position.z < -.4 && camera.position.y > 1.94);
+    sim::Fly fly;
+    camera.position = {0, 1.7, -3};
+    for (int i = 0; i < 30; ++i)
+        fly.step(camera, {.forward = 1}, 1.f / 60, wall);
+    assert(camera.position.z > -3.71);
+    fly.step(camera, {.forward = 1}, .05f, {});
+    assert(camera.position.z < -3.71);
+    auto z = camera.position.z;
+    fly.step(camera, {.forward = .01f}, .05f, {});
+    assert(z - camera.position.z < .003f); // inertia tail must not move at full speed
     std::cout << "M3A config, hit offset, wheel, OBB sweep, independent client aspect, roll, arbitrary normal and "
                  "stair tests passed\n";
 }

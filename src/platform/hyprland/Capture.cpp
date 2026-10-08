@@ -1,13 +1,17 @@
 #include "Capture.hpp"
+#include "interaction/Hands.hpp"
 #include "render/GLState.hpp"
 #include "render/SurfaceSampler.hpp"
 #include <GLES3/gl3.h>
 #include <algorithm>
 #include <hyprland/src/desktop/Workspace.hpp>
+#include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
+#include <hyprland/src/desktop/view/Popup.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/protocols/core/Compositor.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
+#include <hyprland/src/xwayland/XSurface.hpp>
 #include <set>
 namespace hyprune::platform {
 // Runs on the event loop, never from IPassElement::draw. Read-only texture
@@ -49,6 +53,9 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             e.window = w;
             e.surface.id = "surface-" + std::to_string(++sequence_);
             size_t i = entries.size();
+            e.surface.width = std::clamp(float(surface->m_current.size.x) * windowScale, .2f, 6.f);
+            e.surface.height =
+                e.surface.width * float(surface->m_current.size.y) / std::max(1.f, float(surface->m_current.size.x));
             e.surface.center = {float(int(i % 3) - 1) * 3.8f, 2.0f, -2.f - float(i / 3) * 3};
             if (i == 0)
                 e.surface.center = {0, 2, -2};
@@ -56,6 +63,25 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 e.surface.center = {-3.8f, 2, -2};
             if (i == 2)
                 e.surface.center = {3.8f, 2, -2};
+            if (camera && world) {
+                e.surface.yaw = -camera->yaw;
+                e.surface.center = camera->position + camera->forward() * spawnDistance;
+                if (auto wall = interaction::raycast(camera->position, camera->forward(), world->collision))
+                    e.surface.center =
+                        camera->position +
+                        camera->forward() * std::min(spawnDistance, std::max(.2f, wall->distance - .15f));
+                for (auto &other : entries)
+                    if (auto hit = surfaces::intersect(other.surface, camera->position, camera->forward());
+                        hit && hit->distance < spawnDistance)
+                        e.surface.center = camera->position + camera->forward() * std::max(.2f, hit->distance - .15f);
+                if (!surfaces::pushOut(e.surface, world->collision)) {
+                    auto id = e.surface.id;
+                    e.surface = surfaces::carryPlane(*camera, e.surface.width, e.surface.height, world->collision);
+                    e.surface.id = id;
+                }
+                if (spawnNew && layout && layout->binding(w->m_workspace ? int(w->m_workspace->m_id) : 0, world))
+                    layout->freePoses[e.surface.id] = e.surface;
+            }
             e.commitListener = surface->m_events.commit.listen([count = e.commits] { ++*count; });
             entries.push_back(std::move(e));
             it = entries.end() - 1;
@@ -69,7 +95,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         it->surface.pixelWidth = std::max(1, int(surface->m_current.size.x));
         it->surface.pixelHeight = std::max(1, int(surface->m_current.size.y));
         it->surface.height = it->surface.width * float(it->surface.pixelHeight) / it->surface.pixelWidth;
-        if (world && world->areas.empty()) {
+        if (world && world->areas.empty() && !spawnNew && (!layout || !layout->freePoses.contains(it->surface.id))) {
             auto anchors = world->manifest.value("anchors", world::Json::array());
             size_t index = std::distance(entries.begin(), it);
             if (index < anchors.size() && anchors[index].at("screenType") == "com.hyprune.window") {
@@ -83,6 +109,14 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 it->surface.width = std::min(a.at("size")[0].get<float>(), a.at("size")[1].get<float>() * ratio);
                 it->surface.height = it->surface.width / ratio;
             }
+        }
+        if (layout && world->areas.empty() && layout->freePoses.contains(it->surface.id)) {
+            auto pixels = it->surface;
+            it->surface = layout->freePoses.at(it->surface.id);
+            it->surface.texture = pixels.texture;
+            it->surface.pixelWidth = pixels.pixelWidth;
+            it->surface.pixelHeight = pixels.pixelHeight;
+            it->surface.height = it->surface.width * float(pixels.pixelHeight) / pixels.pixelWidth;
         }
         if (layout && camera && world && !world->areas.empty()) {
             it->visible = false;
@@ -105,6 +139,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         }
         return true;
     });
+    attach();
     if (layout && world && !world->areas.empty())
         compose(monitor, world, *layout);
 }
@@ -115,6 +150,7 @@ void Capture::release() {
             e.window->setSuspended(workspace && !workspace->isVisible());
         }
     entries.clear();
+    children.clear();
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
     render::GLState state;
     for (auto &frame : workspaces) {
@@ -140,7 +176,124 @@ std::vector<surfaces::Surface> Capture::visible() const {
             result.push_back(e.surface);
     for (auto &f : workspaces)
         result.push_back(f.surface);
+    for (auto &c : children)
+        if (c.resource)
+            result.push_back(c.surface);
     return result;
+}
+surfaces::Surface *Capture::plane(const std::string &id) {
+    if (auto e = find(id))
+        return &e->surface;
+    for (auto &c : children)
+        if (c.surface.id == id && c.resource)
+            return &c.surface;
+    if (auto w = workspace(id))
+        return &w->surface;
+    return nullptr;
+}
+std::optional<Capture::Target> Capture::target(const std::string &id, float u, float v) {
+    if (auto e = find(id)) {
+        Vector2D local{u * e->surface.pixelWidth, v * e->surface.pixelHeight};
+        auto [resource, subLocal] = e->window->resource()->at(local, true);
+        if (resource)
+            return Target{resource, subLocal, e->parentKeyboard ? e->parentId : id};
+    }
+    for (auto &c : children)
+        if (c.surface.id == id && c.resource) {
+            Vector2D local{u * c.surface.pixelWidth, v * c.surface.pixelHeight};
+            // at() on a subsurface still includes its parent-relative offset.
+            // This plane already represents that exact leaf, so its input region
+            // and seat coordinates must stay local to the leaf resource.
+            if (c.resource->m_current.effectiveInputRegion().containsPoint(local))
+                return Target{c.resource.lock(), local, c.parentId};
+        }
+    return {};
+}
+void Capture::attach() {
+    auto previous = std::move(children);
+    children.clear();
+    auto add = [&](Entry &owner, SP<CWLSurfaceResource> r, Vector2D offset) {
+        if (!r || !r->m_current.texture || !r->m_current.texture->m_texID ||
+            r->m_current.texture->m_type == Render::TEXTURE_EXTERNAL ||
+            r->m_current.transform != WL_OUTPUT_TRANSFORM_NORMAL || r->m_current.viewport.hasSource ||
+            children.size() >= 128)
+            return;
+        Child child;
+        child.resource = r;
+        child.texture = r->m_current.texture;
+        child.parentId = owner.surface.id;
+        child.offset = offset;
+        auto old = std::find_if(previous.begin(), previous.end(), [&](auto &c) { return c.resource == r; });
+        child.surface.id = old == previous.end() ? "child-" + std::to_string(++sequence_) : old->surface.id;
+        auto &s = child.surface;
+        auto &parent = owner.surface;
+        s.rotation = parent.rotation;
+        s.yaw = parent.yaw;
+        s.texture = child.texture->m_texID;
+        s.pixelWidth = std::max(1, int(r->m_current.size.x));
+        s.pixelHeight = std::max(1, int(r->m_current.size.y));
+        s.width = parent.width * s.pixelWidth / parent.pixelWidth;
+        s.height = parent.height * s.pixelHeight / parent.pixelHeight;
+        s.center = parent.center +
+                   parent.right() * ((offset.x + s.pixelWidth * .5f) / parent.pixelWidth - .5f) * parent.width +
+                   parent.up() * (.5f - (offset.y + s.pixelHeight * .5f) / parent.pixelHeight) * parent.height +
+                   parent.normal() * (.006f + children.size() * .0001f);
+        children.push_back(std::move(child));
+        r->frame(std::chrono::steady_clock::now());
+    };
+    for (auto &e : entries) {
+        auto w = e.window.lock();
+        if (!w)
+            continue;
+        e.parentId.clear();
+        auto parent = w->parent();
+        if (!parent)
+            parent = w->x11Parent();
+        e.parentKeyboard =
+            w->m_isX11 && (w->m_X11ShouldntFocus || (w->m_xwaylandSurface && w->m_xwaylandSurface->m_overrideRedirect));
+        if (!parent && e.parentKeyboard)
+            parent = Desktop::focusState()->window();
+        if (parent)
+            for (auto &p : entries)
+                if (p.window == parent) {
+                    e.parentId = p.surface.id;
+                    e.visible = p.visible;
+                    e.surface.rotation = p.surface.rotation;
+                    e.surface.yaw = p.surface.yaw;
+                    auto box = w->surfaceLogicalBox(), pb = parent->surfaceLogicalBox();
+                    if (box && pb) {
+                        float x = (box->x - pb->x + box->w * .5f) / std::max(1., pb->w) - .5f;
+                        float y = .5f - (box->y - pb->y + box->h * .5f) / std::max(1., pb->h);
+                        e.surface.width = p.surface.width * box->w / pb->w;
+                        e.surface.height = p.surface.height * box->h / pb->h;
+                        e.surface.center = p.surface.center + p.surface.right() * (x * p.surface.width) +
+                                           p.surface.up() * (y * p.surface.height) + p.surface.normal() * .02f;
+                    }
+                    break;
+                }
+        if (!e.visible)
+            continue;
+        auto root = w->resource();
+        root->breadthfirst(
+            [&](SP<CWLSurfaceResource> r, const Vector2D &off, void *) {
+                if (r != root)
+                    add(e, r, off);
+            },
+            nullptr);
+        if (w->m_popupHead)
+            w->m_popupHead->breadthfirst(
+                [&](SP<Desktop::View::CPopup> p, void *) {
+                    if (!p->m_mapped || !p->resource())
+                        return;
+                    auto box = w->surfaceLogicalBox();
+                    if (!box)
+                        return;
+                    auto off = p->coordsGlobal() - Vector2D{box->x, box->y};
+                    p->resource()->breadthfirst(
+                        [&](SP<CWLSurfaceResource> r, const Vector2D &sub, void *) { add(e, r, off + sub); }, nullptr);
+                },
+                nullptr);
+    }
 }
 Capture::WorkspaceFrame *Capture::workspace(const std::string &id) {
     for (auto &f : workspaces)
@@ -258,6 +411,16 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
                         box->h / monitor->m_size.y);
             glBindTexture(GL_TEXTURE_2D, entry.surface.texture);
             glDrawArrays(GL_TRIANGLES, 0, 6);
+            for (auto &child : children)
+                if (child.parentId == entry.surface.id && child.resource) {
+                    glUniform4f(glGetUniformLocation(program_, "rect"),
+                                (box->x - monitor->m_position.x + child.offset.x) / monitor->m_size.x,
+                                (box->y - monitor->m_position.y + child.offset.y) / monitor->m_size.y,
+                                child.surface.pixelWidth / monitor->m_size.x,
+                                child.surface.pixelHeight / monitor->m_size.y);
+                    glBindTexture(GL_TEXTURE_2D, child.surface.texture);
+                    glDrawArrays(GL_TRIANGLES, 0, 6);
+                }
         }
     }
     std::erase_if(workspaces, [&](auto &f) {

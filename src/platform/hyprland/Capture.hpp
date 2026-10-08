@@ -3,6 +3,7 @@
 #include "surfaces/Surface.hpp"
 #include "world/World.hpp"
 #include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/protocols/core/Compositor.hpp>
 #include <hyprland/src/render/Texture.hpp>
 #include <memory>
 #include <vector>
@@ -15,10 +16,30 @@ class Capture {
         surfaces::Surface surface;
         surfaces::Instance instance;
         bool visible = true;
+        std::string parentId;
+        bool parentKeyboard = false;
         std::shared_ptr<uint64_t> commits = std::make_shared<uint64_t>(0);
         CHyprSignalListener commitListener;
     };
     std::vector<Entry> entries;
+    struct Child {
+        WP<CWLSurfaceResource> resource;
+        SP<Render::ITexture> texture;
+        surfaces::Surface surface;
+        std::string parentId;
+        Vector2D offset;
+    };
+    std::vector<Child> children;
+    struct Target {
+        SP<CWLSurfaceResource> resource;
+        Vector2D local;
+        std::string parentId;
+    };
+    std::optional<Target> target(const std::string &, float u, float v);
+    surfaces::Surface *plane(const std::string &);
+    float spawnDistance = 5, windowScale = .002;
+    bool spawnNew = false;
+    void attach();
     struct WorkspaceFrame {
         unsigned fbo = 0, texture = 0;
         int workspaceId = 0;

@@ -72,6 +72,26 @@ int main(int argc, char **argv) {
         terminal.id = "relaunched";
         plane = restored.locate(terminal, w.get(), camera, 1600, 900);
         check(plane && std::abs(plane->center.x + 2.7f) < .001f, "placement relaunch");
+        surfaces::Layout custom;
+        custom.bind(10, w->id, "sun-court", w.get());
+        auto userPlane = *plane;
+        userPlane.center = {4, 2, 1};
+        userPlane.width = 1.4f;
+        userPlane.height = .7875f;
+        custom.mount(terminal, w.get(), userPlane);
+        auto durable = world::Json{{"bindings", custom.bindings}, {"placements", custom.placements}};
+        custom = {};
+        custom.restore(durable);
+        auto mounted = custom.locate(terminal, w.get(), camera, 1600, 900);
+        check(mounted && std::abs(mounted->center.x - 4) < .001, "custom mount restore");
+        custom.pull(terminal, w.get());
+        auto pulled = custom.locate(terminal, w.get(), camera, 1600, 900);
+        check(pulled && length(pulled->center - mounted->center) > 1, "saved custom pose overrode hand pull");
+        custom.recall(std::span(&terminal, 1));
+        auto recalled = custom.locate(terminal, w.get(), camera, 1600, 900);
+        check(recalled && length(recalled->center - mounted->center) > 1, "saved custom pose overrode recall");
+        durable["placements"][0]["pose"]["rotation"] = {0, 0, 0, 0};
+        rejects([&] { custom.restore(durable); });
         // Changed package: removed mount; no stale pose/identity is used.
         std::erase_if(w->anchors.get_ref<world::Json::array_t &>(), [&](auto &a) { return a.at("id") == id; });
         restored.instances = world::Json::array();

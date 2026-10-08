@@ -13,3 +13,6 @@ these IPC bytes support conformance tooling and do not change embedded world sch
 
 M2 world 0.3 and IPC 0.4 bytes are pinned to `9dde810b2a817de2f1e775577d0551ab703da55d`.
 Regenerate embedded world contracts with `python3 dev/embed-schema.py`.
+
+M3A IPC 0.5 bytes are pinned to `2f8e80e458a930550034206da4458d857a1b1a4a`.
+World contracts and earlier IPC bytes remain unchanged.

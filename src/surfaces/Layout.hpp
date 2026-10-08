@@ -12,6 +12,8 @@ class Layout {
   public:
     Json bindings = Json::array(), placements = Json::array(), instances = Json::array();
     std::string carried;
+    std::map<std::string, Surface> freePoses;
+    void mount(const Instance &, const world::World *, Surface);
     Json desktop = nullptr;
     Json state(const world::World *) const;
     const Json *binding(int workspace, const world::World *) const;

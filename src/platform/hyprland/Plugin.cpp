@@ -1,18 +1,26 @@
 #include "control/Control.hpp"
+#include "interaction/Config.hpp"
+#include "interaction/Hands.hpp"
 #include "world/Mounts.hpp"
 #include "world/Spatial.hpp"
+#include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/LayerState.hpp>
+#include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/src/event/EventBus.hpp>
+#include <hyprland/src/layout/target/WindowTarget.hpp>
 #include <hyprland/src/managers/KeybindManager.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
+#include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/plugins/HookSystem.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
+#include <hyprland/src/pointer/PointerController.hpp>
+#include <hyprland/src/pointer/PointerManager.hpp>
 #include <hyprland/src/protocols/LayerShell.hpp>
 #include <hyprland/src/protocols/core/Compositor.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
@@ -42,6 +50,47 @@ struct Runtime {
     render::Renderer renderer;
     Capture capture;
     surfaces::Layout layout;
+    interaction::Hands hands;
+    Json config = interaction::defaultConfig(), configured = config;
+    std::set<std::string> graphicsOverrides;
+    bool superHeld = false, altHeld = false, noclip = false, freeCursor = false, zoomHeld = false;
+    float zoom = 1, baseFov = 60, lookX = 0, lookY = 0;
+    sim::Intent smoothIntent;
+    int tool = 1;
+    std::string tagged;
+    uint32_t gestureButton = 0;
+    std::set<uint32_t> swallowedButtons, swallowedKeys;
+    WP<CWLSurfaceResource> grabResource;
+    std::string cursorState = "desktop";
+    bool savedCursorHidden = false, cursorHidden = false;
+    void cursor();
+    void modeToggle();
+    void button(IPointer::SButtonEvent, bool super);
+    void axis(IPointer::SAxisEvent);
+    void handTick(float);
+    struct Handover {
+        int phase = 0, workspace = 0;
+        float elapsed = 0;
+        sim::Camera before, from, to;
+        bool animated = false;
+    } handover;
+    struct FullscreenState {
+        std::vector<std::pair<PHLWINDOWREF, bool>> covering;
+        int phase = 0;
+        float elapsed = 0;
+        std::string id;
+        surfaces::Surface before, from, to;
+    } fullscreen;
+    void focusWall(const std::string &);
+    void transitionTick(float);
+    void restoreFullscreenWindows() {
+        for (auto &[w, allowed] : fullscreen.covering)
+            if (w)
+                w->m_allowedOverFullscreen = allowed;
+        fullscreen.covering.clear();
+    }
+    void routePointer(const std::string &, surfaces::Hit, uint32_t = 0);
+
     float pointerX = .5f, pointerY = .5f;
     std::string pendingArea;
     void refresh();
@@ -63,13 +112,15 @@ struct Runtime {
     bool toggleAfterLoad = false;
     std::chrono::steady_clock::time_point loadDeadline;
     double accumulator = 0;
-    std::string focused, lastError, grabbed;
-    std::set<uint32_t> buttons;
+    std::string focused, focusedParent, lastError, grabbed;
+    std::set<uint32_t> buttons, appKeys;
     void cancelGrab();
     std::set<uint32_t> keys;
     SP<CEventLoopTimer> timer;
     std::vector<CHyprSignalListener> listeners;
-    CFunctionHook *motionHook = nullptr;
+    CFunctionHook *motionHook = nullptr, *cursorHook = nullptr, *keyboardHook = nullptr;
+    WP<IKeyboard> eventKeyboard;
+    std::optional<bool> pendingCursorHide;
     uint64_t deferred = 0, tickDeferred = 0;
     std::vector<uint64_t> inputDeferred;
     void deferInput(std::function<void()>);
@@ -98,6 +149,30 @@ struct Runtime {
 std::unique_ptr<Runtime> runtime;
 using Move = void (*)(void *, const Vector2D &);
 Move originalMove = nullptr;
+using HideCursor = void (*)(void *, bool);
+HideCursor originalHideCursor = nullptr;
+void cursorHide(void *self, bool requested) {
+    if (!runtime || !runtime->active) {
+        originalHideCursor(self, requested);
+        return;
+    }
+    bool pending = runtime->pendingCursorHide.has_value();
+    runtime->pendingCursorHide = requested;
+    if (pending)
+        return;
+    runtime->deferInput([self] {
+        if (!runtime->pendingCursorHide)
+            return;
+        bool hide = *runtime->pendingCursorHide;
+        runtime->pendingCursorHide.reset();
+        if (runtime->active && (runtime->cursorState == "reticle" || runtime->cursorState == "virtual"))
+            hide = true;
+        if (hide != runtime->cursorHidden) {
+            originalHideCursor(self, hide);
+            runtime->cursorHidden = hide;
+        }
+    });
+}
 bool locked() {
     return g_pSessionLockManager && g_pSessionLockManager->isSessionLocked();
 }
@@ -116,23 +191,50 @@ template <class F> void safe(F f) {
         std::fprintf(stderr, "[hyprune] unknown callback exception\n");
     }
 }
+using KeyboardInput = void (*)(void *, const IKeyboard::SKeyEvent &, SP<IKeyboard>);
+KeyboardInput originalKeyboardInput = nullptr;
+void keyboardInput(void *self, const IKeyboard::SKeyEvent &event, SP<IKeyboard> keyboard) {
+    // The cancellable bus runs before Hyprland switches the seat keyboard. Keep the
+    // event source only for that synchronous call; native processing remains intact.
+    auto previous = runtime->eventKeyboard;
+    runtime->eventKeyboard = keyboard;
+    originalKeyboardInput(self, event, keyboard);
+    runtime->eventKeyboard = previous;
+}
 bool ownsInput() {
     return runtime && runtime->active && !runtime->loading && !runtime->control.uiVisible() && !locked() &&
-           runtime->monitor == Desktop::focusState()->monitor() && runtime->layout.desktop.is_null();
+           runtime->monitor == Desktop::focusState()->monitor() && runtime->layout.desktop.is_null() &&
+           runtime->fullscreen.phase != 2 && !runtime->freeCursor && !runtime->handover.phase;
 }
 void motion(void *self, const Vector2D &delta) {
     if (runtime && runtime->active && runtime->control.uiVisible() && !runtime->directorSurface())
         return;
     if (ownsInput()) {
-        if (runtime->typing) {
-            runtime->pointerX =
-                std::clamp(runtime->pointerX + float(delta.x) / float(runtime->monitor->m_pixelSize.x), 0.f, 1.f);
-            runtime->pointerY =
-                std::clamp(runtime->pointerY + float(delta.y) / float(runtime->monitor->m_pixelSize.y), 0.f, 1.f);
+        if (runtime->typing && runtime->config["input"]["typing_cursor"] == true) {
+            auto mon = runtime->monitor.lock();
+            runtime->pointerX += float(delta.x) / float(mon->m_size.x);
+            runtime->pointerY += float(delta.y) / float(mon->m_size.y);
+            if ((runtime->pointerX < 0 || runtime->pointerX >= 1 || runtime->pointerY < 0 || runtime->pointerY >= 1) &&
+                runtime->buttons.empty()) {
+                auto global =
+                    mon->m_position + Vector2D{runtime->pointerX * mon->m_size.x, runtime->pointerY * mon->m_size.y};
+                for (auto &m : State::monitorState()->monitors())
+                    if (m != mon && global.x >= m->m_position.x && global.y >= m->m_position.y &&
+                        global.x < m->m_position.x + m->m_size.x && global.y < m->m_position.y + m->m_size.y) {
+                        runtime->freeCursor = true;
+                        runtime->deferInput([global] {
+                            runtime->cursor();
+                            Pointer::pointerController()->warpTo(global, true);
+                        });
+                        return;
+                    }
+            }
+            runtime->pointerX = std::clamp(runtime->pointerX, 0.f, .9999f);
+            runtime->pointerY = std::clamp(runtime->pointerY, 0.f, .9999f);
             return;
         }
-        runtime->camera.yaw += float(delta.x) * .0025f;
-        runtime->camera.pitch = std::clamp(runtime->camera.pitch - float(delta.y) * .0025f, -1.48f, 1.48f);
+        runtime->lookX += float(delta.x) * runtime->config["player"]["look_sensitivity"].get<float>();
+        runtime->lookY -= float(delta.y) * runtime->config["player"]["look_sensitivity"].get<float>();
         return;
     }
     originalMove(self, delta);
@@ -178,14 +280,24 @@ void Runtime::deferInput(std::function<void()> operation) {
         if (!runtime)
             return;
         std::erase(runtime->inputDeferred, *id);
-        if (runtime->renderDepth)
-            throw std::runtime_error("deferred input inside render pass");
+        if (runtime->renderDepth) {
+            runtime->deferInput(std::move(operation));
+            return;
+        }
         safe(operation);
     });
     inputDeferred.push_back(*id);
 }
 void Runtime::cancelGrab() {
-    if (!buttons.empty() && capture.find(grabbed)) {
+    if (!appKeys.empty()) {
+        auto now =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+                .count();
+        for (auto key : appKeys)
+            g_pSeatManager->sendKeyboardKey(now, key, WL_KEYBOARD_KEY_STATE_RELEASED);
+        appKeys.clear();
+    }
+    if (!buttons.empty() && grabResource) {
         auto now =
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
                 .count();
@@ -195,6 +307,9 @@ void Runtime::cancelGrab() {
     }
     buttons.clear();
     grabbed.clear();
+    grabResource.reset();
+    hands.end();
+    gestureButton = 0;
 }
 std::pair<int, std::string> processIdentity(int pid) {
     std::ifstream f("/proc/" + std::to_string(pid) + "/stat");
@@ -233,6 +348,8 @@ void Runtime::refresh() {
         throw std::runtime_error("capture inside render pass");
     if (monitor && world) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        capture.spawnDistance = config["windows"]["spawn_distance"];
+        capture.windowScale = config["windows"]["scale"];
         capture.refresh(monitor.lock(), world.get(), &layout, &camera);
     }
 }
@@ -253,6 +370,8 @@ void Runtime::home(const Json &binding, bool travel) {
         throw ipc::Error(-32005, "area arrival obstructed");
     typing = false;
     keys.clear();
+    smoothIntent = {};
+    lookX = lookY = 0;
     cancelGrab();
     pointerX = pointerY = .5f;
     layout.desktop = nullptr;
@@ -266,9 +385,17 @@ void Runtime::home(const Json &binding, bool travel) {
         camera.position = position;
 }
 void Runtime::unfocus() {
+    if (!layout.desktop.is_null() && !handover.phase && handover.animated) {
+        handover.from = camera;
+        handover.to = handover.before;
+        handover.elapsed = 0;
+        handover.phase = 2;
+    }
     layout.desktop = nullptr;
     typing = false;
     keys.clear();
+    smoothIntent = {};
+    lookX = lookY = 0;
     cancelGrab();
     pointerX = pointerY = .5f;
     publish();
@@ -326,6 +453,8 @@ void Runtime::publish() {
         surfaces.push_back({{"id", e.surface.id},
                             {"kind", "window"},
                             {"title", e.surface.title},
+                            {"parentId", e.parentId},
+                            {"floating", e.window->m_isFloating},
                             {"logicalSize", {e.surface.pixelWidth, e.surface.pixelHeight}},
                             {"focused", e.surface.id == focused}});
     for (auto &f : capture.workspaces)
@@ -373,7 +502,26 @@ void Runtime::publish() {
                 {"markers",
                  world::projectMarkers(*world, camera, float(monitor->m_pixelSize.x) / monitor->m_pixelSize.y)}};
     }
-    ipc->publish({{"mounts", layout.state(world.get())},
+    Json apps = Json::array();
+    for (auto &e : capture.entries)
+        if (e.parentId.empty())
+            apps.push_back({{"surfaceId", e.surface.id},
+                            {"workspaceId", e.instance.workspaceId},
+                            {"title", e.instance.title},
+                            {"appClass", e.instance.appClass},
+                            {"icon", e.instance.appClass}});
+    ipc->publish({{"interaction",
+                   {{"mode", !layout.desktop.is_null() ? "workspace"
+                             : fullscreen.phase == 2   ? "fullscreen"
+                             : typing                  ? "typing"
+                                                       : "movement"},
+                    {"tool", tool},
+                    {"tools", config["tools"]["slots"]},
+                    {"noclip", noclip},
+                    {"cursor", cursorState},
+                    {"taggedSurfaceId", tagged.empty() ? Json(nullptr) : Json(tagged)}}},
+                  {"apps", apps},
+                  {"mounts", layout.state(world.get())},
                   {"presentation",
                    {{"profile", world ? renderer.profile : Json(nullptr)},
                     {"fov", camera.fov},
@@ -440,8 +588,17 @@ void Runtime::finishLoad() {
         auto spawn = pendingArea.empty() ? candidate->spawn(pendingSpawn) : world::areaSpawn(*candidate, pendingArea);
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         renderer.prepare(candidate);
+        if (graphicsOverrides.contains("exposure"))
+            renderer.profile["exposure"] = config["graphics"]["exposure"];
+        if (graphicsOverrides.contains("bloom_strength"))
+            renderer.profile["bloom"]["strength"] = config["graphics"]["bloom_strength"];
         world = std::move(candidate);
         capture.release();
+        layout.freePoses.clear();
+        restoreFullscreenWindows();
+        fullscreen = {};
+        handover = {};
+        hands.end();
         auto transition = control.location["transition"];
         control.reset(world.get());
         control.location["transition"] = transition;
@@ -512,14 +669,18 @@ void Runtime::toggle(const std::string &output) {
     control.outputId = "output-" + std::to_string(chosen->m_id);
     savedFocus = Desktop::focusState()->window();
     active = true;
+    savedCursorHidden = !g_pHyprRenderer->shouldRenderCursor();
+    cursorHidden = savedCursorHidden;
+    capture.spawnNew = false;
     typing = false;
     keys.clear();
     lastTick = std::chrono::steady_clock::now();
-    // Keep Hyprland's cursor lifecycle untouched. A frozen native cursor and
-    // the rendered reticle are intentional in M0; hardware cursor rendering
-    // must be tested on a dedicated DRM session before adding cursor gates.
+    // Visibility changes are coalesced after the frame. Hardware cursor behavior
+    // still requires the supervised DRM checklist in docs/M3A.md.
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
     refresh();
+    capture.spawnNew = true;
+    cursor();
     publish();
 }
 void Runtime::exit() {
@@ -528,6 +689,11 @@ void Runtime::exit() {
     if (!active)
         return;
     active = false;
+    restoreFullscreenWindows();
+    fullscreen = {};
+    handover = {};
+    freeCursor = false;
+    cursor();
     layout.desktop = nullptr;
     control.stop();
     for (auto &[actor, b] : bindings)
@@ -548,6 +714,8 @@ void Runtime::focus(const std::string &id, bool keyboard) {
     if (renderDepth)
         throw std::runtime_error("focus inside render pass");
     if (auto frame = capture.workspace(id)) {
+        if (!handover.animated)
+            handover.before = camera;
         Desktop::focusState()->rawMonitorFocus(monitor.lock());
         auto result = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(frame->workspaceId));
         if (!result.success)
@@ -582,14 +750,421 @@ void Runtime::focus(const std::string &id, bool keyboard) {
         control.stop();
     }
     if (keyboard) {
-        Desktop::focusState()->rawWindowFocus(w, Desktop::FOCUS_REASON_CLICK);
+        Desktop::focusState()->fullWindowFocus(w, Desktop::FOCUS_REASON_CLICK);
+        Desktop::windowState()->raise(w);
         g_pSeatManager->setKeyboardFocus(w->resource());
         typing = true;
         keys.clear();
         focused = id;
+        freeCursor = false;
     }
     g_pSeatManager->setPointerFocus(w->resource(), {entry->surface.pixelWidth * .5, entry->surface.pixelHeight * .5});
     publish();
+}
+void Runtime::cursor() {
+    if (renderDepth)
+        throw std::runtime_error("cursor inside render pass");
+    std::string next = !active || freeCursor       ? "desktop"
+                       : !layout.desktop.is_null() ? "workspace"
+                       : fullscreen.phase == 2     ? "fullscreen"
+                       : control.uiVisible()       ? "director"
+                       : typing                    ? "virtual"
+                                                   : "reticle";
+    if (next == cursorState)
+        return;
+    bool hide = next == "reticle" || next == "virtual";
+    if (!active)
+        hide = savedCursorHidden;
+    if (cursorHidden != hide) {
+        g_pHyprRenderer->setCursorHidden(hide);
+    }
+    cursorState = next;
+    if (monitor && (next == "fullscreen" || next == "workspace"))
+        Pointer::pointerController()->warpTo(monitor->m_position + monitor->m_size * .5, true);
+}
+void Runtime::modeToggle() {
+    if (!layout.desktop.is_null()) {
+        unfocus();
+        return;
+    }
+    if (fullscreen.phase == 2)
+        return;
+    cancelGrab();
+    typing = !typing;
+    freeCursor = false;
+    keys.clear();
+    smoothIntent = {};
+    lookX = lookY = 0;
+    pointerX = pointerY = .5f;
+    if (!typing) {
+        focused.clear();
+        g_pSeatManager->setPointerFocus(nullptr, {});
+        g_pSeatManager->setKeyboardFocus(nullptr);
+    }
+    cursor();
+    publish();
+}
+void Runtime::routePointer(const std::string &id, surfaces::Hit hit, uint32_t time) {
+    if (auto target = capture.target(id, hit.u, hit.v)) {
+        if (!buttons.empty() && grabResource && target->resource != grabResource)
+            return;
+        g_pSeatManager->setPointerFocus(target->resource, target->local);
+        g_pSeatManager->sendPointerMotion(time, target->local);
+        g_pSeatManager->sendPointerFrame();
+    } else if (buttons.empty())
+        g_pSeatManager->setPointerFocus(nullptr, {});
+}
+void Runtime::focusWall(const std::string &id) {
+    auto wall = capture.workspace(id);
+    if (!wall || handover.phase)
+        return;
+    cancelGrab();
+    control.stop();
+    typing = false;
+    keys.clear();
+    handover.animated = true;
+    handover.before = camera;
+    handover.from = camera;
+    handover.to = camera;
+    handover.workspace = wall->workspaceId;
+    auto normal = wall->surface.normal();
+    auto forward = normal * -1;
+    handover.to.position =
+        wall->surface.center + normal * (wall->surface.height / (2 * std::tan(camera.fov * .01745329252f / 2)));
+    handover.to.yaw = std::atan2(forward.x, -forward.z);
+    handover.to.pitch = std::asin(forward.y);
+    handover.elapsed = 0;
+    handover.phase = 1;
+}
+void Runtime::handTick(float dt) {
+    if (hands.gesture == interaction::Gesture::None)
+        return;
+    auto e = capture.find(hands.pose.id);
+    if (!e) {
+        hands.end();
+        gestureButton = 0;
+        return;
+    }
+    if (hands.update(camera, pointerRay(), dt, world->collision)) {
+        layout.freePoses[e->surface.id] = hands.pose;
+        if (hands.gesture == interaction::Gesture::Resize && e->window->m_target) {
+            auto w = e->window.lock();
+            auto box = w->m_target->position();
+            double width = std::clamp(double(hands.pose.width / hands.start.width * hands.start.pixelWidth), 160.,
+                                      monitor->m_size.x);
+            double height = std::clamp(double(hands.pose.height / hands.start.height * hands.start.pixelHeight), 100.,
+                                       monitor->m_size.y);
+            if (std::abs(box.w - width) >= 1 || std::abs(box.h - height) >= 1) {
+                auto floated = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_ENABLE, w);
+                if (!floated)
+                    throw std::runtime_error("client float rejected: " + floated.error().message);
+                auto result = Config::Actions::resize({width, height}, false, w);
+                if (!result)
+                    throw std::runtime_error("client resize rejected: " + result.error().message);
+                w->m_target->rememberFloatingSize({width, height});
+                w->sendWindowSize(true);
+            }
+        }
+    }
+}
+void Runtime::button(IPointer::SButtonEvent event, bool super) {
+    bool down = event.state == WL_POINTER_BUTTON_STATE_PRESSED;
+    if (!down && event.button == gestureButton) {
+        auto id = hands.pose.id;
+        auto g = hands.gesture;
+        hands.end();
+        gestureButton = 0;
+        if (g == interaction::Gesture::Carry) {
+            auto held = capture.find(id);
+            std::optional<std::pair<int, float>> wall;
+            for (auto &f : capture.workspaces)
+                if (auto h = surfaces::intersect(f.surface, camera.position, pointerRay());
+                    h && h->distance < 12 && (!wall || h->distance < wall->second))
+                    wall = {{f.workspaceId, h->distance}};
+            if (held && wall) {
+                auto w = held->window.lock();
+                layout.release(held->instance, world.get());
+                auto r = g_pKeybindManager->m_dispatchers.at("movetoworkspacesilent")(
+                    std::to_string(wall->first) +
+                    ",address:" + std::format("{:x}", reinterpret_cast<uintptr_t>(w.get())));
+                if (!r.success)
+                    throw std::runtime_error("drop workspace failed");
+                auto tiled = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_DISABLE, w);
+                if (!tiled)
+                    throw std::runtime_error("client tiling rejected: " + tiled.error().message);
+            } else if (held) {
+                layout.carried.clear();
+                if (layout.binding(held->instance.workspaceId, world.get()))
+                    layout.mount(held->instance, world.get(), hands.pose);
+            }
+        }
+        if (g != interaction::Gesture::Carry)
+            if (auto held = capture.find(id)) {
+                layout.carried.clear();
+                if (layout.binding(held->instance.workspaceId, world.get()))
+                    layout.mount(held->instance, world.get(), hands.pose);
+            }
+        refresh();
+        publish();
+        return;
+    }
+    if (!ownsInput())
+        return;
+    if (event.button == config["input"]["typing_button"].get<uint32_t>() && down) {
+        modeToggle();
+        return;
+    }
+    auto hit = aim();
+    if (!grabbed.empty())
+        if (auto plane = capture.plane(grabbed))
+            if (auto h = surfaces::intersect(*plane, camera.position, pointerRay(), false))
+                hit = {{grabbed, *h}};
+    if (down && super &&
+        (event.button == config["input"]["carry_button"].get<uint32_t>() ||
+         event.button == config["input"]["resize_button"].get<uint32_t>() ||
+         event.button == config["input"]["roll_button"].get<uint32_t>())) {
+        if (!hit)
+            return;
+        auto e = capture.find(hit->first);
+        if (auto wall = capture.workspace(hit->first)) {
+            // Pull the actual topmost native client under the workspace-wall hit.
+            float x = hit->second.u * monitor->m_size.x + monitor->m_position.x,
+                  y = hit->second.v * monitor->m_size.y + monitor->m_position.y;
+            for (auto it = capture.entries.rbegin(); it != capture.entries.rend(); ++it)
+                if (it->instance.workspaceId == wall->workspaceId && !layout.pulled(it->instance, world.get())) {
+                    auto box = it->window->logicalBox();
+                    if (box && x >= box->x && x < box->x + box->w && y >= box->y && y < box->y + box->h) {
+                        e = &*it;
+                        auto s = wall->surface;
+                        s.id = e->surface.id;
+                        s.pixelWidth = e->surface.pixelWidth;
+                        s.pixelHeight = e->surface.pixelHeight;
+                        s.width = wall->surface.width * box->w / monitor->m_size.x;
+                        s.height = wall->surface.height * box->h / monitor->m_size.y;
+                        s.center = wall->surface.center +
+                                   wall->surface.right() *
+                                       ((box->x - monitor->m_position.x + box->w / 2) / monitor->m_size.x - .5f) *
+                                       wall->surface.width +
+                                   wall->surface.up() *
+                                       (.5f - (box->y - monitor->m_position.y + box->h / 2) / monitor->m_size.y) *
+                                       wall->surface.height +
+                                   wall->surface.normal() * .06f;
+                        e->surface = s;
+                        auto h = surfaces::intersect(s, camera.position, pointerRay());
+                        if (h)
+                            hit = {{s.id, *h}};
+                        break;
+                    }
+                }
+        }
+        if (!e || !e->parentId.empty())
+            return;
+        cancelGrab();
+        typing = false;
+        keys.clear();
+        if (layout.binding(e->instance.workspaceId, world.get()))
+            layout.pull(e->instance, world.get());
+        auto g = event.button == config["input"]["carry_button"].get<uint32_t>()    ? interaction::Gesture::Carry
+                 : event.button == config["input"]["resize_button"].get<uint32_t>() ? interaction::Gesture::Resize
+                                                                                    : interaction::Gesture::Roll;
+        if (g == interaction::Gesture::Resize &&
+            Fullscreen::controller()->isFullscreen(e->window.lock(), Fullscreen::FSMODE_MAXIMIZED))
+            Fullscreen::controller()->setFullscreenMode(e->window.lock(), Fullscreen::FSMODE_NONE,
+                                                        Fullscreen::FSMODE_NONE);
+        hands.begin(g, e->surface, hit->second);
+        layout.freePoses[e->surface.id] = e->surface;
+        gestureButton = event.button;
+        return;
+    }
+    if (down && config["tools"]["enabled"] == true && config["tools"]["slots"][tool - 1] == "mount") {
+        if (hit && capture.find(hit->first)) {
+            tagged = hit->first;
+            layout.freePoses[tagged] = capture.find(tagged)->surface;
+            layout.carried.clear();
+            return;
+        }
+        if (!tagged.empty())
+            if (auto e = capture.find(tagged))
+                if (auto wall = interaction::raycast(camera.position, pointerRay(), *world)) {
+                    auto s = e->surface;
+                    s.yaw = 0;
+                    s.rotation = interaction::orientation(wall->normal);
+                    s.center = wall->point + wall->normal * .06f;
+                    if (surfaces::pushOut(s, world->collision)) {
+                        layout.mount(e->instance, world.get(), s);
+                        tagged.clear();
+                        refresh();
+                        publish();
+                    }
+                    return;
+                }
+        return;
+    }
+    if (down && config["tools"]["enabled"] == true && config["tools"]["slots"][tool - 1] == "path")
+        return;
+    if (down && hit && capture.workspace(hit->first)) {
+        focusWall(hit->first);
+        return;
+    }
+    if (down && hit)
+        if (auto t = capture.target(hit->first, hit->second.u, hit->second.v)) {
+            if (buttons.empty()) {
+                // A child press preserves its parent keyboard focus and popup grab serial.
+                if (focused != t->parentId)
+                    focus(t->parentId, true);
+                grabbed = hit->first;
+                grabResource = t->resource;
+            }
+            buttons.insert(event.button);
+            routePointer(hit->first, hit->second, event.timeMs);
+        }
+    if (grabResource) {
+        g_pSeatManager->sendPointerButton(event.timeMs, event.button, event.state);
+        g_pSeatManager->sendPointerFrame();
+    }
+    if (!down) {
+        buttons.erase(event.button);
+        if (buttons.empty()) {
+            grabbed.clear();
+            grabResource.reset();
+        }
+    }
+}
+void Runtime::axis(IPointer::SAxisEvent event) {
+    if (!ownsInput())
+        return;
+    float raw = event.deltaDiscrete ? event.deltaDiscrete / 120.f : event.delta * .05f;
+    float steps =
+        std::clamp(event.relativeDirection == WL_POINTER_AXIS_RELATIVE_DIRECTION_INVERTED ? raw : -raw, -2.f, 2.f);
+    if (zoomHeld) {
+        zoom = std::clamp(zoom * std::pow(config["windows"]["wheel_factor"].get<float>(), steps), 1.f, 10.f);
+        return;
+    }
+    if (hands.gesture == interaction::Gesture::Carry) {
+        hands.wheel(steps * std::log(config["windows"]["wheel_factor"].get<float>()) / std::log(1.06f));
+        return;
+    }
+    auto hit = aim();
+    if (!hit)
+        return;
+    if (superHeld && !typing)
+        if (auto e = capture.find(hit->first)) {
+            hands.begin(interaction::Gesture::Carry, e->surface, hit->second);
+            hands.wheel(steps);
+            handTick(.1f);
+            hands.end();
+            return;
+        }
+    routePointer(hit->first, hit->second, event.timeMs);
+    if (capture.target(hit->first, hit->second.u, hit->second.v)) {
+        g_pSeatManager->sendPointerAxis(event.timeMs, event.axis, event.delta, event.deltaDiscrete / 120,
+                                        event.deltaDiscrete, event.source, event.relativeDirection);
+        g_pSeatManager->sendPointerFrame();
+    }
+}
+void Runtime::transitionTick(float dt) {
+    float duration =
+        config["graphics"]["reduced_motion"] == true ? 0.f : config["windows"]["transition_seconds"].get<float>();
+    if (handover.phase) {
+        handover.elapsed += dt;
+        float t = duration ? std::min(1.f, handover.elapsed / duration) : 1.f;
+        t = t * t * (3 - 2 * t);
+        camera.position = handover.from.position + (handover.to.position - handover.from.position) * t;
+        camera.yaw = handover.from.yaw + std::remainder(handover.to.yaw - handover.from.yaw, 6.2831853f) * t;
+        camera.pitch = handover.from.pitch + (handover.to.pitch - handover.from.pitch) * t;
+        if (t >= 1) {
+            int phase = handover.phase;
+            handover.phase = 0;
+            if (phase == 2)
+                handover.animated = false;
+            if (phase == 1)
+                focus("workspace-" + std::to_string(handover.workspace), true);
+        }
+    }
+    auto fs = Fullscreen::controller()->getFullscreenWindow(monitor.lock());
+    if (fullscreen.phase == 0 && fs)
+        for (auto &e : capture.entries)
+            if (e.window == fs) {
+                cancelGrab();
+                keys.clear();
+                fullscreen.id = e.surface.id;
+                fullscreen.before = fullscreen.from = e.surface;
+                fullscreen.phase = 1;
+                fullscreen.elapsed = 0;
+                break;
+            }
+    if (fullscreen.phase && !capture.find(fullscreen.id)) {
+        restoreFullscreenWindows();
+        fullscreen = {};
+        cursor();
+        return;
+    }
+    if (fullscreen.phase == 2 && !fs) {
+        fullscreen.phase = 3;
+        fullscreen.from = fullscreen.to;
+        fullscreen.to = fullscreen.before;
+        fullscreen.elapsed = 0;
+    }
+    if (fullscreen.phase == 1 && !fs) {
+        fullscreen.phase = 3;
+        fullscreen.from = capture.find(fullscreen.id)->surface;
+        fullscreen.to = fullscreen.before;
+        fullscreen.elapsed = 0;
+    }
+    if (fullscreen.phase == 1 || fullscreen.phase == 3) {
+        if (fullscreen.phase == 1) {
+            auto &s = fullscreen.to;
+            s = fullscreen.before;
+            s.center = camera.position + camera.forward();
+            s.yaw = 0;
+            s.rotation = interaction::orientation(camera.forward() * -1);
+            s.height = 2 * std::tan(camera.fov * .01745329252f / 2) * 1.01f;
+            s.width = s.height * monitor->m_pixelSize.x / monitor->m_pixelSize.y;
+        }
+        fullscreen.elapsed += dt;
+        float t = duration ? std::min(1.f, fullscreen.elapsed / duration) : 1.f;
+        t = t * t * (3 - 2 * t);
+        auto s = fullscreen.from;
+        s.center = s.center + (fullscreen.to.center - s.center) * t;
+        s.width += (fullscreen.to.width - s.width) * t;
+        s.height += (fullscreen.to.height - s.height) * t;
+        s.yaw += (fullscreen.to.yaw - s.yaw) * t;
+        float sign = 0, norm = 0;
+        for (int j = 0; j < 4; j++)
+            sign += fullscreen.from.rotation[j] * fullscreen.to.rotation[j];
+        for (int j = 0; j < 4; j++) {
+            s.rotation[j] = fullscreen.from.rotation[j] * (1 - t) + fullscreen.to.rotation[j] * (sign < 0 ? -t : t);
+            norm += s.rotation[j] * s.rotation[j];
+        }
+        for (auto &q : s.rotation)
+            q /= std::sqrt(norm);
+        if (auto e = capture.find(fullscreen.id)) {
+            e->surface = s;
+            e->visible = true;
+        }
+        if (t >= 1) {
+            if (fullscreen.phase == 1) {
+                fullscreen.phase = 2;
+                for (auto &e : capture.entries)
+                    if (e.surface.id != fullscreen.id && e.parentId.empty()) {
+                        fullscreen.covering.push_back({e.window, e.window->m_allowedOverFullscreen});
+                        e.window->m_allowedOverFullscreen = false;
+                    }
+                if (auto entry = capture.find(fullscreen.id)) {
+                    Desktop::focusState()->fullWindowFocus(entry->window.lock(), Desktop::FOCUS_REASON_OTHER,
+                                                           entry->window->resource(), true);
+                    Desktop::windowState()->raise(entry->window.lock());
+                }
+                typing = false;
+                cancelGrab();
+            } else {
+                layout.freePoses[fullscreen.id] = fullscreen.before;
+                restoreFullscreenWindows();
+                fullscreen = {};
+                typing = false;
+            }
+        }
+    }
 }
 std::optional<Json> Runtime::method(const std::string &method, const Json &wire) {
     Json params = wire;
@@ -640,7 +1215,10 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     if (method == "placements.list") {
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
-        return Json{{"placements", layout.placements}};
+        auto placements = layout.placements;
+        if (protocol != "0.5")
+            std::erase_if(placements.get_ref<Json::array_t &>(), [](auto &p) { return p.contains("pose"); });
+        return Json{{"placements", placements}};
     }
     if (method == "placements.remove") {
         if (params.size() != 3 || !params.at("rule").is_object())
@@ -912,10 +1490,14 @@ void Runtime::tick() {
     control.tick(dt, camera, world.get());
     if (control.uiVisible()) {
         keys.clear();
+        smoothIntent = {};
+        lookX = lookY = 0;
         cancelGrab();
         typing = false;
     }
-    if (active && monitor && layout.desktop.is_null()) {
+    if (active && monitor)
+        transitionTick(dt);
+    if (active && monitor && layout.desktop.is_null() && fullscreen.phase != 2) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         if (!ownsInput()) {
             if (monitor != Desktop::focusState()->monitor())
@@ -926,52 +1508,100 @@ void Runtime::tick() {
         if (!grabbed.empty() && !capture.find(grabbed))
             cancelGrab();
         sim::Intent intent;
-        if (!typing) {
+        if (!typing && !handover.phase && fullscreen.phase == 0) {
             intent.forward = float(keys.contains(KEY_W)) - float(keys.contains(KEY_S));
             intent.right = float(keys.contains(KEY_D)) - float(keys.contains(KEY_A));
             intent.up = float(keys.contains(KEY_SPACE)) - float(keys.contains(KEY_LEFTCTRL));
             intent.jump = keys.contains(KEY_SPACE);
+            intent.jumpSpeed = config["player"]["jump_speed"];
+            intent.stepHeight = config["player"]["step_height"];
+            intent.speed = (movement == &walk ? config["player"]["walk_speed"].get<float>() / 3.5f
+                                              : config["player"]["fly_speed"].get<float>() / 5.f) *
+                           (keys.contains(KEY_LEFTSHIFT) ? config["player"]["run_multiplier"].get<float>() : 1.f);
         }
+        float lookT = config["player"]["look_inertia"];
+        float blend = lookT > 0 ? 1 - std::exp(-dt / lookT) : 1;
+        camera.yaw += lookX * blend;
+        camera.pitch = std::clamp(camera.pitch + lookY * blend, -1.48f, 1.48f);
+        lookX *= 1 - blend;
+        lookY *= 1 - blend;
+        camera.fov = std::max(30.f, baseFov / (zoomHeld ? zoom : 1.f));
+        float moveT = config["player"]["move_inertia"];
+        float mb = moveT > 0 ? 1 - std::exp(-dt / moveT) : 1;
+        smoothIntent.forward += (intent.forward - smoothIntent.forward) * mb;
+        smoothIntent.right += (intent.right - smoothIntent.right) * mb;
+        smoothIntent.up += (intent.up - smoothIntent.up) * mb;
+        intent.forward = smoothIntent.forward;
+        intent.right = smoothIntent.right;
+        intent.up = smoothIntent.up;
         accumulator = std::min(accumulator + double(dt), 4.0 / 60.0);
         while (accumulator >= 1.0 / 60.0) {
-            if (!loading && !control.driving() && !control.uiVisible())
-                movement->step(camera, intent, 1.f / 60.f, world->collision);
+            if (!loading && !control.driving() && !control.uiVisible() && !handover.phase && fullscreen.phase == 0) {
+                if (noclip) {
+                    auto speed = intent.speed;
+                    intent.speed = config["player"]["fly_speed"].get<float>() / 5.f;
+                    fly.step(camera, intent, 1.f / 60.f, {});
+                    intent.speed = speed;
+                } else
+                    movement->step(camera, intent, 1.f / 60.f, world->collision);
+            }
             accumulator -= 1.0 / 60.0;
         }
-        if (camera.position.y < -30) {
+        if (config["player"]["respawn_below"].get<float>() > 0 &&
+            camera.position.y < world->spawn().position.y + 1.7f - config["player"]["respawn_below"].get<float>()) {
             auto s = world->spawn();
             camera.position = s.position + Vec3{0, 1.7f, 0};
             camera.verticalSpeed = 0;
-        }
-        refresh();
-        if (!focused.empty() && !capture.find(focused)) {
-            typing = false;
-            focused.clear();
             keys.clear();
+            smoothIntent = {};
+            cancelGrab();
         }
+        handTick(dt);
+        refresh();
+        if (fullscreen.phase == 1 || fullscreen.phase == 3)
+            transitionTick(0);
+        for (auto &entry : capture.entries)
+            if (typing && entry.visible && !entry.parentKeyboard && !entry.parentId.empty() &&
+                entry.parentId == focused && Desktop::focusState()->window() == entry.window) {
+                focusedParent = focused;
+                focused = entry.surface.id;
+                break;
+            }
+        if (!focused.empty() && !capture.find(focused)) {
+            if (!focusedParent.empty() && capture.find(focusedParent))
+                focused = focusedParent;
+            else {
+                typing = false;
+                focused.clear();
+            }
+            focusedParent.clear();
+            keys.clear();
+            smoothIntent = {};
+        }
+        if (typing && !focused.empty() && !g_pSeatManager->m_seatGrab)
+            if (auto e = capture.find(focused))
+                if (g_pSeatManager->m_state.keyboardFocus != e->window->resource())
+                    g_pSeatManager->setKeyboardFocus(e->window->resource());
         renderer.pointerX = typing ? pointerX : .5f;
         renderer.pointerY = typing ? pointerY : .5f;
         auto pointerHit = aim();
         if (!grabbed.empty())
-            if (auto e = capture.find(grabbed))
-                if (auto h = surfaces::intersect(e->surface, camera.position, pointerRay(), false))
+            if (auto plane = capture.plane(grabbed))
+                if (auto h = surfaces::intersect(*plane, camera.position, pointerRay(), false))
                     pointerHit = {{grabbed, *h}};
-        if (typing)
-            if (auto hit = pointerHit)
-                if (auto *e = capture.find(hit->first)) {
-                    auto r = e->window->resource();
-                    g_pSeatManager->setPointerFocus(
-                        r, {hit->second.u * e->surface.pixelWidth, hit->second.v * e->surface.pixelHeight});
-                    g_pSeatManager->sendPointerMotion(
-                        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count(),
-                        {hit->second.u * e->surface.pixelWidth, hit->second.v * e->surface.pixelHeight});
-                    g_pSeatManager->sendPointerFrame();
-                }
+        if (typing) {
+            auto time = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+            if (pointerHit)
+                routePointer(pointerHit->first, pointerHit->second, time);
+            else if (buttons.empty())
+                g_pSeatManager->setPointerFocus(nullptr, {});
+        }
         for (auto &e : capture.entries)
             e.surface.focused = e.surface.id == focused;
         g_pHyprRenderer->damageMonitor(monitor.lock());
         monitor->scheduleFrame();
     }
+    cursor();
     publish();
     ipc->poll();
 }
@@ -979,13 +1609,21 @@ class Pass final : public IPassElement {
   public:
     std::vector<UP<IPassElement>> draw() override {
         safe([] {
-            if (!runtime || !runtime->active || locked() || !runtime->layout.desktop.is_null())
+            if (!runtime || !runtime->active || locked() || !runtime->layout.desktop.is_null() ||
+                runtime->fullscreen.phase == 2)
                 return;
             auto &data = g_pHyprRenderer->m_renderData;
             auto *fb = dynamic_cast<Render::GL::CGLFramebuffer *>(data.currentFB.get());
             if (!fb)
                 return;
             auto surfaces = runtime->capture.visible();
+            if (runtime->fullscreen.phase == 1 || runtime->fullscreen.phase == 3) {
+                auto fs = runtime->capture.find(runtime->fullscreen.id);
+                if (fs) {
+                    std::erase_if(surfaces, [&](auto &s) { return s.id == fs->surface.id; });
+                    surfaces.push_back(fs->surface);
+                }
+            }
             runtime->renderer.draw(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y, runtime->camera,
                                    surfaces, runtime->typing);
         });
@@ -1008,6 +1646,114 @@ void deferToggle(std::string output) {
         safe([&] { runtime->toggle(output); });
     });
 }
+Json luaValue(lua_State *L, int index, int depth = 0) {
+    if (depth > 8)
+        throw std::runtime_error("config nesting too deep");
+    index = lua_absindex(L, index);
+    switch (lua_type(L, index)) {
+    case LUA_TBOOLEAN:
+        return bool(lua_toboolean(L, index));
+    case LUA_TNUMBER:
+        if (lua_isinteger(L, index))
+            return lua_tointeger(L, index);
+        return lua_tonumber(L, index);
+    case LUA_TSTRING:
+        return std::string(lua_tostring(L, index));
+    case LUA_TTABLE: {
+        Json result = lua_rawlen(L, index) > 0 ? Json::array() : Json::object();
+        lua_pushnil(L);
+        int count = 0;
+        while (lua_next(L, index)) {
+            if (++count > 64)
+                throw std::runtime_error("config table too large");
+            auto v = luaValue(L, -1, depth + 1);
+            if (result.is_array()) {
+                if (!lua_isinteger(L, -2))
+                    throw std::runtime_error("array key must be integer");
+                int i = lua_tointeger(L, -2);
+                if (i < 1 || i > 5)
+                    throw std::runtime_error("array index out of range");
+                result[i - 1] = v;
+            } else {
+                if (lua_type(L, -2) != LUA_TSTRING)
+                    throw std::runtime_error("config key must be string");
+                result[lua_tostring(L, -2)] = v;
+            }
+            lua_pop(L, 1);
+        }
+        return result;
+    }
+    default:
+        throw std::runtime_error("unsupported config value");
+    }
+}
+int luaConfig(lua_State *L) {
+    std::string failure;
+    Json next;
+    try {
+        next = interaction::configPatch(runtime->configured, luaValue(L, 1));
+        std::set<xkb_keysym_t> used;
+        for (auto &[name, key] : next["input"]["bindings"].items()) {
+            auto sym = xkb_keysym_from_name(key.get<std::string>().c_str(), XKB_KEYSYM_CASE_INSENSITIVE);
+            if (sym == XKB_KEY_NoSymbol)
+                throw std::runtime_error("unknown keysym for " + name);
+            if (!used.insert(sym).second)
+                throw std::runtime_error("duplicate keysym for " + name);
+            if (sym == XKB_KEY_F12 || sym == XKB_KEY_Escape || sym == XKB_KEY_Tab || sym == XKB_KEY_Shift_L ||
+                sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R || sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R ||
+                (sym >= XKB_KEY_1 && sym <= XKB_KEY_5))
+                throw std::runtime_error("core-owned key for " + name);
+        }
+    } catch (const std::exception &e) {
+        failure = e.what();
+    }
+    if (!failure.empty())
+        return luaL_error(L, "hyprune.config: %s", failure.c_str());
+    if (lua_gettop(L) > 0) {
+        auto patch = luaValue(L, 1);
+        if (patch.contains("graphics"))
+            for (auto &[name, value] : patch["graphics"].items())
+                runtime->graphicsOverrides.insert(name);
+    }
+    runtime->configured = next;
+    runtime->deferInput([next] {
+        auto old = runtime->config;
+        if (old == next && !runtime->graphicsOverrides.contains("exposure") &&
+            !runtime->graphicsOverrides.contains("bloom_strength"))
+            return;
+        if (old["input"] != next["input"] || old["tools"] != next["tools"]) {
+            runtime->cancelGrab();
+            runtime->keys.clear();
+            runtime->smoothIntent = {};
+            runtime->tagged.clear();
+        }
+        runtime->config = next;
+        if (old["graphics"]["fov"] != next["graphics"]["fov"]) {
+            runtime->baseFov = next["graphics"]["fov"];
+            runtime->camera.fov = runtime->baseFov;
+        }
+        if (old["graphics"]["quality"] != next["graphics"]["quality"]) {
+            Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+            runtime->renderer.intelQuality =
+                next["graphics"]["quality"] == "intel" ||
+                (next["graphics"]["quality"] == "auto" &&
+                 std::string(reinterpret_cast<const char *>(glGetString(GL_RENDERER))).find("Intel") !=
+                     std::string::npos);
+            if (runtime->world)
+                runtime->renderer.prepare(runtime->world);
+        }
+        if (!runtime->renderer.profile.is_null()) {
+            if (runtime->graphicsOverrides.contains("exposure"))
+                runtime->renderer.profile["exposure"] = next["graphics"]["exposure"];
+            if (runtime->graphicsOverrides.contains("bloom_strength"))
+                runtime->renderer.profile["bloom"]["strength"] = next["graphics"]["bloom_strength"];
+        }
+        runtime->cursor();
+        runtime->publish();
+    });
+    lua_pushstring(L, next.dump().c_str());
+    return 1;
+}
 int luaToggle(lua_State *state) {
     deferToggle(lua_isstring(state, 1) ? lua_tostring(state, 1) : "");
     return 0;
@@ -1028,18 +1774,50 @@ int luaCamera(lua_State *state) {
               {"pitch", runtime->camera.pitch},
               {"frames", runtime->renderer.frames},
               {"grabbed", runtime->grabbed},
+              {"gesture", int(runtime->hands.gesture)},
+              {"superHeld", runtime->superHeld},
+              {"ownsInput", ownsInput()},
+              {"aim", aim() ? aim()->first : ""},
+              {"gestureId", runtime->hands.pose.id},
+              {"mode", runtime->typing ? "typing" : "movement"},
+              {"tool", runtime->tool},
+              {"noclip", runtime->noclip},
+              {"fullscreen", runtime->fullscreen.phase},
+              {"fullscreenId", runtime->fullscreen.id},
+              {"handover", runtime->handover.phase},
+              {"cursor", runtime->cursorState},
+              {"pointer", {runtime->pointerX, runtime->pointerY}},
+              {"config", runtime->config},
+              {"children", runtime->capture.children.size()},
+              {"seatGrab", bool(g_pSeatManager->m_seatGrab)},
+              {"keyboardFocus", runtime->capture.find(runtime->focused)
+                                    ? bool(g_pSeatManager->m_state.keyboardFocus ==
+                                           runtime->capture.find(runtime->focused)->window->resource())
+                                    : false},
               {"pressedButtons", runtime->buttons.size()},
               {"error", runtime->lastError},
               {"active", runtime->active}};
+    j["childSurfaces"] = Json::array();
+    for (auto &child : runtime->capture.children)
+        j["childSurfaces"].push_back(
+            {{"id", child.surface.id},
+             {"parentId", child.parentId},
+             {"position", {child.surface.center.x, child.surface.center.y, child.surface.center.z}},
+             {"size", {child.surface.width, child.surface.height}},
+             {"pixels", {child.surface.pixelWidth, child.surface.pixelHeight}}});
     j["captures"] = Json::array();
     for (auto &e : runtime->capture.entries)
         j["captures"].push_back(
             {{"id", e.surface.id},
              {"title", e.surface.title},
+             {"parentId", e.parentId},
+             {"floating", e.window->m_isFloating},
              {"commits", *e.commits},
              {"visible", e.visible},
              {"size", {e.surface.width, e.surface.height}},
              {"collision", runtime->world && e.visible && surfaces::overlaps(e.surface, runtime->world->collision)},
+             {"rotation", e.surface.rotation},
+             {"pixels", {e.surface.pixelWidth, e.surface.pixelHeight}},
              {"position", {e.surface.center.x, e.surface.center.y, e.surface.center.z}}});
     lua_pushstring(state, j.dump().c_str());
     return 1;
@@ -1048,6 +1826,7 @@ int luaCamera(lua_State *state) {
 } // namespace
 } // namespace hyprune::platform
 using namespace hyprune::platform;
+using namespace hyprune;
 APICALL EXPORT std::string PLUGIN_API_VERSION() {
     return HYPRLAND_API_VERSION;
 }
@@ -1105,6 +1884,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     });
     HyprlandAPI::addLuaFunction(handle, "hyprune", "toggle", luaToggle);
     HyprlandAPI::addLuaFunction(handle, "hyprune", "camera", luaCamera);
+    HyprlandAPI::addLuaFunction(handle, "hyprune", "config", luaConfig);
     for (auto &match : HyprlandAPI::findFunctionsByName(handle, "CPointerManager4move"))
         if (match.demangled.find("CPointerManager::move(") != std::string::npos) {
             runtime->motionHook = HyprlandAPI::createFunctionHook(handle, match.address, (void *)motion);
@@ -1112,8 +1892,26 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 originalMove = (Move)runtime->motionHook->m_original;
             break;
         }
+    for (auto &match : HyprlandAPI::findFunctionsByName(handle, "setCursorHidden"))
+        if (match.demangled.find("IHyprRenderer::setCursorHidden(bool)") != std::string::npos) {
+            runtime->cursorHook = HyprlandAPI::createFunctionHook(handle, match.address, (void *)cursorHide);
+            if (runtime->cursorHook && runtime->cursorHook->hook())
+                originalHideCursor = (HideCursor)runtime->cursorHook->m_original;
+            break;
+        }
+    if (!originalHideCursor)
+        throw std::runtime_error("Hyprune: deferred cursor visibility hook unavailable");
     if (!originalMove)
         throw std::runtime_error("Hyprune: pointer motion hook unavailable");
+    for (auto &match : HyprlandAPI::findFunctionsByName(handle, "onKeyboardKey"))
+        if (match.demangled.find("CInputManager::onKeyboardKey(") != std::string::npos) {
+            runtime->keyboardHook = HyprlandAPI::createFunctionHook(handle, match.address, (void *)keyboardInput);
+            if (runtime->keyboardHook && runtime->keyboardHook->hook())
+                originalKeyboardInput = (KeyboardInput)runtime->keyboardHook->m_original;
+            break;
+        }
+    if (!originalKeyboardInput)
+        throw std::runtime_error("Hyprune: event keyboard hook unavailable");
     runtime->listeners.push_back(Event::bus()->m_events.render.stage.listen([](eRenderStage stage) {
         safe([&] {
             if (stage == RENDER_PRE)
@@ -1125,180 +1923,252 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 g_pHyprRenderer->addPassElement(makeUnique<Pass>());
         });
     }));
-    runtime->listeners.push_back(Event::bus()->m_events.input.mouse.move.listen([](Vector2D,
-                                                                                   Event::SCallbackInfo &info) {
-        if (ownsInput() || (runtime && runtime->active && runtime->control.uiVisible() && !runtime->directorSurface()))
-            info.cancelled = true;
-    }));
     runtime->listeners.push_back(
-        Event::bus()->m_events.input.keyboard.key.listen([](IKeyboard::SKeyEvent event, Event::SCallbackInfo &info) {
-            safe([&] {
-                if (!runtime->active || locked() || runtime->monitor != Desktop::focusState()->monitor() ||
-                    !runtime->layout.desktop.is_null())
-                    return;
-                auto keyboard = g_pSeatManager->m_keyboard.lock();
-                if (!keyboard || !keyboard->m_xkbSymState)
-                    return;
-                auto sym = xkb_keysym_to_lower(xkb_state_key_get_one_sym(keyboard->m_xkbSymState, event.keycode + 8));
-                if (sym == XKB_KEY_Tab && !runtime->typing && !runtime->control.uiVisible()) {
-                    runtime->control.hold(event.state == WL_KEYBOARD_KEY_STATE_PRESSED);
+        Event::bus()->m_events.input.mouse.move.listen([](Vector2D pos, Event::SCallbackInfo &info) {
+            if (runtime && runtime->active && runtime->typing && runtime->freeCursor && runtime->monitor) {
+                auto m = runtime->monitor.lock();
+                if (pos.x >= m->m_position.x && pos.y >= m->m_position.y && pos.x < m->m_position.x + m->m_size.x &&
+                    pos.y < m->m_position.y + m->m_size.y) {
+                    runtime->freeCursor = false;
+                    runtime->pointerX = (pos.x - m->m_position.x) / m->m_size.x;
+                    runtime->pointerY = (pos.y - m->m_position.y) / m->m_size.y;
+                    runtime->deferInput([] { runtime->cursor(); });
                     info.cancelled = true;
-                    return;
                 }
-                uint32_t action = 0;
-                switch (sym) {
-                case XKB_KEY_w:
-                    action = KEY_W;
-                    break;
-                case XKB_KEY_s:
-                    action = KEY_S;
-                    break;
-                case XKB_KEY_a:
-                    action = KEY_A;
-                    break;
-                case XKB_KEY_d:
-                    action = KEY_D;
-                    break;
-                case XKB_KEY_space:
-                    action = KEY_SPACE;
-                    break;
-                case XKB_KEY_Control_L:
-                    action = KEY_LEFTCTRL;
-                    break;
-                case XKB_KEY_Escape:
-                    action = KEY_ESC;
-                    break;
-                case XKB_KEY_F12:
-                    action = KEY_F12;
-                    break;
-                default:
-                    break;
-                }
-                if (action == KEY_ESC) {
-                    info.cancelled = true;
-                    if (event.state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+            }
+            if (ownsInput() || (runtime->active && runtime->monitor == Desktop::focusState()->monitor() &&
+                                runtime->layout.desktop.is_null() && runtime->fullscreen.phase != 2 &&
+                                !runtime->freeCursor && !runtime->directorSurface()))
+                info.cancelled = true;
+        }));
+    runtime->listeners.push_back(Event::bus()->m_events.input.keyboard.key.listen([](IKeyboard::SKeyEvent event,
+                                                                                     Event::SCallbackInfo &info) {
+        safe([&] {
+            bool down = event.state == WL_KEYBOARD_KEY_STATE_PRESSED;
+            if (!down && runtime->swallowedKeys.erase(event.keycode)) {
+                info.cancelled = true;
+                runtime->keys.erase(event.keycode);
+            }
+            if (!runtime->active || locked() || runtime->monitor != Desktop::focusState()->monitor())
+                return;
+            auto kb = runtime->eventKeyboard.lock();
+            if (!kb)
+                kb = g_pSeatManager->m_keyboard.lock();
+            if (!kb || !kb->m_xkbSymState)
+                return;
+            auto sym = xkb_state_key_get_one_sym(kb->m_xkbSymState, event.keycode + 8);
+            if (sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R)
+                runtime->superHeld = down;
+            if (sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R)
+                runtime->altHeld = down;
+            auto consume = [&] {
+                info.cancelled = true;
+                if (down)
+                    runtime->swallowedKeys.insert(event.keycode);
+            };
+            if (sym == XKB_KEY_F12) {
+                consume();
+                if (down)
+                    deferToggle("");
+                return;
+            }
+            if (down && runtime->superHeld && runtime->altHeld &&
+                (sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R || sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R)) {
+                consume();
+                runtime->deferInput([] { runtime->modeToggle(); });
+                return;
+            }
+            if (!runtime->layout.desktop.is_null() || runtime->fullscreen.phase == 2)
+                return;
+            if (sym == XKB_KEY_Escape) {
+                consume();
+                if (down)
+                    runtime->deferInput([] {
                         if (runtime->loading)
                             runtime->loadCancelled = true;
                         runtime->control.stop();
                         runtime->cancelGrab();
                         runtime->typing = false;
+                        runtime->freeCursor = false;
                         runtime->focused.clear();
+                        runtime->tagged.clear();
                         runtime->keys.clear();
-                    }
-                    return;
-                }
-                if (action == KEY_F12) {
-                    info.cancelled = true;
-                    if (event.state == WL_KEYBOARD_KEY_STATE_PRESSED)
-                        deferToggle("");
-                    return;
-                }
-                if (runtime->loading) {
-                    info.cancelled = true;
-                    return;
-                }
-                if (runtime->control.uiVisible()) {
-                    auto surface = runtime->control.exclusive() ? runtime->directorSurface() : nullptr;
-                    if (!surface)
-                        info.cancelled = true;
-                    else
-                        g_pSeatManager->setKeyboardFocus(surface);
-                    return;
-                }
-                if (action && event.state == WL_KEYBOARD_KEY_STATE_PRESSED && runtime->control.driving())
-                    runtime->control.stop();
-                if (runtime->typing)
-                    return;
-                if (xkb_state_mod_name_is_active(keyboard->m_xkbState, XKB_MOD_NAME_LOGO, XKB_STATE_MODS_EFFECTIVE) ||
-                    xkb_state_mod_name_is_active(keyboard->m_xkbState, XKB_MOD_NAME_ALT, XKB_STATE_MODS_EFFECTIVE)) {
-                    runtime->keys.clear();
-                    return;
-                }
-                if (action == KEY_W || action == KEY_A || action == KEY_S || action == KEY_D || action == KEY_SPACE ||
-                    action == KEY_LEFTCTRL) {
-                    info.cancelled = true;
-                    if (event.state == WL_KEYBOARD_KEY_STATE_PRESSED)
-                        runtime->keys.insert(action);
-                    else
-                        runtime->keys.erase(action);
-                }
-            });
-        }));
-    runtime->listeners.push_back(Event::bus()->m_events.input.mouse.button.listen([](IPointer::SButtonEvent event,
-                                                                                     Event::SCallbackInfo &info) {
-        if (runtime->active && runtime->control.uiVisible() && !runtime->directorSurface()) {
-            info.cancelled = true;
-            return;
-        }
-        if (!ownsInput())
-            return;
-        info.cancelled = true;
-        runtime->deferInput([event] {
-            if (!runtime || !ownsInput())
+                        runtime->smoothIntent = {};
+                        runtime->lookX = runtime->lookY = 0;
+                        runtime->cursor();
+                    });
                 return;
-            safe([&] {
-                if (runtime->renderDepth)
-                    throw std::runtime_error("pointer dispatch inside render pass");
-                auto hit = aim();
-                if (!runtime->grabbed.empty())
-                    if (auto *held = runtime->capture.find(runtime->grabbed)) {
-                        if (auto h = hyprune::surfaces::intersect(held->surface, runtime->camera.position, pointerRay(),
-                                                                  false))
-                            hit = {{held->surface.id, *h}};
-                    }
-                if (event.state == WL_POINTER_BUTTON_STATE_PRESSED && hit && runtime->capture.workspace(hit->first)) {
-                    auto id = hit->first;
-                    runtime->focus(id, true);
+            }
+            if (runtime->loading || runtime->handover.phase || runtime->fullscreen.phase) {
+                consume();
+                runtime->keys.clear();
+                return;
+            }
+            if (runtime->control.uiVisible()) {
+                auto surface = runtime->control.exclusive() ? runtime->directorSurface() : nullptr;
+                if (!surface)
+                    consume();
+                else
+                    runtime->deferInput([surface] { g_pSeatManager->setKeyboardFocus(surface); });
+                return;
+            }
+            std::string action;
+            for (auto &[name, key] : runtime->config["input"]["bindings"].items())
+                if (sym == xkb_keysym_from_name(key.get<std::string>().c_str(), XKB_KEYSYM_CASE_INSENSITIVE))
+                    action = name;
+            uint32_t move = action == "forward"      ? KEY_W
+                            : action == "back"       ? KEY_S
+                            : action == "left"       ? KEY_A
+                            : action == "right"      ? KEY_D
+                            : action == "jump"       ? KEY_SPACE
+                            : action == "down"       ? KEY_LEFTCTRL
+                            : sym == XKB_KEY_Shift_L ? KEY_LEFTSHIFT
+                                                     : 0;
+            // Releases clear semantic movement even when mode or modifiers changed.
+            if (!down && move)
+                runtime->keys.erase(move);
+            if (runtime->typing) {
+                bool modified = runtime->superHeld || runtime->altHeld || sym == XKB_KEY_Super_L ||
+                                sym == XKB_KEY_Super_R || sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R;
+                consume();
+                if (runtime->focused.empty() || runtime->freeCursor)
                     return;
-                }
-                if (event.state == WL_POINTER_BUTTON_STATE_PRESSED && hit) {
-                    if (runtime->grabbed.empty()) {
-                        runtime->focus(hit->first, true);
-                        runtime->grabbed = hit->first;
+                runtime->deferInput([event, kb, modified] {
+                    if (modified && !g_pKeybindManager->onKeyEvent(event, kb))
+                        return;
+                    if (!runtime->typing)
+                        return;
+                    auto entry = runtime->capture.find(runtime->focused);
+                    if (!entry)
+                        return;
+                    if (g_pSeatManager->m_keyboard != kb) {
+                        g_pSeatManager->setKeyboard(kb);
+                        g_pSeatManager->updateActiveKeyboardData();
                     }
-                    runtime->buttons.insert(event.button);
+                    if (!g_pSeatManager->m_seatGrab)
+                        g_pSeatManager->setKeyboardFocus(entry->window->resource());
+                    g_pSeatManager->sendKeyboardKey(event.timeMs, event.keycode, event.state);
+                    if (event.state == WL_KEYBOARD_KEY_STATE_PRESSED)
+                        runtime->appKeys.insert(event.keycode);
+                    else
+                        runtime->appKeys.erase(event.keycode);
+                });
+                return;
+            }
+            if (runtime->superHeld || runtime->altHeld || sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R ||
+                sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R) {
+                consume();
+                runtime->keys.clear();
+                runtime->smoothIntent = {};
+                runtime->deferInput([event, kb] { g_pKeybindManager->onKeyEvent(event, kb); });
+                return;
+            }
+            if (sym == XKB_KEY_Tab) {
+                consume();
+                runtime->control.hold(down);
+                return;
+            }
+            if (runtime->config["tools"]["enabled"] == true && sym >= XKB_KEY_1 && sym <= XKB_KEY_5) {
+                consume();
+                if (down) {
+                    runtime->tool = int(sym - XKB_KEY_1) + 1;
+                    runtime->tagged.clear();
                 }
-                if (!runtime->grabbed.empty())
-                    if (auto *e = runtime->capture.find(runtime->grabbed)) {
-                        if (hit && hit->first == runtime->grabbed)
-                            g_pSeatManager->setPointerFocus(
-                                e->window->resource(),
-                                {hit->second.u * e->surface.pixelWidth, hit->second.v * e->surface.pixelHeight});
-                        g_pSeatManager->sendPointerButton(event.timeMs, event.button, event.state);
-                        g_pSeatManager->sendPointerFrame();
-                    }
-                if (event.state == WL_POINTER_BUTTON_STATE_RELEASED) {
-                    runtime->buttons.erase(event.button);
-                    if (runtime->buttons.empty())
-                        runtime->grabbed.clear();
-                }
-            });
+                return;
+            }
+            if (action == "zoom") {
+                consume();
+                runtime->zoomHeld = down;
+                if (down)
+                    runtime->zoom = 2.f;
+                return;
+            }
+            if (action == "focus") {
+                consume();
+                if (down)
+                    runtime->deferInput([] {
+                        if (auto hit = aim())
+                            if (runtime->capture.workspace(hit->first))
+                                runtime->focusWall(hit->first);
+                    });
+                return;
+            }
+            if (action == "noclip") {
+                consume();
+                if (down)
+                    runtime->deferInput([] {
+                        runtime->noclip = !runtime->noclip;
+                        runtime->keys.clear();
+                        if (!runtime->noclip && runtime->world) {
+                            auto candidate = runtime->camera;
+                            sim::resolveCapsule(candidate, runtime->world->collision);
+                            if (length(candidate.position - runtime->camera.position) > .2f) {
+                                auto sp = runtime->world->spawn();
+                                candidate.position = sp.position + Vec3{0, 1.7f, 0};
+                            }
+                            runtime->camera = candidate;
+                        }
+                    });
+                return;
+            }
+            if (action == "fly") {
+                consume();
+                if (down)
+                    runtime->deferInput([] {
+                        runtime->movement = runtime->movement == &runtime->walk
+                                                ? static_cast<sim::MotionStrategy *>(&runtime->fly)
+                                                : &runtime->walk;
+                        runtime->keys.clear();
+                        runtime->camera.verticalSpeed = 0;
+                    });
+                return;
+            }
+            if (move) {
+                consume();
+                if (down) {
+                    runtime->control.stop();
+                    runtime->keys.insert(move);
+                } else
+                    runtime->keys.erase(move);
+                return;
+            }
+            consume(); // World navigation must never type into an occluded desktop client.
         });
     }));
     runtime->listeners.push_back(
-        Event::bus()->m_events.input.mouse.axis.listen([](IPointer::SAxisEvent event, Event::SCallbackInfo &info) {
-            safe([&] {
-                if (runtime->active && runtime->control.uiVisible() && !runtime->directorSurface()) {
-                    info.cancelled = true;
+        Event::bus()->m_events.input.mouse.button.listen([](IPointer::SButtonEvent event, Event::SCallbackInfo &info) {
+            bool down = event.state == WL_POINTER_BUTTON_STATE_PRESSED;
+            bool held = !down && runtime->swallowedButtons.erase(event.button);
+            bool back = runtime->active && runtime->monitor == Desktop::focusState()->monitor() &&
+                        event.button == runtime->config["input"]["typing_button"].get<uint32_t>() &&
+                        !runtime->layout.desktop.is_null();
+            bool world = runtime->active && runtime->monitor == Desktop::focusState()->monitor() &&
+                         runtime->layout.desktop.is_null() && runtime->fullscreen.phase != 2 && !runtime->freeCursor &&
+                         !runtime->directorSurface();
+            if (!held && !world && !back)
+                return;
+            info.cancelled = true;
+            if (down)
+                runtime->swallowedButtons.insert(event.button);
+            bool super = runtime->superHeld;
+            runtime->deferInput([event, super, back] {
+                if (back) {
+                    if (event.state == WL_POINTER_BUTTON_STATE_PRESSED)
+                        runtime->unfocus();
                     return;
                 }
-                if (!ownsInput())
-                    return;
-                info.cancelled = true;
-                if (runtime->control.uiVisible()) {
-                    auto surface = runtime->control.exclusive() ? runtime->directorSurface() : nullptr;
-                    if (!surface)
-                        info.cancelled = true;
-                    else
-                        g_pSeatManager->setKeyboardFocus(surface);
-                    return;
-                }
-                if (runtime->typing) {
-                    g_pSeatManager->sendPointerAxis(event.timeMs, event.axis, event.delta, event.deltaDiscrete / 120,
-                                                    event.deltaDiscrete, event.source, event.relativeDirection);
-                    g_pSeatManager->sendPointerFrame();
-                }
+                runtime->button(event, super);
             });
+        }));
+    runtime->listeners.push_back(
+        Event::bus()->m_events.input.mouse.axis.listen([](IPointer::SAxisEvent event, Event::SCallbackInfo &info) {
+            bool world = runtime->active && runtime->monitor == Desktop::focusState()->monitor() &&
+                         runtime->layout.desktop.is_null() && runtime->fullscreen.phase != 2 && !runtime->freeCursor &&
+                         !runtime->directorSurface();
+            if (!world)
+                return;
+            info.cancelled = true;
+            runtime->deferInput([event] { runtime->axis(event); });
         }));
     runtime->listeners.push_back(Event::bus()->m_events.monitor.removed.listen([](PHLMONITOR monitor) {
         safe([&] {
@@ -1346,6 +2216,12 @@ APICALL EXPORT void PLUGIN_EXIT() {
     safe([] { runtime->exit(); });
     if (runtime->motionHook)
         HyprlandAPI::removeFunctionHook(handle, runtime->motionHook);
+    if (runtime->keyboardHook)
+        HyprlandAPI::removeFunctionHook(handle, runtime->keyboardHook);
+    if (runtime->cursorHook)
+        HyprlandAPI::removeFunctionHook(handle, runtime->cursorHook);
+    originalHideCursor = nullptr;
+    originalKeyboardInput = nullptr;
     originalMove = nullptr;
     if (Render::GL::g_pHyprOpenGL) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();

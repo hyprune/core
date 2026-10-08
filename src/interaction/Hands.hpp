@@ -19,6 +19,7 @@ struct WorldHit {
     Vec3 point, normal;
 };
 std::optional<WorldHit> raycast(Vec3 origin, Vec3 direction, std::span<const Triangle>);
+std::optional<WorldHit> raycast(Vec3 origin, Vec3 direction, const world::World &);
 bool sweepSafe(const surfaces::Surface &from, const surfaces::Surface &to, std::span<const Triangle>);
 std::array<float, 4> orientation(Vec3 normal);
 } // namespace hyprune::interaction

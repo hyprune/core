@@ -216,10 +216,29 @@ void Layout::restore(const Json &data) {
                  homes.insert(v["worldId"].get<std::string>() + ":" + v["areaId"].get<std::string>()).second,
              -32602, "invalid saved binding");
     for (auto &v : p)
-        need(v.size() == 4 && v.at("worldId").is_string() && v.at("areaId").is_string() &&
+        need((v.size() == 4 || v.size() == 6) && v.at("worldId").is_string() && v.at("areaId").is_string() &&
                  v.at("anchorId").is_string() && v.at("rule").size() == 2 && v["rule"]["appClass"].is_string() &&
                  !v["rule"]["appClass"].get<std::string>().empty() && v["rule"]["title"].is_string(),
              -32602, "invalid saved placement");
+    for (auto &v : p)
+        if (v.contains("pose") || v.contains("size")) {
+            need(v.contains("pose") && v.contains("size") && v["anchorId"] == "" && v["pose"].is_object() &&
+                     v["pose"].size() == 2,
+                 -32602, "invalid user mount");
+            auto pos = v["pose"].at("position"), rot = v["pose"].at("rotation"), size = v["size"];
+            need(pos.is_array() && pos.size() == 3 && rot.is_array() && rot.size() == 4 && size.is_array() &&
+                     size.size() == 2,
+                 -32602, "invalid mount dimensions");
+            for (auto values : {pos, rot, size})
+                for (auto &n : values)
+                    need(n.is_number() && std::isfinite(n.get<double>()), -32602, "nonfinite user mount");
+            double norm = 0;
+            for (auto &n : rot)
+                norm += n.get<double>() * n.get<double>();
+            need(std::abs(norm - 1) < .002 && size[0].get<float>() > .01f && size[1].get<float>() > .01f &&
+                     size[0].get<float>() <= 12 && size[1].get<float>() <= 8,
+                 -32602, "invalid user mount pose/size");
+        }
     bindings = b;
     placements = p;
     temporaryAnchors.clear();
@@ -227,12 +246,13 @@ void Layout::restore(const Json &data) {
 void Layout::pull(const Instance &i, const world::World *w) {
     need(binding(i.workspaceId, w), -32003, "window has no area home");
     need(carried.empty() || carried == i.id, -32004, "already carrying a tool");
+    freePoses.erase(i.id);
     carried = i.id;
     recalled.erase(i.id);
     temporaryAnchors.erase(i.id);
 }
 bool Layout::pulled(const Instance &i, const world::World *w) const {
-    if (carried == i.id || recalled.contains(i.id) || saved(i, w))
+    if (freePoses.contains(i.id) || carried == i.id || recalled.contains(i.id) || saved(i, w))
         return true;
     if (!w)
         if (auto b = binding(i.workspaceId, nullptr))
@@ -242,6 +262,7 @@ bool Layout::pulled(const Instance &i, const world::World *w) const {
     return false;
 }
 std::string Layout::place(const Instance &i, const std::string &requested, const world::World *w) {
+    freePoses.erase(i.id);
     auto b = binding(i.workspaceId, w);
     need(b, -32003, "window has no area home");
     const Json *chosen = nullptr;
@@ -271,6 +292,7 @@ std::string Layout::place(const Instance &i, const std::string &requested, const
     return id;
 }
 void Layout::release(const Instance &i, const world::World *w) {
+    freePoses.erase(i.id);
     auto b = binding(i.workspaceId, w);
     if (b)
         std::erase_if(placements.get_ref<Json::array_t &>(), [&](auto &p) {
@@ -282,6 +304,7 @@ void Layout::release(const Instance &i, const world::World *w) {
     temporaryAnchors.erase(i.id);
 }
 void Layout::recall(std::span<const Instance> live) {
+    freePoses.clear();
     int n = 0;
     for (auto &i : live)
         recalled[i.id] = n++;
@@ -301,9 +324,20 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
     s.pixelHeight = ph;
     auto p = saved(i, w);
     std::string anchorId;
-    if (carried == i.id || recalled.contains(i.id))
+    if (freePoses.contains(i.id))
+        s = freePoses.at(i.id);
+    else if (carried == i.id || recalled.contains(i.id))
         s = carryPlane(camera, 1.4f, 1.4f * ph / pw, w->collision, recalled.contains(i.id) ? recalled[i.id] : 0);
-    else if (p) {
+    else if (p && p->contains("pose")) {
+        s.center = vec(p->at("pose").at("position"));
+        s.rotation = p->at("pose").at("rotation").get<std::array<float, 4>>();
+        s.width = p->at("size")[0];
+        s.height = s.width * ph / pw;
+        if (!pushOut(s, w->collision)) {
+            recalled[i.id] = 0;
+            s = carryPlane(camera, 1.4f, 1.4f * ph / pw, w->collision);
+        }
+    } else if (p) {
         anchorId = temporaryAnchors.contains(i.id) ? temporaryAnchors[i.id] : p->at("anchorId").get<std::string>();
         auto a = anchor(anchorId, w);
         bool valid = false;
@@ -424,6 +458,26 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                                     : recalled.contains(i.id) ? "recalled"
                                                               : "placed"}});
     return s;
+}
+void Layout::mount(const Instance &i, const world::World *w, Surface s) {
+    need(w && !overlaps(s, w->collision), -32005, "mount intersects geometry");
+    auto b = binding(i.workspaceId, w);
+    need(b, -32003, "window has no area home");
+    std::erase_if(placements.get_ref<Json::array_t &>(), [&](auto &p) {
+        return p.at("worldId") == w->id && p.at("areaId") == b->at("areaId") && matches(p, i);
+    });
+    need(placements.size() < 128, -32008, "placement budget");
+    placements.push_back({{"worldId", w->id},
+                          {"areaId", b->at("areaId")},
+                          {"rule", rule(i)},
+                          {"anchorId", ""},
+                          {"pose", {{"position", {s.center.x, s.center.y, s.center.z}}, {"rotation", s.rotation}}},
+                          {"size", {s.width, s.height}}});
+    freePoses.erase(i.id);
+    recalled.erase(i.id);
+    temporaryAnchors.erase(i.id);
+    if (carried == i.id)
+        carried.clear();
 }
 Json Layout::state(const world::World *w) const {
     return {{"areas", w ? w->areas : Json::array()},
