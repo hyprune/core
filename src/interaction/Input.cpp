@@ -70,8 +70,18 @@ std::string bindingName(const Trigger &t) {
 Json inputDefaults() {
     return Json::parse(defaultInputJSON);
 }
-Json validateInput(const Json &j) {
+Json validateInput(const Json &raw) {
+    auto j = raw;
+    if (j.is_object() && !j.contains("invert_y"))
+        j["invert_y"] = false;
     auto defaults = inputDefaults();
+    if (j.is_object() && j.contains("modes") && j["modes"].is_object())
+        for (auto mode : {"interactive", "focus", "menu"})
+            if (j["modes"].contains(mode) && j["modes"][mode].is_object())
+                for (auto action : {"debug", "capture"})
+                    if (!j["modes"][mode].contains(action))
+                        j["modes"][mode][action] =
+                            j["modes"]["world"].value(action, defaults["modes"]["world"][action]);
     if (!j.is_object() || j.size() != defaults.size())
         throw std::runtime_error("input config requires all version 2 fields");
     for (auto it = j.begin(); it != j.end(); ++it)
@@ -84,6 +94,8 @@ Json validateInput(const Json &j) {
     integer("version", 2, 2);
     integer("longHoldMs", 100, 5000);
     integer("captureInputLimit", 16, 1024);
+    if (!j.at("invert_y").is_boolean())
+        throw std::runtime_error("invert_y must be boolean");
     if (!j.at("scopeVignette").is_boolean())
         throw std::runtime_error("scopeVignette must be boolean");
     for (auto [key, lo, hi] : {std::tuple{"useDistance", .2, 30.}, std::tuple{"useTolerance", 0., .5}}) {

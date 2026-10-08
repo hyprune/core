@@ -202,7 +202,7 @@ def up(args, path):
              'runroot':str(runroot), 'plugin':str(copy), 'binds':[], 'logs':str(logs), 'since':time.time(), 'processes':[], 'restoredHUD':{}, 'crashDirectory':str(pathlib.Path(os.environ.get('XDG_CACHE_HOME',str(pathlib.Path.home()/'.cache')))/'hyprland')}
     atomic(path, state)
     settings = {'pid':s['pid'], 'state':str(path), 'daemon':str(BUILD/'hypruned'), 'environment':{
-        'HYPRUNE_WORLD_DIR':str(installed), 'HYPRUNE_INPUT_FILE':str(runroot/'input.json'), 'HYPRUNE_EDITOR_FILE':str(runroot/'editor.json'),
+        'HYPRUNE_CAPTURE_DIR':str(path.parent.parent/'captures'), 'HYPRUNE_WORLD_DIR':str(installed), 'HYPRUNE_INPUT_FILE':str(runroot/'input.json'), 'HYPRUNE_EDITOR_FILE':str(runroot/'editor.json'),
         'HYPRUNE_LAYOUT_FILE':str(runroot/'layout.json'), 'HYPRUNE_LIVE_ROOT':str(root), 'HYPRUNE_WORKSPACE_LOCATIONS':None}}
     atomic(root/'bootstrap.json', settings)
     try:

@@ -2,7 +2,12 @@
 #include "GLState.hpp"
 #include "world/Environment.hpp"
 #include "world/Mounts.hpp"
+#include <fontconfig/fontconfig.h>
+#include <ft2build.h>
 #include <numeric>
+#include FT_FREETYPE_H
+#include <iomanip>
+#include <sstream>
 #include <stdexcept>
 namespace hyprune::render {
 namespace {
@@ -123,7 +128,7 @@ vec3 encode(vec3 x){return mix(12.92*x,1.055*pow(max(x,vec3(0)),vec3(1./2.4))-.0
 void main(){vec2 st=vec2(uv.x,1.-uv.y);vec4 sampleColor=texture(frame,st);vec3 x=(sampleColor.rgb+texture(bloomMap,st).rgb*bloomStrength)*exposure;
  vec3 mapped=toneMapping==0?clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.):toneMapping==1?x/(1.+x):clamp(x,0.,1.);
  vec3 c=encode(mix(sampleColor.rgb,mapped,sampleColor.a));
- vec2 p=abs(gl_FragCoord.xy-resolution*vec2(pointer.x,1.-pointer.y));if((p.x<1.&&p.y<7.)||(p.y<1.&&p.x<7.))c=typing!=0?vec3(.5,1.,.65):vec3(.9);
+ vec2 p=abs(gl_FragCoord.xy-resolution*pointer);if((p.x<1.&&p.y<7.)||(p.y<1.&&p.x<7.))c=typing!=0?vec3(.5,1.,.65):vec3(.9);
  if(scope!=0){vec2 q=(gl_FragCoord.xy/resolution-.5)*vec2(resolution.x/resolution.y,1.);c*=1.-.86*smoothstep(.24,.48,length(q));float ring=abs(length(q)-.28);if(ring<.001)c=mix(c,vec3(.5,.8,.65),.4);}
  result=vec4(c,1);}
 )";
@@ -198,7 +203,12 @@ void Renderer::freeWorld() {
 }
 void Renderer::prepare(std::shared_ptr<const world::World> world) {
     GLState state;
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
     init();
+    textAtlas();
     size_t gpuBytes = 0;
     for (const auto &mesh : world->meshes)
         gpuBytes += mesh.vertices.size() * sizeof(world::Vertex);
@@ -321,6 +331,26 @@ void Renderer::prepare(std::shared_ptr<const world::World> world) {
     environment_ = cube;
     cubeLevels_ = levels.size();
     profile = newProfile;
+    collisionChanged();
+}
+void Renderer::collisionChanged() {
+    GLState state;
+    std::vector<world::Vertex> wire;
+    for (auto &triangle : world_->collision)
+        for (auto edge :
+             {std::pair{triangle.a, triangle.b}, std::pair{triangle.b, triangle.c}, std::pair{triangle.c, triangle.a}})
+            for (auto point : {edge.first, edge.second}) {
+                world::Vertex vertex{};
+                vertex.position = point;
+                vertex.normal = {0, 1, 0};
+                wire.push_back(vertex);
+            }
+    if (!collisionVao_)
+        layout(collisionVao_, collisionVbo_);
+    glBindVertexArray(collisionVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, collisionVbo_);
+    glBufferData(GL_ARRAY_BUFFER, wire.size() * sizeof(world::Vertex), wire.data(), GL_STATIC_DRAW);
+    collisionCount_ = wire.size();
 }
 void Renderer::freeTargets() {
     glDeleteFramebuffers(1, &msaa_);
@@ -387,9 +417,16 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
                     bool typing) {
     if (!world_)
         return;
+    auto started = std::chrono::steady_clock::now();
+    if (lastFrame_.time_since_epoch().count())
+        frameMs_ = std::chrono::duration<double, std::milli>(started - lastFrame_).count();
+    lastFrame_ = started;
+    frameCamera_ = camera;
+    frameTyping_ = typing;
     GLState state;
     init();
     targets(w, h);
+    gpu_[0].begin();
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_BLEND);
     glDisable(GL_STENCIL_TEST);
@@ -531,6 +568,10 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     uniform(scene_, "emission", Vec3{});
     auto identity = Mat4::identity();
     glUniformMatrix4fv(glGetUniformLocation(scene_, "model"), 1, GL_FALSE, identity.v.data());
+    cpu_[0] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+    gpu_[0].end();
+    gpu_[1].begin();
+    auto surfacesStarted = std::chrono::steady_clock::now();
     for (const auto &s : surfaces) {
         Vec3 right = s.right(), up = s.up(), normal = s.normal();
         auto quad = [&](float width, float height, Vec3 center, bool border) {
@@ -560,7 +601,34 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glDisable(GL_DEPTH_TEST);
     uniform(scene_, "hasTexture", 0);
     std::map<std::array<float, 3>, std::vector<world::Vertex>> strokes;
-    for (auto &l : lines) {
+    if (debug) {
+        uniform(scene_, "color", Vec3{.2f, 1, .3f});
+        glBindVertexArray(collisionVao_);
+        glDrawArrays(GL_LINES, 0, collisionCount_);
+    }
+    auto frameLines = lines;
+    if (debug) {
+        auto saved = std::move(lines);
+        lines.clear();
+        debugGeometry(camera, surfaces);
+        std::map<std::array<float, 3>, std::vector<world::Vertex>> wires;
+        for (auto &line : lines)
+            for (auto point : {line.a, line.b}) {
+                world::Vertex vertex{};
+                vertex.position = point;
+                vertex.normal = {0, 1, 0};
+                wires[{line.color.x, line.color.y, line.color.z}].push_back(vertex);
+            }
+        for (auto &[color, vertices] : wires) {
+            uniform(scene_, "color", Vec3{color[0], color[1], color[2]});
+            glBindVertexArray(quadVao_);
+            glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
+            glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(world::Vertex), vertices.data(), GL_STREAM_DRAW);
+            glDrawArrays(GL_LINES, 0, vertices.size());
+        }
+        lines = std::move(saved);
+    }
+    for (auto &l : frameLines) {
         auto delta = l.b - l.a;
         auto side = normalized(cross(delta, camera.position - (l.a + l.b) * .5f)) * l.width;
         if (length(side) < .00001f)
@@ -581,6 +649,10 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(world::Vertex), vertices.data(), GL_STREAM_DRAW);
         glDrawArrays(GL_TRIANGLES, 0, vertices.size());
     }
+    cpu_[1] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - surfacesStarted).count();
+    gpu_[1].end();
+    gpu_[2].begin();
+    auto bloomStarted = std::chrono::steady_clock::now();
     glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa_);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolve_);
     glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
@@ -607,6 +679,17 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
                                 : radius / h);
         glDrawArrays(GL_TRIANGLES, 0, 3);
     }
+    cpu_[2] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - bloomStarted).count();
+    gpu_[2].end();
+    gpu_[3].begin();
+    auto outputStarted = std::chrono::steady_clock::now();
+    present(target, w, h, typing);
+    gpu_[3].end();
+    cpu_[3] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - outputStarted).count();
+    renderMs_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+    ++frames;
+}
+void Renderer::present(GLuint target, int w, int h, bool typing) {
     glViewport(0, 0, w, h);
     glBindFramebuffer(GL_FRAMEBUFFER, target);
     glDisable(GL_DEPTH_TEST);
@@ -618,7 +701,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     auto curve = profile["toneMapping"].get<std::string>();
     uniform(tone_, "toneMapping", curve == "aces" ? 0 : curve == "reinhard" ? 1 : 2);
     glUniform1f(glGetUniformLocation(tone_, "exposure"), profile["exposure"].get<float>());
-    glUniform1f(glGetUniformLocation(tone_, "bloomStrength"), effects ? bloom["strength"].get<float>() : 0);
+    glUniform1f(glGetUniformLocation(tone_, "bloomStrength"), effects ? profile["bloom"]["strength"].get<float>() : 0);
     glUniform2f(glGetUniformLocation(tone_, "pointer"), pointerX, pointerY);
     uniform(tone_, "scope", scopeVignette ? 1 : 0);
     glActiveTexture(GL_TEXTURE1);
@@ -629,12 +712,300 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glBindTexture(GL_TEXTURE_2D, resolveTexture_);
     glBindVertexArray(screenVao_);
     glDrawArrays(GL_TRIANGLES, 0, 3);
-    ++frames;
+    for (auto &label : labels)
+        text(label.x * w, label.y * h, label.text, label.color, w, h);
+    debugHUD(w, h);
+}
+void Renderer::debugHUD(int w, int h) {
+    if (debug) {
+        std::ostringstream message;
+        message << std::fixed << std::setprecision(2);
+        message << "FPS " << (frameMs_ > 0 ? 1000 / frameMs_ : 0) << "  FRAME " << frameMs_ << " ms\nCPU render "
+                << renderMs_ << "  update " << updateMs << "  capture " << captureMs << "  IPC " << ipcMs
+                << " ms\nGPU ";
+        bool supported = std::all_of(gpu_.begin(), gpu_.end(), [](auto &t) { return t.available; });
+        if (supported) {
+            double total = 0;
+            for (auto &t : gpu_)
+                total += t.milliseconds;
+            message << total << " ms";
+        } else
+            message << "N/A (timer unavailable/disjoint/enclosing query)";
+        message << "\nScene/windows/bloom/output CPU ";
+        for (auto &v : cpu_)
+            message << v << " ";
+        text(22, 24, message.str(), {.4f, 1, .6f}, w, h);
+    }
+}
+
+void Renderer::drawHUD(GLuint target, int w, int h) {
+    GLState state;
+    glBindFramebuffer(GL_FRAMEBUFFER, target);
+    glViewport(0, 0, w, h);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_RASTERIZER_DISCARD);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDepthMask(GL_FALSE);
+    debugHUD(w, h);
+}
+
+void Renderer::textAtlas() {
+    if (loadedFont_ == font && textTexture_)
+        return;
+    auto pattern = FcPatternCreate();
+    FcPatternAddString(pattern, FC_FAMILY, reinterpret_cast<const FcChar8 *>(font.c_str()));
+    FcConfigSubstitute(nullptr, pattern, FcMatchPattern);
+    FcDefaultSubstitute(pattern);
+    FcResult result;
+    auto match = FcFontMatch(nullptr, pattern, &result);
+    FcPatternDestroy(pattern);
+    FcChar8 *path = nullptr;
+    if (!match || FcPatternGetString(match, FC_FILE, 0, &path) != FcResultMatch) {
+        if (match)
+            FcPatternDestroy(match);
+        throw std::runtime_error("overlay font unavailable");
+    }
+    FT_Library library;
+    if (FT_Init_FreeType(&library)) {
+        FcPatternDestroy(match);
+        throw std::runtime_error("font initialization failed");
+    }
+    FT_Face face;
+    auto status = FT_New_Face(library, reinterpret_cast<const char *>(path), 0, &face);
+    FcPatternDestroy(match);
+    if (status) {
+        FT_Done_FreeType(library);
+        throw std::runtime_error("overlay font failed");
+    }
+    FT_Set_Pixel_Sizes(face, 0, 16);
+    constexpr int width = 512, height = 256, cell = 32;
+    std::vector<uint8_t> atlas(width * height);
+    for (int i = 32; i < 127; ++i) {
+        if (FT_Load_Char(face, i, FT_LOAD_RENDER))
+            continue;
+        auto &g = face->glyph;
+        int x = (i % 16) * cell, y = (i / 16) * cell;
+        int gw = std::min(30u, g->bitmap.width), gh = std::min(30u, g->bitmap.rows);
+        for (int row = 0; row < gh; ++row)
+            for (int column = 0; column < gw; ++column)
+                atlas[(y + row) * width + x + column] = g->bitmap.buffer[row * g->bitmap.pitch + column];
+        glyphs_[i] = {
+            float(gw),        float(gh),        float(g->bitmap_left), float(g->bitmap_top), float(g->advance.x) / 64,
+            float(x) / width, float(y) / height};
+    }
+    FT_Done_Face(face);
+    FT_Done_FreeType(library);
+    if (!textProgram_)
+        textProgram_ = program(R"(#version 300 es
+layout(location=0) in vec2 position;layout(location=1) in vec2 texcoord;out vec2 uv;void main(){gl_Position=vec4(position,0,1);uv=texcoord;})",
+                               R"(#version 300 es
+precision highp float;in vec2 uv;uniform sampler2D atlas;uniform vec3 color;out vec4 result;void main(){float a=texture(atlas,uv).r;result=vec4(color,a);})");
+    if (!textTexture_)
+        glGenTextures(1, &textTexture_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textTexture_);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    if (!textVao_) {
+        glGenVertexArrays(1, &textVao_);
+        glGenBuffers(1, &textBuffer_);
+    }
+    glBindVertexArray(textVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, textBuffer_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void *>(2 * sizeof(float)));
+    loadedFont_ = font;
+}
+void Renderer::text(float x, float y, const std::string &value, Vec3 color, int w, int h) {
+    if (!textTexture_)
+        return;
+    float left = x;
+    std::vector<float> vertices;
+    vertices.reserve(value.size() * 24);
+    for (auto character : value) {
+        auto c = static_cast<unsigned char>(character);
+        if (c == '\n') {
+            x = left;
+            y += 21;
+            continue;
+        }
+        if (c < 32 || c >= 127)
+            c = '?';
+        auto g = glyphs_[c];
+        float x0 = x + g.left, y0 = y + 16 - g.top, x1 = x0 + g.width, y1 = y0 + g.height;
+        std::array<std::array<float, 4>, 6> points = {{{x0, y0, g.u, g.v},
+                                                       {x1, y0, g.u + g.width / 512, g.v},
+                                                       {x1, y1, g.u + g.width / 512, g.v + g.height / 256},
+                                                       {x0, y0, g.u, g.v},
+                                                       {x1, y1, g.u + g.width / 512, g.v + g.height / 256},
+                                                       {x0, y1, g.u, g.v + g.height / 256}}};
+        for (auto &p : points) {
+            vertices.push_back(p[0] * 2 / w - 1);
+            vertices.push_back(p[1] * 2 / h - 1);
+            vertices.push_back(p[2]);
+            vertices.push_back(p[3]);
+        }
+        x += g.advance;
+    }
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(textProgram_);
+    uniform(textProgram_, "atlas", 0);
+    uniform(textProgram_, "color", color);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textTexture_);
+    glBindSampler(0, clamp_);
+    glBindVertexArray(textVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, textBuffer_);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 4);
+    glDisable(GL_BLEND);
+}
+void Renderer::debugGeometry(const sim::Camera &camera, std::span<const surfaces::Surface> surfaces) {
+    auto line = [&](Vec3 a, Vec3 b, Vec3 color) { lines.push_back({a, b, color, .012f}); };
+    auto box = [&](const std::array<Vec3, 8> &v, Vec3 color) {
+        for (int i = 0; i < 8; ++i)
+            for (int bit : {1, 2, 4})
+                if (!(i & bit))
+                    line(v[i], v[i | bit], color);
+    };
+    for (auto &surface : surfaces) {
+        std::array<Vec3, 8> corners;
+        for (int i = 0; i < 8; ++i)
+            corners[i] = surface.center + surface.right() * ((i & 1 ? 1 : -1) * surface.width * .5f) +
+                         surface.up() * ((i & 2 ? 1 : -1) * surface.height * .5f) +
+                         surface.normal() * ((i & 4 ? 1 : -1) * .04f);
+        box(corners, {1, .55f, .1f});
+    }
+    for (auto &zone : world_->placementZones) {
+        auto lo = zone["bounds"]["min"], hi = zone["bounds"]["max"];
+        std::array<Vec3, 8> corners;
+        for (int i = 0; i < 8; ++i)
+            corners[i] = {i & 1 ? hi[0].get<float>() : lo[0].get<float>(),
+                          i & 2 ? hi[1].get<float>() : lo[1].get<float>(),
+                          i & 4 ? hi[2].get<float>() : lo[2].get<float>()};
+        box(corners, {.4f, .7f, 1});
+    }
+    // Exact player capsule; thin native lines also remain readable from inside it.
+    Vec3 low = camera.position + Vec3{0, -camera.eyeHeight + .3f, 0}, high = camera.position + Vec3{0, -.2f, 0};
+    for (int j = 0; j < 24; ++j) {
+        float a = j * 6.2831853f / 24, b = (j + 1) * 6.2831853f / 24;
+        Vec3 p{.3f * std::cos(a), 0, .3f * std::sin(a)}, q{.3f * std::cos(b), 0, .3f * std::sin(b)};
+        line(low + p, low + q, {1, .25f, .6f});
+        line(high + p, high + q, {1, .25f, .6f});
+        if (j % 6 == 0)
+            line(low + p, high + p, {1, .25f, .6f});
+        for (auto center : {low, high})
+            for (int plane = 0; plane < 2; ++plane) {
+                Vec3 u = plane ? Vec3{0, .3f * std::sin(a), .3f * std::cos(a)}
+                               : Vec3{.3f * std::cos(a), .3f * std::sin(a), 0};
+                Vec3 v = plane ? Vec3{0, .3f * std::sin(b), .3f * std::cos(b)}
+                               : Vec3{.3f * std::cos(b), .3f * std::sin(b), 0};
+                line(center + u, center + v, {1, .25f, .6f});
+            }
+    }
+    for (auto &edge : world_->walkingEdges) {
+        const world::Json *a = nullptr, *b = nullptr;
+        for (auto &node : world_->walkingNodes) {
+            if (node["id"] == edge["from"])
+                a = &node;
+            if (node["id"] == edge["to"])
+                b = &node;
+        }
+        if (a && b) {
+            auto p = a->at("position"), q = b->at("position");
+            line({p[0], p[1], p[2]}, {q[0], q[1], q[2]}, {.1f, 1, .65f});
+        }
+    }
+}
+world::Json Renderer::timings() const {
+    world::Json cpu = world::Json::array(), gpu = world::Json::array();
+    for (auto &v : cpu_)
+        cpu.push_back(v);
+    for (auto &timer : gpu_)
+        gpu.push_back(timer.available ? world::Json(timer.milliseconds) : world::Json(nullptr));
+    return {{"frameMs", frameMs_},
+            {"cpuRenderMs", renderMs_},
+            {"cpuUpdateMs", updateMs},
+            {"captureMs", captureMs},
+            {"ipcMs", ipcMs},
+            {"cpuPassMs", cpu},
+            {"gpuPassMs", gpu},
+            {"debug", debug},
+            {"collisionTriangles", world_ ? world_->collision.size() : 0}};
+}
+Renderer::Pixels Renderer::snapshot() {
+    if (!frames || !resolve_)
+        throw std::runtime_error("no completed world frame to capture");
+    auto started = std::chrono::steady_clock::now();
+    GLState state;
+    GLuint fbo = 0, texture = 0;
+    glGenFramebuffers(1, &fbo);
+    glGenTextures(1, &texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width_, height_, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        glDeleteFramebuffers(1, &fbo);
+        glDeleteTextures(1, &texture);
+        throw std::runtime_error("capture framebuffer unavailable");
+    }
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDisable(GL_RASTERIZER_DISCARD);
+    glDisable(GL_SAMPLE_COVERAGE);
+    glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+    present(fbo, width_, height_, frameTyping_);
+    Pixels pixels{width_, height_, frameCamera_, std::vector<uint8_t>(size_t(width_) * height_ * 4), 0};
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
+    // Hyprland target convention: row zero is logical top. No second row flip.
+    glReadPixels(0, 0, width_, height_, GL_RGBA, GL_UNSIGNED_BYTE, pixels.rgba.data());
+    glDeleteFramebuffers(1, &fbo);
+    glDeleteTextures(1, &texture);
+    pixels.ageMs = std::chrono::duration<double, std::milli>(started - lastFrame_).count();
+    pixels.readbackMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+    return pixels;
 }
 void Renderer::destroy() {
     GLState state;
     freeWorld();
     freeTargets();
+    for (auto &timer : gpu_)
+        timer.destroy();
+    glDeleteProgram(textProgram_);
+    glDeleteTextures(1, &textTexture_);
+    glDeleteVertexArrays(1, &textVao_);
+    glDeleteBuffers(1, &textBuffer_);
+    textProgram_ = textTexture_ = textVao_ = textBuffer_ = 0;
+    loadedFont_.clear();
+    glDeleteVertexArrays(1, &collisionVao_);
+    glDeleteBuffers(1, &collisionVbo_);
+    collisionVao_ = collisionVbo_ = 0;
+    collisionCount_ = 0;
     glDeleteProgram(scene_);
     glDeleteProgram(tone_);
     glDeleteProgram(bloom_);

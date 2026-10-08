@@ -72,7 +72,8 @@ bool sweepSafe(const surfaces::Surface &a, const surfaces::Surface &b, std::span
     }
     return true;
 }
-void Hands::begin(Gesture g, const surfaces::Surface &s, surfaces::Hit h) {
+void Hands::begin(Gesture g, const surfaces::Surface &s, surfaces::Hit h, const sim::Camera &camera) {
+    grabCamera = camera.orientation();
     gesture = g;
     start = pose = s;
     distance = targetDistance = h.distance;
@@ -96,7 +97,10 @@ bool Hands::update(const sim::Camera &camera, Vec3 ray, float dt, std::span<cons
     auto next = pose;
     if (gesture == Gesture::Carry) {
         distance += (targetDistance - distance) * (1 - std::exp(-dt / .06f));
-        next.center = camera.position + ray * distance - offset;
+        auto delta = quaternionProduct(camera.orientation(), conjugate(grabCamera));
+        next.rotation = quaternionProduct(delta, start.rotation);
+        next.yaw = 0;
+        next.center = camera.position + ray * distance - rotate(delta, offset);
     } else {
         auto h = surfaces::intersect(start, camera.position, ray, false);
         if (!h)

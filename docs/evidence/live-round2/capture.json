@@ -1,0 +1,3472 @@
+{
+  "camera": {
+    "eyeHeight": 1.7000000476837158,
+    "fov": 60.0,
+    "pitch": -0.10000002384185791,
+    "position": [
+      -8.0,
+      1.7000000476837158,
+      12.0
+    ],
+    "yaw": -5.9602808022418685e-08
+  },
+  "frame": {
+    "ageMs": 14.419252,
+    "height": 1080,
+    "number": 419,
+    "readbackMs": 4.828229,
+    "source": "last-completed-world-frame",
+    "timings": {
+      "captureMs": 0.030417,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.203824,
+        0.25928,
+        0.011207,
+        0.026279
+      ],
+      "cpuRenderMs": 0.502235,
+      "cpuUpdateMs": 0.529305,
+      "debug": true,
+      "frameMs": 16.599074,
+      "gpuPassMs": [
+        3.742239,
+        0.662031,
+        1.58401,
+        0.219687
+      ],
+      "ipcMs": 1.31744
+    },
+    "width": 1920
+  },
+  "input": [
+    {
+      "key": "Super_L",
+      "mode": "world",
+      "mods": 64,
+      "pressed": true,
+      "timeMs": 110941706,
+      "value": 0.0
+    },
+    {
+      "key": "Return",
+      "mode": "world",
+      "mods": 64,
+      "pressed": true,
+      "timeMs": 110941748,
+      "value": 0.0
+    },
+    {
+      "key": "Return",
+      "mode": "world",
+      "mods": 64,
+      "pressed": false,
+      "timeMs": 110941759,
+      "value": 0.0
+    },
+    {
+      "key": "Super_L",
+      "mode": "world",
+      "mods": 0,
+      "pressed": false,
+      "timeMs": 110941911,
+      "value": 0.0
+    },
+    {
+      "key": "Super_L",
+      "mode": "world",
+      "mods": 64,
+      "pressed": true,
+      "timeMs": 110942214,
+      "value": 0.0
+    },
+    {
+      "key": "LMB",
+      "mode": "world",
+      "mods": 64,
+      "pressed": true,
+      "timeMs": 110942343,
+      "value": 0.0
+    },
+    {
+      "key": "MouseMove",
+      "mode": "world",
+      "mods": 64,
+      "pressed": true,
+      "timeMs": 110942512,
+      "value": 210.0
+    },
+    {
+      "key": "LMB",
+      "mode": "world",
+      "mods": 64,
+      "pressed": false,
+      "timeMs": 110942651,
+      "value": 0.0
+    },
+    {
+      "key": "Super_L",
+      "mode": "world",
+      "mods": 0,
+      "pressed": false,
+      "timeMs": 110945715,
+      "value": 0.0
+    },
+    {
+      "key": "MouseMove",
+      "mode": "world",
+      "mods": 0,
+      "pressed": true,
+      "timeMs": 110945753,
+      "value": -210.0
+    },
+    {
+      "key": "MouseMove",
+      "mode": "world",
+      "mods": 0,
+      "pressed": true,
+      "timeMs": 110945863,
+      "value": 0.0
+    },
+    {
+      "key": "MouseMove",
+      "mode": "world",
+      "mods": 0,
+      "pressed": true,
+      "timeMs": 110946003,
+      "value": 0.0
+    },
+    {
+      "key": "MouseMove",
+      "mode": "world",
+      "mods": 0,
+      "pressed": true,
+      "timeMs": 110946841,
+      "value": 0.0
+    },
+    {
+      "key": "F3",
+      "mode": "world",
+      "mods": 0,
+      "pressed": true,
+      "timeMs": 110947655,
+      "value": 0.0
+    },
+    {
+      "key": "F3",
+      "mode": "world",
+      "mods": 0,
+      "pressed": false,
+      "timeMs": 110947658,
+      "value": 0.0
+    },
+    {
+      "key": "u",
+      "mode": "world",
+      "mods": 0,
+      "pressed": true,
+      "timeMs": 110947849,
+      "value": 0.0
+    }
+  ],
+  "mode": "world",
+  "placements": {
+    "anchors": [
+      {
+        "areaId": "array-hall",
+        "id": "array-hall-slot-02-banner-01",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "banner"
+        },
+        "pose": {
+          "position": [
+            -8.0,
+            6.6,
+            -37.945
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            0.9999999403953552
+          ]
+        },
+        "size": [
+          1.55,
+          4.2
+        ]
+      },
+      {
+        "areaId": "array-hall",
+        "id": "array-hall-slot-02-banner-02",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "banner"
+        },
+        "pose": {
+          "position": [
+            21.0,
+            6.6,
+            -43.945
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            0.9999999403953552
+          ]
+        },
+        "size": [
+          1.55,
+          4.2
+        ]
+      },
+      {
+        "areaId": "array-hall",
+        "id": "array-hall-slot-02-hanging-wall-01",
+        "mount": {
+          "interaction": "focus-in",
+          "role": "mounted-workspace",
+          "type": "hanging-wall"
+        },
+        "pose": {
+          "position": [
+            8.0,
+            10.0,
+            -47.945
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            0.9999999403953552
+          ]
+        },
+        "size": [
+          16,
+          8
+        ]
+      },
+      {
+        "areaId": "array-hall",
+        "id": "array-hall-slot-02-lectern-01",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "lectern"
+        },
+        "pose": {
+          "position": [
+            -1.0,
+            1.9704,
+            -39.79892
+          ],
+          "rotation": [
+            -0.1888589859008789,
+            0.0,
+            0.0,
+            0.9820041656494141
+          ]
+        },
+        "size": [
+          1.8,
+          1.1
+        ]
+      },
+      {
+        "areaId": "array-hall",
+        "id": "array-hall-slot-02-lectern-02",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "lectern"
+        },
+        "pose": {
+          "position": [
+            18.0,
+            1.9704,
+            -39.79892
+          ],
+          "rotation": [
+            -0.1888589859008789,
+            0.0,
+            0.0,
+            0.9820041656494141
+          ]
+        },
+        "size": [
+          1.8,
+          1.1
+        ]
+      },
+      {
+        "areaId": "array-hall",
+        "id": "array-hall-slot-02-operator-desk-01",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "operator-desk"
+        },
+        "pose": {
+          "position": [
+            -2.0,
+            1.96093,
+            -53.05391
+          ],
+          "rotation": [
+            -4.363855055089516e-09,
+            0.9950041770935059,
+            0.09983336925506592,
+            4.349301008232942e-08
+          ]
+        },
+        "size": [
+          2.55,
+          1.4
+        ]
+      },
+      {
+        "areaId": "array-hall",
+        "id": "array-hall-slot-02-operator-desk-02",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "operator-desk"
+        },
+        "pose": {
+          "position": [
+            8.0,
+            1.96093,
+            -53.05391
+          ],
+          "rotation": [
+            -4.363855055089516e-09,
+            0.9950041770935059,
+            0.09983336925506592,
+            4.349301008232942e-08
+          ]
+        },
+        "size": [
+          2.55,
+          1.4
+        ]
+      },
+      {
+        "areaId": "array-hall",
+        "id": "array-hall-slot-02-operator-desk-03",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "operator-desk"
+        },
+        "pose": {
+          "position": [
+            18.0,
+            1.96093,
+            -53.05391
+          ],
+          "rotation": [
+            -4.363855055089516e-09,
+            0.9950041770935059,
+            0.09983336925506592,
+            4.349301008232942e-08
+          ]
+        },
+        "size": [
+          2.55,
+          1.4
+        ]
+      },
+      {
+        "areaId": "rime-vault",
+        "id": "rime-vault-slot-03-operator-desk-01",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "operator-desk"
+        },
+        "pose": {
+          "position": [
+            33.6,
+            -4.00907,
+            -80.8261
+          ],
+          "rotation": [
+            -0.09983336925506592,
+            0.0,
+            0.0,
+            0.9950041770935059
+          ]
+        },
+        "size": [
+          2.55,
+          1.4
+        ]
+      },
+      {
+        "areaId": "rime-vault",
+        "id": "rime-vault-slot-03-operator-desk-02",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "operator-desk"
+        },
+        "pose": {
+          "position": [
+            45.0,
+            -4.00907,
+            -81.8261
+          ],
+          "rotation": [
+            -0.09983336925506592,
+            0.0,
+            0.0,
+            0.9950041770935059
+          ]
+        },
+        "size": [
+          2.55,
+          1.4
+        ]
+      },
+      {
+        "areaId": "rime-vault",
+        "id": "rime-vault-slot-03-terminal-bench-01",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "terminal-bench"
+        },
+        "pose": {
+          "position": [
+            28.5,
+            -0.008,
+            -95.79633
+          ],
+          "rotation": [
+            -0.10977822542190552,
+            0.0,
+            0.0,
+            0.9939561486244202
+          ]
+        },
+        "size": [
+          2.3,
+          1.3
+        ]
+      },
+      {
+        "areaId": "rime-vault",
+        "id": "rime-vault-slot-03-wall-inset-console-01",
+        "mount": {
+          "interaction": "focus-in",
+          "role": "mounted-workspace",
+          "type": "wall-inset-console"
+        },
+        "pose": {
+          "position": [
+            39.0,
+            -0.1,
+            -99.315
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            0.9999999403953552
+          ]
+        },
+        "size": [
+          13.8,
+          6.3
+        ]
+      },
+      {
+        "areaId": "rime-vault",
+        "id": "rime-vault-slot-03-wall-inset-console-02",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "wall-inset-console"
+        },
+        "pose": {
+          "position": [
+            49.295,
+            -1.4,
+            -94.0
+          ],
+          "rotation": [
+            -2.9802322387695312e-08,
+            -0.7071067690849304,
+            0.0,
+            0.7071068286895752
+          ]
+        },
+        "size": [
+          3.0,
+          2.0
+        ]
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-blast-door-screen-01",
+        "mount": {
+          "interaction": "focus-in",
+          "role": "mounted-workspace",
+          "type": "blast-door-screen"
+        },
+        "pose": {
+          "position": [
+            63.0,
+            10.7,
+            -147.095
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            0.9999999403953552
+          ]
+        },
+        "size": [
+          18.5,
+          10.4
+        ]
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-kiosk-pillar-01",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "kiosk-pillar"
+        },
+        "pose": {
+          "position": [
+            45.3,
+            2.25767,
+            -122.84554
+          ],
+          "rotation": [
+            -0.06994280219078064,
+            0.0,
+            0.0,
+            0.9975509643554688
+          ]
+        },
+        "size": [
+          1.0,
+          1.9
+        ]
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-operator-desk-01",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "operator-desk"
+        },
+        "pose": {
+          "position": [
+            38.0,
+            1.96093,
+            -135.7961
+          ],
+          "rotation": [
+            -0.09983336925506592,
+            0.0,
+            0.0,
+            0.9950041770935059
+          ]
+        },
+        "size": [
+          2.5,
+          1.4
+        ]
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-terminal-bench-01",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "terminal-bench"
+        },
+        "pose": {
+          "position": [
+            41.0,
+            1.97243,
+            -122.79978
+          ],
+          "rotation": [
+            -0.20845988392829895,
+            0.0,
+            0.0,
+            0.9780309200286865
+          ]
+        },
+        "size": [
+          3.7,
+          1.55
+        ]
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-wall-inset-console-01",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "wall-inset-console"
+        },
+        "pose": {
+          "position": [
+            76.0,
+            4.9,
+            -146.845
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            0.9999999403953552
+          ]
+        },
+        "size": [
+          3.0,
+          2.0
+        ]
+      },
+      {
+        "areaId": "sun-court",
+        "id": "sun-court-slot-01-facade-wall-01",
+        "mount": {
+          "interaction": "focus-in",
+          "role": "mounted-workspace",
+          "type": "facade-wall"
+        },
+        "pose": {
+          "position": [
+            8.0,
+            10.1,
+            -23.115
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            0.9999999403953552
+          ]
+        },
+        "size": [
+          18.8,
+          9.3
+        ]
+      },
+      {
+        "areaId": "sun-court",
+        "id": "sun-court-slot-01-field-rig-01",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "field-rig"
+        },
+        "pose": {
+          "position": [
+            -16.5,
+            2.9022,
+            0.09496
+          ],
+          "rotation": [
+            -0.019998759031295776,
+            0.0,
+            0.0,
+            0.9997999668121338
+          ]
+        },
+        "size": [
+          2.4,
+          1.35
+        ]
+      },
+      {
+        "areaId": "sun-court",
+        "id": "sun-court-slot-01-field-rig-02",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "field-rig"
+        },
+        "pose": {
+          "position": [
+            -13.3,
+            2.9022,
+            0.09496
+          ],
+          "rotation": [
+            -0.019998759031295776,
+            0.0,
+            0.0,
+            0.9997999668121338
+          ]
+        },
+        "size": [
+          2.4,
+          1.35
+        ]
+      },
+      {
+        "areaId": "sun-court",
+        "id": "sun-court-slot-01-kiosk-pillar-01",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "kiosk-pillar"
+        },
+        "pose": {
+          "position": [
+            17.0,
+            2.2044,
+            -4.74518
+          ],
+          "rotation": [
+            -0.039989352226257324,
+            0.0,
+            0.0,
+            0.9992001056671143
+          ]
+        },
+        "size": [
+          1.6,
+          2.0
+        ]
+      },
+      {
+        "areaId": "sun-court",
+        "id": "sun-court-slot-01-operator-desk-01",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "operator-desk"
+        },
+        "pose": {
+          "position": [
+            -15.0,
+            1.96093,
+            7.5539
+          ],
+          "rotation": [
+            -0.09983336925506592,
+            0.0,
+            0.0,
+            0.9950041770935059
+          ]
+        },
+        "size": [
+          2.6,
+          1.45
+        ]
+      },
+      {
+        "areaId": "sun-court",
+        "id": "sun-court-slot-01-operator-desk-02",
+        "mount": {
+          "interaction": "in-place",
+          "role": "tool-mount",
+          "type": "operator-desk"
+        },
+        "pose": {
+          "position": [
+            22.0,
+            1.96093,
+            7.9539
+          ],
+          "rotation": [
+            -0.09983336925506592,
+            0.0,
+            0.0,
+            0.9950041770935059
+          ]
+        },
+        "size": [
+          2.5,
+          1.4
+        ]
+      }
+    ],
+    "areas": [
+      {
+        "dataAnchors": [
+          "sun-court-slot-01-globe-01",
+          "sun-court-slot-01-crate-01",
+          "sun-court-slot-01-crate-02",
+          "sun-court-slot-01-crate-03",
+          "sun-court-slot-01-crate-04",
+          "sun-court-slot-01-crate-05",
+          "sun-court-slot-01-crate-06"
+        ],
+        "freePlacementZones": [
+          "sun-court-open-work"
+        ],
+        "id": "sun-court",
+        "primaryAnchor": "sun-court-slot-01-facade-wall-01",
+        "spawnId": "sun-court",
+        "theme": "sun-court",
+        "toolAnchors": [
+          "sun-court-slot-01-operator-desk-01",
+          "sun-court-slot-01-operator-desk-02",
+          "sun-court-slot-01-field-rig-01",
+          "sun-court-slot-01-field-rig-02",
+          "sun-court-slot-01-kiosk-pillar-01"
+        ],
+        "workspaceSlot": "01"
+      },
+      {
+        "dataAnchors": [
+          "array-hall-slot-02-crate-01",
+          "array-hall-slot-02-crate-02"
+        ],
+        "freePlacementZones": [
+          "array-hall-open-work"
+        ],
+        "id": "array-hall",
+        "primaryAnchor": "array-hall-slot-02-hanging-wall-01",
+        "spawnId": "array-hall",
+        "theme": "array-hall",
+        "toolAnchors": [
+          "array-hall-slot-02-lectern-01",
+          "array-hall-slot-02-lectern-02",
+          "array-hall-slot-02-banner-01",
+          "array-hall-slot-02-banner-02",
+          "array-hall-slot-02-operator-desk-01",
+          "array-hall-slot-02-operator-desk-02",
+          "array-hall-slot-02-operator-desk-03"
+        ],
+        "workspaceSlot": "02"
+      },
+      {
+        "dataAnchors": [
+          "rime-vault-slot-03-crate-01",
+          "rime-vault-slot-03-crate-02",
+          "rime-vault-slot-03-crate-03"
+        ],
+        "freePlacementZones": [
+          "rime-vault-open-work"
+        ],
+        "id": "rime-vault",
+        "primaryAnchor": "rime-vault-slot-03-wall-inset-console-01",
+        "spawnId": "rime-vault",
+        "theme": "rime-vault",
+        "toolAnchors": [
+          "rime-vault-slot-03-operator-desk-01",
+          "rime-vault-slot-03-operator-desk-02",
+          "rime-vault-slot-03-wall-inset-console-02",
+          "rime-vault-slot-03-terminal-bench-01"
+        ],
+        "workspaceSlot": "03"
+      },
+      {
+        "dataAnchors": [
+          "signal-rise-slot-04-radar-dish-01",
+          "signal-rise-slot-04-crate-01",
+          "signal-rise-slot-04-crate-02",
+          "signal-rise-slot-04-crate-03",
+          "signal-rise-slot-04-crate-04",
+          "signal-rise-slot-04-crate-05",
+          "signal-rise-slot-04-crate-06",
+          "signal-rise-slot-04-crate-07",
+          "signal-rise-slot-04-crate-08"
+        ],
+        "freePlacementZones": [
+          "signal-rise-open-work"
+        ],
+        "id": "signal-rise",
+        "primaryAnchor": "signal-rise-slot-04-blast-door-screen-01",
+        "spawnId": "signal-rise",
+        "theme": "signal-rise",
+        "toolAnchors": [
+          "signal-rise-slot-04-terminal-bench-01",
+          "signal-rise-slot-04-kiosk-pillar-01",
+          "signal-rise-slot-04-wall-inset-console-01",
+          "signal-rise-slot-04-operator-desk-01"
+        ],
+        "workspaceSlot": "04"
+      }
+    ],
+    "bindings": [],
+    "carriedSurfaceId": null,
+    "desktopWorkspaceId": null,
+    "instances": [
+      {
+        "anchorId": "",
+        "areaId": "sun-court",
+        "status": "placed",
+        "surfaceId": "surface-1",
+        "workspaceId": 2
+      },
+      {
+        "anchorId": "",
+        "areaId": "sun-court",
+        "status": "placed",
+        "surfaceId": "surface-2",
+        "workspaceId": 2
+      }
+    ],
+    "objects": [
+      {
+        "areaId": "sun-court",
+        "id": "sun-court-slot-01-globe-01",
+        "mountType": "globe",
+        "pose": {
+          "position": [
+            -7.0,
+            4.18,
+            -10.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "sun-court",
+        "id": "sun-court-slot-01-crate-01",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            -19.0,
+            0.4,
+            2.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "sun-court",
+        "id": "sun-court-slot-01-crate-02",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            -19.0,
+            1.25,
+            2.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "sun-court",
+        "id": "sun-court-slot-01-crate-03",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            -21.0,
+            0.4,
+            6.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "sun-court",
+        "id": "sun-court-slot-01-crate-04",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            -21.0,
+            0.4,
+            4.8
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "sun-court",
+        "id": "sun-court-slot-01-crate-05",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            -22.0,
+            0.4,
+            -1.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "sun-court",
+        "id": "sun-court-slot-01-crate-06",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            23.0,
+            0.4,
+            -14.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "array-hall",
+        "id": "array-hall-slot-02-crate-01",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            -3.0,
+            0.4,
+            -59.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "array-hall",
+        "id": "array-hall-slot-02-crate-02",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            19.0,
+            0.4,
+            -59.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "rime-vault",
+        "id": "rime-vault-slot-03-crate-01",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            47.0,
+            -5.6,
+            -80.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "rime-vault",
+        "id": "rime-vault-slot-03-crate-02",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            47.0,
+            -5.6,
+            -100.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "rime-vault",
+        "id": "rime-vault-slot-03-crate-03",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            34.0,
+            -5.6,
+            -96.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-radar-dish-01",
+        "mountType": "radar-dish",
+        "pose": {
+          "position": [
+            35.0,
+            8.5,
+            -149.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-crate-01",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            32.0,
+            0.4,
+            -121.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-crate-02",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            48.0,
+            0.4,
+            -151.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-crate-03",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            82.0,
+            0.4,
+            -143.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-crate-04",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            46.0,
+            0.4,
+            -132.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-crate-05",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            47.5,
+            0.4,
+            -133.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-crate-06",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            70.0,
+            0.4,
+            -139.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-crate-07",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            71.5,
+            0.4,
+            -139.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      },
+      {
+        "areaId": "signal-rise",
+        "id": "signal-rise-slot-04-crate-08",
+        "mountType": "crate",
+        "pose": {
+          "position": [
+            34.0,
+            0.4,
+            -140.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sourceId": null
+      }
+    ],
+    "placementZones": [
+      {
+        "bounds": {
+          "max": [
+            7.0,
+            4.8,
+            8.0
+          ],
+          "min": [
+            -2.0,
+            0.15,
+            0.0
+          ]
+        },
+        "clearance": 0.15,
+        "id": "sun-court-open-work",
+        "windowSizes": [
+          [
+            1.6,
+            0.9
+          ],
+          [
+            3.2,
+            1.8
+          ]
+        ]
+      },
+      {
+        "bounds": {
+          "max": [
+            12.0,
+            4.8,
+            -34.0
+          ],
+          "min": [
+            3.0,
+            0.15,
+            -40.0
+          ]
+        },
+        "clearance": 0.15,
+        "id": "array-hall-open-work",
+        "windowSizes": [
+          [
+            1.6,
+            0.9
+          ],
+          [
+            3.2,
+            1.8
+          ]
+        ]
+      },
+      {
+        "bounds": {
+          "max": [
+            42.0,
+            -1.2,
+            -77.0
+          ],
+          "min": [
+            36.0,
+            -5.85,
+            -83.0
+          ]
+        },
+        "clearance": 0.15,
+        "id": "rime-vault-open-work",
+        "windowSizes": [
+          [
+            1.6,
+            0.9
+          ],
+          [
+            3.2,
+            1.8
+          ]
+        ]
+      },
+      {
+        "bounds": {
+          "max": [
+            62.0,
+            4.8,
+            -125.0
+          ],
+          "min": [
+            52.0,
+            0.15,
+            -130.0
+          ]
+        },
+        "clearance": 0.15,
+        "id": "signal-rise-open-work",
+        "windowSizes": [
+          [
+            1.6,
+            0.9
+          ],
+          [
+            3.2,
+            1.8
+          ]
+        ]
+      }
+    ],
+    "placements": []
+  },
+  "recentEvents": [
+    {
+      "event": "location.transition",
+      "params": {
+        "id": "transition-1",
+        "monotonicMs": 110940308,
+        "outputId": null,
+        "phase": "loading",
+        "progress": null,
+        "to": {
+          "worldId": "com.hyprune.lumen-reach"
+        }
+      }
+    },
+    {
+      "event": "location.transition",
+      "params": {
+        "id": "transition-1",
+        "monotonicMs": 110940836,
+        "outputId": null,
+        "phase": "arrived",
+        "progress": 1.0,
+        "to": {
+          "worldId": "com.hyprune.lumen-reach"
+        }
+      }
+    }
+  ],
+  "recentIPC": [
+    {
+      "method": "_layout.restore",
+      "timeMs": 110940212
+    },
+    {
+      "method": "world.load",
+      "timeMs": 110940308
+    },
+    {
+      "method": "shell.claim",
+      "timeMs": 110941143
+    },
+    {
+      "method": "_connection.closed",
+      "timeMs": 110941175
+    }
+  ],
+  "screenshot": "/home/rick/workspace/hyprune/core/dev/nested/.state/captures/capture-1791469877418.png",
+  "state": {
+    "apps": [
+      {
+        "appClass": "kitty",
+        "icon": "kitty",
+        "surfaceId": "surface-1",
+        "title": "~/w/h/core",
+        "workspaceId": 2
+      },
+      {
+        "appClass": "hyprune-live-regression",
+        "icon": "hyprune-live-regression",
+        "surfaceId": "surface-2",
+        "title": "Live-launch-regression",
+        "workspaceId": 2
+      }
+    ],
+    "editor": {
+      "debug": true,
+      "locked": [],
+      "mode": "world",
+      "objects": [],
+      "paths": [],
+      "selectedId": null,
+      "selectedKind": "",
+      "submode": "normal",
+      "tool": 1
+    },
+    "integrations": {
+      "sources": []
+    },
+    "interaction": {
+      "cursor": "reticle",
+      "mode": "movement",
+      "noclip": false,
+      "taggedSurfaceId": null,
+      "tool": 1,
+      "tools": [
+        "pointer",
+        "mount",
+        "path",
+        "path",
+        "path"
+      ]
+    },
+    "keymap": {
+      "capture": null,
+      "config": {
+        "captureInputLimit": 256,
+        "invert_y": false,
+        "longHoldMs": 1000,
+        "modes": {
+          "focus": {
+            "capture": [
+              "u"
+            ],
+            "debug": [
+              "F3",
+              "y"
+            ],
+            "exit": [
+              "Super+Tab",
+              "Back"
+            ]
+          },
+          "interactive": {
+            "capture": [
+              "u"
+            ],
+            "debug": [
+              "F3",
+              "y"
+            ],
+            "exit": [
+              "Super+Tab",
+              "Back"
+            ]
+          },
+          "menu": {
+            "capture": [
+              "u"
+            ],
+            "debug": [
+              "F3",
+              "y"
+            ],
+            "exit": [
+              "Escape"
+            ]
+          },
+          "world": {
+            "autopilot": [
+              "x"
+            ],
+            "back": [
+              "j",
+              "s",
+              "Down"
+            ],
+            "capture": [
+              "u"
+            ],
+            "carry": [
+              "Super+LMB"
+            ],
+            "debug": [
+              "F3",
+              "y"
+            ],
+            "distance": [
+              "Super+Wheel"
+            ],
+            "down": [
+              "Control_L"
+            ],
+            "fly": [
+              "F4"
+            ],
+            "focus": [
+              "f"
+            ],
+            "forward": [
+              "k",
+              "w",
+              "Up"
+            ],
+            "left": [
+              "h",
+              "a",
+              "Left"
+            ],
+            "look": [
+              "MouseMove"
+            ],
+            "menu": [
+              "Tab[L]"
+            ],
+            "noclip": [
+              "v"
+            ],
+            "primary": [
+              "LMB"
+            ],
+            "resize": [
+              "Super+RMB"
+            ],
+            "right": [
+              "l",
+              "d",
+              "Right"
+            ],
+            "rotate": [
+              "Super+Shift+Wheel"
+            ],
+            "scope": [
+              "q"
+            ],
+            "secondary": [
+              "RMB"
+            ],
+            "sprint": [
+              "Shift_L"
+            ],
+            "tool1": [
+              "1"
+            ],
+            "tool2": [
+              "2"
+            ],
+            "tool3": [
+              "3"
+            ],
+            "tool4": [
+              "4"
+            ],
+            "tool5": [
+              "5"
+            ],
+            "transport": [
+              "z"
+            ],
+            "up": [
+              "space"
+            ],
+            "use": [
+              "e"
+            ],
+            "wheel": [
+              "Wheel"
+            ]
+          }
+        },
+        "scopeVignette": true,
+        "useDistance": 6,
+        "useTolerance": 0.12,
+        "version": 2
+      },
+      "conflicts": [],
+      "error": "",
+      "path": "/run/user/1000/hyprune-live/efb50993780079460b0cbed1363e2166a2de1d9f_1791469863_1859931329/1791469868987980635/input.json",
+      "steals": []
+    },
+    "location": {
+      "autodrive": false,
+      "route": [],
+      "transition": {
+        "id": "transition-1",
+        "monotonicMs": 110940836,
+        "outputId": null,
+        "phase": "arrived",
+        "progress": 1.0,
+        "to": {
+          "worldId": "com.hyprune.lumen-reach"
+        }
+      },
+      "waypoint": null,
+      "zones": [
+        {
+          "bounds": {
+            "max": [
+              26.0,
+              18.0,
+              16.0
+            ],
+            "min": [
+              -36.0,
+              -0.4,
+              -26.0
+            ]
+          },
+          "id": "sun-court",
+          "name": "Sun Court"
+        },
+        {
+          "bounds": {
+            "max": [
+              27.0,
+              23.0,
+              -32.0
+            ],
+            "min": [
+              -13.0,
+              -0.4,
+              -62.0
+            ]
+          },
+          "id": "array-hall",
+          "name": "Array Hall"
+        },
+        {
+          "bounds": {
+            "max": [
+              55.0,
+              5.0,
+              -52.0
+            ],
+            "min": [
+              26.0,
+              -6.4,
+              -103.0
+            ]
+          },
+          "id": "rime-vault",
+          "name": "Rime Vault"
+        },
+        {
+          "bounds": {
+            "max": [
+              85.0,
+              28.0,
+              -100.0
+            ],
+            "min": [
+              29.0,
+              -6.4,
+              -160.0
+            ]
+          },
+          "id": "signal-rise",
+          "name": "Signal Rise"
+        }
+      ]
+    },
+    "mounts": {
+      "anchors": [
+        {
+          "areaId": "array-hall",
+          "id": "array-hall-slot-02-banner-01",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "banner"
+          },
+          "pose": {
+            "position": [
+              -8.0,
+              6.6,
+              -37.945
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              0.9999999403953552
+            ]
+          },
+          "size": [
+            1.55,
+            4.2
+          ]
+        },
+        {
+          "areaId": "array-hall",
+          "id": "array-hall-slot-02-banner-02",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "banner"
+          },
+          "pose": {
+            "position": [
+              21.0,
+              6.6,
+              -43.945
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              0.9999999403953552
+            ]
+          },
+          "size": [
+            1.55,
+            4.2
+          ]
+        },
+        {
+          "areaId": "array-hall",
+          "id": "array-hall-slot-02-hanging-wall-01",
+          "mount": {
+            "interaction": "focus-in",
+            "role": "mounted-workspace",
+            "type": "hanging-wall"
+          },
+          "pose": {
+            "position": [
+              8.0,
+              10.0,
+              -47.945
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              0.9999999403953552
+            ]
+          },
+          "size": [
+            16,
+            8
+          ]
+        },
+        {
+          "areaId": "array-hall",
+          "id": "array-hall-slot-02-lectern-01",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "lectern"
+          },
+          "pose": {
+            "position": [
+              -1.0,
+              1.9704,
+              -39.79892
+            ],
+            "rotation": [
+              -0.1888589859008789,
+              0.0,
+              0.0,
+              0.9820041656494141
+            ]
+          },
+          "size": [
+            1.8,
+            1.1
+          ]
+        },
+        {
+          "areaId": "array-hall",
+          "id": "array-hall-slot-02-lectern-02",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "lectern"
+          },
+          "pose": {
+            "position": [
+              18.0,
+              1.9704,
+              -39.79892
+            ],
+            "rotation": [
+              -0.1888589859008789,
+              0.0,
+              0.0,
+              0.9820041656494141
+            ]
+          },
+          "size": [
+            1.8,
+            1.1
+          ]
+        },
+        {
+          "areaId": "array-hall",
+          "id": "array-hall-slot-02-operator-desk-01",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "operator-desk"
+          },
+          "pose": {
+            "position": [
+              -2.0,
+              1.96093,
+              -53.05391
+            ],
+            "rotation": [
+              -4.363855055089516e-09,
+              0.9950041770935059,
+              0.09983336925506592,
+              4.349301008232942e-08
+            ]
+          },
+          "size": [
+            2.55,
+            1.4
+          ]
+        },
+        {
+          "areaId": "array-hall",
+          "id": "array-hall-slot-02-operator-desk-02",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "operator-desk"
+          },
+          "pose": {
+            "position": [
+              8.0,
+              1.96093,
+              -53.05391
+            ],
+            "rotation": [
+              -4.363855055089516e-09,
+              0.9950041770935059,
+              0.09983336925506592,
+              4.349301008232942e-08
+            ]
+          },
+          "size": [
+            2.55,
+            1.4
+          ]
+        },
+        {
+          "areaId": "array-hall",
+          "id": "array-hall-slot-02-operator-desk-03",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "operator-desk"
+          },
+          "pose": {
+            "position": [
+              18.0,
+              1.96093,
+              -53.05391
+            ],
+            "rotation": [
+              -4.363855055089516e-09,
+              0.9950041770935059,
+              0.09983336925506592,
+              4.349301008232942e-08
+            ]
+          },
+          "size": [
+            2.55,
+            1.4
+          ]
+        },
+        {
+          "areaId": "rime-vault",
+          "id": "rime-vault-slot-03-operator-desk-01",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "operator-desk"
+          },
+          "pose": {
+            "position": [
+              33.6,
+              -4.00907,
+              -80.8261
+            ],
+            "rotation": [
+              -0.09983336925506592,
+              0.0,
+              0.0,
+              0.9950041770935059
+            ]
+          },
+          "size": [
+            2.55,
+            1.4
+          ]
+        },
+        {
+          "areaId": "rime-vault",
+          "id": "rime-vault-slot-03-operator-desk-02",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "operator-desk"
+          },
+          "pose": {
+            "position": [
+              45.0,
+              -4.00907,
+              -81.8261
+            ],
+            "rotation": [
+              -0.09983336925506592,
+              0.0,
+              0.0,
+              0.9950041770935059
+            ]
+          },
+          "size": [
+            2.55,
+            1.4
+          ]
+        },
+        {
+          "areaId": "rime-vault",
+          "id": "rime-vault-slot-03-terminal-bench-01",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "terminal-bench"
+          },
+          "pose": {
+            "position": [
+              28.5,
+              -0.008,
+              -95.79633
+            ],
+            "rotation": [
+              -0.10977822542190552,
+              0.0,
+              0.0,
+              0.9939561486244202
+            ]
+          },
+          "size": [
+            2.3,
+            1.3
+          ]
+        },
+        {
+          "areaId": "rime-vault",
+          "id": "rime-vault-slot-03-wall-inset-console-01",
+          "mount": {
+            "interaction": "focus-in",
+            "role": "mounted-workspace",
+            "type": "wall-inset-console"
+          },
+          "pose": {
+            "position": [
+              39.0,
+              -0.1,
+              -99.315
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              0.9999999403953552
+            ]
+          },
+          "size": [
+            13.8,
+            6.3
+          ]
+        },
+        {
+          "areaId": "rime-vault",
+          "id": "rime-vault-slot-03-wall-inset-console-02",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "wall-inset-console"
+          },
+          "pose": {
+            "position": [
+              49.295,
+              -1.4,
+              -94.0
+            ],
+            "rotation": [
+              -2.9802322387695312e-08,
+              -0.7071067690849304,
+              0.0,
+              0.7071068286895752
+            ]
+          },
+          "size": [
+            3.0,
+            2.0
+          ]
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-blast-door-screen-01",
+          "mount": {
+            "interaction": "focus-in",
+            "role": "mounted-workspace",
+            "type": "blast-door-screen"
+          },
+          "pose": {
+            "position": [
+              63.0,
+              10.7,
+              -147.095
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              0.9999999403953552
+            ]
+          },
+          "size": [
+            18.5,
+            10.4
+          ]
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-kiosk-pillar-01",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "kiosk-pillar"
+          },
+          "pose": {
+            "position": [
+              45.3,
+              2.25767,
+              -122.84554
+            ],
+            "rotation": [
+              -0.06994280219078064,
+              0.0,
+              0.0,
+              0.9975509643554688
+            ]
+          },
+          "size": [
+            1.0,
+            1.9
+          ]
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-operator-desk-01",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "operator-desk"
+          },
+          "pose": {
+            "position": [
+              38.0,
+              1.96093,
+              -135.7961
+            ],
+            "rotation": [
+              -0.09983336925506592,
+              0.0,
+              0.0,
+              0.9950041770935059
+            ]
+          },
+          "size": [
+            2.5,
+            1.4
+          ]
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-terminal-bench-01",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "terminal-bench"
+          },
+          "pose": {
+            "position": [
+              41.0,
+              1.97243,
+              -122.79978
+            ],
+            "rotation": [
+              -0.20845988392829895,
+              0.0,
+              0.0,
+              0.9780309200286865
+            ]
+          },
+          "size": [
+            3.7,
+            1.55
+          ]
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-wall-inset-console-01",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "wall-inset-console"
+          },
+          "pose": {
+            "position": [
+              76.0,
+              4.9,
+              -146.845
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              0.9999999403953552
+            ]
+          },
+          "size": [
+            3.0,
+            2.0
+          ]
+        },
+        {
+          "areaId": "sun-court",
+          "id": "sun-court-slot-01-facade-wall-01",
+          "mount": {
+            "interaction": "focus-in",
+            "role": "mounted-workspace",
+            "type": "facade-wall"
+          },
+          "pose": {
+            "position": [
+              8.0,
+              10.1,
+              -23.115
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              0.9999999403953552
+            ]
+          },
+          "size": [
+            18.8,
+            9.3
+          ]
+        },
+        {
+          "areaId": "sun-court",
+          "id": "sun-court-slot-01-field-rig-01",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "field-rig"
+          },
+          "pose": {
+            "position": [
+              -16.5,
+              2.9022,
+              0.09496
+            ],
+            "rotation": [
+              -0.019998759031295776,
+              0.0,
+              0.0,
+              0.9997999668121338
+            ]
+          },
+          "size": [
+            2.4,
+            1.35
+          ]
+        },
+        {
+          "areaId": "sun-court",
+          "id": "sun-court-slot-01-field-rig-02",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "field-rig"
+          },
+          "pose": {
+            "position": [
+              -13.3,
+              2.9022,
+              0.09496
+            ],
+            "rotation": [
+              -0.019998759031295776,
+              0.0,
+              0.0,
+              0.9997999668121338
+            ]
+          },
+          "size": [
+            2.4,
+            1.35
+          ]
+        },
+        {
+          "areaId": "sun-court",
+          "id": "sun-court-slot-01-kiosk-pillar-01",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "kiosk-pillar"
+          },
+          "pose": {
+            "position": [
+              17.0,
+              2.2044,
+              -4.74518
+            ],
+            "rotation": [
+              -0.039989352226257324,
+              0.0,
+              0.0,
+              0.9992001056671143
+            ]
+          },
+          "size": [
+            1.6,
+            2.0
+          ]
+        },
+        {
+          "areaId": "sun-court",
+          "id": "sun-court-slot-01-operator-desk-01",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "operator-desk"
+          },
+          "pose": {
+            "position": [
+              -15.0,
+              1.96093,
+              7.5539
+            ],
+            "rotation": [
+              -0.09983336925506592,
+              0.0,
+              0.0,
+              0.9950041770935059
+            ]
+          },
+          "size": [
+            2.6,
+            1.45
+          ]
+        },
+        {
+          "areaId": "sun-court",
+          "id": "sun-court-slot-01-operator-desk-02",
+          "mount": {
+            "interaction": "in-place",
+            "role": "tool-mount",
+            "type": "operator-desk"
+          },
+          "pose": {
+            "position": [
+              22.0,
+              1.96093,
+              7.9539
+            ],
+            "rotation": [
+              -0.09983336925506592,
+              0.0,
+              0.0,
+              0.9950041770935059
+            ]
+          },
+          "size": [
+            2.5,
+            1.4
+          ]
+        }
+      ],
+      "areas": [
+        {
+          "dataAnchors": [
+            "sun-court-slot-01-globe-01",
+            "sun-court-slot-01-crate-01",
+            "sun-court-slot-01-crate-02",
+            "sun-court-slot-01-crate-03",
+            "sun-court-slot-01-crate-04",
+            "sun-court-slot-01-crate-05",
+            "sun-court-slot-01-crate-06"
+          ],
+          "freePlacementZones": [
+            "sun-court-open-work"
+          ],
+          "id": "sun-court",
+          "primaryAnchor": "sun-court-slot-01-facade-wall-01",
+          "spawnId": "sun-court",
+          "theme": "sun-court",
+          "toolAnchors": [
+            "sun-court-slot-01-operator-desk-01",
+            "sun-court-slot-01-operator-desk-02",
+            "sun-court-slot-01-field-rig-01",
+            "sun-court-slot-01-field-rig-02",
+            "sun-court-slot-01-kiosk-pillar-01"
+          ],
+          "workspaceSlot": "01"
+        },
+        {
+          "dataAnchors": [
+            "array-hall-slot-02-crate-01",
+            "array-hall-slot-02-crate-02"
+          ],
+          "freePlacementZones": [
+            "array-hall-open-work"
+          ],
+          "id": "array-hall",
+          "primaryAnchor": "array-hall-slot-02-hanging-wall-01",
+          "spawnId": "array-hall",
+          "theme": "array-hall",
+          "toolAnchors": [
+            "array-hall-slot-02-lectern-01",
+            "array-hall-slot-02-lectern-02",
+            "array-hall-slot-02-banner-01",
+            "array-hall-slot-02-banner-02",
+            "array-hall-slot-02-operator-desk-01",
+            "array-hall-slot-02-operator-desk-02",
+            "array-hall-slot-02-operator-desk-03"
+          ],
+          "workspaceSlot": "02"
+        },
+        {
+          "dataAnchors": [
+            "rime-vault-slot-03-crate-01",
+            "rime-vault-slot-03-crate-02",
+            "rime-vault-slot-03-crate-03"
+          ],
+          "freePlacementZones": [
+            "rime-vault-open-work"
+          ],
+          "id": "rime-vault",
+          "primaryAnchor": "rime-vault-slot-03-wall-inset-console-01",
+          "spawnId": "rime-vault",
+          "theme": "rime-vault",
+          "toolAnchors": [
+            "rime-vault-slot-03-operator-desk-01",
+            "rime-vault-slot-03-operator-desk-02",
+            "rime-vault-slot-03-wall-inset-console-02",
+            "rime-vault-slot-03-terminal-bench-01"
+          ],
+          "workspaceSlot": "03"
+        },
+        {
+          "dataAnchors": [
+            "signal-rise-slot-04-radar-dish-01",
+            "signal-rise-slot-04-crate-01",
+            "signal-rise-slot-04-crate-02",
+            "signal-rise-slot-04-crate-03",
+            "signal-rise-slot-04-crate-04",
+            "signal-rise-slot-04-crate-05",
+            "signal-rise-slot-04-crate-06",
+            "signal-rise-slot-04-crate-07",
+            "signal-rise-slot-04-crate-08"
+          ],
+          "freePlacementZones": [
+            "signal-rise-open-work"
+          ],
+          "id": "signal-rise",
+          "primaryAnchor": "signal-rise-slot-04-blast-door-screen-01",
+          "spawnId": "signal-rise",
+          "theme": "signal-rise",
+          "toolAnchors": [
+            "signal-rise-slot-04-terminal-bench-01",
+            "signal-rise-slot-04-kiosk-pillar-01",
+            "signal-rise-slot-04-wall-inset-console-01",
+            "signal-rise-slot-04-operator-desk-01"
+          ],
+          "workspaceSlot": "04"
+        }
+      ],
+      "bindings": [],
+      "carriedSurfaceId": null,
+      "desktopWorkspaceId": null,
+      "instances": [
+        {
+          "anchorId": "",
+          "areaId": "sun-court",
+          "status": "placed",
+          "surfaceId": "surface-1",
+          "workspaceId": 2
+        },
+        {
+          "anchorId": "",
+          "areaId": "sun-court",
+          "status": "placed",
+          "surfaceId": "surface-2",
+          "workspaceId": 2
+        }
+      ],
+      "objects": [
+        {
+          "areaId": "sun-court",
+          "id": "sun-court-slot-01-globe-01",
+          "mountType": "globe",
+          "pose": {
+            "position": [
+              -7.0,
+              4.18,
+              -10.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "sun-court",
+          "id": "sun-court-slot-01-crate-01",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              -19.0,
+              0.4,
+              2.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "sun-court",
+          "id": "sun-court-slot-01-crate-02",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              -19.0,
+              1.25,
+              2.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "sun-court",
+          "id": "sun-court-slot-01-crate-03",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              -21.0,
+              0.4,
+              6.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "sun-court",
+          "id": "sun-court-slot-01-crate-04",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              -21.0,
+              0.4,
+              4.8
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "sun-court",
+          "id": "sun-court-slot-01-crate-05",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              -22.0,
+              0.4,
+              -1.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "sun-court",
+          "id": "sun-court-slot-01-crate-06",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              23.0,
+              0.4,
+              -14.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "array-hall",
+          "id": "array-hall-slot-02-crate-01",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              -3.0,
+              0.4,
+              -59.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "array-hall",
+          "id": "array-hall-slot-02-crate-02",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              19.0,
+              0.4,
+              -59.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "rime-vault",
+          "id": "rime-vault-slot-03-crate-01",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              47.0,
+              -5.6,
+              -80.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "rime-vault",
+          "id": "rime-vault-slot-03-crate-02",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              47.0,
+              -5.6,
+              -100.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "rime-vault",
+          "id": "rime-vault-slot-03-crate-03",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              34.0,
+              -5.6,
+              -96.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-radar-dish-01",
+          "mountType": "radar-dish",
+          "pose": {
+            "position": [
+              35.0,
+              8.5,
+              -149.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-crate-01",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              32.0,
+              0.4,
+              -121.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-crate-02",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              48.0,
+              0.4,
+              -151.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-crate-03",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              82.0,
+              0.4,
+              -143.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-crate-04",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              46.0,
+              0.4,
+              -132.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-crate-05",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              47.5,
+              0.4,
+              -133.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-crate-06",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              70.0,
+              0.4,
+              -139.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-crate-07",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              71.5,
+              0.4,
+              -139.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        },
+        {
+          "areaId": "signal-rise",
+          "id": "signal-rise-slot-04-crate-08",
+          "mountType": "crate",
+          "pose": {
+            "position": [
+              34.0,
+              0.4,
+              -140.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          },
+          "sourceId": null
+        }
+      ],
+      "placementZones": [
+        {
+          "bounds": {
+            "max": [
+              7.0,
+              4.8,
+              8.0
+            ],
+            "min": [
+              -2.0,
+              0.15,
+              0.0
+            ]
+          },
+          "clearance": 0.15,
+          "id": "sun-court-open-work",
+          "windowSizes": [
+            [
+              1.6,
+              0.9
+            ],
+            [
+              3.2,
+              1.8
+            ]
+          ]
+        },
+        {
+          "bounds": {
+            "max": [
+              12.0,
+              4.8,
+              -34.0
+            ],
+            "min": [
+              3.0,
+              0.15,
+              -40.0
+            ]
+          },
+          "clearance": 0.15,
+          "id": "array-hall-open-work",
+          "windowSizes": [
+            [
+              1.6,
+              0.9
+            ],
+            [
+              3.2,
+              1.8
+            ]
+          ]
+        },
+        {
+          "bounds": {
+            "max": [
+              42.0,
+              -1.2,
+              -77.0
+            ],
+            "min": [
+              36.0,
+              -5.85,
+              -83.0
+            ]
+          },
+          "clearance": 0.15,
+          "id": "rime-vault-open-work",
+          "windowSizes": [
+            [
+              1.6,
+              0.9
+            ],
+            [
+              3.2,
+              1.8
+            ]
+          ]
+        },
+        {
+          "bounds": {
+            "max": [
+              62.0,
+              4.8,
+              -125.0
+            ],
+            "min": [
+              52.0,
+              0.15,
+              -130.0
+            ]
+          },
+          "clearance": 0.15,
+          "id": "signal-rise-open-work",
+          "windowSizes": [
+            [
+              1.6,
+              0.9
+            ],
+            [
+              3.2,
+              1.8
+            ]
+          ]
+        }
+      ],
+      "placements": []
+    },
+    "movement": {
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        -0.049979180097579956,
+        2.9764160913714477e-08,
+        1.489449785729846e-09,
+        0.9987502694129944
+      ],
+      "position": [
+        -8.0,
+        1.7000000476837158,
+        12.0
+      ]
+    },
+    "presentation": {
+      "fov": 60.0,
+      "profile": {
+        "bloom": {
+          "radius": 3,
+          "strength": 0.12,
+          "threshold": 1
+        },
+        "exposure": 1,
+        "fog": {
+          "baseHeight": 0,
+          "color": [
+            0.028,
+            0.045,
+            0.065
+          ],
+          "density": 0.008,
+          "excludeUnlit": true,
+          "heightFalloff": 0
+        },
+        "sky": {
+          "ground": [
+            0.055,
+            0.07,
+            0.085
+          ],
+          "horizon": [
+            0.55,
+            0.61,
+            0.65
+          ],
+          "sun": {
+            "angularRadius": 0.025,
+            "color": [
+              1,
+              0.83,
+              0.6
+            ],
+            "direction": [
+              0.3,
+              1,
+              0.5
+            ],
+            "intensity": 3
+          },
+          "zenith": [
+            0.18,
+            0.3,
+            0.52
+          ]
+        },
+        "toneMapping": "aces"
+      },
+      "quality": "intel"
+    },
+    "runtime": {
+      "active": true,
+      "outputs": [
+        "output-1"
+      ]
+    },
+    "shell": {
+      "leases": [
+        {
+          "id": "lease-08f5647eaaf18b89",
+          "outputs": [
+            "output-1"
+          ],
+          "overlays": [
+            {
+              "exclusiveInput": false,
+              "outputId": "output-1",
+              "visible": false
+            }
+          ]
+        }
+      ]
+    },
+    "spatial": {
+      "map": {
+        "bounds": [
+          -36,
+          -162,
+          86,
+          16
+        ],
+        "sha256": "af02d47f27014fde50a3319cd740b96496ccf79e5a7f1d60e49191142fa45fb7",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 520 780\"><rect width=\"520\" height=\"780\" fill=\"#10212d\"/>\n<path d=\"M 128.0 738.0 L 164.0 682.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 164.0 682.0 L 192.0 642.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 192.0 642.0 L 192.0 590.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 164.0 682.0 L 164.0 698.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 164.0 698.0 L 136.0 698.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 136.0 698.0 L 136.0 690.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 136.0 690.0 L 136.0 666.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 136.0 666.0 L 136.0 662.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 128.0 738.0 L 128.0 748.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 128.0 748.0 L 74.0 748.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 74.0 748.0 L 74.0 730.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 74.0 730.0 L 74.0 666.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 74.0 666.0 L 74.0 634.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 74.0 634.0 L 36.0 634.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 74.0 666.0 L 74.0 594.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 74.0 594.0 L 74.0 530.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 74.0 530.0 L 94.0 522.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 94.0 522.0 L 94.0 530.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 94.0 530.0 L 94.0 594.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 94.0 594.0 L 94.0 610.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 94.0 610.0 L 113.2 610.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 113.2 610.0 L 113.2 546.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 113.2 546.0 L 140.0 546.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 140.0 546.0 L 140.0 594.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 192.0 590.0 L 192.0 558.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 192.0 558.0 L 192.0 506.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 192.0 506.0 L 240.0 490.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 240.0 490.0 L 280.0 490.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 192.0 558.0 L 118.0 546.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 118.0 546.0 L 118.0 530.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 118.0 530.0 L 118.0 466.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 118.0 466.0 L 118.0 453.2\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 118.0 453.2 L 146.0 453.2\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 146.0 453.2 L 146.0 466.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 146.0 466.0 L 146.0 530.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 280.0 490.0 L 280.0 482.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 280.0 482.0 L 280.0 394.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 280.0 394.0 L 288.0 394.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 288.0 394.0 L 312.0 374.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 312.0 374.0 L 312.0 334.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 312.0 334.0 L 352.0 298.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 352.0 298.0 L 376.0 290.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 288.0 394.0 L 274.0 386.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 274.0 386.0 L 274.0 322.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 274.0 322.0 L 274.0 314.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 376.0 290.0 L 376.0 194.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 376.0 194.0 L 376.0 190.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 376.0 190.0 L 388.0 162.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 388.0 162.0 L 412.0 146.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 412.0 146.0 L 412.0 106.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 412.0 106.0 L 412.0 82.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 388.0 162.0 L 456.0 178.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 456.0 178.0 L 466.0 170.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 466.0 170.0 L 466.0 122.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 376.0 190.0 L 308.0 186.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 308.0 186.0 L 286.0 178.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 286.0 178.0 L 286.0 114.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 376.0 190.0 L 412.0 194.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 412.0 194.0 L 464.0 238.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 464.0 238.0 L 482.0 234.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 482.0 234.0 L 482.0 138.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 482.0 138.0 L 482.0 82.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<path d=\"M 482.0 82.0 L 336.0 82.0\" stroke=\"#d6aa61\" stroke-width=\"3\" fill=\"none\"/>\n<circle cx=\"128.0\" cy=\"738.0\" r=\"8\" fill=\"#9ccaca\"/><text x=\"140.0\" y=\"738.0\" fill=\"#eee0c7\" font-size=\"12\">Sun Court</text>\n<circle cx=\"192.0\" cy=\"554.0\" r=\"8\" fill=\"#9ccaca\"/><text x=\"204.0\" y=\"554.0\" fill=\"#eee0c7\" font-size=\"12\">Array Hall</text>\n<circle cx=\"312.0\" cy=\"374.0\" r=\"8\" fill=\"#9ccaca\"/><text x=\"324.0\" y=\"374.0\" fill=\"#eee0c7\" font-size=\"12\">Rime Vault</text>\n<circle cx=\"376.0\" cy=\"190.0\" r=\"8\" fill=\"#9ccaca\"/><text x=\"388.0\" y=\"190.0\" fill=\"#eee0c7\" font-size=\"12\">Signal Rise</text>\n</svg>",
+        "worldToMap": [
+          0.007692307692307693,
+          0,
+          0,
+          0.005128205128205128,
+          0.3076923076923077,
+          0.8846153846153846
+        ]
+      },
+      "output": {
+        "height": 1080,
+        "id": "output-1",
+        "name": "HEADLESS-1",
+        "scale": 1.0,
+        "width": 1920
+      },
+      "projection": {
+        "markers": [
+          {
+            "distance": 19.142621994018555,
+            "id": "globe-platform",
+            "label": "Instrument terrace",
+            "occluded": false,
+            "x": 0.551863968372345,
+            "y": 0.3575083017349243
+          },
+          {
+            "distance": 22.8527889251709,
+            "id": "lookout",
+            "label": "West lookout",
+            "occluded": false,
+            "x": 0.12443739175796509,
+            "y": 0.21428713202476501
+          },
+          {
+            "distance": 34.94281005859375,
+            "id": "cascade-bridge",
+            "label": "Upper Cascade",
+            "occluded": false,
+            "x": 0.06011536717414856,
+            "y": 0.27642178535461426
+          },
+          {
+            "distance": 39.509490966796875,
+            "id": "rooftop",
+            "label": "Rooftop shelter",
+            "occluded": false,
+            "x": 0.5427030324935913,
+            "y": 0.006186723709106445
+          },
+          {
+            "distance": 47.75981521606445,
+            "id": "hall-arrival",
+            "label": "Array Hall",
+            "occluded": false,
+            "x": 0.6740747690200806,
+            "y": 0.41310760378837585
+          },
+          {
+            "distance": 52.80388259887695,
+            "id": "hall-upper",
+            "label": "Upper balcony",
+            "occluded": true,
+            "x": 0.5430322289466858,
+            "y": 0.27642175555229187
+          },
+          {
+            "distance": 102.14205932617188,
+            "id": "vault-arrival",
+            "label": "Rime Vault",
+            "occluded": true,
+            "x": 0.7458561658859253,
+            "y": 0.4704039692878723
+          },
+          {
+            "distance": 112.12604522705078,
+            "id": "vault-platform",
+            "label": "Maintenance deck",
+            "occluded": true,
+            "x": 0.6682650446891785,
+            "y": 0.42958101630210876
+          },
+          {
+            "distance": 150.37619018554688,
+            "id": "rise-arrival",
+            "label": "Signal Rise",
+            "occluded": true,
+            "x": 0.7215641140937805,
+            "y": 0.41310760378837585
+          },
+          {
+            "distance": 178.72537231445312,
+            "id": "fortress-room",
+            "label": "Gate operator room",
+            "occluded": true,
+            "x": 0.7122662663459778,
+            "y": 0.4002876579761505
+          },
+          {
+            "distance": 175.67587280273438,
+            "id": "diagnostics-platform",
+            "label": "Diagnostics deck",
+            "occluded": true,
+            "x": 0.7690567970275879,
+            "y": 0.39945387840270996
+          },
+          {
+            "distance": 160.9728240966797,
+            "id": "dish-platform",
+            "label": "Dish terrace",
+            "occluded": true,
+            "x": 0.6242852210998535,
+            "y": 0.3906204402446747
+          },
+          {
+            "distance": 172.15109252929688,
+            "id": "gantry-west",
+            "label": "Cable gantry",
+            "occluded": true,
+            "x": 0.655806303024292,
+            "y": 0.38098686933517456
+          }
+        ],
+        "monotonicMs": 110947836,
+        "outputId": "output-1",
+        "worldId": "com.hyprune.lumen-reach"
+      },
+      "world": {
+        "id": "com.hyprune.lumen-reach",
+        "name": "Lumen Reach",
+        "places": [
+          {
+            "id": "arrival",
+            "name": "Sun Court",
+            "position": [
+              -8.0,
+              1.7000000476837158,
+              12.0
+            ]
+          },
+          {
+            "id": "globe-platform",
+            "name": "Instrument terrace",
+            "position": [
+              -6.0,
+              2.9000000953674316,
+              -7.0
+            ]
+          },
+          {
+            "id": "lookout",
+            "name": "West lookout",
+            "position": [
+              -21.5,
+              5.699999809265137,
+              -6.0
+            ]
+          },
+          {
+            "id": "cascade-bridge",
+            "name": "Upper Cascade",
+            "position": [
+              -31.0,
+              5.699999809265137,
+              -14.0
+            ]
+          },
+          {
+            "id": "rooftop",
+            "name": "Rooftop shelter",
+            "position": [
+              -5.0,
+              17.700000762939453,
+              -24.0
+            ]
+          },
+          {
+            "id": "hall-arrival",
+            "name": "Array Hall",
+            "position": [
+              8.0,
+              1.7000000476837158,
+              -33.0
+            ]
+          },
+          {
+            "id": "hall-upper",
+            "name": "Upper balcony",
+            "position": [
+              -3.5,
+              9.699999809265137,
+              -40.0
+            ]
+          },
+          {
+            "id": "vault-arrival",
+            "name": "Rime Vault",
+            "position": [
+              38.0,
+              -4.300000190734863,
+              -79.0
+            ]
+          },
+          {
+            "id": "vault-platform",
+            "name": "Maintenance deck",
+            "position": [
+              28.5,
+              -0.2999999523162842,
+              -94.0
+            ]
+          },
+          {
+            "id": "rise-arrival",
+            "name": "Signal Rise",
+            "position": [
+              54.0,
+              1.7000000476837158,
+              -125.0
+            ]
+          },
+          {
+            "id": "fortress-room",
+            "name": "Gate operator room",
+            "position": [
+              63.0,
+              4.100000381469727,
+              -152.0
+            ]
+          },
+          {
+            "id": "diagnostics-platform",
+            "name": "Diagnostics deck",
+            "position": [
+              76.5,
+              4.100000381469727,
+              -142.0
+            ]
+          },
+          {
+            "id": "dish-platform",
+            "name": "Dish terrace",
+            "position": [
+              31.5,
+              5.699999809265137,
+              -144.0
+            ]
+          },
+          {
+            "id": "gantry-west",
+            "name": "Cable gantry",
+            "position": [
+              44.0,
+              7.699999809265137,
+              -152.0
+            ]
+          }
+        ]
+      }
+    },
+    "surfaces": [
+      {
+        "focused": false,
+        "id": "surface-1",
+        "kind": "window",
+        "logicalSize": [
+          1896,
+          1056
+        ],
+        "title": "~/w/h/core"
+      },
+      {
+        "focused": false,
+        "id": "surface-2",
+        "kind": "window",
+        "logicalSize": [
+          941,
+          1056
+        ],
+        "title": "Live-launch-regression"
+      },
+      {
+        "focused": true,
+        "id": "workspace-1",
+        "kind": "workspace",
+        "logicalSize": [
+          1280,
+          720
+        ],
+        "title": "1"
+      },
+      {
+        "focused": true,
+        "id": "workspace-2",
+        "kind": "workspace",
+        "logicalSize": [
+          1280,
+          720
+        ],
+        "title": "2"
+      }
+    ],
+    "workspaces": {
+      "currentId": 2,
+      "locations": []
+    },
+    "world": {
+      "id": "com.hyprune.lumen-reach",
+      "spawnId": "arrival"
+    }
+  },
+  "submode": "normal",
+  "surfaces": [
+    {
+      "id": "surface-1",
+      "parentId": "",
+      "position": [
+        -5.510690689086914,
+        1.7000000476837158,
+        7.663717746734619
+      ],
+      "rotation": [
+        0.0,
+        -0.2576272785663605,
+        0.0,
+        0.9662443995475769
+      ],
+      "size": [
+        3.8400001525878906,
+        2.1600000858306885
+      ],
+      "title": "~/w/h/core",
+      "visible": true
+    },
+    {
+      "id": "surface-2",
+      "parentId": "",
+      "position": [
+        -8.0,
+        1.7000000476837158,
+        7.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "size": [
+        3.8400001525878906,
+        2.1600000858306885
+      ],
+      "title": "Live-launch-regression",
+      "visible": true
+    }
+  ],
+  "timestampMs": 1791469877418,
+  "tool": 1,
+  "version": 1
+}

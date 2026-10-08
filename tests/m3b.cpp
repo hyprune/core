@@ -50,6 +50,52 @@ int main() {
                 }
                 checked++;
             }
+    assert(!defaults["invert_y"].get<bool>());
+    auto legacy = defaults;
+    legacy.erase("invert_y");
+    for (auto mode : {"interactive", "focus", "menu"}) {
+        legacy["modes"][mode].erase("debug");
+        legacy["modes"][mode].erase("capture");
+    }
+    assert(validateInput(legacy) == defaults);
+    assert(sim::Camera::lookPitch(-10, .0025f, false) > 0);
+    assert(sim::Camera::lookPitch(-10, .0025f, true) < 0);
+    for (float yaw : {-.5235988f, 0.f, .5235988f}) {
+        sim::Camera c;
+        c.yaw = yaw;
+        c.pitch = .2f;
+        assert(length(rotate(c.orientation(), Vec3{0, 0, -1}) - c.forward()) < .0001f);
+        auto viewForward = c.view().point(c.position + c.forward() * 3);
+        assert(length(viewForward - Vec3{0, 0, -3}) < .0001f);
+        for (auto xy : {Vec3{.2f, .25f, 0}, Vec3{.8f, .75f, 0}}) {
+            auto ray = c.ray(xy.x, xy.y, 16.f / 9);
+            auto p = c.view().point(c.position + ray * 5);
+            float tanFov = std::tan(c.fov * .01745329252f / 2);
+            assert(std::abs((p.x / -p.z / tanFov / (16.f / 9) + 1) / 2 - xy.x) < .0001f);
+            assert(std::abs((1 - p.y / -p.z / tanFov) / 2 - xy.y) < .0001f);
+        }
+    }
+    sim::Camera carryCamera;
+    carryCamera.position = {0, 1.7f, 0};
+    surfaces::Surface carried;
+    carried.center = {0, 1.7f, -3};
+    carried.width = 2;
+    carried.height = 1;
+    Hands carry;
+    carry.begin(Gesture::Carry, carried, {3, .7f, .3f}, carryCamera);
+    auto initialOffset = carry.offset;
+    carryCamera.yaw = .5235988f;
+    carryCamera.pitch = .15f;
+    assert(carry.update(carryCamera, carryCamera.forward(), .016f, {}));
+    auto facing = carry.pose.normal();
+    assert(dot(facing, carryCamera.forward() * -1) > .9999f);
+    assert(length(carry.pose.center + rotate(carryCamera.orientation(), initialOffset) -
+                  (carryCamera.position + carryCamera.forward() * 3)) < .0001f);
+    assert(carry.pose.center.x > 0);
+    for (auto normal : {Vec3{1, 0, 0}, Vec3{0, 0, -1}, Vec3{0, 1, 0}})
+        assert(length(rotate(orientation(normal), Vec3{0, 0, 1}) - normal) < .0001f);
+    auto positiveY = std::array<float, 4>{0, std::sin(.5235988f / 2), 0, std::cos(.5235988f / 2)};
+    assert(rotate(positiveY, Vec3{1, 0, 0}).z < 0); // Surface/editor angles are right-handed.
     Input multi;
     multi.event("world", "k", 0, true, 0);
     multi.event("world", "w", Shift, true, 1);

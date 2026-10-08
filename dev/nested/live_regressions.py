@@ -54,6 +54,39 @@ def acceptance(logs,recorded,children,check):
     instances=s.camera()['instances'];check('new_terminal_has_current_home',any(v['surfaceId']==window['id'] and v['areaId'] for v in instances))
     app=wait(lambda:next((a for a in status()['appDetails'] if a['title']=='Live-launch-regression'),None))
     check('workspaces_list_native_terminal_app',any(w['id']==app['workspaceId'] for w in status()['workspaces']))
+    # Carry follows camera heading and preserves an off-centre grab.
+    carry_modifier=s.envrun('wtype','-M','logo','-P','Super_L','-s','3500','-p','Super_L','-m','logo');children.append(carry_modifier)
+    wait(lambda:s.camera()['superHeld']);pointer('button',272,1)
+    carried_id=wait(lambda:s.camera()['gestureId'] if s.camera()['gesture']==1 else None)
+    initial_heading=s.camera()['yaw'];pointer(210,0)
+    turned=wait(lambda:s.camera() if s.camera()['yaw']>initial_heading+.45 else None)
+    carried=next(v for v in turned['captures'] if v['id']==carried_id)
+    q=carried['rotation'];normal=[2*(q[0]*q[2]+q[3]*q[1]),2*(q[1]*q[2]-q[3]*q[0]),1-2*(q[0]*q[0]+q[1]*q[1])]
+    forward=[math.sin(turned['yaw'])*math.cos(turned['pitch']),math.sin(turned['pitch']),-math.cos(turned['yaw'])*math.cos(turned['pitch'])]
+    check('carried_window_faces_player_after_right_turn',sum(-normal[i]*forward[i] for i in range(3))>.98 and not carried['collision'])
+    pointer('button',272,0);carry_modifier.wait(timeout=5);pointer(-210,0)
+    # Retest round 2: motion conventions, actual debug drawing, and deferred
+    # paired captures through the same live bootstrap as the owner.
+    before=s.camera()['pitch'];pointer(0,-40)
+    wait(lambda:s.camera()['pitch']>before+.03)
+    check('mouse_up_looks_up_default',True)
+    before=s.camera()['pitch'];pointer(0,40);wait(lambda:s.camera()['pitch']<before-.03)
+    input_path=pathlib.Path(recorded['runRoot'])/'input.json' if 'runRoot' in recorded else pathlib.Path(recorded['runroot'])/'input.json'
+    config=json.loads(input_path.read_text());config['invert_y']=True
+    temp=input_path.with_suffix('.tmp');temp.write_text(json.dumps(config));temp.replace(input_path);time.sleep(.7)
+    before=s.camera()['pitch'];pointer(0,-40);wait(lambda:s.camera()['pitch']<before-.03)
+    check('invert_y_live_reload_reverses_only_pitch',True)
+    config['invert_y']=False;temp.write_text(json.dumps(config));temp.replace(input_path);time.sleep(.7)
+    keys('-k','F3');wait(lambda:s.camera()['debug'])
+    check('F3_core_debug_enabled',s.camera()['timings']['frameMs']>0)
+    keys('-k','u')
+    capture_dir=pathlib.Path(s.camera()['captureDirectory'])
+    capture_json=wait(lambda:next((p for p in sorted(capture_dir.glob('capture-*.json'),reverse=True) if p.stat().st_mtime>recorded['since']),None))
+    dump=json.loads(capture_json.read_text());png=pathlib.Path(dump['screenshot'])
+    check('U_persists_JSON_and_core_FBO_PNG',png.read_bytes()[:8]==b'\x89PNG\r\n\x1a\n' and dump['frame']['width']>0 and dump['frame']['height']>0)
+    check('capture_files_private',capture_json.stat().st_mode&0o777==0o600 and png.stat().st_mode&0o777==0o600)
+    (logs/'round2-capture.json').write_text(json.dumps(dump,indent=2)+'\n')
+    keys('-k','y');wait(lambda:not s.camera()['debug']);check('Y_core_debug_disabled',True)
     # A native top layer represents the owner's launcher/bar. It must receive
     # ordinary pointer input, while hidden desktop clients remain masked.
     marker=logs/'layer-clicked';marker.unlink(missing_ok=True)
@@ -88,19 +121,22 @@ ShellRoot {
     # hints crashed Qt in the owner's two coredumps.
     keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status()['director'])
     original_pid=qpid()
+    original_connections=(logs/'shell.log').read_text().count('"type": "presentation.peer"')
     for n in range(3):
         for tab in [3,4,6,0]:
             ui('tab',tab);time.sleep(.12)
             assert status()['tab']==tab and status()['director']
     check('Workspaces_and_Help_repeat_without_Qt_crash',qpid()==original_pid)
+    keys('-k','u');wait(lambda:any(p.stat().st_mtime>capture_json.stat().st_mtime for p in capture_dir.glob('capture-*.json')))
+    check('U_works_in_Director_menu',True)
     ui('tab',4)
     # Exercise Quickshell's own crash supervisor: the replacement QML PID must
     # supersede even a retained old socket and retain the authenticated bridge.
     subprocess.run(['prlimit','--pid',str(original_pid),'--core=0'],check=True)
     os.kill(original_pid,signal.SIGSEGV)
-    wait(lambda:qpid()!=original_pid,20)
+    wait(lambda:(logs/'shell.log').read_text().count('"type": "presentation.peer"')>original_connections,20)
     wait(lambda:status().get('status')=='live',20)
-    check('Quickshell_crash_reconnects_through_owned_bridge',qpid()!=original_pid and status()['lease']==initial['lease'])
+    check('Quickshell_crash_reconnects_through_owned_bridge',(logs/'shell.log').read_text().count('"type": "presentation.peer"')>original_connections and status()['lease']==initial['lease'])
     keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status()['director'])
     ui('tab',4);time.sleep(.4);check('Help_opens_after_QML_crash_recovery',status()['director'] and status()['tab']==4)
     keys('-k','Escape');wait(lambda:not status()['director'])

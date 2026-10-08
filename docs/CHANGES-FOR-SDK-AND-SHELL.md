@@ -234,3 +234,15 @@ the same UID are accepted; the bridge binds the replacement Wayland PID. Directo
 uses anchored pages to avoid the observed Qt StackLayout crash. Back from world
 control gives a real layer cursor; Back/Super+Tab returns. See M3B.md for the
 added supervised cursor transitions and owner retry notes.
+
+## Live retest round 2 / input v2 compatible amendment
+
+IPC 0.6 input schema accepts optional `invert_y` (boolean, default false) and
+optional debug/capture action arrays in interactive/focus/menu. Older keymaps
+remain valid; core canonicalizes these defaults on read. Settings exposes invert
+Y and the additional action slots. Bind interception stays mode scoped.
+Core draws diagnostic FPS/timings/collision wires; F3/Y and U work in all modes.
+U publishes private JSON/PNG pairs from the last completed core world frame,
+including frame age, and posts a path notice. This adds no cursor transitions and
+no compositor snapshot calls. Native focus captures explicitly retain the last
+world view; they do not capture desktop/layer pixels.

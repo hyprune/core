@@ -232,3 +232,62 @@ Live follow-up evidence: [35 nested checks](evidence/live-followup/acceptance.js
 [recovered Director](evidence/live-followup/director.json), and the unit/schema/SDK/shell
 logs under `docs/evidence/live-followup/`. The test intentionally crashes only the
 nested presentation, limits its core dump size, and leaves the real session alone.
+
+## Live retest round 2: input conventions and diagnostics
+
+World +Y is up; zero camera heading looks along -Z. Positive camera heading
+turns right; positive pitch looks up. Screen pointer Y grows down. Camera
+quaternions use right-handed axis angles, so the camera quaternion is
+`Y(-heading) * X(pitch)`. Surface/editor yaw remains a right-handed +Y angle.
+Carry applies the camera quaternion delta to both the original window facing
+and the hit-point offset, preserving the grab point as the camera turns or tilts.
+Camera ray/projection, mount normals, editor rotation and carry are pinned by
+unit tests. Focus interpolation takes the shortest heading across the ±pi seam.
+The virtual reticle now uses Hyprland's target convention (native row zero is
+the logical top), matching input rays and projection.
+
+`invert_y` is an optional boolean in input.json, defaults to false, and has a
+Settings checkbox. Older keymaps are normalized without overwriting the file.
+Missing debug/capture actions in interactive/focus/menu inherit their world
+bindings; explicit empty arrays disable them. F3/Y and U are scoped bindings in
+those modes, so their Hyprland collisions are intercepted only while active.
+
+F3/Y draws core's same-frame diagnostic HUD: FPS/frame interval, CPU update,
+render, capture refresh and IPC, asynchronous disjoint-aware GPU query timings,
+and CPU scene/windows/bloom/output timings. Collision triangles, player capsule,
+window OBBs, placement-zone bounds and walking graph are native wireframes.
+Collision VBOs are rebuilt outside the render pass when editor transforms change.
+GPU query reads never wait for unfinished results or call glFinish; unavailable
+or disjoint timings show N/A. Debug HUD remains visible over native focus views;
+its world timing sample refers to the last world frame there.
+
+U stages a core-owned RGBA8 tonemap of the last completed world resolve FBO
+**after** the compositor frame, restores GL state including pack/unpack/PBO
+state, and reads that own FBO. It never asks Hyprland to render or snapshot.
+PNG encoding and atomic private file persistence run in a worker; the owner loop
+posts the success/error notice. The bootstrap pins the state directory at load:
+`$XDG_STATE_HOME/hyprune/captures/`, or `~/.local/state/hyprune/captures/`.
+A JSON/PNG pair has the same timestamp stem. JSON records the frame camera,
+number, dimensions, age, source and timings, plus mode/tools/surfaces/placements,
+IPC/events and bounded input history. During native 2D handover the screenshot is
+explicitly the last completed **world** frame, with its age, rather than a native
+desktop snapshot. Plugin unload waits for any active writer to finish.
+
+### Supervised live test checklist additions
+
+- [ ] World: mouse up looks up; Settings → Invert mouse look Y → Save reverses
+      only the vertical axis. Clear the option and save to restore the default.
+- [ ] Carry an off-centre point of a terminal; turn right 30°, left, then tilt.
+      The window faces the player, the grabbed point stays under the reticle,
+      and collision recovery still prevents geometry penetration.
+- [ ] F3 then Y toggles core diagnostics; verify CPU/GPU labels and all collision
+      wires. No cursor state change occurs for either action.
+- [ ] U in world, E-interactive, F-focus and Director: JSON and PNG appear,
+      the notice names their path, and PNG orientation matches the world output.
+      Native focus captures clearly report last-world-frame age. U never changes
+      the cursor or triggers a compositor snapshot inside the frame.
+- [ ] Interactive/focus → Super+Tab: existing deferred cursor hide/show and focus
+      exit remain balanced after diagnostics. F3/Y/U stealing ends on deactivate.
+
+Nested evidence is under `docs/evidence/live-round2/`. The nested compositor has
+only a software cursor; these checks do not validate hardware-cursor behavior.

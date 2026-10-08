@@ -28,6 +28,17 @@ inline Vec3 rotate(const std::array<float, 4> &q, Vec3 v) {
     Vec3 u{q[0], q[1], q[2]};
     return v + cross(u, v) * (2 * q[3]) + cross(u, cross(u, v)) * 2;
 }
+inline std::array<float, 4> quaternionProduct(const std::array<float, 4> &a, const std::array<float, 4> &b) {
+    return {
+        a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+        a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]};
+}
+inline std::array<float, 4> conjugate(std::array<float, 4> q) {
+    q[0] = -q[0];
+    q[1] = -q[1];
+    q[2] = -q[2];
+    return q;
+}
 struct Mat4 {
     bool operator==(const Mat4 &) const = default;
     std::array<float, 16> v{};

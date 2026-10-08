@@ -4,9 +4,12 @@
 namespace hyprune::render {
 // Every state changed by Renderer or its uploads is restored, even on exceptions.
 class GLState {
-    GLint draw, read, program, vao, array, renderbuffer, active, unpack, pbo;
+    GLint draw, read, program, vao, array, renderbuffer, active, unpack, pbo, pack, packPbo;
     GLint viewport[4], scissor[4], depthFunc, cullMode, frontFace, srcRGB, dstRGB, srcAlpha, dstAlpha, eqRGB, eqAlpha;
     GLfloat clearColor[4], clearDepth, depthRange[2];
+    std::array<GLint, 6> pixelRows;
+    static constexpr std::array<GLenum, 6> rowEnums{GL_PACK_ROW_LENGTH,   GL_PACK_SKIP_ROWS,   GL_PACK_SKIP_PIXELS,
+                                                    GL_UNPACK_ROW_LENGTH, GL_UNPACK_SKIP_ROWS, GL_UNPACK_SKIP_PIXELS};
     GLboolean colorMask[4], depthMask;
     struct Unit {
         GLint texture, cube, sampler;
@@ -23,6 +26,8 @@ class GLState {
 
   public:
     GLState() {
+        for (std::size_t i = 0; i < rowEnums.size(); ++i)
+            glGetIntegerv(rowEnums[i], &pixelRows[i]);
         glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw);
         glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read);
         glGetIntegerv(GL_CURRENT_PROGRAM, &program);
@@ -32,6 +37,8 @@ class GLState {
         glGetIntegerv(GL_ACTIVE_TEXTURE, &active);
         glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpack);
         glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &pbo);
+        glGetIntegerv(GL_PACK_ALIGNMENT, &pack);
+        glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &packPbo);
         for (int i = 0; i < 7; i++) {
             glActiveTexture(GL_TEXTURE0 + i);
             glGetIntegerv(GL_TEXTURE_BINDING_2D, &units[i].texture);
@@ -59,6 +66,8 @@ class GLState {
             enabled[i] = glIsEnabled(caps[i]);
     }
     ~GLState() {
+        for (std::size_t i = 0; i < rowEnums.size(); ++i)
+            glPixelStorei(rowEnums[i], pixelRows[i]);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, draw);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, read);
         glUseProgram(program);
@@ -74,6 +83,8 @@ class GLState {
         glActiveTexture(active);
         glPixelStorei(GL_UNPACK_ALIGNMENT, unpack);
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
+        glPixelStorei(GL_PACK_ALIGNMENT, pack);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, packPbo);
         glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
         glScissor(scissor[0], scissor[1], scissor[2], scissor[3]);
         glDepthFunc(depthFunc);

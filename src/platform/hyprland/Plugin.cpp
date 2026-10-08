@@ -43,6 +43,7 @@ extern "C" {
 }
 #include "Capture.hpp"
 #include "ipc/Bridge.hpp"
+#include "render/PNG.hpp"
 #include "render/Renderer.hpp"
 #include <fcntl.h>
 #include <fstream>
@@ -66,6 +67,8 @@ struct Runtime {
     std::deque<Json> recentIPC, recentEvents;
     unsigned modifiers = 0;
     bool debug = false, lookHeld = false;
+    std::filesystem::path captureDirectory;
+    std::future<std::string> captureWrite;
     std::string relativeSurface;
     float localX = .5f, localY = .5f;
     std::string inputMode() const;
@@ -357,7 +360,9 @@ void motion(void *self, const Vector2D &delta) {
         if (!mouseLook)
             return;
         runtime->lookX += float(delta.x) * runtime->config["player"]["look_sensitivity"].get<float>();
-        runtime->lookY -= float(delta.y) * runtime->config["player"]["look_sensitivity"].get<float>();
+        runtime->lookY +=
+            sim::Camera::lookPitch(float(delta.y), runtime->config["player"]["look_sensitivity"].get<float>(),
+                                   runtime->input.config["invert_y"].get<bool>());
         return;
     }
     if (runtime && runtime->active && runtime->cursorWarpPending)
@@ -365,14 +370,9 @@ void motion(void *self, const Vector2D &delta) {
     originalMove(self, delta);
 }
 Vec3 pointerRay() {
-    auto forward = runtime->camera.forward(), right = normalized(cross(forward, {0, 1, 0})), up = cross(right, forward);
-    float tan = std::tan(runtime->camera.fov * .01745329252f / 2),
-          aspect = runtime->monitor ? runtime->monitor->m_pixelSize.x / float(runtime->monitor->m_pixelSize.y) : 1;
-    return normalized(
-        forward +
-        right * ((((runtime->typing || runtime->editor.activeHandle >= 0) ? runtime->pointerX : .5f) * 2 - 1) * tan *
-                 aspect) +
-        up * ((1 - ((runtime->typing || runtime->editor.activeHandle >= 0) ? runtime->pointerY : .5f) * 2) * tan));
+    float aspect = runtime->monitor ? runtime->monitor->m_size.x / float(runtime->monitor->m_size.y) : 1;
+    bool pointer = runtime->typing || runtime->editor.activeHandle >= 0;
+    return runtime->camera.ray(pointer ? runtime->pointerX : .5f, pointer ? runtime->pointerY : .5f, aspect);
 }
 std::optional<std::pair<std::string, surfaces::Hit>> aim() {
     std::optional<std::pair<std::string, surfaces::Hit>> best;
@@ -1228,7 +1228,7 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
             Fullscreen::controller()->isFullscreen(e->window.lock(), Fullscreen::FSMODE_MAXIMIZED))
             Fullscreen::controller()->setFullscreenMode(e->window.lock(), Fullscreen::FSMODE_NONE,
                                                         Fullscreen::FSMODE_NONE);
-        hands.begin(g, e->surface, hit->second);
+        hands.begin(g, e->surface, hit->second, camera);
         layout.freePoses[e->surface.id] = e->surface;
         gestureButton = event.button;
         return;
@@ -1385,7 +1385,7 @@ void Runtime::transitionTick(float dt) {
         s.center = s.center + (fullscreen.to.center - s.center) * t;
         s.width += (fullscreen.to.width - s.width) * t;
         s.height += (fullscreen.to.height - s.height) * t;
-        s.yaw += (fullscreen.to.yaw - s.yaw) * t;
+        s.yaw += std::remainder(fullscreen.to.yaw - s.yaw, 2 * std::numbers::pi_v<float>) * t;
         float sign = 0, norm = 0;
         for (int j = 0; j < 4; j++)
             sign += fullscreen.from.rotation[j] * fullscreen.to.rotation[j];
@@ -1641,11 +1641,15 @@ void Runtime::leaveInteraction() {
     publish();
 }
 void Runtime::debugCapture() {
-    auto base = getenv("XDG_STATE_HOME") ? std::filesystem::path(getenv("XDG_STATE_HOME"))
-                                         : std::filesystem::path(getenv("HOME")) / ".local/state";
+    if (renderDepth)
+        throw std::runtime_error("capture inside render pass");
+    if (captureWrite.valid())
+        throw ipc::Error(-32004, "capture is still being written");
+    Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+    auto pixels = renderer.snapshot();
     auto now = std::chrono::system_clock::now();
     auto stamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    auto path = base / "hyprune/captures" / ("capture-" + std::to_string(stamp) + ".json");
+    auto path = captureDirectory / ("capture-" + std::to_string(stamp) + ".json");
     Json surfaces = Json::array();
     for (auto &e : capture.entries)
         surfaces.push_back({{"id", e.surface.id},
@@ -1679,9 +1683,27 @@ void Runtime::debugCapture() {
                   {"recentIPC", recentIPC},
                   {"recentEvents", recentEvents},
                   {"input", input.recent}};
-    interaction::atomicJSON(path, value, 4 * 1048576);
-    ipc->notify("runtime.notice",
-                {{"level", "info"}, {"code", "capture.saved"}, {"message", "Saved capture: " + path.string()}});
+    auto frameCamera = pixels.camera;
+    value["camera"] = {{"position", {frameCamera.position.x, frameCamera.position.y, frameCamera.position.z}},
+                       {"yaw", frameCamera.yaw},
+                       {"pitch", frameCamera.pitch},
+                       {"fov", frameCamera.fov},
+                       {"eyeHeight", frameCamera.eyeHeight}};
+    value["frame"] = {{"number", renderer.frames},
+                      {"width", pixels.width},
+                      {"height", pixels.height},
+                      {"readbackMs", pixels.readbackMs},
+                      {"ageMs", pixels.ageMs},
+                      {"source", "last-completed-world-frame"},
+                      {"timings", renderer.timings()}};
+    auto image = path;
+    image.replace_extension(".png");
+    value["screenshot"] = image.string();
+    captureWrite = std::async(std::launch::async, [path, image, value = std::move(value), pixels = std::move(pixels)] {
+        render::writePNG(image, pixels.width, pixels.height, pixels.rgba);
+        interaction::atomicJSON(path, value, 4 * 1048576);
+        return path.string();
+    });
 }
 namespace {
 interaction::Transform objectTransform(const interaction::Tools &, const world::World &, const std::string &);
@@ -1805,7 +1827,7 @@ void Runtime::action(interaction::Action a) {
         if (a.name == "distance") {
             bool temporary = hands.gesture == interaction::Gesture::None;
             if (temporary)
-                hands.begin(interaction::Gesture::Carry, e->surface, hit->second);
+                hands.begin(interaction::Gesture::Carry, e->surface, hit->second, camera);
             hands.wheel(a.value);
             handTick(.1f);
             if (temporary) {
@@ -2213,6 +2235,8 @@ void Runtime::toolsTick() {
                 auto &t = world->collision[i];
                 t = {m.point(t.a), m.point(t.b), m.point(t.c)};
             }
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        renderer.collisionChanged();
     }
     renderer.lines.clear();
     for (auto &path : editor.paths)
@@ -2600,6 +2624,18 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
 void Runtime::tick() {
     if (renderDepth != 0)
         throw std::runtime_error("deferred work inside compositor render pass");
+    auto updateStarted = std::chrono::steady_clock::now();
+    if (captureWrite.valid() && captureWrite.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        try {
+            auto path = captureWrite.get();
+            ipc->notify("runtime.notice",
+                        {{"level", "info"}, {"code", "capture.saved"}, {"message", "Saved JSON + PNG: " + path}});
+        } catch (const std::exception &e) {
+            ipc->notify("runtime.notice", {{"level", "warning"}, {"code", "capture.failed"}, {"message", e.what()}});
+        }
+    }
+    if (renderDepth != 0)
+        throw std::runtime_error("deferred work inside compositor render pass");
     ipc->poll();
     if (auto next = inputFile.poll())
         applyInput(*next);
@@ -2703,6 +2739,7 @@ void Runtime::tick() {
         lookX *= 1 - blend;
         lookY *= 1 - blend;
         camera.fov = std::max(3.f, baseFov / (zoomHeld ? zoom : 1.f));
+        renderer.debug = debug;
         renderer.scopeVignette = zoomHeld && input.config["scopeVignette"].get<bool>();
         float moveT = config["player"]["move_inertia"];
         float mb = moveT > 0 ? 1 - std::exp(-dt / moveT) : 1;
@@ -2737,7 +2774,10 @@ void Runtime::tick() {
         }
         handTick(dt);
         toolsTick();
+        auto captureStarted = std::chrono::steady_clock::now();
         refresh();
+        renderer.captureMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - captureStarted).count();
         if (fullscreen.phase == 1 || fullscreen.phase == 3)
             transitionTick(0);
         for (auto &entry : capture.entries)
@@ -2781,21 +2821,28 @@ void Runtime::tick() {
         g_pHyprRenderer->damageMonitor(monitor.lock());
         monitor->scheduleFrame();
     }
+    renderer.updateMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - updateStarted).count();
     cursor();
+    auto ipcStarted = std::chrono::steady_clock::now();
     publish();
     ipc->poll();
+    renderer.ipcMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ipcStarted).count();
 }
 class Pass final : public IPassElement {
   public:
     std::vector<UP<IPassElement>> draw() override {
         safe([] {
-            if (!runtime || !runtime->active || locked() || !runtime->layout.desktop.is_null() ||
-                runtime->fullscreen.phase == 2)
+            if (!runtime || !runtime->active || locked())
                 return;
             auto &data = g_pHyprRenderer->m_renderData;
             auto *fb = dynamic_cast<Render::GL::CGLFramebuffer *>(data.currentFB.get());
             if (!fb)
                 return;
+            if (!runtime->layout.desktop.is_null() || runtime->fullscreen.phase == 2) {
+                runtime->renderer.drawHUD(fb->getFBID(),data.currentFB->m_size.x,data.currentFB->m_size.y);
+                return;
+            }
             auto surfaces = runtime->capture.visible();
             if (runtime->fullscreen.phase == 1 || runtime->fullscreen.phase == 3) {
                 auto fs = runtime->capture.find(runtime->fullscreen.id);
@@ -2964,6 +3011,9 @@ int luaCamera(lua_State *state) {
         {"superHeld", runtime->superHeld},
         {"ownsInput", ownsInput()},
         {"layerCursor", runtime->layerCursor},
+        {"debug", runtime->debug},
+        {"timings", runtime->renderer.timings()},
+        {"captureDirectory", runtime->captureDirectory.string()},
         {"instances", runtime->layout.instances},
         {"aim", aim() ? aim()->first : ""},
         {"gestureId", runtime->hands.pose.id},
@@ -3033,6 +3083,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
 #endif
     runtime = std::make_unique<Runtime>();
     runtime->input.apply(runtime->inputFile.current);
+    auto stateHome = getenv("XDG_STATE_HOME") ? std::filesystem::path(getenv("XDG_STATE_HOME"))
+                                              : std::filesystem::path(getenv("HOME")) / ".local/state";
+    runtime->captureDirectory = getenv("HYPRUNE_CAPTURE_DIR") ? std::filesystem::path(getenv("HYPRUNE_CAPTURE_DIR"))
+                                                              : stateHome / "hyprune/captures";
     if (auto p = getenv("HYPRUNE_EDITOR_FILE"))
         runtime->editorFile = p;
     else if (auto p = getenv("XDG_STATE_HOME"))

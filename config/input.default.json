@@ -2,6 +2,7 @@
   "version": 2,
   "longHoldMs": 1000,
   "scopeVignette": true,
+  "invert_y": false,
   "useDistance": 6,
   "useTolerance": 0.12,
   "captureInputLimit": 256,
@@ -111,17 +112,38 @@
       "exit": [
         "Super+Tab",
         "Back"
+      ],
+      "debug": [
+        "F3",
+        "y"
+      ],
+      "capture": [
+        "u"
       ]
     },
     "focus": {
       "exit": [
         "Super+Tab",
         "Back"
+      ],
+      "debug": [
+        "F3",
+        "y"
+      ],
+      "capture": [
+        "u"
       ]
     },
     "menu": {
       "exit": [
         "Escape"
+      ],
+      "debug": [
+        "F3",
+        "y"
+      ],
+      "capture": [
+        "u"
       ]
     }
   }

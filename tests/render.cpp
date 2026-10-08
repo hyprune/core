@@ -1,4 +1,5 @@
 #include "render/GLState.hpp"
+#include "render/PNG.hpp"
 #include "render/Renderer.hpp"
 #include "render/SurfaceSampler.hpp"
 #include "world/Mounts.hpp"
@@ -351,6 +352,37 @@ int main(int argc, char **argv) {
         glReadPixels(180, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
         check(std::abs(int(pixel[0]) - 128) <= 1, "world bloom/exposure changed app color");
         check(glGetError() == GL_NO_ERROR, "material GL error");
+        renderer.pointerX = .3f;
+        renderer.pointerY = .25f;
+        renderer.draw(fbo, 320, 180, camera, {}, true);
+        glReadPixels(96, 45, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+        check(pixel[1] > pixel[0] && pixel[1] > pixel[2], "reticle native screen Y disagrees with pointer ray");
+        auto screenshot = renderer.snapshot();
+        check(screenshot.width == 320 && screenshot.height == 180 && screenshot.rgba.size() == 320 * 180 * 4,
+              "completed-frame snapshot dimensions");
+        check(screenshot.rgba[(45 * 320 + 96) * 4 + 1] > screenshot.rgba[(45 * 320 + 96) * 4],
+              "PNG row zero must remain logical top");
+        glPixelStorei(GL_PACK_ROW_LENGTH, 400);
+        glPixelStorei(GL_PACK_SKIP_ROWS, 2);
+        glPixelStorei(GL_PACK_ALIGNMENT, 8);
+        auto guarded = renderer.snapshot();
+        GLint packRow, packSkip, packAlignment;
+        glGetIntegerv(GL_PACK_ROW_LENGTH, &packRow);
+        glGetIntegerv(GL_PACK_SKIP_ROWS, &packSkip);
+        glGetIntegerv(GL_PACK_ALIGNMENT, &packAlignment);
+        check(packRow == 400 && packSkip == 2 && packAlignment == 8, "snapshot pixel pack state leaked");
+        glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+        glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+        glPixelStorei(GL_PACK_ALIGNMENT, 4);
+        renderer.debug = true;
+        renderer.draw(fbo, 320, 180, camera, {}, false);
+        auto debugFrame = renderer.snapshot();
+        check(debugFrame.rgba != screenshot.rgba, "core debug overlay absent");
+        auto png = std::filesystem::temp_directory_path() / "hyprune-render-snapshot.png";
+        render::writePNG(png, guarded.width, guarded.height, guarded.rgba);
+        check(std::filesystem::file_size(png) > 100, "PNG encode failed");
+        std::filesystem::remove(png);
+        check(glGetError() == GL_NO_ERROR, "snapshot/debug GL error");
         renderer.destroy();
         glDeleteTextures(1, &app);
         glDeleteTextures(1, &texture);

@@ -11,6 +11,18 @@ struct Camera {
     Vec3 forward() const {
         return {std::sin(yaw) * std::cos(pitch), std::sin(pitch), -std::cos(yaw) * std::cos(pitch)};
     }
+    // World +Y is up, forward at zero is -Z; heading +yaw turns right.
+    // Quaternion angles use right-handed axes, hence -yaw about world +Y.
+    std::array<float, 4> orientation() const {
+        return quaternionProduct({0, std::sin(-yaw / 2), 0, std::cos(yaw / 2)},
+                                 {std::sin(pitch / 2), 0, 0, std::cos(pitch / 2)});
+    }
+    Vec3 ray(float x, float y, float aspect) const {
+        auto f = forward(), r = normalized(cross(f, {0, 1, 0})), u = cross(r, f);
+        float tangent = std::tan(fov * .01745329252f / 2);
+        return normalized(f + r * ((x * 2 - 1) * tangent * aspect) + u * ((1 - y * 2) * tangent));
+    }
+    static float lookPitch(float dy, float sensitivity, bool inverted) { return (inverted ? dy : -dy) * sensitivity; }
     Mat4 view() const { return lookAt(position, forward()); }
 };
 struct Intent {
