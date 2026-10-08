@@ -304,3 +304,67 @@ markers. Lua graphics options: render_scale="auto" (or 0.375..1), target_fps=60
 (30..240 integer). Diagnostic captures include internal/native dimensions and
 current scale. No public IPC/schema fields change; shell rendering and input
 contracts are unchanged.
+
+## Graphics Settings integration (core-only handoff, 2026-10-08)
+
+Core adds IPC 0.7 `graphics.get` (`state.read`, empty params) and `graphics.set`
+(`world.control`, `{patch:{...}}`). Both return `{config,effective,overrides,path,
+error,presets,options,unsupported,timings}`. Settings should request `world.control`
+in its existing grant. The core validates, atomically persists the sparse patch
+in `$XDG_CONFIG_HOME/hyprune/graphics.json` (fallback `~/.config`, test override
+`HYPRUNE_GRAPHICS_FILE`) and applies it without any Hyprland reload. Core watches
+atomic replacements. Invalid reloads retain the last valid settings and expose
+`error`. File values override Lua graphics setup; absent file keys inherit Lua.
+
+`config` contains validated requested values; `effective` resolves the preset.
+`quality`: `auto|low|medium|high|ultra` (`intel` remains a legacy Low alias).
+Auto chooses **Low/iGPU on Intel, Medium otherwise**. The `presets` object gives
+all exact effect defaults. Render controls from `options`, display requested
+null as **Preset**, and provide an explicit override for every effect:
+
+- `msaa`: null or 1 (off), 2, 4 samples; clamped to device support.
+- `bloom`: null or `off|low|high` (low extraction only; high separable blur).
+- `sky`: null or `off|gradient|environment` (cheap gradient or authored environment sky).
+- `sharpen`: 0..1, default .35; zero disables reconstruction sharpening.
+- `fog`: null or `off|linear|height` (distance-only or integrated height density).
+- `reflections`: null/bool, environment-cubemap IBL, requires specular.
+- `normal_maps`, `specular`, `ambient_occlusion`: null/bool, separate material features.
+- `alpha_haze`: null/bool, blended world materials (including transparent glass).
+  Masked cutouts and native application surfaces are retained at all settings.
+- `anisotropy`: null or 1/2/4/8/16; explicit nearest samplers are preserved.
+- `dynamic_resolution`: bool. With auto scale, adapt to GPU budget when enabled;
+  disabled freezes the current scale (initially device/output-dependent).
+- `render_scale`: `"auto"` or 0.375..1; fixed values disable adaptation. Native
+  window surfaces, world markers and prompts always use output resolution.
+- `target_fps`: integer 30..240, default 60; dynamic controller budget, not a cap.
+- Existing `fov` 30..110, `exposure` .01..16, `bloom_strength` 0..4 and
+  `reduced_motion` bool remain available via the same patch.
+
+SSR, runtime shadow maps and contact shadows are **unsupported**, not pretend
+quality switches. Authored baked shadows/contact darkening remain in lightmaps.
+F3 exposes asynchronously measured GPU stage costs. Material effects share one
+world shading pass; its cost is explicitly labelled shared, never duplicated or
+misrepresented as a separately timed normal/fog/specular cost. `timings` includes
+`gpuEffectsMs`, rendered/reused frame counts and native/internal dimensions.
+Unavailable/disjoint queries give null. Poll diagnostics only while Settings is
+open (e.g. 1 Hz); do not drive world marker positions from these responses.
+
+**Contract handoff:** work is confined to core per lead coordination. The
+companion `docs/graphics-ipc-amendment.json` contains the exact IPC 0.7 schema
+addition for the schema/docs owner to apply to canonical schema and RFC-0005/0008;
+shell/SDK must adopt that amendment before enabling these controls. No shell,
+canonical schema or external docs checkout is edited by this core task. Existing
+0.1–0.6 peers neither advertise nor accept these methods.
+
+Renderer interface for the independent GPU-offload spike: `applyGraphics(config)`
+requires the owner EGL context outside the render pass and updates scalar controls
+and samplers only. `draw(target,width,height,camera,surfaces,typing)`, native-surface
+composition, `snapshot()` and texture ownership stay unchanged. Seven disjoint
+non-nested timer groups measure sky/world/resolve/bloom/upscale/native/output.
+
+Native-composition detail for the offload spike: alpha 1 in the native intermediate
+means linear world colour; alpha 0 now means already encoded client/overlay colour.
+The output shader preserves the latter without a decode/encode round trip.
+MSAA-off renders directly into resolve colour/depth textures; the multisample
+renderbuffer target is unused in that mode. Target ownership and external draw /
+snapshot signatures are unchanged.

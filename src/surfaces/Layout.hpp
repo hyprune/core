@@ -17,6 +17,7 @@ class Layout {
     std::map<std::string, std::string> spawnAreas;
     void spawn(const Instance &, const world::World *, const sim::Camera &, Surface, float aspect = 16.f / 9);
     void mount(const Instance &, const world::World *, Surface);
+    void invalidateCollision() { recovered.clear(); }
     Json desktop = nullptr;
     Json state(const world::World *) const;
     const Json *binding(int workspace, const world::World *) const;
@@ -35,6 +36,13 @@ class Layout {
     std::vector<std::pair<std::string, Json>> events;
 
   private:
+    struct Recovered {
+        const world::World *world;
+        Json pose;
+        float width, height;
+        Surface surface;
+    };
+    std::map<std::string, Recovered> recovered;
     std::map<std::string, int> recalled;
     std::map<std::string, std::string> temporaryAnchors;
     Json rule(const Instance &) const;

@@ -1,6 +1,7 @@
 #include "interaction/Config.hpp"
 #include "interaction/InputFile.hpp"
 #include "interaction/Tools.hpp"
+#include "render/Graphics.hpp"
 #include "render/OverlayStyle.hpp"
 #include "sim/Camera.hpp"
 #undef NDEBUG
@@ -43,6 +44,31 @@ int main() {
         }
         assert(rejected);
     }
+    auto presets = render::graphicsPresets();
+    for (auto &[name, values] : presets.items()) {
+        auto cfg = configPatch(defaultConfig(), {{"graphics", {{"quality", name}}}})["graphics"];
+        auto effective = render::effectiveGraphics(cfg, "Intel PTL");
+        for (auto &[key, value] : values.items())
+            assert(effective[key] == value);
+    }
+    assert(render::effectiveGraphics(render::graphicsDefaults(), "Intel PTL")["quality"] == "low");
+    assert(render::effectiveGraphics(render::graphicsDefaults(), "AMD")["quality"] == "medium");
+    auto graphicsOptions = render::graphicsOptions();
+    for (auto &[key, values] : graphicsOptions.items()) {
+        for (auto &value : values)
+            configPatch(defaultConfig(), {{"graphics", {{key, value}}}});
+        bool rejected = false;
+        try {
+            configPatch(defaultConfig(), {{"graphics", {{key, "nonsense"}}}});
+        } catch (...) {
+            rejected = true;
+        }
+        assert(rejected);
+    }
+    auto custom = configPatch(defaultConfig(), {{"graphics", {{"quality", "low"}, {"normal_maps", true}}}});
+    assert(render::effectiveGraphics(custom["graphics"], "Intel")["normal_maps"] == true);
+    custom = configPatch(custom, {{"graphics", {{"normal_maps", nullptr}}}});
+    assert(render::effectiveGraphics(custom["graphics"], "Intel")["normal_maps"] == false);
     auto defaults = validateInput(inputDefaults());
     assert(inputConflicts(defaults).empty());
     unsigned checked = 0;
@@ -209,8 +235,25 @@ int main() {
         atomicJSON(file.path, invalid);
         assert(!file.poll());
         assert(file.current == next && !file.error.empty());
+        atomicJSON(file.path, next);
+        assert(!file.poll() && file.error.empty()); // repairing with the same last-good value clears errors
         file.save(defaults);
         assert(readJSON(file.path) == defaults);
+    }
+    setenv("HYPRUNE_GRAPHICS_FILE", (dir / "graphics.json").c_str(), 1);
+    {
+        InputFile file("graphics", Json::object(), [](const Json &patch) {
+            configPatch(defaultConfig(), {{"graphics", patch}});
+            return patch;
+        });
+        file.save({{"quality", "low"}, {"bloom", "high"}});
+        assert(readJSON(file.path) == file.current);
+        atomicJSON(file.path, {{"msaa", 999}});
+        assert(!file.poll() && !file.error.empty() && file.current["quality"] == "low");
+        atomicJSON(file.path, file.current);
+        assert(!file.poll() && file.error.empty());
+        atomicJSON(file.path, Json::object());
+        assert(file.poll() == Json::object());
     }
     std::filesystem::remove_all(dir);
     Tools tools;

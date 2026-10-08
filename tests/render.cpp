@@ -486,7 +486,9 @@ int main(int argc, char **argv) {
         check(!render::Renderer::intelTier("high", "Intel") && !render::Renderer::intelTier("auto", "AMD"),
               "explicit/device quality mismatch");
         glFinish();
-        renderer.intelQuality = true;
+        auto lowSettings = render::graphicsDefaults();
+        lowSettings["quality"] = "low";
+        renderer.applyGraphics(lowSettings);
         renderer.draw(fbo, 320, 180, camera, {}, false);
         glFinish();
         check(renderer.timings()["msaaSamples"] <= 2, "live MSAA tier did not reallocate targets");
@@ -511,6 +513,11 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 1000; ++i)
             scale.sample(100, .016);
         check(scale.scale == .375f, "resolution lower bound");
+        scale.reset(0, 60, true, 3840 * 2160);
+        for (int i = 0; i < 50; ++i) scale.sample(1, .1);
+        check(scale.scale == .5f, "resolution increased before stable headroom");
+        for (int i = 0; i < 15; ++i) scale.sample(1, .1);
+        check(scale.scale > .5f, "resolution never recovers under sustained headroom");
         scale.reset(.75f, 60, true, 3840 * 2160);
         for (int i = 0; i < 1000; ++i)
             scale.sample(100, .016);
@@ -519,11 +526,11 @@ int main(int argc, char **argv) {
         // A world panel above the eye and a native surface behind/in front of it
         // pin both colour orientation and reconstructed-depth orientation.
         auto orientationWorld = std::make_shared<world::World>();
-        world::Material magenta;
-        magenta.unlit = true;
-        magenta.color = {1, 0, 1};
-        magenta.doubleSided = true;
-        orientationWorld->materials = {magenta};
+        world::Material magentaMaterial;
+        magentaMaterial.unlit = true;
+        magentaMaterial.color = {1, 0, 1};
+        magentaMaterial.doubleSided = true;
+        orientationWorld->materials = {magentaMaterial};
         world::Mesh panel;
         for (auto xy : {Vec3{0, 0, 0}, Vec3{1, 0, 0}, Vec3{1, 1, 0}, Vec3{0, 0, 0}, Vec3{1, 1, 0}, Vec3{0, 1, 0}}) {
             world::Vertex v{};

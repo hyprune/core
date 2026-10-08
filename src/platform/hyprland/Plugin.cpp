@@ -99,6 +99,27 @@ struct Runtime {
 
     Json config = interaction::defaultConfig(), configured = config;
     std::set<std::string> graphicsOverrides;
+    Json graphicsBaseProfile = nullptr;
+    interaction::InputFile graphicsFile{"graphics", Json::object(), [](const Json &patch) {
+        interaction::configPatch(interaction::defaultConfig(), {{"graphics", patch}});
+        return patch;
+    }};
+    void applyGraphics(const Json &patch) {
+        auto next = interaction::configPatch(configured, {{"graphics", patch}});
+        config["graphics"] = next["graphics"];
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        renderer.applyGraphics(config["graphics"]);
+        if (!renderer.profile.is_null() && !graphicsBaseProfile.is_null()) {
+            renderer.profile["exposure"] = patch.contains("exposure") || graphicsOverrides.contains("exposure")
+                ? next["graphics"]["exposure"] : graphicsBaseProfile["exposure"];
+            renderer.profile["bloom"]["strength"] = patch.contains("bloom_strength") || graphicsOverrides.contains("bloom_strength")
+                ? next["graphics"]["bloom_strength"] : graphicsBaseProfile["bloom"]["strength"];
+            renderer.graphics["exposure"] = renderer.profile["exposure"];
+            renderer.graphics["bloom_strength"] = renderer.profile["bloom"]["strength"];
+        }
+        baseFov = next["graphics"]["fov"];
+        if (!zoomHeld) camera.fov = baseFov;
+    }
     bool superHeld = false, altHeld = false, noclip = false, freeCursor = false, layerCursor = false, zoomHeld = false,
          cursorWarpPending = false;
     float zoom = 1, baseFov = 60, lookX = 0, lookY = 0;
@@ -799,17 +820,13 @@ void Runtime::finishLoad() {
             throw ipc::Error(-32006, "world load expired");
         auto spawn = pendingArea.empty() ? candidate->spawn(pendingSpawn) : world::areaSpawn(*candidate, pendingArea);
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
-        renderer.intelQuality = render::Renderer::intelTier(config["graphics"]["quality"],
-                                                            reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
-        renderer.renderScale = config["graphics"]["render_scale"] == "auto" ? 0.f : config["graphics"]["render_scale"].get<float>();
-        renderer.targetFPS = config["graphics"]["target_fps"];
+        applyGraphics(graphicsFile.current);
         renderer.prepare(candidate);
-        if (graphicsOverrides.contains("exposure"))
-            renderer.profile["exposure"] = config["graphics"]["exposure"];
-        if (graphicsOverrides.contains("bloom_strength"))
-            renderer.profile["bloom"]["strength"] = config["graphics"]["bloom_strength"];
+        graphicsBaseProfile = renderer.profile;
+        applyGraphics(graphicsFile.current);
         world = std::move(candidate);
         capture.release();
+        layout.invalidateCollision();
         layout.freePoses.clear();
         layout.spawnAreas.clear();
         restoreFullscreenWindows();
@@ -2285,6 +2302,7 @@ void Runtime::toolsTick() {
                 t = {m.point(t.a), m.point(t.b), m.point(t.c)};
             }
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        layout.invalidateCollision();
         renderer.collisionChanged();
     }
     renderer.lines.clear();
@@ -2358,6 +2376,26 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     auto protocol = params.value("_protocol", "0.1");
     params.erase("_pid");
     params.erase("_protocol");
+    if (method == "graphics.get" || method == "graphics.set") {
+        if (renderDepth) throw ipc::Error(-32004, "graphics update during render");
+        if (method == "graphics.set") {
+            if (params.size() != 1 || !params.contains("patch") || !params["patch"].is_object())
+                throw ipc::Error(-32602, "graphics patch required");
+            auto merged = graphicsFile.current;
+            merged.update(params["patch"]);
+            try {
+                interaction::configPatch(configured, {{"graphics", merged}});
+            } catch (const std::exception &e) { throw ipc::Error(-32602, e.what()); }
+            graphicsFile.save(merged);
+            applyGraphics(merged);
+        } else if (!params.empty()) throw ipc::Error(-32602, "unexpected params");
+        return Json{{"config", config["graphics"]}, {"effective", renderer.graphics},
+                    {"overrides", graphicsFile.current}, {"path", graphicsFile.path.string()},
+                    {"error", graphicsFile.error}, {"presets", render::graphicsPresets()},
+                    {"options", render::graphicsOptions()},
+                    {"unsupported", {"ssr", "runtime_shadows", "contact_shadows"}},
+                    {"timings", renderer.timings()}};
+    }
     if (method == "input.get") {
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
@@ -2452,7 +2490,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
         auto placements = layout.placements;
-        if (protocol != "0.5" && protocol != "0.6")
+        if (protocol != "0.5" && protocol != "0.6" && protocol != "0.7")
             std::erase_if(placements.get_ref<Json::array_t &>(), [](auto &p) { return p.contains("pose"); });
         return Json{{"placements", placements}};
     }
@@ -2572,6 +2610,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             params["profile"].value("environment", Json(nullptr)) != before.value("environment", Json(nullptr)))
             throw ipc::Error(-32007, "sky/environment edits require package reload");
         renderer.profile = params["profile"];
+        graphicsBaseProfile = renderer.profile;
+        applyGraphics(graphicsFile.current);
         publish();
         return Json{{"revision", ipc->revision()}};
     }
@@ -2629,7 +2669,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     }
     if (control::Control::methods().contains(method)) {
         if (method == "shell.overlay" && params.value("exclusiveInput", false) &&
-            (protocol != "0.3" && protocol != "0.4" && protocol != "0.5" && protocol != "0.6"))
+            (protocol != "0.3" && protocol != "0.4" && protocol != "0.5" && protocol != "0.6" && protocol != "0.7"))
             throw ipc::Error(-32007, "verified association requires IPC 0.3");
         if ((method == "travel.start" || method == "autodrive.start") && !active)
             throw ipc::Error(-32005, "world mode inactive");
@@ -2699,6 +2739,8 @@ void Runtime::tick() {
     if (renderDepth != 0)
         throw std::runtime_error("deferred work inside compositor render pass");
     ipc->poll();
+    if (auto next = graphicsFile.poll())
+        applyGraphics(*next);
     if (auto next = inputFile.poll())
         applyInput(*next);
     renderer.debug = debug;
@@ -3044,25 +3086,7 @@ int luaConfig(lua_State *L) {
             runtime->tagged.clear();
         }
         runtime->config = next;
-        runtime->renderer.renderScale = next["graphics"]["render_scale"] == "auto" ? 0.f : next["graphics"]["render_scale"].get<float>();
-        runtime->renderer.targetFPS = next["graphics"]["target_fps"];
-        if (old["graphics"]["fov"] != next["graphics"]["fov"]) {
-            runtime->baseFov = next["graphics"]["fov"];
-            runtime->camera.fov = runtime->baseFov;
-        }
-        if (old["graphics"]["quality"] != next["graphics"]["quality"]) {
-            Render::GL::g_pHyprOpenGL->makeEGLCurrent();
-            runtime->renderer.intelQuality = render::Renderer::intelTier(
-                next["graphics"]["quality"], reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
-            if (runtime->world)
-                runtime->renderer.prepare(runtime->world);
-        }
-        if (!runtime->renderer.profile.is_null()) {
-            if (runtime->graphicsOverrides.contains("exposure"))
-                runtime->renderer.profile["exposure"] = next["graphics"]["exposure"];
-            if (runtime->graphicsOverrides.contains("bloom_strength"))
-                runtime->renderer.profile["bloom"]["strength"] = next["graphics"]["bloom_strength"];
-        }
+        runtime->applyGraphics(runtime->graphicsFile.current);
         runtime->cursor();
         runtime->publish();
     });
@@ -3227,6 +3251,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     {"workspace.activate", "world.control"},
                     {"world.load", "world.control"},
                     {"surface.focus", "surface.control"},
+                    {"graphics.get", "state.read"},
+                    {"graphics.set", "world.control"},
                     {"input.get", "state.read"},
                     {"input.preview", "state.read"},
                     {"input.set", "input.control"},
@@ -3235,6 +3261,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     {"movement.set", "movement.control"},
                     {"runtime.exit", "runtime.control"}});
     runtime->ipc->advertise(std::move(methods));
+    runtime->deferInput([] { runtime->applyGraphics(runtime->graphicsFile.current); });
     HyprlandAPI::addDispatcherV2(handle, "hyprune.toggle", [](std::string arg) {
         deferToggle(arg);
         return SDispatchResult{};

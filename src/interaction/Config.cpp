@@ -1,4 +1,5 @@
 #include "Config.hpp"
+#include "render/Graphics.hpp"
 #include <cmath>
 #include <set>
 namespace hyprune::interaction {
@@ -34,14 +35,7 @@ Json defaultConfig() {
           {"respawn_below", 30.0}}},
         {"windows", {{"spawn_distance", 5.0}, {"scale", .002}, {"wheel_factor", 1.06}, {"transition_seconds", .35}}},
         {"tools", {{"enabled", true}, {"slots", Json::array({"pointer", "mount", "path", "path", "path"})}}},
-        {"graphics",
-         {{"quality", "auto"},
-          {"render_scale", "auto"},
-          {"target_fps", 60},
-          {"fov", 60.0},
-          {"exposure", 1.0},
-          {"bloom_strength", .15},
-          {"reduced_motion", false}}}};
+        {"graphics", render::graphicsDefaults()}};
 }
 Json configPatch(const Json &current, const Json &patch) {
     if (!patch.is_object())
@@ -66,6 +60,15 @@ Json configPatch(const Json &current, const Json &patch) {
                 for (auto &[action, sym] : result[section][key].items())
                     if (!names.insert(sym).second)
                         throw std::runtime_error("duplicate binding");
+                continue;
+            }
+            if (section == "graphics" && render::graphicsOptions().contains(key)) {
+                auto options = render::graphicsOptions().at(key);
+                bool inherited = render::graphicsDefaults().at(key).is_null() && v.is_null();
+                bool legacy = key == "quality" && v == "intel";
+                if (!inherited && !legacy && std::find(options.begin(), options.end(), v) == options.end())
+                    throw std::runtime_error("unsupported graphics." + key);
+                result[section][key] = v;
                 continue;
             }
             if (section == "graphics" && key == "render_scale") {
@@ -139,6 +142,8 @@ Json configPatch(const Json &current, const Json &patch) {
                     min = .01;
                     max = 16;
                 }
+                if (key == "sharpen")
+                    max = 1;
                 if (key == "bloom_strength") {
                     max = 4;
                 }

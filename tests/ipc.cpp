@@ -76,10 +76,13 @@ int main() {
     std::thread loop;
     try {
         auto token = randomId(), token02 = randomId(), token03 = randomId(), token04 = randomId(), token05 = randomId();
+        auto token06 = randomId(), token07 = randomId();
         std::atomic<int> disconnected = 0;
         std::atomic<bool> notice = false;
         Server server(dir, "test",
-                      {{token, "org.hyprune.test", {"state.read"}},
+                      {{token06, "org.hyprune.test", {"state.read"}},
+                       {token07, "org.hyprune.test", {"state.read"}},
+                       {token, "org.hyprune.test", {"state.read"}},
                        {token02, "org.hyprune.test", {"state.read", "data.publish"}},
                        {token03, "org.hyprune.test", {"state.read"}},
                        {token04, "org.hyprune.test", {"state.read"}},
@@ -91,8 +94,11 @@ int main() {
                           return Json{{"actor", params["_actor"]}, {"client", params["_client"]}};
                       });
         server.contextual(true);
-        server.advertise(
-            {{"camera.get", "state.read"}, {"data.publish", "data.publish"}, {"placements.list", "state.read"}});
+        server.advertise({{"graphics.get", "state.read"},
+                          {"graphics.set", "world.control"},
+                          {"camera.get", "state.read"},
+                          {"data.publish", "data.publish"},
+                          {"placements.list", "state.read"}});
         server.publish({{"runtime", {{"active", false}}},
                         {"location", {{"waypoint", nullptr}}},
                         {"integrations", {{"sources", Json::array()}}},
@@ -233,6 +239,25 @@ int main() {
             notice = true;
             auto event = c.receive();
             check(event["method"] == "runtime.notice" && event["params"].size() == 3, "frozen notice fields widened");
+        }
+        for (const auto *version : {"0.6", "0.7"}) {
+            Client c(server.path());
+            auto h = hello(std::string(version) == "0.7" ? token07 : token06);
+            h["params"]["protocols"] = {version};
+            c.sendJson(h);
+            auto response = c.receive()["result"];
+            bool graphics = std::string(version) == "0.7";
+            check(response["protocol"] == version, "graphics protocol negotiation");
+            auto methods = response["methods"];
+            check((std::find(methods.begin(), methods.end(), "graphics.get") != methods.end()) == graphics,
+                  "graphics capability version isolation");
+            check(std::find(methods.begin(), methods.end(), "graphics.set") == methods.end(),
+                  "graphics write without grant");
+            c.sendJson(req("gfx", "graphics.get"));
+            auto get = c.receive();
+            check(graphics ? get.contains("result") : get["error"]["code"] == -32601, "graphics request isolation");
+            c.sendJson(req("set", "graphics.set", {{"patch", {{"quality", "low"}}}}));
+            check(c.receive()["error"]["code"] == -32601, "graphics write unauthorized");
         }
         for (int i = 0; i < 100 && disconnected < 2; i++)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));

@@ -467,3 +467,23 @@ pixels exactly across 1.0 and 0.5 world scales, verify world colour/depth
 orientation, native window occlusion, capture dimensions and GL state, and
 exercise fixed/auto bounds and hysteresis. Live-like 4K acceptance: 55/55,
 including scale diff reload, new-window spawn, captures and recovery. CTests: 8/8.
+
+### Graphics presets and diagnostics follow-up
+
+See [GRAPHICS.md](GRAPHICS.md) and the IPC 0.7 graphics handoff in
+[CHANGES-FOR-SDK-AND-SHELL.md](CHANGES-FOR-SDK-AND-SHELL.md).
+The core-only work adds no cursor state transitions. Graphics file/IPC changes
+run outside the render pass and do not switch focus, workspaces or input mode.
+
+Supervised live checklist additions (not exercised against the owner's session):
+
+- [ ] Auto reports Low on Intel; F3 reports delivered FPS, internal/native size,
+  the chosen effect values and disjoint GPU stage timings on a readable panel.
+- [ ] While a window is aimed/used/carried, change preset and MSAA. Client text,
+  cursor alignment and window/world occlusion remain correct; no cursor change.
+- [ ] Change individual effects and restore them to Preset. Confirm baked
+  shadows remain and unsupported SSR/runtime shadows are not offered as enabled.
+- [ ] Atomically save graphics.json; no Hyprland reload. Invalid values leave
+  the world running with the last valid settings; repairing clears the error.
+- [ ] Auto resolution settles while moving through Lumen Reach. U records the
+  selected preset, per-pass costs, new/reused frame counts and native-size PNG.

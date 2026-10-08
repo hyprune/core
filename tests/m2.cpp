@@ -114,6 +114,18 @@ int main(int argc, char **argv) {
         custom.restore(durable);
         auto mounted = custom.locate(terminal, w.get(), camera, 1600, 900);
         check(mounted && std::abs(mounted->center.x - 4) < .001, "custom mount restore");
+        auto cached = custom.locate(terminal, w.get(), camera, 1600, 900);
+        check(cached && length(cached->center - mounted->center) < .001f, "stable recovered pose cache");
+        auto resized = custom.locate(terminal, w.get(), camera, 800, 450);
+        check(resized && std::abs(resized->width - 1.6f) < .001f, "pose cache ignored logical resize");
+        auto triangles = w->collision;
+        auto c = mounted->center;
+        w->collision.push_back({c + Vec3{-10, -10, 0}, c + Vec3{10, -10, 0}, c + Vec3{0, 10, 0}});
+        custom.invalidateCollision();
+        auto recovered = custom.locate(terminal, w.get(), camera, 1600, 900);
+        check(recovered && !surfaces::overlaps(*recovered, w->collision), "editor geometry left stale pose cache");
+        w->collision = std::move(triangles);
+        custom.invalidateCollision();
         custom.pull(terminal, w.get());
         auto pulled = custom.locate(terminal, w.get(), camera, 1600, 900);
         check(pulled && length(pulled->center - mounted->center) > 1, "saved custom pose overrode hand pull");

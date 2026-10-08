@@ -63,7 +63,7 @@ uniform int hasTexture,baked,lightSrgb,unlit,surface,details;
 uniform float intensity,metallic,roughness,normalScale,occlusionStrength;
 uniform samplerCube environmentMap;
 uniform float cubeLevels,envRotation,envIntensity,alpha,alphaCutoff;
-uniform int alphaMode,excludeUnlit,effects;
+uniform int alphaMode,excludeUnlit,effects,normalEnabled,specularEnabled,aoEnabled,reflectionEnabled,fogMode;
 uniform vec3 fogColor,sunDirection,sunColor;
 uniform float fogDensity,heightFalloff,baseHeight,sunIntensity;
 out vec4 result;
@@ -85,12 +85,12 @@ void main(){
  vec3 base=color*baseSample.rgb;
  vec3 emissive=emission*(present[4]!=0?texture(emissiveMap,coords(4)).rgb:vec3(1));
  vec3 N=normalize(gl_FrontFacing?n:-n),L=normalize(sunDirection);vec3 geometric=N;
- if(details!=0&&present[1]!=0)N=mappedNormal(N,coords(1));
+ if(details!=0&&normalEnabled!=0&&present[1]!=0)N=mappedNormal(N,coords(1));
  vec3 irradiance=vec3(.24+.76*max(dot(N,L),0.));
  if(baked!=0){irradiance=texture(lightmap,lightUV).rgb;if(lightSrgb!=0)irradiance=decode(irradiance);irradiance*=intensity;}
- float ao=present[3]!=0?mix(1.,texture(aoMap,coords(3)).r,occlusionStrength):1.;
+ float ao=aoEnabled!=0&&present[3]!=0?mix(1.,texture(aoMap,coords(3)).r,occlusionStrength):1.;
  vec3 lit=base*irradiance*ao;
- if(details!=0&&unlit==0){
+ if(details!=0&&specularEnabled!=0&&unlit==0){
   vec2 mr=present[2]!=0?texture(mrMap,coords(2)).bg:vec2(1);
   float metal=clamp(metallic*mr.x,0.,1.),rough=clamp(roughness*mr.y,.08,1.);
   vec3 V=normalize(eye-worldPosition),H=normalize(L+V),F0=mix(vec3(.04),base,metal);
@@ -100,7 +100,9 @@ void main(){
   vec3 key=F*((power+2.)/25.132741)*pow(nh,power)*nl;
   vec3 R=reflect(-V,N);vec3 sky=mix(vec3(.055,.07,.085),vec3(.32,.43,.58),clamp(R.y*.5+.5,0.,1.));
   sky=mix(sky,vec3(.16,.21,.28),rough*rough);
-  if(effects!=0){float c=cos(envRotation),s=sin(envRotation);R=vec3(c*R.x+s*R.z,R.y,-s*R.x+c*R.z);sky=textureLod(environmentMap,R,rough*(cubeLevels-1.)).rgb*envIntensity;key*=sunColor*sunIntensity;}
+  if(effects!=0&&reflectionEnabled!=0){float c=cos(envRotation),s=sin(envRotation);R=vec3(c*R.x+s*R.z,R.y,-s*R.x+c*R.z);sky=textureLod(environmentMap,R,rough*(cubeLevels-1.)).rgb*envIntensity;}
+  if(effects!=0)key*=sunColor*sunIntensity;
+  if(reflectionEnabled==0)sky=vec3(0);
   vec3 skyF=F0+(max(vec3(1.-rough),F0)-F0)*pow(1.-nv,5.);
   float visibility=baked!=0?clamp(dot(irradiance,vec3(.2126,.7152,.0722)),0.,1.):1.;
   float detail=baked!=0?clamp(1.+.3*(dot(N,L)-dot(geometric,L)),.7,1.3):1.;
@@ -109,13 +111,27 @@ void main(){
  if(unlit!=0)lit=base;
  lit+=emissive;
  // Camera-relative integrated height density along the view segment.
+ float fog=0.;
+ if(fogMode!=0){
+ float density=fogDensity;
+ if(fogMode==2){
  float dy=(worldPosition.y-eye.y)*heightFalloff;
  float integral=abs(dy)<.001?1.:clamp((1.-exp(clamp(-dy,-40.,40.)))/dy,0.,1e6);
- float density=fogDensity*exp(clamp(-(eye.y-baseHeight)*heightFalloff,-40.,40.))*integral;
- float fog=1.-exp(-length(worldPosition-eye)*density);
+ density=fogDensity*exp(clamp(-(eye.y-baseHeight)*heightFalloff,-40.,40.))*integral;
+ }
+ fog=1.-exp(-length(worldPosition-eye)*density);
+ }
  if(unlit!=0&&excludeUnlit!=0)fog=0.;lit=mix(lit,fogColor,clamp(fog,0.,1.));
  result=vec4(lit,alphaMode==2?coverage:1.);
 }
+)";
+// Native app pixels stay in their encoded colour space. This avoids a decode /
+// encode round-trip and keeps the material shader out of the native 4K pass.
+const char *nativeFragment = R"(#version 300 es
+precision highp float;
+in vec2 uv;uniform sampler2D albedo;uniform int hasTexture;uniform vec3 color;out vec4 result;
+vec3 encode(vec3 x){return mix(12.92*x,1.055*pow(max(x,vec3(0)),vec3(1./2.4))-.055,step(vec3(.0031308),x));}
+void main(){result=vec4(hasTexture!=0?texture(albedo,uv).rgb:encode(color),0);}
 )";
 const char *screenVertex = R"(#version 300 es
 precision highp float;
@@ -128,19 +144,23 @@ const char *upscaleFragment = R"(#version 300 es
 precision highp float;
 in vec2 uv;uniform sampler2D image,depthImage;uniform float sharpness;out vec4 result;
 void main(){vec2 st=uv,d=1./vec2(textureSize(image,0));
- vec4 c=texture(image,st);vec3 a=texture(image,st+vec2(d.x,0)).rgb,b=texture(image,st-vec2(d.x,0)).rgb;
+ vec4 c=texture(image,st);result=c;
+ if(sharpness>0.){vec3 a=texture(image,st+vec2(d.x,0)).rgb,b=texture(image,st-vec2(d.x,0)).rgb;
  vec3 e=texture(image,st+vec2(0,d.y)).rgb,f=texture(image,st-vec2(0,d.y)).rgb;
  vec3 lo=min(c.rgb,min(min(a,b),min(e,f))),hi=max(c.rgb,max(max(a,b),max(e,f)));
- result=vec4(clamp(c.rgb+sharpness*(c.rgb-(a+b+e+f)*.25),lo,hi),c.a);
+ result=vec4(clamp(c.rgb+sharpness*(c.rgb-(a+b+e+f)*.25),lo,hi),c.a);}
  ivec2 size=textureSize(depthImage,0);gl_FragDepth=texelFetch(depthImage,clamp(ivec2(st*vec2(size)),ivec2(0),size-1),0).r;}
 )";
 const char *toneFragment = R"(#version 300 es
 precision highp float;
 in vec2 uv;uniform sampler2D frame,bloomMap;uniform vec2 resolution,pointer;uniform int typing,toneMapping,scope;uniform float exposure,bloomStrength;out vec4 result;
 vec3 encode(vec3 x){return mix(12.92*x,1.055*pow(max(x,vec3(0)),vec3(1./2.4))-.055,step(vec3(.0031308),x));}
-void main(){vec2 st=vec2(uv.x,1.-uv.y);vec4 sampleColor=texture(frame,st);vec3 x=(sampleColor.rgb+texture(bloomMap,st).rgb*bloomStrength)*exposure;
+void main(){vec2 st=vec2(uv.x,1.-uv.y);vec4 sampleColor=texture(frame,st);vec3 c=sampleColor.rgb;
+ if(sampleColor.a>.5){vec3 x=sampleColor.rgb;
+ if(bloomStrength>0.)x+=texture(bloomMap,st).rgb*bloomStrength;
+ x*=exposure;
  vec3 mapped=toneMapping==0?clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.):toneMapping==1?x/(1.+x):clamp(x,0.,1.);
- vec3 c=encode(mix(sampleColor.rgb,mapped,sampleColor.a));
+ c=encode(mapped); }
  vec2 p=abs(gl_FragCoord.xy-resolution*pointer);if((p.x<1.&&p.y<7.)||(p.y<1.&&p.x<7.))c=typing!=0?vec3(.5,1.,.65):vec3(.9);
  if(scope!=0){vec2 q=(gl_FragCoord.xy/resolution-.5)*vec2(resolution.x/resolution.y,1.);c*=1.-.86*smoothstep(.24,.48,length(q));float ring=abs(length(q)-.28);if(ring<.001)c=mix(c,vec3(.5,.8,.65),.4);}
  result=vec4(c,1);}
@@ -156,8 +176,8 @@ void main(){vec3 c;
 )";
 const char *skyFragment = R"(#version 300 es
 precision highp float;
-in vec2 uv;uniform samplerCube environmentMap;uniform vec3 forward,right,up;uniform float tanFov,aspect,rotation;out vec4 result;
-void main(){vec3 d=normalize(forward+right*((uv.x*2.-1.)*tanFov*aspect)+up*((uv.y*2.-1.)*tanFov));float c=cos(rotation),s=sin(rotation);d=vec3(c*d.x+s*d.z,d.y,-s*d.x+c*d.z);result=vec4(textureLod(environmentMap,d,0.).rgb,1);}
+in vec2 uv;uniform samplerCube environmentMap;uniform vec3 forward,right,up;uniform float tanFov,aspect,rotation;uniform int skyMode;uniform vec3 zenith,horizon,ground;out vec4 result;
+void main(){vec3 d=normalize(forward+right*((uv.x*2.-1.)*tanFov*aspect)+up*((uv.y*2.-1.)*tanFov));if(skyMode==1){result=vec4(mix(horizon,d.y>0.?zenith:ground,abs(d.y)),1);return;}float c=cos(rotation),s=sin(rotation);d=vec3(c*d.x+s*d.z,d.y,-s*d.x+c*d.z);result=vec4(textureLod(environmentMap,d,0.).rgb,1);}
 )";
 void layout(GLuint &vao, GLuint &vbo) {
     glGenVertexArrays(1, &vao);
@@ -183,12 +203,12 @@ void Renderer::init() {
         return;
     device = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
     scene_ = program(vertex, fragment);
+    native_ = program(vertex, nativeFragment);
     tone_ = program(screenVertex, toneFragment);
     upscale_ = program(screenVertex, upscaleFragment);
     bloom_ = program(screenVertex, bloomFragment);
     sky_ = program(screenVertex, skyFragment);
-    auto gpu = std::string(reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
-    intelQuality = intelQuality || gpu.find("Intel") != std::string::npos;
+    // Device selection belongs to applyGraphics; explicit presets must win.
     layout(quadVao_, quadVbo_);
     glGenVertexArrays(1, &screenVao_);
     glGenSamplers(1, &repeat_);
@@ -298,7 +318,7 @@ void Renderer::prepare(std::shared_ptr<const world::World> world) {
             glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, settings.wrapT);
             // Preserve explicit nearest filtering; anisotropy is a runtime quality choice.
             if (anisotropy && settings.magFilter == GL_LINEAR && settings.minFilter == GL_LINEAR_MIPMAP_LINEAR)
-                glSamplerParameterf(sampler, 0x84FE, std::min(intelQuality ? 2.f : 8.f, maximum));
+                glSamplerParameterf(sampler, 0x84FE, std::min(graphics["anisotropy"].get<float>(), maximum));
         }
         glGenTextures(1, &cube);
         glActiveTexture(GL_TEXTURE6);
@@ -387,25 +407,61 @@ void Renderer::freeTargets() {
     resolvedDepth_ = nativeTexture_ = nativeDepth_ = nativeFbo_ = 0;
     width_ = height_ = scaledWidth_ = scaledHeight_ = 0;
 }
+void Renderer::applyGraphics(const world::Json &config) {
+    GLState guard;
+    auto renderer = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
+    graphics = effectiveGraphics(config, renderer ? renderer : "");
+    intelQuality = graphics["quality"] == "low";
+    msaa = graphics["msaa"];
+    dynamicResolution = graphics["dynamic_resolution"];
+    renderScale = graphics["render_scale"] == "auto" ? 0.f : graphics["render_scale"].get<float>();
+    targetFPS = graphics["target_fps"];
+    // Changing samplers does not rebuild meshes/textures or invalidate client leases.
+    GLint count = 0;
+    glGetIntegerv(GL_NUM_EXTENSIONS, &count);
+    bool supported = false;
+    for (int i = 0; i < count; ++i) {
+        std::string extension = reinterpret_cast<const char *>(glGetStringi(GL_EXTENSIONS, i));
+        supported |=
+            extension == "GL_EXT_texture_filter_anisotropic" || extension == "GL_ARB_texture_filter_anisotropic";
+    }
+    if (supported) {
+        float maximum = 1;
+        glGetFloatv(0x84FF, &maximum);
+        for (auto sampler : samplers_) {
+            GLint min = 0, mag = 0;
+            glGetSamplerParameteriv(sampler, GL_TEXTURE_MIN_FILTER, &min);
+            glGetSamplerParameteriv(sampler, GL_TEXTURE_MAG_FILTER, &mag);
+            if (min == GL_LINEAR_MIPMAP_LINEAR && mag == GL_LINEAR)
+                glSamplerParameterf(sampler, 0x84FE, std::min(maximum, graphics["anisotropy"].get<float>()));
+        }
+    }
+}
 void Renderer::targets(int w, int h) {
     int sw = std::max(1, int(std::round(w * resolution_.scale)));
     int sh = std::max(1, int(std::round(h * resolution_.scale)));
-    if (w == width_ && h == height_ && sw == scaledWidth_ && sh == scaledHeight_ && allocatedIntel_ == intelQuality)
+    if (w == width_ && h == height_ && sw == scaledWidth_ && sh == scaledHeight_ && allocatedSamples_ == msaa)
         return;
     freeTargets();
     GLint maxSamples = 0;
     glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-    samples_ = std::min(intelQuality ? 2 : 4, maxSamples);
-    allocatedIntel_ = intelQuality;
+    samples_ = std::max(1, std::min(msaa, maxSamples));
+    allocatedSamples_ = msaa;
     glGenFramebuffers(1, &msaa_);
     glBindFramebuffer(GL_FRAMEBUFFER, msaa_);
     glGenRenderbuffers(1, &color_);
     glBindRenderbuffer(GL_RENDERBUFFER, color_);
-    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_RGBA16F, sw, sh);
+    if (samples_ == 1)
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA16F, sw, sh);
+    else
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_RGBA16F, sw, sh);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, color_);
     glGenRenderbuffers(1, &depth_);
     glBindRenderbuffer(GL_RENDERBUFFER, depth_);
-    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_DEPTH_COMPONENT24, sw, sh);
+    if (samples_ == 1)
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, sw, sh);
+    else
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_DEPTH_COMPONENT24, sw, sh);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         throw std::runtime_error("HDR MSAA framebuffer unavailable");
@@ -465,6 +521,20 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
                     bool typing) {
     if (!world_)
         return;
+    auto now = std::chrono::steady_clock::now();
+    if (!fpsSince_.time_since_epoch().count()) {
+        fpsSince_ = now;
+        fpsFrames_ = frames;
+        fpsBacklog_ = backlog_;
+    }
+    auto interval = std::chrono::duration<double>(now - fpsSince_).count();
+    if (interval >= 1.) {
+        deliveredFPS_ = (frames - fpsFrames_) / interval;
+        queuePressure_ = backlog_ - fpsBacklog_ > 0 && deliveredFPS_ < targetFPS * .995;
+        fpsSince_ = now;
+        fpsFrames_ = frames;
+        fpsBacklog_ = backlog_;
+    }
     while (!frameFences_.empty()) {
         auto ready = glClientWaitSync(frameFences_.front(), 0, 0);
         if (ready != GL_ALREADY_SIGNALED && ready != GL_CONDITION_SATISFIED)
@@ -482,6 +552,8 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         present(target, w, h, frameTyping_);
         ++skipped_;
+        if (!captureRequested)
+            ++backlog_;
         return;
     }
     auto started = std::chrono::steady_clock::now();
@@ -496,15 +568,17 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     if (!width_ || w != width_ || h != height_ || resolution_.requested != renderScale ||
         resolution_.targetFPS != targetFPS)
         resolution_.reset(renderScale, targetFPS, intelQuality, w * h);
-    else if (std::all_of(gpu_.begin(), gpu_.end(), [](auto &timer) { return timer.available; })) {
+    else if (dynamicResolution && std::all_of(gpu_.begin(), gpu_.end(), [](auto &timer) { return timer.available; })) {
         double ms = 0;
         for (auto &timer : gpu_)
             ms += timer.milliseconds;
-        resolution_.sample(ms, frameMs_ / 1000.);
+        // Timers omit the enclosing compositor. Reused frames are direct evidence
+        // that its remaining GPU budget was insufficient; leave extra headroom.
+        resolution_.sample(queuePressure_ ? std::max(ms, 1000. / targetFPS) : ms, frameMs_ / 1000.);
     }
     targets(w, h);
     glLineWidth(1);
-    gpu_[0].begin();
+    gpu_[6].begin();
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_BLEND);
     glDisable(GL_STENCIL_TEST);
@@ -519,7 +593,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glDepthMask(GL_TRUE);
     glDepthRangef(0, 1);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glBindFramebuffer(GL_FRAMEBUFFER, msaa_);
+    glBindFramebuffer(GL_FRAMEBUFFER, samples_ == 1 ? resolve_ : msaa_);
     glViewport(0, 0, scaledWidth_, scaledHeight_);
     glClearColor(.028f, .045f, .065f, 1);
     glClearDepthf(1);
@@ -533,6 +607,10 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glDisable(GL_DEPTH_TEST);
     glUseProgram(sky_);
     uniform(sky_, "environmentMap", 6);
+    uniform(sky_, "skyMode", graphics["sky"] == "gradient" ? 1 : 2);
+    uniform(sky_, "zenith", vec(sky["zenith"]));
+    uniform(sky_, "horizon", vec(sky["horizon"]));
+    uniform(sky_, "ground", vec(sky["ground"]));
     auto forward = camera.forward(), right = normalized(cross(forward, {0, 1, 0})), up = cross(right, forward);
     uniform(sky_, "forward", forward);
     uniform(sky_, "right", right);
@@ -541,7 +619,10 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glUniform1f(glGetUniformLocation(sky_, "aspect"), float(w) / h);
     glUniform1f(glGetUniformLocation(sky_, "rotation"), rotation);
     glBindVertexArray(screenVao_);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    if (graphics["sky"] != "off")
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+    gpu_[6].end();
+    gpu_[0].begin();
     glEnable(GL_DEPTH_TEST);
     glUseProgram(scene_);
     auto vp = perspective(float(w) / h, camera.fov * .01745329252f) * camera.view();
@@ -555,6 +636,11 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     uniform(scene_, "emissiveMap", 5);
     uniform(scene_, "eye", camera.position);
     uniform(scene_, "details", materialDetails);
+    uniform(scene_, "normalEnabled", graphics["normal_maps"].get<bool>());
+    uniform(scene_, "specularEnabled", graphics["specular"].get<bool>());
+    uniform(scene_, "aoEnabled", graphics["ambient_occlusion"].get<bool>());
+    uniform(scene_, "reflectionEnabled", graphics["reflections"].get<bool>());
+    uniform(scene_, "fogMode", graphics["fog"] == "off" ? 0 : graphics["fog"] == "linear" ? 1 : 2);
     uniform(scene_, "effects", effects);
     uniform(scene_, "environmentMap", 6);
     uniform(scene_, "excludeUnlit", fog["excludeUnlit"].get<bool>());
@@ -582,6 +668,8 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     for (auto index : order) {
         auto b = batches_[index];
         const auto &m = world_->materials[b.material];
+        if (m.alphaMode == 2 && !graphics["alpha_haze"].get<bool>())
+            continue;
         if (m.alphaMode == 2) {
             glEnable(GL_BLEND);
             glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
@@ -654,7 +742,10 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         int w = scaledWidth_, h = scaledHeight_;
         glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa_);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolve_);
-        glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        if (samples_ > 1)
+            glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        gpu_[2].end();
+        gpu_[4].begin();
         // Application pixels carry alpha zero and never contribute to world bloom.
         glDisable(GL_DEPTH_TEST);
         glUseProgram(bloom_);
@@ -665,12 +756,12 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glViewport(0, 0, std::max(1, w / 2), std::max(1, h / 2));
         glUniform1f(glGetUniformLocation(bloom_, "threshold"), effects ? bloom["threshold"].get<float>() : 1e20f);
         float radius = bloom["radius"];
-        if (!effects || bloom["strength"].get<float>() <= 0) {
+        if (!effects || graphics["bloom"] == "off" || bloom["strength"].get<float>() <= 0) {
             glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[0]);
             glClearColor(0, 0, 0, 0);
             glClear(GL_COLOR_BUFFER_BIT);
         } else
-            for (int pass = 0; pass < 3; pass++) {
+            for (int pass = 0; pass < (graphics["bloom"] == "low" ? 1 : 3); pass++) {
                 glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[pass == 1 ? 1 : 0]);
                 glBindTexture(GL_TEXTURE_2D, pass == 0 ? resolveTexture_ : bloomTexture_[pass == 1 ? 0 : 1]);
                 uniform(bloom_, "extract", pass == 0);
@@ -684,6 +775,8 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
                 glDrawArrays(GL_TRIANGLES, 0, 3);
             }
     }
+    gpu_[4].end();
+    gpu_[5].begin();
     glBindFramebuffer(GL_FRAMEBUFFER, nativeFbo_);
     glViewport(0, 0, w, h);
     glEnable(GL_DEPTH_TEST);
@@ -692,7 +785,8 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glUseProgram(upscale_);
     uniform(upscale_, "image", 0);
     uniform(upscale_, "depthImage", 1);
-    glUniform1f(glGetUniformLocation(upscale_, "sharpness"), resolution_.scale < 1 ? .35f : 0.f);
+    glUniform1f(glGetUniformLocation(upscale_, "sharpness"),
+                resolution_.scale < 1 ? graphics["sharpen"].get<float>() : 0.f);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, resolveTexture_);
     glBindSampler(0, clamp_);
@@ -702,32 +796,47 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glBindVertexArray(screenVao_);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glDepthFunc(GL_LESS);
-    glUseProgram(scene_);
+    glUseProgram(native_);
+    glUniformMatrix4fv(glGetUniformLocation(native_, "vp"), 1, GL_FALSE, vp.v.data());
+    glUniformMatrix4fv(glGetUniformLocation(native_, "model"), 1, GL_FALSE, identity.v.data());
+    uniform(native_, "albedo", 0);
     glActiveTexture(GL_TEXTURE0);
     cpu_[2] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - bloomStarted).count();
-    gpu_[2].end();
+    gpu_[5].end();
     gpu_[1].begin();
     auto surfacesStarted = std::chrono::steady_clock::now();
     for (const auto &s : surfaces) {
         Vec3 right = s.right(), up = s.up(), normal = s.normal();
         auto quad = [&](float width, float height, Vec3 center, bool border) {
-            world::Vertex vertices[6];
-            const float xy[6][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
-            for (int i = 0; i < 6; i++) {
-                vertices[i].position = center + right * ((xy[i][0] - .5f) * width) + up * ((.5f - xy[i][1]) * height);
-                vertices[i].normal = normal;
-                vertices[i].uv[0] = xy[i][0];
-                vertices[i].uv[1] = xy[i][1];
-            }
-            uniform(scene_, "hasTexture", !border && s.texture != 0);
-            uniform(scene_, "color",
+            std::vector<world::Vertex> vertices;
+            auto rectangle = [&](float x0, float y0, float x1, float y1) {
+                for (auto xy : {std::pair{x0, y0}, std::pair{x1, y0}, std::pair{x1, y1}, std::pair{x0, y0},
+                                std::pair{x1, y1}, std::pair{x0, y1}}) {
+                    world::Vertex v{};
+                    v.position = center + right * ((xy.first - .5f) * width) + up * ((.5f - xy.second) * height);
+                    v.normal = normal;
+                    v.uv[0] = xy.first;
+                    v.uv[1] = xy.second;
+                    vertices.push_back(v);
+                }
+            };
+            if (border) {
+                float dx = .035f / width, dy = .035f / height;
+                rectangle(0, 0, 1, dy);
+                rectangle(0, 1 - dy, 1, 1);
+                rectangle(0, dy, dx, 1 - dy);
+                rectangle(1 - dx, dy, 1, 1 - dy);
+            } else
+                rectangle(0, 0, 1, 1);
+            uniform(native_, "hasTexture", !border && s.texture != 0);
+            uniform(native_, "color",
                     border ? (s.focused ? Vec3{.08f, .9f, .45f} : Vec3{.1f, .4f, .55f}) : Vec3{1, 1, 1});
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, border ? 0 : s.texture);
             glBindVertexArray(quadVao_);
             glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
-            glBufferData(GL_ARRAY_BUFFER, sizeof vertices, vertices, GL_STREAM_DRAW);
-            glDrawArrays(GL_TRIANGLES, 0, 6);
+            glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(world::Vertex), vertices.data(), GL_STREAM_DRAW);
+            glDrawArrays(GL_TRIANGLES, 0, vertices.size());
         };
         quad(s.width + .07f, s.height + .07f, s.center - normal * .015f, true);
         quad(s.width, s.height, s.center, false);
@@ -736,10 +845,10 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     // Editor primitives are plain vertices under the same GL guard. No seat or
     // compositor callbacks occur while the render pass draws handles/path strokes.
     glDisable(GL_DEPTH_TEST);
-    uniform(scene_, "hasTexture", 0);
+    uniform(native_, "hasTexture", 0);
     std::map<std::array<float, 3>, std::vector<world::Vertex>> strokes;
     if (debug) {
-        uniform(scene_, "color", Vec3{.2f, 1, .3f});
+        uniform(native_, "color", Vec3{.2f, 1, .3f});
         glBindVertexArray(collisionVao_);
         glDrawArrays(GL_LINES, 0, collisionCount_);
     }
@@ -757,7 +866,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
                 wires[{line.color.x, line.color.y, line.color.z}].push_back(vertex);
             }
         for (auto &[color, vertices] : wires) {
-            uniform(scene_, "color", Vec3{color[0], color[1], color[2]});
+            uniform(native_, "color", Vec3{color[0], color[1], color[2]});
             glBindVertexArray(quadVao_);
             glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
             glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(world::Vertex), vertices.data(), GL_STREAM_DRAW);
@@ -780,7 +889,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         group.insert(group.end(), std::begin(v), std::end(v));
     }
     for (auto &[color, vertices] : strokes) {
-        uniform(scene_, "color", Vec3{color[0], color[1], color[2]});
+        uniform(native_, "color", Vec3{color[0], color[1], color[2]});
         glBindVertexArray(quadVao_);
         glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
         glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(world::Vertex), vertices.data(), GL_STREAM_DRAW);
@@ -810,7 +919,8 @@ void Renderer::present(GLuint target, int w, int h, bool typing) {
     auto curve = profile["toneMapping"].get<std::string>();
     uniform(tone_, "toneMapping", curve == "aces" ? 0 : curve == "reinhard" ? 1 : 2);
     glUniform1f(glGetUniformLocation(tone_, "exposure"), profile["exposure"].get<float>());
-    glUniform1f(glGetUniformLocation(tone_, "bloomStrength"), effects ? profile["bloom"]["strength"].get<float>() : 0);
+    glUniform1f(glGetUniformLocation(tone_, "bloomStrength"),
+                effects && graphics["bloom"] != "off" ? profile["bloom"]["strength"].get<float>() : 0);
     glUniform2f(glGetUniformLocation(tone_, "pointer"), pointerX, pointerY);
     uniform(tone_, "scope", scopeVignette ? 1 : 0);
     glActiveTexture(GL_TEXTURE1);
@@ -822,33 +932,71 @@ void Renderer::present(GLuint target, int w, int h, bool typing) {
     glBindSampler(0, clamp_);
     glBindVertexArray(screenVao_);
     glDrawArrays(GL_TRIANGLES, 0, 3);
-    for (auto &label : labels)
-        text(label.x * w, label.y * h, label.text, label.color, w, h);
+    for (auto &label : labels) {
+        float scale = std::clamp(w / 1920.f, 1.f, 2.f);
+        auto caption = label.text;
+        float limit = std::min(440.f * scale, w - 32.f);
+        auto measure = [&] {
+            float n = 0;
+            for (unsigned char c : caption)
+                n += glyphs_[c >= 32 && c < 127 ? c : '?'].advance * scale;
+            return n;
+        };
+        bool truncated = false;
+        while (!caption.empty() && measure() > limit - 40 * scale) {
+            caption.pop_back();
+            truncated = true;
+        }
+        if (truncated)
+            caption += "...";
+        float width = measure(), x = std::clamp(label.x * w, 16.f, std::max(16.f, w - width - 16));
+        float y = std::clamp(label.y * h, 16.f, std::max(16.f, h - 30 * scale));
+        panel(x - 6 * scale, y - 3 * scale, width + 12 * scale, 24 * scale);
+        text(x, y, caption, label.color, w, h, scale);
+    }
     for (auto &sprite : icons_)
         icon(sprite, w, h);
     debugHUD(w, h);
 }
+void Renderer::panel(float x, float y, float width, float height) {
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(int(x), int(y), int(width), int(height));
+    glClearColor(.018f, .025f, .035f, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glDisable(GL_SCISSOR_TEST);
+}
 void Renderer::debugHUD(int w, int h) {
-    if (debug) {
-        std::ostringstream message;
-        message << std::fixed << std::setprecision(2);
-        message << "FPS " << (frameMs_ > 0 ? 1000 / frameMs_ : 0) << "  FRAME " << frameMs_ << " ms\nCPU render "
-                << renderMs_ << "  update " << updateMs << "  capture " << captureMs << "  IPC " << ipcMs
-                << " ms\nGPU ";
-        bool supported = std::all_of(gpu_.begin(), gpu_.end(), [](auto &t) { return t.available; });
-        if (supported) {
-            double total = 0;
-            for (auto &t : gpu_)
-                total += t.milliseconds;
-            message << total << " ms";
-        } else
-            message << "N/A (timer unavailable/disjoint/enclosing query)";
-        message << "\nScale " << resolution_.scale << " (" << scaledWidth_ << "x" << scaledHeight_ << ") target "
-                << targetFPS << " FPS\nScene/windows/bloom+upscale/output CPU ";
-        for (auto &v : cpu_)
-            message << v << " ";
-        text(22, 24, message.str(), {.4f, 1, .6f}, w, h);
-    }
+    if (!debug)
+        return;
+    float scale = std::clamp(w / 1920.f, .8f, 2.f);
+    auto gpu = [&](int index) {
+        std::ostringstream out;
+        out << std::fixed << std::setprecision(2);
+        if (gpu_[index].available)
+            out << gpu_[index].milliseconds << " ms";
+        else
+            out << "N/A";
+        return out.str();
+    };
+    auto enabled = [&](const char *key) { return graphics[key].get<bool>() ? "on" : "off"; };
+    std::ostringstream message;
+    message << std::fixed << std::setprecision(2) << "HYPRUNE / " << graphics["quality"].get<std::string>()
+            << " / GPU timing\n"
+            << "FPS " << deliveredFPS_ << "   FRAME " << frameMs_ << " ms   target " << targetFPS << "\nCPU update "
+            << updateMs << "  capture " << captureMs << "  render " << renderMs_ << "  IPC " << ipcMs << "\nScale "
+            << resolution_.scale << "  " << scaledWidth_ << "x" << scaledHeight_ << " / native " << w << "x" << h
+            << "\nSky " << graphics["sky"].get<std::string>() << "                       " << gpu(6)
+            << "\nWorld shading (shared cost)     " << gpu(0) << "\n  normal " << enabled("normal_maps")
+            << " | specular " << enabled("specular") << " | IBL " << enabled("reflections") << "\n  AO "
+            << enabled("ambient_occlusion") << " | fog " << graphics["fog"].get<std::string>() << " | haze "
+            << enabled("alpha_haze") << "\n  anisotropy " << graphics["anisotropy"] << "x / baked shadows retained"
+            << "\nMSAA " << samples_ << "x resolve                 " << gpu(2) << "\nBloom "
+            << graphics["bloom"].get<std::string>() << "                       " << gpu(4)
+            << "\nUpscale + sharpen               " << gpu(5) << "\nNative windows + geometry       " << gpu(1)
+            << "\nOutput + markers                " << gpu(3) << "\nSSR / runtime shadows: unsupported"
+            << "\nRendered " << frames << " / reused " << skipped_;
+    panel(14 * scale, 14 * scale, std::min(float(w) - 28 * scale, 740 * scale), 352 * scale);
+    text(26 * scale, 24 * scale, message.str(), {.79f, .9f, .96f}, w, h, scale);
 }
 
 void Renderer::drawHUD(GLuint target, int w, int h) {
@@ -940,7 +1088,7 @@ precision highp float;in vec2 uv;uniform sampler2D atlas;uniform int iconMode;un
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void *>(2 * sizeof(float)));
     loadedFont_ = font;
 }
-void Renderer::text(float x, float y, const std::string &value, Vec3 color, int w, int h) {
+void Renderer::text(float x, float y, const std::string &value, Vec3 color, int w, int h, float scale) {
     if (!textTexture_)
         return;
     float left = x;
@@ -950,13 +1098,14 @@ void Renderer::text(float x, float y, const std::string &value, Vec3 color, int 
         auto c = static_cast<unsigned char>(character);
         if (c == '\n') {
             x = left;
-            y += 21;
+            y += 21 * scale;
             continue;
         }
         if (c < 32 || c >= 127)
             c = '?';
         auto g = glyphs_[c];
-        float x0 = x + g.left, y0 = y + 16 - g.top, x1 = x0 + g.width, y1 = y0 + g.height;
+        float x0 = x + g.left * scale, y0 = y + (16 - g.top) * scale, x1 = x0 + g.width * scale,
+              y1 = y0 + g.height * scale;
         std::array<std::array<float, 4>, 6> points = {{{x0, y0, g.u, g.v},
                                                        {x1, y0, g.u + g.width / 512, g.v},
                                                        {x1, y1, g.u + g.width / 512, g.v + g.height / 256},
@@ -969,7 +1118,7 @@ void Renderer::text(float x, float y, const std::string &value, Vec3 color, int 
             vertices.push_back(p[2]);
             vertices.push_back(p[3]);
         }
-        x += g.advance;
+        x += g.advance * scale;
     }
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
@@ -1100,11 +1249,11 @@ void Renderer::worldOverlays(const sim::Camera &camera, std::span<const surfaces
             }
             previous = next;
         }
-        uniform(scene_, "hasTexture", 0);
+        uniform(native_, "hasTexture", 0);
         auto linear = color("routeColor");
         auto decode = [](float v) { return v <= .04045f ? v / 12.92f : std::pow((v + .055f) / 1.055f, 2.4f); };
         linear = {decode(linear.x), decode(linear.y), decode(linear.z)};
-        uniform(scene_, "color", linear);
+        uniform(native_, "color", linear);
         glBindVertexArray(quadVao_);
         glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
         glBufferData(GL_ARRAY_BUFFER, routeVertices.size() * sizeof(world::Vertex), routeVertices.data(),
@@ -1199,9 +1348,25 @@ world::Json Renderer::timings() const {
     world::Json cpu = world::Json::array(), gpu = world::Json::array();
     for (auto &v : cpu_)
         cpu.push_back(v);
-    for (auto &timer : gpu_)
-        gpu.push_back(timer.available ? world::Json(timer.milliseconds) : world::Json(nullptr));
-    return {{"renderScale", resolution_.scale},
+    auto cost = [&](std::initializer_list<int> indices) -> world::Json {
+        double sum = 0;
+        for (int index : indices) {
+            if (!gpu_[index].available)
+                return nullptr;
+            sum += gpu_[index].milliseconds;
+        }
+        return sum;
+    };
+    gpu = {cost({0, 6}), cost({1}), cost({2, 4, 5}), cost({3})};
+    world::Json effects = {{"world_shading_shared", cost({0})}, {"sky", cost({6})},
+                           {"msaa_resolve", cost({2})},         {"bloom", cost({4})},
+                           {"upscale_sharpen", cost({5})},      {"native_surfaces_geometry", cost({1})},
+                           {"output_markers", cost({3})}};
+    return {{"renderedFrames", frames},
+            {"deliveredFPS", deliveredFPS_},
+            {"graphics", graphics},
+            {"gpuEffectsMs", effects},
+            {"renderScale", resolution_.scale},
             {"internalSize", {scaledWidth_, scaledHeight_}},
             {"nativeSize", {width_, height_}},
             {"targetFPS", targetFPS},
@@ -1295,6 +1460,7 @@ void Renderer::destroy() {
     collisionVao_ = collisionVbo_ = 0;
     collisionCount_ = 0;
     glDeleteProgram(scene_);
+    glDeleteProgram(native_);
     glDeleteProgram(tone_);
     glDeleteProgram(upscale_);
     upscale_ = 0;
@@ -1305,6 +1471,6 @@ void Renderer::destroy() {
     glDeleteVertexArrays(1, &screenVao_);
     glDeleteSamplers(1, &repeat_);
     glDeleteSamplers(1, &clamp_);
-    scene_ = tone_ = bloom_ = sky_ = quadVbo_ = quadVao_ = screenVao_ = repeat_ = clamp_ = 0;
+    native_ = scene_ = tone_ = bloom_ = sky_ = quadVbo_ = quadVao_ = screenVao_ = repeat_ = clamp_ = 0;
 }
 } // namespace hyprune::render

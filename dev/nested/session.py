@@ -9,8 +9,8 @@ class Client:
     def __init__(self,path,token=None,protocol="0.1"):
         self.socket=socket.socket(socket.AF_UNIX);self.socket.settimeout(5);self.socket.connect(path);self.count=0;self.events=[];self.transcript=[]
         params={'protocols':[protocol],'client':{'id':'org.hyprune.nested','name':'Nested test'},'capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}
-        if protocol in ['0.2','0.3','0.4','0.5','0.6']:params['capabilities']+=['shell.control','data.publish']
-        if protocol == '0.6':params['capabilities']+=['input.control']
+        if protocol in ['0.2','0.3','0.4','0.5','0.6','0.7']:params['capabilities']+=['shell.control','data.publish']
+        if protocol in ['0.6','0.7']:params['capabilities']+=['input.control']
         if token:params['token']=token
         self.hello=self.call('session.hello',params)
     def receive(self):
@@ -103,6 +103,7 @@ def run(args):
             source=ROOT.parent/'worlds/dist'/worldid
             if not (source/'world.json').is_file():raise RuntimeError('Build '+worldid+' before M3A acceptance')
             shutil.copytree(source,installed/worldid,dirs_exist_ok=True)
+    (STATE/"graphics.json").unlink(missing_ok=True)
     token=secrets.token_hex(32)
     grants=[{'token':token,'client':'org.hyprune.nested','capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}]
     if args.m1 or args.integration or args.m2 or args.m3a or args.m3b:grants[0]['capabilities']+=['shell.control','data.publish']
@@ -111,7 +112,7 @@ def run(args):
     if args.m3b:
         for grant in grants:grant['capabilities'].append('input.control')
     read,write=os.pipe();os.write(write,json.dumps(grants).encode());os.close(write)
-    environment=os.environ.copy();environment.update(AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read),HYPRUNE_LAYOUT_FILE=str(STATE/"layout.json"),HYPRUNE_INPUT_FILE=str(STATE/"input.json"),HYPRUNE_EDITOR_FILE=str(STATE/"editor.json"),XDG_STATE_HOME=str(STATE/"statehome"))
+    environment=os.environ.copy();environment.update(AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read),HYPRUNE_LAYOUT_FILE=str(STATE/"layout.json"),HYPRUNE_INPUT_FILE=str(STATE/"input.json"),HYPRUNE_GRAPHICS_FILE=str(STATE/"graphics.json"),HYPRUNE_EDITOR_FILE=str(STATE/"editor.json"),XDG_STATE_HOME=str(STATE/"statehome"),XDG_CACHE_HOME=str(STATE/"cache"/secrets.token_hex(8)))
     if args.integration: environment['HYPRUNE_WORKSPACE_LOCATIONS']=str(STATE/'locations.json')
     config=str(HERE/'hyprland.lua')
     if os.environ.get('HYPRUNE_NESTED_4K')=='1':
@@ -139,7 +140,7 @@ def run(args):
             if signature:break
             time.sleep(.1)
         if not signature:raise RuntimeError('nested startup timed out')
-        state={'pid':process.pid,'startTime':pathlib.Path(f'/proc/{process.pid}/stat').read_text().split()[21],'config':config,'runtime':str(runtime),'signature':signature,'wayland':wayland,'outerSignature':environment.get('HYPRLAND_INSTANCE_SIGNATURE',''),'outerWayland':environment.get('WAYLAND_DISPLAY','')}
+        state={'pid':process.pid,'startTime':pathlib.Path(f'/proc/{process.pid}/stat').read_text().split()[21],'config':config,'runtime':str(runtime),'signature':signature,'wayland':wayland,'cacheHome':environment['XDG_CACHE_HOME'],'stateHome':environment['XDG_STATE_HOME'],'outerSignature':environment.get('HYPRLAND_INSTANCE_SIGNATURE',''),'outerWayland':environment.get('WAYLAND_DISPLAY','')}
         (STATE/'session.json').write_text(json.dumps(state));verified()
         ctl('output','create','headless');time.sleep(.3)
         ctl('eval','hl.dispatch(hl.dsp.focus({ monitor = "HEADLESS-1" }))')
@@ -155,7 +156,7 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,"0.6" if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.7" if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
         if args.m3b:
             from m3b import acceptance

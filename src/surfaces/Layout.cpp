@@ -414,14 +414,23 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
         if ((s.width != old.width || s.height != old.height) && !pushOut(s, w->collision))
             return {}; // Never publish a newly resized quad through geometry.
         freePoses[i.id] = s;
-    }
-    else if (carried == i.id || recalled.contains(i.id))
-        s = carryPlane(camera, pw * windowScale, ph * windowScale, w->collision, recalled.contains(i.id) ? recalled[i.id] : 0);
+    } else if (carried == i.id || recalled.contains(i.id))
+        s = carryPlane(camera, pw * windowScale, ph * windowScale, w->collision,
+                       recalled.contains(i.id) ? recalled[i.id] : 0);
     else if (p && p->contains("pose")) {
         s.center = vec(p->at("pose").at("position"));
         s.rotation = p->at("pose").at("rotation").get<std::array<float, 4>>();
         s.logicalSize(pw, ph, windowScale);
-        if (!pushOut(s, w->collision)) {
+        auto found = recovered.find(i.id);
+        if (found != recovered.end() && found->second.world == w && found->second.pose == p->at("pose") &&
+            found->second.width == s.width && found->second.height == s.height) {
+            s.center = found->second.surface.center;
+            s.rotation = found->second.surface.rotation;
+        } else if (pushOut(s, w->collision)) {
+            if (recovered.size() > 1024)
+                recovered.clear();
+            recovered[i.id] = {w, p->at("pose"), s.width, s.height, s};
+        } else {
             recalled[i.id] = 0;
             s = carryPlane(camera, pw * windowScale, ph * windowScale, w->collision);
         }

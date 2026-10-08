@@ -16,6 +16,8 @@ def verified():
     assert lines[0]==str(pid) and lines[1]==state['wayland'], 'nested lock identity mismatch'
     assert (lock.parent/'.socket.sock').is_socket(), 'nested control socket missing'
     env=os.environ.copy();env.update(HYPRUNE_VERIFIED_NESTED="1",XDG_RUNTIME_DIR=state['runtime'],HYPRLAND_INSTANCE_SIGNATURE=state['signature'],WAYLAND_DISPLAY=state['wayland'])
+    for field,key in [('cacheHome','XDG_CACHE_HOME'),('stateHome','XDG_STATE_HOME')]:
+        if field in state:env[key]=state[field]
     return state,env
 def main():
     state,env=verified();args=sys.argv[1:]

@@ -241,3 +241,9 @@ For the owner-supervised real-session check, see [dev/live/LIVE-TEST.md](dev/liv
 `dev/live/preflight`, `up`, `status`, and idempotent `down` swap only the old
 hypr3d plugin/HUD and record recovery state. Agents must use explicit nested
 instances; `./dev/nested/run.sh --live` provides the locked dry-run.
+
+Graphics presets and individual effects use an independent, watched
+`~/.config/hyprune/graphics.json`. Auto selects Low/iGPU on Intel. IPC 0.7 adds
+validated `graphics.get`/`graphics.set` for Settings while older clients retain
+their method lists. See [graphics controls](docs/GRAPHICS.md) for every option,
+GPU cost attribution and the native-resolution composition contract.

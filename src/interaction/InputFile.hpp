@@ -1,18 +1,21 @@
 #pragma once
 #include "Input.hpp"
+#include <functional>
 namespace hyprune::interaction {
 // Independent inotify watch on the parent directory survives atomic editor saves.
 class InputFile {
   public:
     std::filesystem::path path;
     std::string error;
-    InputFile();
+    InputFile(std::string name = "input", Json defaults = inputDefaults(),
+              std::function<Json(const Json &)> validate = {});
     ~InputFile();
     Json current = inputDefaults();
     std::optional<Json> poll();
     void save(const Json &);
 
   private:
+    std::function<Json(const Json &)> validate;
     int watch = -1;
     std::string bytes;
     std::optional<Json> read();

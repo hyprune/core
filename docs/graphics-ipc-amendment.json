@@ -1,0 +1,531 @@
+{
+  "protocol": "0.7",
+  "baseProtocol": "0.6",
+  "methods": {
+    "graphics.get": "state.read",
+    "graphics.set": "world.control"
+  },
+  "$defs": {
+    "graphicsConfig": {
+      "type": "object",
+      "properties": {
+        "quality": {
+          "enum": [
+            "auto",
+            "low",
+            "medium",
+            "high",
+            "ultra",
+            "intel"
+          ]
+        },
+        "msaa": {
+          "enum": [
+            1,
+            2,
+            4,
+            null
+          ]
+        },
+        "bloom": {
+          "enum": [
+            "off",
+            "low",
+            "high",
+            null
+          ]
+        },
+        "fog": {
+          "enum": [
+            "off",
+            "linear",
+            "height",
+            null
+          ]
+        },
+        "sky": {
+          "enum": [
+            "off",
+            "gradient",
+            "environment",
+            null
+          ]
+        },
+        "anisotropy": {
+          "enum": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            null
+          ]
+        },
+        "reflections": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "normal_maps": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "specular": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "ambient_occlusion": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "alpha_haze": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "dynamic_resolution": {
+          "type": "boolean"
+        },
+        "reduced_motion": {
+          "type": "boolean"
+        },
+        "render_scale": {
+          "anyOf": [
+            {
+              "const": "auto"
+            },
+            {
+              "type": "number",
+              "minimum": 0.375,
+              "maximum": 1
+            }
+          ]
+        },
+        "target_fps": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 240
+        },
+        "fov": {
+          "type": "number",
+          "minimum": 30,
+          "maximum": 110
+        },
+        "exposure": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 16
+        },
+        "bloom_strength": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "sharpen": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "quality",
+        "msaa",
+        "bloom",
+        "fog",
+        "sky",
+        "anisotropy",
+        "reflections",
+        "normal_maps",
+        "specular",
+        "ambient_occlusion",
+        "alpha_haze",
+        "dynamic_resolution",
+        "reduced_motion",
+        "render_scale",
+        "target_fps",
+        "fov",
+        "exposure",
+        "bloom_strength",
+        "sharpen"
+      ],
+      "additionalProperties": false
+    },
+    "graphicsPatch": {
+      "type": "object",
+      "properties": {
+        "quality": {
+          "enum": [
+            "auto",
+            "low",
+            "medium",
+            "high",
+            "ultra",
+            "intel"
+          ]
+        },
+        "msaa": {
+          "enum": [
+            1,
+            2,
+            4,
+            null
+          ]
+        },
+        "bloom": {
+          "enum": [
+            "off",
+            "low",
+            "high",
+            null
+          ]
+        },
+        "fog": {
+          "enum": [
+            "off",
+            "linear",
+            "height",
+            null
+          ]
+        },
+        "sky": {
+          "enum": [
+            "off",
+            "gradient",
+            "environment",
+            null
+          ]
+        },
+        "anisotropy": {
+          "enum": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            null
+          ]
+        },
+        "reflections": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "normal_maps": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "specular": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "ambient_occlusion": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "alpha_haze": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "dynamic_resolution": {
+          "type": "boolean"
+        },
+        "reduced_motion": {
+          "type": "boolean"
+        },
+        "render_scale": {
+          "anyOf": [
+            {
+              "const": "auto"
+            },
+            {
+              "type": "number",
+              "minimum": 0.375,
+              "maximum": 1
+            }
+          ]
+        },
+        "target_fps": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 240
+        },
+        "fov": {
+          "type": "number",
+          "minimum": 30,
+          "maximum": 110
+        },
+        "exposure": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 16
+        },
+        "bloom_strength": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "sharpen": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "graphics.get.params": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "graphics.get.result": {
+      "type": "object",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/graphicsConfig"
+        },
+        "effective": {
+          "$ref": "#/$defs/graphicsConfig"
+        },
+        "overrides": {
+          "$ref": "#/$defs/graphicsPatch"
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "error": {
+          "type": "string"
+        },
+        "presets": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/graphicsPatch"
+          }
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array"
+          }
+        },
+        "unsupported": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "ssr",
+              "runtime_shadows",
+              "contact_shadows"
+            ]
+          }
+        },
+        "timings": {
+          "type": "object",
+          "description": "Extensible diagnostic measurements; GPU timings can be null when unavailable."
+        }
+      },
+      "required": [
+        "config",
+        "effective",
+        "overrides",
+        "path",
+        "error",
+        "presets",
+        "options",
+        "unsupported",
+        "timings"
+      ],
+      "additionalProperties": false
+    },
+    "graphics.get.request": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "const": "graphics.get"
+        },
+        "params": {
+          "$ref": "#/$defs/graphics.get.params"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "graphics.get.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/graphics.get.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "graphics.set.params": {
+      "type": "object",
+      "properties": {
+        "patch": {
+          "$ref": "#/$defs/graphicsPatch"
+        }
+      },
+      "required": [
+        "patch"
+      ],
+      "additionalProperties": false
+    },
+    "graphics.set.result": {
+      "type": "object",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/graphicsConfig"
+        },
+        "effective": {
+          "$ref": "#/$defs/graphicsConfig"
+        },
+        "overrides": {
+          "$ref": "#/$defs/graphicsPatch"
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "error": {
+          "type": "string"
+        },
+        "presets": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/graphicsPatch"
+          }
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array"
+          }
+        },
+        "unsupported": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "ssr",
+              "runtime_shadows",
+              "contact_shadows"
+            ]
+          }
+        },
+        "timings": {
+          "type": "object",
+          "description": "Extensible diagnostic measurements; GPU timings can be null when unavailable."
+        }
+      },
+      "required": [
+        "config",
+        "effective",
+        "overrides",
+        "path",
+        "error",
+        "presets",
+        "options",
+        "unsupported",
+        "timings"
+      ],
+      "additionalProperties": false
+    },
+    "graphics.set.request": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "const": "graphics.set"
+        },
+        "params": {
+          "$ref": "#/$defs/graphics.set.params"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "graphics.set.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/graphics.set.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "instructions": [
+    "Copy IPC 0.6 to 0.7; keep existing common/input references at 0.6.",
+    "Change hello protocol const/enum from 0.6 to 0.7 and add the two methods to the hello methods enum.",
+    "Add these definitions and request/response oneOf references. All state and event payloads remain 0.6-compatible."
+  ]
+}

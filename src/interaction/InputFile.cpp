@@ -64,13 +64,22 @@ void atomicJSON(const std::filesystem::path &p, const Json &value, size_t budget
         close(dir);
     }
 }
-InputFile::InputFile() {
-    if (auto p = getenv("HYPRUNE_INPUT_FILE"))
+InputFile::InputFile(std::string name, Json defaults, std::function<Json(const Json &)> validator)
+    : current(std::move(defaults)), validate(std::move(validator)) {
+    if (!validate)
+        validate = [](const Json &j) {
+            auto next = validateInput(j);
+            if (!inputConflicts(next).empty())
+                throw std::runtime_error("conflicting Hyprune actions in one mode");
+            return next;
+        };
+    auto environment = name == "input" ? "HYPRUNE_INPUT_FILE" : "HYPRUNE_GRAPHICS_FILE";
+    if (auto p = getenv(environment))
         path = p;
     else if (auto p = getenv("XDG_CONFIG_HOME"))
-        path = std::filesystem::path(p) / "hyprune/input.json";
+        path = std::filesystem::path(p) / ("hyprune/" + name + ".json");
     else if (auto p = getenv("HOME"))
-        path = std::filesystem::path(p) / ".config/hyprune/input.json";
+        path = std::filesystem::path(p) / (".config/hyprune/" + name + ".json");
     if (path.empty() || !path.is_absolute())
         throw std::runtime_error("input file path must be absolute");
     std::filesystem::create_directories(path.parent_path());
@@ -92,14 +101,12 @@ InputFile::~InputFile() {
         close(watch);
 }
 std::optional<Json> InputFile::read() {
-    auto j = validateInput(readJSON(path));
-    if (!inputConflicts(j).empty())
-        throw std::runtime_error("conflicting Hyprune actions in one mode");
+    auto j = validate(readJSON(path));
     auto encoded = j.dump();
+    error.clear();
     if (encoded == bytes)
         return {};
     bytes = encoded;
-    error.clear();
     return j;
 }
 std::optional<Json> InputFile::poll() {
@@ -126,9 +133,7 @@ std::optional<Json> InputFile::poll() {
     }
 }
 void InputFile::save(const Json &j) {
-    auto next = validateInput(j);
-    if (!inputConflicts(next).empty())
-        throw std::runtime_error("conflicting Hyprune actions in one mode");
+    auto next = validate(j);
     if (next == current && error.empty())
         return;
     atomicJSON(path, next);

@@ -43,7 +43,8 @@ def acceptance(logs,recorded,children,check):
     wait(lambda:status().get('lease'))
     initial=status();check('live_like_IPC06_grant',initial['protocol']=='0.6' and bool(initial['lease']))
     check('native_workspace_inventory_without_home_bindings',len(initial['workspaces'])>0)
-    s.ctl('eval','hl.bind("SUPER + Return",hl.dsp.exec_cmd("kitty --class hyprune-live-regression --title Live-launch-regression"))')
+    s.ctl('eval','hl.unbind("SUPER + RETURN")')
+    s.ctl('eval','hl.bind("SUPER + Return",hl.dsp.exec_cmd("kitty --start-as normal --class hyprune-live-regression --title Live-launch-regression"))')
     keys('-M','logo','-P','Super_L','-s','40','-k','Return','-s','150','-p','Super_L','-m','logo')
     window=wait(lambda:next((v for v in s.camera()['captures'] if v['title']=='Live-launch-regression' and v['visible']),None))
     check('terminal_keybind_adopted_on_unbound_workspace',window['visible'] and not window['collision'])
@@ -112,6 +113,19 @@ def acceptance(logs,recorded,children,check):
         check('core_GPU_queue_is_bounded',all(v['inFlight']<=2 for v in samples))
         check('auto_Intel_quality_applied_on_world_load',all('Intel' not in v['renderer'] or (v['quality']=='intel' and v['msaaSamples']<=2) for v in samples))
         check('auto_render_scale_preserves_native_output',all(v['nativeSize']==[3840,2160] and .375<=v['renderScale']<=1 for v in samples))
+        # Delivered new frames, not reciprocal median interval; duplicate presents
+        # count as reused and cannot masquerade as sustained 60 FPS.
+        time.sleep(5)
+        start=time.monotonic(); first=s.camera()['timings']; sustained=[]
+        for n in range(80):
+            time.sleep(.2); sustained.append(s.camera()['timings'])
+        seconds=time.monotonic()-start; last=sustained[-1]
+        delivered=(last['renderedFrames']-first['renderedFrames'])/seconds
+        (logs/'graphics-sustained.json').write_text(json.dumps({'resolution':[3840,2160],
+            'seconds':seconds,'deliveredFPS':delivered,
+            'reusedFrames':last['reusedFrames']-first['reusedFrames'],
+            'settings':last['graphics'],'samples':sustained},indent=2)+'\n')
+        print('MEASURE sustained new world frames/s:',delivered,flush=True)
         baseline=[]
         s.ctl('eval','hl.plugin.hyprune.config({graphics={render_scale=1}})');time.sleep(1)
         for n in range(40):

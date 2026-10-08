@@ -1,5 +1,6 @@
 #pragma once
 #include "GPUTimer.hpp"
+#include "Graphics.hpp"
 #include "OverlayStyle.hpp"
 #include "Resolution.hpp"
 #include "interaction/Tools.hpp"
@@ -48,7 +49,11 @@ class Renderer {
     static bool intelTier(const std::string &quality, const std::string &device) {
         return quality == "intel" || (quality == "auto" && device.find("Intel") != std::string::npos);
     }
+    void applyGraphics(const world::Json &); // Deferred, owner EGL context current; no world re-upload.
+    world::Json graphics = effectiveGraphics(graphicsDefaults(), "generic");
     bool intelQuality = false, effects = true;
+    int msaa = 4;
+    bool dynamicResolution = true;
     float renderScale = 0; // zero = automatic
     int targetFPS = 60;
     float pointerX = .5f, pointerY = .5f;
@@ -69,7 +74,7 @@ class Renderer {
     std::vector<Batch> batches_;
     std::vector<GLuint> textures_, colorTextures_, samplers_;
     GLuint scene_ = 0, tone_ = 0, quadVao_ = 0, quadVbo_ = 0, screenVao_ = 0, repeat_ = 0, clamp_ = 0;
-    GLuint environment_ = 0, bloom_ = 0, sky_ = 0;
+    GLuint environment_ = 0, bloom_ = 0, sky_ = 0, native_ = 0;
     int cubeLevels_ = 1;
     GLuint bloomFbo_[2]{}, bloomTexture_[2]{};
     GLuint msaa_ = 0, color_ = 0, depth_ = 0, resolve_ = 0, resolveTexture_ = 0;
@@ -77,12 +82,15 @@ class Renderer {
     Resolution resolution_;
     int scaledWidth_ = 0, scaledHeight_ = 0;
     int width_ = 0, height_ = 0, samples_ = 4;
-    bool allocatedIntel_ = false;
+    int allocatedSamples_ = 0;
     std::deque<GLsync> frameFences_;
-    uint64_t skipped_ = 0;
+    uint64_t skipped_ = 0, backlog_ = 0, fpsFrames_ = 0, fpsBacklog_ = 0;
+    double deliveredFPS_ = 0;
+    bool queuePressure_ = false;
+    std::chrono::steady_clock::time_point fpsSince_{};
     GLuint collisionVao_ = 0, collisionVbo_ = 0;
     GLsizei collisionCount_ = 0;
-    std::array<GPUTimer, 4> gpu_;
+    std::array<GPUTimer, 7> gpu_;
     std::array<double, 4> cpu_{};
     double frameMs_ = 0, renderMs_ = 0;
     std::chrono::steady_clock::time_point lastFrame_{};
@@ -107,7 +115,8 @@ class Renderer {
     std::array<Glyph, 128> glyphs_{};
     void textAtlas();
     void debugHUD(int, int);
-    void text(float x, float y, const std::string &, Vec3 color, int w, int h);
+    void text(float x, float y, const std::string &, Vec3 color, int w, int h, float scale = 1);
+    void panel(float x, float y, float width, float height);
     void present(GLuint, int, int, bool);
     void debugGeometry(const sim::Camera &, std::span<const surfaces::Surface>);
     void init();

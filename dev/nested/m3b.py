@@ -34,6 +34,37 @@ def acceptance(client,children,args,shell_token,socketpath):
  native=s.STATE/'native-super-tab';native.unlink(missing_ok=True)
  keys('-M','logo','-P','Super_L','-s','100','-k','Tab','-s','100','-p','Super_L','-m','logo');wait(native.exists);check('steal_inactive_restore',True);native.unlink()
  s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")');wait(lambda:state()['runtime']['active']);time.sleep(.4)
+ # Core graphics 0.7 controls coexist with the unmodified 0.6 shell.
+ original_graphics=client.call('graphics.get',{})
+ authored_exposure=original_graphics['effective']['exposure']
+ from jsonschema import Draft202012Validator
+ amendment=json.loads((ROOT/'docs/graphics-ipc-amendment.json').read_text())
+ validator=Draft202012Validator({'$defs':amendment['$defs'],'$ref':'#/$defs/graphics.get.result'})
+ validator.validate(original_graphics)
+ (s.STATE/'graphics-get.json').write_text(json.dumps(original_graphics,indent=2)+'\n')
+ check('graphics_07_response_contract',True)
+ for preset in ['low','medium','high','ultra']:
+  result=client.call('graphics.set',{'patch':{'quality':preset}})
+  check('graphics_preset_'+preset,result['effective']['quality']==preset)
+ for option,values in original_graphics['options'].items():
+  if option=='quality':continue
+  for value in values:
+   result=client.call('graphics.set',{'patch':{option:value}})
+   check('graphics_option_'+option+'_'+str(value),result['effective'][option]==value)
+  if option!='dynamic_resolution':client.call('graphics.set',{'patch':{option:None}})
+ client.call('graphics.set',{'patch':{'exposure':2.5}})
+ check('graphics_exposure_override',client.call('graphics.get',{})['effective']['exposure']==2.5)
+ graphics_path=pathlib.Path(original_graphics['path'])
+ replacement=graphics_path.with_suffix('.new');replacement.write_text(json.dumps({'quality':'low','bloom':'high'}));replacement.replace(graphics_path)
+ wait(lambda:client.call('graphics.get',{})['effective']['bloom']=='high')
+ check('graphics_atomic_reload',client.call('graphics.get',{})['effective']['quality']=='low')
+ replacement.write_text('{"msaa":999}');replacement.replace(graphics_path)
+ wait(lambda:bool(client.call('graphics.get',{})['error']))
+ check('graphics_invalid_reload_keeps_last_good',client.call('graphics.get',{})['effective']['msaa']==1)
+ replacement.write_text('{}');replacement.replace(graphics_path)
+ wait(lambda:client.call('graphics.get',{})['overrides']=={})
+ check('graphics_clear_restores_device_preset',not client.call('graphics.get',{})['error'])
+ check('graphics_clear_restores_authored_exposure',client.call('graphics.get',{})['effective']['exposure']==authored_exposure)
  # Real shell, same verified association as M3A.
  read,write=os.pipe();os.write(write,(shell_token+'\n').encode());os.close(write);_,environment=verified();environment.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_PROTOCOL='0.6',HYPRUNE_SOCKET=str(socketpath),HYPRUNE_OUTPUT_SCREEN='HEADLESS-1',HYPRUNE_DEV_AUTOMATION='1')
  shell=subprocess.Popen(['python3',str(pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR',str(ROOT.parent/'shell')))/'bridge/launch.py'),'--protocol','0.6'],env=environment,pass_fds=(read,),stdout=open(s.STATE/'shell.log','w'),stderr=subprocess.STDOUT);os.close(read);children.append(shell)

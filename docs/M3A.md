@@ -228,10 +228,10 @@ gizmos and debug wires then render at native output resolution; labels and the
 reticle remain native too. U still captures the complete native-resolution frame.
 The F3 overlay and capture timings show the scale and internal/native sizes.
 
-Automatic mode initially uses 0.6875 on Intel outputs above 2560×1440 and 1
+Automatic mode initially uses 0.5 on Intel outputs above 2560×1440 and 1
 otherwise. Nonblocking GPU pass timers control 1/16 scale steps, bounded to
-0.375–1. A smoothed GPU budget reserves 25% of the requested frame interval for
+0.375–1. A smoothed GPU budget reserves 40% of the requested frame interval for
 compositor work. Reduction requires 0.6 seconds above 108% of that budget;
-increase requires 3 seconds below 75%. Missing/disjoint timer samples do not
+increase requires 6 seconds below 60%. Missing/disjoint timer samples do not
 change resolution. This is a GPU-work target, not a guarantee of compositor FPS
 under concurrent GPU load. Fixed scale disables automatic adaptation.
