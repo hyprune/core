@@ -1,0 +1,5 @@
+{
+  "X11_transient_owner_beats_other_focus": true,
+  "attached_dialog_keeps_requested_size": true,
+  "attached_windows_skip_root_placement": true
+}

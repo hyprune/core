@@ -1,0 +1,1 @@
+PASS M2: area ownership, persistence/relaunch, invalid placement recovery, full OBB, carry wall clamp, tilted picking, slopes

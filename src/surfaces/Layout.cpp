@@ -341,38 +341,54 @@ void Layout::spawn(const Instance &i, const world::World *w, const sim::Camera &
                 float margin = zone.at("clearance");
                 s = desired;
                 for (int attempt = 0; attempt < 14; ++attempt) {
-                    auto candidate = s;
-                    auto r = candidate.right(), u = candidate.up(), n = candidate.normal();
-                    Vec3 half;
-                    half.x = std::abs(r.x) * candidate.width * .5f + std::abs(u.x) * candidate.height * .5f +
-                             std::abs(n.x) * .04f + margin;
-                    half.y = std::abs(r.y) * candidate.width * .5f + std::abs(u.y) * candidate.height * .5f +
-                             std::abs(n.y) * .04f + margin;
-                    half.z = std::abs(r.z) * candidate.width * .5f + std::abs(u.z) * candidate.height * .5f +
-                             std::abs(n.z) * .04f + margin;
-                    if (hi.x - lo.x >= 2 * half.x && hi.y - lo.y >= 2 * half.y && hi.z - lo.z >= 2 * half.z) {
-                        candidate.center = {std::clamp(s.center.x, lo.x + half.x, hi.x - half.x),
-                                            std::clamp(s.center.y, lo.y + half.y, hi.y - half.y),
-                                            std::clamp(s.center.z, lo.z + half.z, hi.z - half.z)};
-                        if (pushOut(candidate, w->collision) && candidate.center.x >= lo.x + half.x &&
-                            candidate.center.x <= hi.x - half.x && candidate.center.y >= lo.y + half.y &&
-                            candidate.center.y <= hi.y - half.y && candidate.center.z >= lo.z + half.z &&
-                            candidate.center.z <= hi.z - half.z) {
-                            auto forward = camera.forward();
-                            auto right = normalized(cross(forward, {0, 1, 0}));
-                            auto up = normalized(cross(right, forward));
-                            auto delta = candidate.center - camera.position;
-                            float depth = dot(delta, forward);
-                            float tangent = std::tan(camera.fov * float(M_PI) / 360.f);
-                            if (depth <= .05f || std::abs(dot(delta, right)) > depth * tangent * aspect ||
-                                std::abs(dot(delta, up)) > depth * tangent) {
-                                s.width *= .8f;
-                                s.height *= .8f;
+                    for (int fan = 0; fan < 49; ++fan) {
+                        auto candidate = s;
+                        // Small screen-plane offsets fan arrivals without changing the
+                        // collision-safe depth chosen by the spawn recovery.
+                        int column = fan == 0 ? 0 : ((fan + 1) / 2) * (fan % 2 ? 1 : -1);
+                        candidate.center += candidate.right() * (column * .28f) + candidate.up() * ((fan / 7) * .18f);
+                        auto r = candidate.right(), u = candidate.up(), n = candidate.normal();
+                        Vec3 half;
+                        half.x = std::abs(r.x) * candidate.width * .5f + std::abs(u.x) * candidate.height * .5f +
+                                 std::abs(n.x) * .04f + margin;
+                        half.y = std::abs(r.y) * candidate.width * .5f + std::abs(u.y) * candidate.height * .5f +
+                                 std::abs(n.y) * .04f + margin;
+                        half.z = std::abs(r.z) * candidate.width * .5f + std::abs(u.z) * candidate.height * .5f +
+                                 std::abs(n.z) * .04f + margin;
+                        if (hi.x - lo.x >= 2 * half.x && hi.y - lo.y >= 2 * half.y && hi.z - lo.z >= 2 * half.z) {
+                            candidate.center = {std::clamp(candidate.center.x, lo.x + half.x, hi.x - half.x),
+                                                std::clamp(candidate.center.y, lo.y + half.y, hi.y - half.y),
+                                                std::clamp(candidate.center.z, lo.z + half.z, hi.z - half.z)};
+                            bool occupied = false;
+                            for (const auto &[id, placed] : freePoses)
+                                if (id != i.id && length(placed.center - candidate.center) < .18f)
+                                    occupied = true;
+                            if (occupied)
                                 continue;
+                            if (pushOut(candidate, w->collision) && candidate.center.x >= lo.x + half.x &&
+                                candidate.center.x <= hi.x - half.x && candidate.center.y >= lo.y + half.y &&
+                                candidate.center.y <= hi.y - half.y && candidate.center.z >= lo.z + half.z &&
+                                candidate.center.z <= hi.z - half.z) {
+                                auto forward = camera.forward();
+                                auto right = normalized(cross(forward, {0, 1, 0}));
+                                auto up = normalized(cross(right, forward));
+                                auto delta = candidate.center - camera.position;
+                                float depth = dot(delta, forward);
+                                float tangent = std::tan(camera.fov * float(M_PI) / 360.f);
+                                if (depth <= .05f ||
+                                    std::abs(dot(delta, right)) > depth * tangent * aspect ||
+                                    std::abs(dot(delta, up)) > depth * tangent) {
+                                    continue;
+                                }
+                                for (const auto &[id, placed] : freePoses)
+                                    if (id != i.id && length(placed.center - candidate.center) < .18f)
+                                        occupied = true;
+                                if (occupied)
+                                    continue;
+                                freePoses[i.id] = candidate;
+                                spawnAreas[i.id] = home->at("id");
+                                return;
                             }
-                            freePoses[i.id] = candidate;
-                            spawnAreas[i.id] = home->at("id");
-                            return;
                         }
                     }
                     s.width *= .8f;

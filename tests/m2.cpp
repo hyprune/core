@@ -43,6 +43,14 @@ int main(int argc, char **argv) {
                   adoptedPlane->center.z >= bounds["min"][2] && adoptedPlane->center.z <= bounds["max"][2],
               "spawn outside home free zone");
         check(adopted.bindings.empty() && adopted.placements.empty(), "spawn rewrote native workspace or saved homes");
+        surfaces::Instance second = opened;
+        second.id = "new-live-second";
+        proposed.id = second.id;
+        adopted.spawn(second, w.get(), spawnCamera, proposed);
+        auto secondPlane = adopted.locate(second, w.get(), spawnCamera, 1600, 900);
+        check(secondPlane && length(secondPlane->center - adoptedPlane->center) > .1f,
+              "zone clamping stacked newly spawned windows");
+        proposed.id = opened.id;
         auto outside = *w;
         outside.collision.clear();
         surfaces::Layout arrival;

@@ -5,6 +5,11 @@
 #include <iostream>
 using namespace hyprune;
 int main() {
+    float near = interaction::limitSpawnDistance(5, 1);
+    assert(std::abs(near - .85f) < 1e-6f);
+    assert(interaction::limitSpawnDistance(near, 4) == near);
+    assert(interaction::limitSpawnDistance(interaction::limitSpawnDistance(5, 4), 1) == near);
+
     auto c = interaction::defaultConfig();
     assert(interaction::configPatch(c, {{"player", {{"walk_speed", 4.0}}}})["player"]["walk_speed"] == 4);
     for (auto patch :

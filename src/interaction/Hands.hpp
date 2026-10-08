@@ -15,6 +15,11 @@ class Hands {
     void wheel(float steps);
     void end() { gesture = Gesture::None; }
 };
+// Obstacle order cannot replace an already tighter visibility bound. OBB
+// recovery runs once after these ray constraints, never before another ray.
+inline float limitSpawnDistance(float current, float obstacle) {
+    return std::min(current, std::max(.2f, obstacle - .15f));
+}
 struct WorldHit {
     float distance;
     Vec3 point, normal;

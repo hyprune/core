@@ -14,6 +14,18 @@
 #include <hyprland/src/xwayland/XSurface.hpp>
 #include <set>
 namespace hyprune::platform {
+namespace {
+PHLWINDOW attachmentParent(const PHLWINDOW &w) {
+    auto parent = w->parent();
+    if (!parent)
+        parent = w->x11Parent();
+    bool menu =
+        w->m_isX11 && (w->m_X11ShouldntFocus || (w->m_xwaylandSurface && w->m_xwaylandSurface->m_overrideRedirect));
+    if (!parent && menu)
+        parent = Desktop::focusState()->window();
+    return parent == w ? nullptr : parent;
+}
+} // namespace
 // Runs on the event loop, never from IPassElement::draw. Read-only texture
 // leases avoid snapshot FBOs and compositor recursion entirely for M0.
 void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::Layout *layout,
@@ -37,6 +49,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
     for (auto &w : Desktop::windowState()->windows()) {
         if (!w->m_isMapped || w->isHidden() || w->m_monitor != monitor || !w->resource())
             continue;
+        bool attached = bool(attachmentParent(w));
         bool newlyMapped = std::none_of(knownWindows_.begin(), knownWindows_.end(), [&](auto &v) { return v == w; });
         // Baseline all existing windows, including windows without a texture yet.
         if (!spawnNew && newlyMapped)
@@ -45,7 +58,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                                        [&](auto &v) { return v.window == w && world && v.worldId == world->id; });
         auto existing = std::find_if(entries.begin(), entries.end(), [&](auto &e) { return e.window == w; });
         surfaces::Instance identity{"", w->m_class, w->m_title, w->m_workspace ? int(w->m_workspace->m_id) : 0};
-        if (world && !world->areas.empty() && existing == entries.end() && !newlyMapped && layout &&
+        if (!attached && world && !world->areas.empty() && existing == entries.end() && !newlyMapped && layout &&
             !layout->binding(identity.workspaceId, world) && !layout->hasPlacement(identity, world) &&
             remembered == adoptedWindows_.end())
             continue;
@@ -78,19 +91,23 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 e.surface.center = {-3.8f, 2, -2};
             if (i == 2)
                 e.surface.center = {3.8f, 2, -2};
-            if (camera && world &&
+            if (!attached && camera && world &&
                 ((spawnNew && newlyMapped) ||
                  (remembered != adoptedWindows_.end() && layout && !layout->freePoses.contains(e.surface.id)))) {
                 e.surface.yaw = -camera->yaw;
                 e.surface.center = camera->position + camera->forward() * spawnDistance;
-                if (auto wall = interaction::raycast(camera->position, camera->forward(), world->collision))
-                    e.surface.center =
-                        camera->position +
-                        camera->forward() * std::min(spawnDistance, std::max(.2f, wall->distance - .15f));
+                if (auto wall = interaction::raycast(camera->position, camera->forward(), world->collision,
+                                                     &world->collisionIndex))
+                    e.surface.center = camera->position + camera->forward() * interaction::limitSpawnDistance(
+                                                                                  spawnDistance, wall->distance);
                 for (auto &other : entries)
                     if (auto hit = surfaces::intersect(other.surface, camera->position, camera->forward());
                         hit && hit->distance < spawnDistance)
-                        e.surface.center = camera->position + camera->forward() * std::max(.2f, hit->distance - .15f);
+                        e.surface.center =
+                            camera->position +
+                            camera->forward() *
+                                interaction::limitSpawnDistance(
+                                    dot(e.surface.center - camera->position, camera->forward()), hit->distance);
                 if (!surfaces::pushOut(e.surface, world->collision)) {
                     auto id = e.surface.id;
                     e.surface = surfaces::carryPlane(*camera, e.surface.width, e.surface.height, world->collision);
@@ -127,7 +144,8 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         it->surface.pixelWidth = std::max(1, int(surface->m_current.size.x));
         it->surface.pixelHeight = std::max(1, int(surface->m_current.size.y));
         it->surface.height = it->surface.width * float(it->surface.pixelHeight) / it->surface.pixelWidth;
-        if (world && world->areas.empty() && !spawnNew && (!layout || !layout->freePoses.contains(it->surface.id))) {
+        if (!attached && world && world->areas.empty() && !spawnNew &&
+            (!layout || !layout->freePoses.contains(it->surface.id))) {
             auto anchors = world->manifest.value("anchors", world::Json::array());
             size_t index = std::distance(entries.begin(), it);
             if (index < anchors.size() && anchors[index].at("screenType") == "com.hyprune.window") {
@@ -142,7 +160,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 it->surface.height = it->surface.width / ratio;
             }
         }
-        if (layout && world->areas.empty() && layout->freePoses.contains(it->surface.id)) {
+        if (!attached && layout && world->areas.empty() && layout->freePoses.contains(it->surface.id)) {
             auto pixels = it->surface;
             it->surface = layout->freePoses.at(it->surface.id);
             it->surface.texture = pixels.texture;
@@ -152,7 +170,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             if (!surfaces::pushOut(it->surface, world->collision))
                 it->visible = false;
         }
-        if (layout && camera && world && !world->areas.empty()) {
+        if (!attached && layout && camera && world && !world->areas.empty()) {
             it->visible = false;
             if (auto placed =
                     layout->locate(it->instance, world, *camera, it->surface.pixelWidth, it->surface.pixelHeight)) {
@@ -160,6 +178,10 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 it->surface = *placed;
                 it->visible = true;
             }
+        }
+        if (attached && layout) {
+            layout->freePoses.erase(it->surface.id);
+            layout->spawnAreas.erase(it->surface.id);
         }
         w->setSuspended(false);
         surface->frame(std::chrono::steady_clock::now());
@@ -316,13 +338,11 @@ void Capture::attach() {
         if (!w)
             continue;
         e.parentId.clear();
-        auto parent = w->parent();
-        if (!parent)
-            parent = w->x11Parent();
+        auto parent = attachmentParent(w);
         e.parentKeyboard =
             w->m_isX11 && (w->m_X11ShouldntFocus || (w->m_xwaylandSurface && w->m_xwaylandSurface->m_overrideRedirect));
-        if (!parent && e.parentKeyboard)
-            parent = Desktop::focusState()->window();
+        if (parent)
+            e.visible = false;
         if (parent)
             for (auto &p : entries)
                 if (p.window == parent) {

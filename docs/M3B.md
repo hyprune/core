@@ -494,3 +494,17 @@ hold timing without cursor changes. Supervised checklist: E enters virtual
 cursor typing; Super+Tab exits to reticle; TAB hold enters Director cursor;
 release before threshold stays reticle. Timing publication itself never moves,
 shows, hides or changes the shape of a cursor.
+
+Supervised live test checklist — review audit additions:
+
+- [ ] Client A fullscreen → client B fullscreen: A's placement is restored,
+  native fullscreen cursor becomes reticle during B's fly-in, then native cursor.
+- [ ] Close the fullscreen owner: no stale focus/grab/placement; reticle returns
+  once, and another surviving window can enter E use mode (virtual cursor).
+- [ ] Exit during world upload: cancellation releases partial GPU resources and
+  restores the normal desktop cursor through the existing deferred exit path.
+- [ ] Transparent client corners and popup shadows reveal the world; foreground
+  world glass blends over windows and background glass stays behind them.
+
+All automated cursor checks use a nested software cursor. Hardware behavior
+still requires the owner's supervised test; no live session was changed.

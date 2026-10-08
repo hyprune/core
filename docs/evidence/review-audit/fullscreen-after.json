@@ -1,0 +1,6 @@
+{
+  "fullscreen_first_owner": true,
+  "fullscreen_replacement": true,
+  "fullscreen_close_cleanup": true,
+  "surviving_window_usable": true
+}

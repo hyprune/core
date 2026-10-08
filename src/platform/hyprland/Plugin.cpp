@@ -499,6 +499,12 @@ void Runtime::refresh() {
                 if (!runtime->active || !window || !window->m_isMapped || !window->m_target)
                     return;
                 auto w = window.lock();
+                // A transient relationship may arrive after the first map commit.
+                if (w->parent() || w->x11Parent())
+                    return;
+                for (const auto &entry : runtime->capture.entries)
+                    if (entry.window == w && !entry.parentId.empty())
+                        return;
                 auto floated = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_ENABLE, w);
                 if (!floated)
                     throw std::runtime_error("spawn float rejected: " + floated.error().message);
@@ -1383,6 +1389,28 @@ void Runtime::transitionTick(float dt) {
         }
     }
     auto fs = Fullscreen::controller()->getFullscreenWindow(monitor.lock());
+    if (fullscreen.phase) {
+        auto old = capture.find(fullscreen.id);
+        if (!old || (fs && fs != old->window)) {
+            cancelGrab();
+            keys.clear();
+            input.clear();
+            smoothIntent = {};
+            typing = false;
+            relativeSurface.clear();
+            focused.clear();
+            focusedParent.clear();
+            if (old) {
+                old->surface = fullscreen.before;
+                if (layout.freePoses.contains(fullscreen.id))
+                    layout.freePoses[fullscreen.id] = fullscreen.before;
+            } else
+                layout.freePoses.erase(fullscreen.id);
+            restoreFullscreenWindows();
+            fullscreen = {};
+            cursor();
+        }
+    }
     if (fullscreen.phase == 0 && fs)
         for (auto &e : capture.entries)
             if (e.window == fs) {
@@ -1394,12 +1422,6 @@ void Runtime::transitionTick(float dt) {
                 fullscreen.elapsed = 0;
                 break;
             }
-    if (fullscreen.phase && !capture.find(fullscreen.id)) {
-        restoreFullscreenWindows();
-        fullscreen = {};
-        cursor();
-        return;
-    }
     if (fullscreen.phase == 2 && !fs) {
         fullscreen.phase = 3;
         fullscreen.from = fullscreen.to;
@@ -1459,7 +1481,8 @@ void Runtime::transitionTick(float dt) {
                 typing = false;
                 cancelGrab();
             } else {
-                layout.freePoses[fullscreen.id] = fullscreen.before;
+                if (layout.freePoses.contains(fullscreen.id))
+                    layout.freePoses[fullscreen.id] = fullscreen.before;
                 restoreFullscreenWindows();
                 fullscreen = {};
                 typing = false;

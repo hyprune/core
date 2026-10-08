@@ -1,0 +1,22 @@
+/home/rick/workspace/hyprune/core/tests/fixtures/atrium
+/home/rick/workspace/hyprune/core/tests/fixtures/materials
+/home/rick/workspace/hyprune/core/tests/fixtures/m2
+/home/rick/workspace/hyprune/core/tests/fixtures/atrium
+/home/rick/workspace/hyprune/core/tests/fixtures/materials
+/home/rick/workspace/hyprune/core/tests/fixtures/m2
+load: ok
+hello: 0.8 ['session.hello', 'session.ping', 'state.subscribe', 'state.snapshot', 'state.unsubscribe', 'atmosphere.get', 'atmosphere.set', 'autodrive.start', 'autodrive.stop', 'camera.fov', 'camera.get', 'camera.set', 'data.object.bind', 'data.publish', 'data.remove', 'graphics.get', 'graphics.set', 'input.capture', 'input.capture.cancel', 'input.get', 'input.preview', 'input.set', 'movement.set', 'overlay.style', 'placements.list', 'placements.remove', 'route.clear', 'route.set', 'runtime.exit', 'shell.bind', 'shell.claim', 'shell.overlay', 'shell.release', 'surface.focus', 'surface.place', 'surface.pull', 'surface.return', 'surfaces.recall', 'travel.cancel', 'travel.start', 'ui.close', 'ui.open', 'waypoint.clear', 'waypoint.set', 'workspace.activate', 'workspace.bind', 'workspace.focus', 'workspace.unfocus', 'world.load']
+PASS audit: fullscreen_first_owner
+Traceback (most recent call last):
+  File "/home/rick/workspace/hyprune/core/dev/nested/review_audit.py", line 48, in <module>
+    s.run(argparse.Namespace(integration=False,m3b=True,m3a=False,m2=False,m1=False,live=False,serve=False,record=False,visible=False))
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rick/workspace/hyprune/core/dev/nested/session.py", line 163, in run
+    acceptance(client,children,args,shell_token,socketpath)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rick/workspace/hyprune/core/dev/nested/review_audit.py", line 35, in acceptance
+    wait(lambda:s.camera()['fullscreen']==2 and s.camera()['fullscreenId']==b['id'],'fullscreen owner replacement stuck')
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rick/workspace/hyprune/core/dev/nested/review_audit.py", line 16, in wait
+    raise AssertionError(label)
+AssertionError: fullscreen owner replacement stuck
