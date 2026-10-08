@@ -48,6 +48,7 @@ def camera():
 
 def run(args):
     global STATE
+    if not hasattr(args,'climbing'): args.climbing=False
     if not hasattr(args,'integration'): args.integration=False
     if args.integration:
         STATE=HERE/'.integration-state'
@@ -55,6 +56,8 @@ def run(args):
         # First-session integration starts from its authored Switchyard locations.
         (STATE/'layout.json').unlink(missing_ok=True)
         os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+    if args.climbing:
+        STATE=HERE/'.climbing-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if args.m3b:
         STATE=HERE/'.m3b-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     elif args.m3a:
@@ -73,6 +76,9 @@ def run(args):
     package=installed/'org.hyprune.atrium'
     if package.exists():shutil.rmtree(package)
     shutil.copytree(ROOT/'tests/fixtures/atrium',package)
+    if args.climbing:
+        subprocess.run([sys.executable,str(ROOT/'tests/fixtures/climbing.py')],check=True)
+        shutil.copytree(ROOT/'tests/fixtures/climbing',installed/'org.hyprune.climbing',dirs_exist_ok=True)
     if args.m2 or args.m3a or args.m3b:
         subprocess.run([sys.executable,str(ROOT/'tests/fixtures/m2.py')],check=True,stdout=subprocess.DEVNULL)
         shutil.copytree(ROOT/'tests/fixtures/m2',installed/'org.hyprune.m2',dirs_exist_ok=True)
@@ -159,8 +165,14 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
+        if args.climbing:
+            from climbing import acceptance
+            acceptance(client,children,args,shell_token,socketpath)
+            (STATE/'transcript.json').write_text(json.dumps(client.transcript))
+            (STATE/'notifications.json').write_text(json.dumps(client.events))
+            return
         if args.m3b:
             from m3b import acceptance
             acceptance(client,children,args,shell_token,socketpath)
@@ -386,6 +398,6 @@ def m1(client):
     print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
     try:run(args)
     except KeyboardInterrupt:print("Nested session stopped.",flush=True)

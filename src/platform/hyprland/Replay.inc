@@ -20,6 +20,7 @@ Json Runtime::sessionInitial() const {
     return state;
 }
 void Runtime::restoreSession(const Json &j) {
+    climbing.reset(camera);
     camera = replay::camera(j.at("camera"));
     movement = j.at("movement") == "walk" ? static_cast<sim::MotionStrategy *>(&walk) : &fly;
     noclip = j.at("noclip");
@@ -77,7 +78,7 @@ Json Runtime::sessionMethod(const std::string &method, const Json &params) {
     };
     auto idle = [&] {
         if (!active || !world || loading || inputMode() != "world" || hands.gesture != interaction::Gesture::None ||
-            objectCarry || !keys.empty() || zoomHeld || control.driving())
+            objectCarry || climbing.active() || !keys.empty() || zoomHeld || control.driving())
             throw ipc::Error(-32004, "start in idle world control with no held movement/gesture");
     };
     if (method == "recording.status" || method == "replay.status") {
@@ -113,6 +114,7 @@ Json Runtime::sessionMethod(const std::string &method, const Json &params) {
                                 {"seed", seed},
                                 {"initial", sessionInitial()},
                                 {"player", config["player"]},
+                                {"movementConfig", config["movement"]},
                                 {"input", input.config}},
                                params.value("includeAppKeys", false));
         accumulator = 0;
@@ -142,12 +144,14 @@ Json Runtime::sessionMethod(const std::string &method, const Json &params) {
         auto recordedInput = interaction::validateInput(session.header.at("input"));
         auto checked = config;
         checked["player"] = session.header.at("player");
-        checked = interaction::configPatch(config, {{"player", session.header.at("player")}});
+        checked = interaction::configPatch(config, {{"player", session.header.at("player")},
+            {"movement", session.header.value("movementConfig", interaction::defaultConfig()["movement"])}});
         replayInput = input.config;
-        replayConfig = config["player"];
+        replayConfig = {{"player", config["player"]}, {"movement", config["movement"]}};
         replayEditor = editor.saved();
         input.apply(recordedInput);
         config["player"] = checked["player"];
+        config["movement"] = checked["movement"];
         restoreSession(session.header.at("initial"));
         editor.deterministicId = session.header.at("seed").get<uint64_t>();
         session.playing = true;
@@ -166,7 +170,9 @@ void Runtime::stopReplay() {
     cancelGrab();
     keys.clear();
     input.apply(replayInput);
-    config["player"] = replayConfig;
+    config["player"] = replayConfig["player"];
+    config["movement"] = replayConfig["movement"];
+    climbing.reset(camera);
     editor.restore(replayEditor);
     editor.deterministicId.reset();
     editor.activeHandle = -1;

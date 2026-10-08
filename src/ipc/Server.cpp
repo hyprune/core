@@ -109,6 +109,10 @@ Json Server::visibleState(const Peer &p) const {
         state["keymap"] = interaction::withoutRecordingAction(state["keymap"]);
     if (!protocol::atLeast(p.protocol, "0.9") && state.contains("keymap"))
         state["keymap"] = hyprune::interaction::legacyInputNames(state["keymap"]);
+    if (!protocol::atLeast(p.protocol, "0.11") && state.contains("movement")) {
+        for (auto key : {"state", "ladderId", "prompt"})
+            state["movement"].erase(key);
+    }
     if (protocol::atLeast(p.protocol, "0.8"))
         return state;
     if (state.contains("keymap"))

@@ -1,0 +1,31 @@
+Test project /home/rick/workspace/hyprune/core/build
+      Start  1: render
+ 1/13 Test  #1: render ...........................   Passed    6.33 sec
+      Start  2: ipc
+ 2/13 Test  #2: ipc ..............................   Passed    0.72 sec
+      Start  3: control
+ 3/13 Test  #3: control ..........................   Passed    0.10 sec
+      Start  4: core
+ 4/13 Test  #4: core .............................   Passed    0.21 sec
+      Start  5: m2
+ 5/13 Test  #5: m2 ...............................   Passed    0.40 sec
+      Start  6: m3a
+ 6/13 Test  #6: m3a ..............................   Passed    0.02 sec
+      Start  7: m3b
+ 7/13 Test  #7: m3b ..............................   Passed    0.02 sec
+      Start  8: bridge
+ 8/13 Test  #8: bridge ...........................   Passed    0.03 sec
+      Start  9: spatial-index
+ 9/13 Test  #9: spatial-index ....................   Passed    0.09 sec
+      Start 10: offload-policy-transport
+10/13 Test #10: offload-policy-transport .........   Passed    0.74 sec
+      Start 11: climbing
+11/13 Test #11: climbing .........................   Passed    0.16 sec
+      Start 12: shader-warmup
+12/13 Test #12: shader-warmup ....................   Passed    0.38 sec
+      Start 13: record-replay
+13/13 Test #13: record-replay ....................   Passed    0.01 sec
+
+100% tests passed out of 13
+
+Total Test time (real) =   9.21 sec

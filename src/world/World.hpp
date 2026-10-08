@@ -1,5 +1,6 @@
 #pragma once
 #include "sim/Camera.hpp"
+#include "sim/Climbing.hpp"
 #include <array>
 #include <filesystem>
 #include <json.hpp>
@@ -52,6 +53,7 @@ struct CubeLevel {
 struct World {
     std::string id, name, defaultSpawn;
     std::vector<Spawn> spawns;
+    std::vector<sim::Climbable> climbables;
     std::vector<Mesh> meshes;
     std::vector<Triangle> collision, visualTriangles;
     sim::TriangleIndex collisionIndex, visualIndex;

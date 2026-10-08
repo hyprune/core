@@ -139,7 +139,8 @@ void inheritance(const std::string &runtime) {
     Server server(runtime, "inheritance", grants, [](auto &, auto &) { return Json{{"ok", true}}; });
     server.advertise(methods);
     const Json mounts{{"placements", Json::array({Json{{"pose", true}}, Json{{"anchorId", "wall"}}})}};
-    server.publish({{"runtime", Json::object()},
+    server.publish({{"movement", {{"state", "climbing"}, {"ladderId", "hatch"}, {"prompt", "W/S climb"}}},
+                    {"runtime", Json::object()},
                     {"location", Json::object()},
                     {"integrations", Json::object()},
                     {"spatial", Json::object()},
@@ -206,6 +207,9 @@ void inheritance(const std::string &runtime) {
                   "latest state inherited old limits");
         if (atLeast(version, "0.8"))
             check(state["keymap"]["holds"].size() == 1, "latest state lost hold timing");
+        check(state["movement"].contains("ladderId") == atLeast(version, "0.11"), "climbing version projection");
+        if (atLeast(version, "0.11"))
+            check(state["movement"]["state"] == "climbing", "climbing state lost");
         previousMethods = advertised;
         previousEvents = events;
         previousState = state;

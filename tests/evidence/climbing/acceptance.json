@@ -1,0 +1,864 @@
+{
+  "grab_attach": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.4349655210971832,
+        -0.0,
+        0.0,
+        0.9004471302032471
+      ],
+      "position": [
+        0.0,
+        2.99111008644104,
+        0.550000011920929
+      ],
+      "prompt": "W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "grab_prompt": {
+    "passed": true,
+    "evidence": "W/S climb / Ctrl slide / Space let go"
+  },
+  "grab_hold": {
+    "passed": true,
+    "evidence": [
+      [
+        0.0,
+        2.99111008644104,
+        0.550000011920929
+      ],
+      [
+        0.0,
+        2.99111008644104,
+        0.550000011920929
+      ]
+    ]
+  },
+  "grab_K_up": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.4349655210971832,
+        -0.0,
+        0.0,
+        0.9004471302032471
+      ],
+      "position": [
+        0.0,
+        3.548886775970459,
+        0.550000011920929
+      ],
+      "prompt": "W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "grab_J_down": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.4349655210971832,
+        -0.0,
+        0.0,
+        0.9004471302032471
+      ],
+      "position": [
+        0.0,
+        2.9577765464782715,
+        0.550000011920929
+      ],
+      "prompt": "W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "grab_slide": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.4349655210971832,
+        -0.0,
+        0.0,
+        0.9004471302032471
+      ],
+      "position": [
+        0.0,
+        2.09110951423645,
+        0.550000011920929
+      ],
+      "prompt": "W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "grab_jump_off": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.4349655210971832,
+        -0.0,
+        0.0,
+        0.9004471302032471
+      ],
+      "position": [
+        0.0,
+        2.78667950630188,
+        0.9476162195205688
+      ],
+      "prompt": "Move into ladder to climb",
+      "state": "walking"
+    }
+  },
+  "grab_fall_catch": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        -0.19866932928562164,
+        -0.0,
+        -0.0,
+        0.9800665974617004
+      ],
+      "position": [
+        0.0,
+        7.690979957580566,
+        0.550000011920929
+      ],
+      "prompt": "W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "grab_catch_jump_off": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        -0.19866932928562164,
+        -0.0,
+        -0.0,
+        0.9800665974617004
+      ],
+      "position": [
+        0.0,
+        8.441121101379395,
+        0.972053050994873
+      ],
+      "prompt": "",
+      "state": "walking"
+    }
+  },
+  "grab_rim_reached": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.5226872563362122,
+        -0.0,
+        0.0,
+        0.8525245189666748
+      ],
+      "position": [
+        0.0,
+        7.700000286102295,
+        0.28333359956741333
+      ],
+      "prompt": "W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "grab_top_exit": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.5226872563362122,
+        -0.0,
+        0.0,
+        0.8525245189666748
+      ],
+      "position": [
+        3.877317134026725e-09,
+        7.700390815734863,
+        -0.8400331139564514
+      ],
+      "prompt": "Move into ladder to climb",
+      "state": "walking"
+    }
+  },
+  "grab_bottom_detach": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.5226872563362122,
+        -0.0,
+        0.0,
+        0.8525245189666748
+      ],
+      "position": [
+        0.0,
+        1.7000000476837158,
+        1.5966737270355225
+      ],
+      "prompt": "Move into ladder to climb",
+      "state": "walking"
+    }
+  },
+  "grab_noclip_detaches": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        0.0,
+        3.9990580081939697,
+        0.550000011920929
+      ],
+      "prompt": "",
+      "state": "flying"
+    }
+  },
+  "grab_noclip_no_grab": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        0.0,
+        3.9990580081939697,
+        -0.6166666746139526
+      ],
+      "prompt": "",
+      "state": "flying"
+    }
+  },
+  "grab_fly_detaches": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.fly",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        0.0,
+        3.9990580081939697,
+        0.550000011920929
+      ],
+      "prompt": "",
+      "state": "flying"
+    }
+  },
+  "grab_fly_no_grab": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.fly",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        -6.547928933287039e-06,
+        3.999199867248535,
+        0.375
+      ],
+      "prompt": "",
+      "state": "flying"
+    }
+  },
+  "look-to-climb_attach": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.4349655210971832,
+        -0.0,
+        0.0,
+        0.9004471302032471
+      ],
+      "position": [
+        0.0,
+        2.75887131690979,
+        0.550000011920929
+      ],
+      "prompt": "Look up/down + W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "look-to-climb_prompt": {
+    "passed": true,
+    "evidence": "Look up/down + W/S climb / Ctrl slide / Space let go"
+  },
+  "look-to-climb_hold": {
+    "passed": true,
+    "evidence": [
+      [
+        0.0,
+        2.75887131690979,
+        0.550000011920929
+      ],
+      [
+        0.0,
+        2.75887131690979,
+        0.550000011920929
+      ]
+    ]
+  },
+  "look-to-climb_K_up": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.4349655210971832,
+        -0.0,
+        0.0,
+        0.9004471302032471
+      ],
+      "position": [
+        0.0,
+        3.2433080673217773,
+        0.550000011920929
+      ],
+      "prompt": "Look up/down + W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "look-to-climb_J_down": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.4349655210971832,
+        -0.0,
+        0.0,
+        0.9004471302032471
+      ],
+      "position": [
+        0.0,
+        2.732760429382324,
+        0.550000011920929
+      ],
+      "prompt": "Look up/down + W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "look-to-climb_slide": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.4349655210971832,
+        -0.0,
+        0.0,
+        0.9004471302032471
+      ],
+      "position": [
+        0.0,
+        1.732759714126587,
+        0.550000011920929
+      ],
+      "prompt": "Look up/down + W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "look-to-climb_jump_off": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.4349655210971832,
+        -0.0,
+        0.0,
+        0.9004471302032471
+      ],
+      "position": [
+        0.0,
+        2.4828991889953613,
+        0.972053050994873
+      ],
+      "prompt": "Move into ladder to climb",
+      "state": "walking"
+    }
+  },
+  "look-to-climb_fall_catch": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        -0.19866932928562164,
+        -0.0,
+        -0.0,
+        0.9800665974617004
+      ],
+      "position": [
+        0.0,
+        7.690979957580566,
+        0.550000011920929
+      ],
+      "prompt": "Look up/down + W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "look-to-climb_catch_jump_off": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        -0.19866932928562164,
+        -0.0,
+        -0.0,
+        0.9800665974617004
+      ],
+      "position": [
+        0.0,
+        8.492964744567871,
+        0.9945358633995056
+      ],
+      "prompt": "",
+      "state": "walking"
+    }
+  },
+  "look-to-climb_rim_reached": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.5226872563362122,
+        -0.0,
+        0.0,
+        0.8525245189666748
+      ],
+      "position": [
+        0.0,
+        7.699999809265137,
+        0.28333359956741333
+      ],
+      "prompt": "Look up/down + W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "look-to-climb_top_exit": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.5226872563362122,
+        -0.0,
+        0.0,
+        0.8525245189666748
+      ],
+      "position": [
+        3.877649756844903e-09,
+        7.700000286102295,
+        -0.8400331139564514
+      ],
+      "prompt": "Move into ladder to climb",
+      "state": "walking"
+    }
+  },
+  "look-to-climb_bottom_detach": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.5226872563362122,
+        -0.0,
+        0.0,
+        0.8525245189666748
+      ],
+      "position": [
+        0.0,
+        1.7000000476837158,
+        1.6550074815750122
+      ],
+      "prompt": "Move into ladder to climb",
+      "state": "walking"
+    }
+  },
+  "look-to-climb_noclip_detaches": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        0.0,
+        3.9990580081939697,
+        0.550000011920929
+      ],
+      "prompt": "",
+      "state": "flying"
+    }
+  },
+  "look-to-climb_noclip_no_grab": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        0.0,
+        3.9990580081939697,
+        -0.7000002264976501
+      ],
+      "prompt": "",
+      "state": "flying"
+    }
+  },
+  "look-to-climb_fly_detaches": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.fly",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        0.0,
+        3.9990580081939697,
+        0.550000011920929
+      ],
+      "prompt": "",
+      "state": "flying"
+    }
+  },
+  "look-to-climb_fly_no_grab": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.fly",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        -6.987575488892617e-06,
+        3.99920916557312,
+        0.3750000298023224
+      ],
+      "prompt": "",
+      "state": "flying"
+    }
+  },
+  "auto-traverse_attach": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.4349655210971832,
+        -0.0,
+        0.0,
+        0.9004471302032471
+      ],
+      "position": [
+        0.0,
+        3.124443292617798,
+        0.550000011920929
+      ],
+      "prompt": "Traversing / Space let go",
+      "state": "climbing"
+    }
+  },
+  "auto-traverse_prompt": {
+    "passed": true,
+    "evidence": "Traversing / Space let go"
+  },
+  "auto-traverse_jump_off": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.4349655210971832,
+        -0.0,
+        0.0,
+        0.9004471302032471
+      ],
+      "position": [
+        0.0,
+        3.9745826721191406,
+        0.972053050994873
+      ],
+      "prompt": "E traverse ladder",
+      "state": "walking"
+    }
+  },
+  "auto-traverse_fall_catch": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "hatch",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        -0.19866932928562164,
+        -0.0,
+        -0.0,
+        0.9800665974617004
+      ],
+      "position": [
+        0.0,
+        7.690979957580566,
+        0.550000011920929
+      ],
+      "prompt": "E traverse / Space let go",
+      "state": "climbing"
+    }
+  },
+  "auto-traverse_catch_jump_off": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        -0.19866932928562164,
+        -0.0,
+        -0.0,
+        0.9800665974617004
+      ],
+      "position": [
+        0.0,
+        8.441121101379395,
+        0.972053050994873
+      ],
+      "prompt": "",
+      "state": "walking"
+    }
+  },
+  "auto-traverse_top_exit": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        3.8972882698828926e-09,
+        7.700000286102295,
+        -0.8400331139564514
+      ],
+      "prompt": "E traverse ladder",
+      "state": "walking"
+    }
+  },
+  "auto-traverse_bottom_detach": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        4.577263568172896e-11,
+        1.7000000476837158,
+        1.5383399724960327
+      ],
+      "prompt": "E traverse ladder",
+      "state": "walking"
+    }
+  },
+  "auto-traverse_noclip_detaches": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        0.0,
+        3.9990580081939697,
+        0.550000011920929
+      ],
+      "prompt": "",
+      "state": "flying"
+    }
+  },
+  "auto-traverse_noclip_no_grab": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        0.0,
+        3.9990580081939697,
+        -0.7000002264976501
+      ],
+      "prompt": "",
+      "state": "flying"
+    }
+  },
+  "auto-traverse_fly_detaches": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.fly",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        0.0,
+        3.9990580081939697,
+        0.550000011920929
+      ],
+      "prompt": "",
+      "state": "flying"
+    }
+  },
+  "auto-traverse_fly_no_grab": {
+    "passed": true,
+    "evidence": {
+      "ladderId": null,
+      "modeId": "com.hyprune.fly",
+      "orientation": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "position": [
+        -6.547928933287039e-06,
+        3.999199867248535,
+        0.375
+      ],
+      "prompt": "",
+      "state": "flying"
+    }
+  },
+  "wide_strafe": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "wide",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.24740396440029144,
+        -0.0,
+        0.0,
+        0.9689124226570129
+      ],
+      "position": [
+        -3.6999998092651367,
+        2.5911104679107666,
+        0.550000011920929
+      ],
+      "prompt": "W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "angled_ladder": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "angled",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.24740396440029144,
+        -0.0,
+        0.0,
+        0.9689124226570129
+      ],
+      "position": [
+        10.0,
+        4.043880462646484,
+        2.0624477863311768
+      ],
+      "prompt": "W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  },
+  "tall_rope": {
+    "passed": true,
+    "evidence": {
+      "ladderId": "tall",
+      "modeId": "com.hyprune.walk",
+      "orientation": [
+        0.24740396440029144,
+        -0.0,
+        0.0,
+        0.9689124226570129
+      ],
+      "position": [
+        5.0,
+        3.9911091327667236,
+        0.550000011920929
+      ],
+      "prompt": "W/S climb / Ctrl slide / Space let go",
+      "state": "climbing"
+    }
+  }
+}

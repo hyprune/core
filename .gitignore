@@ -17,3 +17,5 @@ tests/fixtures/m3a/
 dev/nested/.m3b-state/
 
 tests/fixtures/m3b/
+/tests/fixtures/climbing/
+/dev/nested/.climbing-state/

@@ -22,6 +22,7 @@ Json defaultConfig() {
                 {"noclip", "v"},
                 {"fly", "F4"},
                 {"zoom", "c"}}}}},
+            {"movement", {{"climb_mode", "grab"}}},
             {"player",
              {{"walk_speed", 3.5},
               {"fly_speed", 5.0},
@@ -80,6 +81,11 @@ Json configPatch(const Json &current, const Json &patch) {
                     throw std::runtime_error("render_scale must be auto or 0.375..1");
                 result[section][key] = v;
                 continue;
+            }
+            if (section == "movement" && key == "climb_mode") {
+                if (!v.is_string())
+                    throw std::runtime_error("climb_mode must be a string");
+                sim::climbMode(v.get<std::string>());
             }
             auto old = result[section][key];
             if (old.is_boolean()) {

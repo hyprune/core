@@ -3,18 +3,18 @@
     {
       "error": null,
       "failures": [],
-      "frame": 208,
+      "frame": 207,
       "mode": "input",
-      "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-QIzhMq.jsonl",
+      "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-j3OYo9.jsonl",
       "playing": false,
       "recording": false
     },
     {
       "error": null,
       "failures": [],
-      "frame": 208,
+      "frame": 207,
       "mode": "input",
-      "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-QIzhMq.jsonl",
+      "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-j3OYo9.jsonl",
       "playing": false,
       "recording": false
     }
@@ -22,20 +22,20 @@
   "camera": {
     "error": null,
     "failures": [],
-    "frame": 208,
+    "frame": 207,
     "mode": "camera",
-    "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-QIzhMq.jsonl",
+    "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-j3OYo9.jsonl",
     "playing": false,
     "recording": false
   },
   "shaderCache": {
-    "compileMs": 62.89693700000001,
+    "compileMs": 62.067145,
     "hits": 0,
     "misses": 8,
     "rejected": 0,
     "warming": false,
-    "warmupMaxStepMs": 28.128157,
-    "warmupMs": 43.57531899999999
+    "warmupMaxStepMs": 27.69602,
+    "warmupMs": 41.862322
   },
   "checks": [
     "rebindable F8",

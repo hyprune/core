@@ -204,6 +204,7 @@ struct Runtime {
     sim::Walk walk;
     sim::Fly fly;
     sim::MotionStrategy *movement = &walk;
+    sim::Climbing climbing;
     std::shared_ptr<world::World> world;
     std::unique_ptr<ipc::Bridge> ipc;
     PHLMONITORREF monitor;
@@ -726,7 +727,12 @@ void Runtime::offloadPump() {
     if (renderDepth) throw std::runtime_error("offload polling inside frame");
     if (offload.connected()) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
-        offload.tick(camera, renderer.graphics, renderer.profile, offloadPolicy.value("targetFPS", 30));
+        // Flatten the simulation's visual-only bob into the existing pose packet.
+        // The physical capsule and movement publication keep their original pose.
+        auto view = camera;
+        view.position.y += view.climbBob;
+        view.climbBob = 0;
+        offload.tick(view, renderer.graphics, renderer.profile, offloadPolicy.value("targetFPS", 30));
         if (!offload.connected()) {
             auto stop = offloadRequest; stop["enabled"] = false; stop["generation"] = offloadGeneration;
             ipc->renderer(stop);
@@ -919,6 +925,14 @@ void Runtime::publish() {
         {"movement",
          {{"modeId", movement == &walk ? "com.hyprune.walk" : "com.hyprune.fly"},
           {"position", {camera.position.x, camera.position.y, camera.position.z}},
+          {"state", climbing.active()              ? "climbing"
+                    : movement == &walk && !noclip ? "walking"
+                                                   : "flying"},
+          {"ladderId", climbing.active() ? Json(climbing.ladderId) : Json(nullptr)},
+          {"prompt",
+           world && !noclip && movement == &walk && (climbing.active() || climbing.nearby(camera, world->climbables))
+               ? climbing.prompt(sim::climbMode(config["movement"]["climb_mode"].get<std::string>()))
+               : ""},
           {"orientation", {cy * sp, sy * cp, -sy * sp, cy * cp}}}},
         {"shell", {{"leases", control.leases}}},
         {"location", control.location},
@@ -1010,6 +1024,7 @@ void Runtime::finishLoad() {
         world->defaultSpawn = spawn.id;
         float lens = camera.fov;
         camera = {};
+        climbing.reset(camera);
         camera.fov = lens;
         camera.position = spawn.position + Vec3{0, 1.7f, 0};
         camera.yaw = spawn.yaw;
@@ -1132,6 +1147,7 @@ void Runtime::toggle(const std::string &output) {
     publish();
 }
 void Runtime::exit() {
+    climbing.reset(camera);
     if (renderDepth)
         throw std::runtime_error("world exit inside render pass");
     if (loading)
@@ -2040,9 +2056,11 @@ void Runtime::action(interaction::Action a) {
         held(KEY_A);
     else if (a.name == "right")
         held(KEY_D);
-    else if (a.name == "up")
+    else if (a.name == "up") {
         held(KEY_SPACE);
-    else if (a.name == "down")
+        if (a.pressed && a.edge)
+            climbing.jump();
+    } else if (a.name == "down")
         held(KEY_LEFTCTRL);
     else if (a.name == "sprint")
         held(KEY_LEFTSHIFT);
@@ -2174,9 +2192,12 @@ void Runtime::action(interaction::Action a) {
     else if (a.name == "menu") {
         input.clear();
         control.openMenu();
-    } else if (a.name == "use")
-        useAim(false);
-    else if (a.name == "focus")
+    } else if (a.name == "use") {
+        if (!world || noclip || movement != &walk ||
+            !climbing.use(camera, world->climbables,
+                          sim::climbMode(config["movement"]["climb_mode"].get<std::string>())))
+            useAim(false);
+    } else if (a.name == "focus")
         useAim(true);
     else if (a.name == "debug")
         debug = !debug;
@@ -2184,9 +2205,11 @@ void Runtime::action(interaction::Action a) {
         deferInput([] { runtime->debugCapture(); });
     else if (a.name == "noclip") {
         noclip = !noclip;
+        climbing.reset(camera);
         camera.verticalSpeed = 0;
     } else if (a.name == "fly") {
         movement = movement == &walk ? static_cast<sim::MotionStrategy *>(&fly) : &walk;
+        climbing.reset(camera);
         keys.clear();
         smoothIntent = {};
         camera.verticalSpeed = 0;
@@ -2977,6 +3000,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             throw ipc::Error(-32005, "world mode inactive");
         auto outputs = monitor ? Json::array({"output-" + std::to_string(monitor->m_id)}) : Json::array();
         auto result = control.execute(method, params, actor, client, world.get(), camera, outputs);
+        if (method == "camera.set" || method == "travel.start" || method == "autodrive.start")
+            climbing.reset(camera);
         if (method == "shell.release") {
             bindings.erase(actor);
             control.associate(actor, false);
@@ -3010,6 +3035,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             movement = &fly;
         else
             throw ipc::Error(-32007, "unsupported movement mode");
+        climbing.reset(camera);
+        smoothIntent = {};
         camera.verticalSpeed = 0;
         keys.clear();
     } else if (method == "surface.focus") {
@@ -3158,9 +3185,12 @@ void Runtime::tick() {
         smoothIntent.forward += (intent.forward - smoothIntent.forward) * mb;
         smoothIntent.right += (intent.right - smoothIntent.right) * mb;
         smoothIntent.up += (intent.up - smoothIntent.up) * mb;
-        intent.forward = smoothIntent.forward;
-        intent.right = smoothIntent.right;
+        intent.forward = climbing.active() ? intent.forward : smoothIntent.forward;
+        intent.right = climbing.active() ? intent.right : smoothIntent.right;
         intent.up = smoothIntent.up;
+        if (climbing.active() && (typing || !ownsInput() || control.uiVisible() || control.driving() ||
+                                  handover.phase || fullscreen.phase || movement != &walk || noclip))
+            climbing.reset(camera);
         accumulator = std::min(accumulator + double(dt), 4.0 / 60.0);
         while (accumulator >= 1.0 / 60.0) {
             if (!loading && !control.driving() && !control.uiVisible() && !handover.phase && fullscreen.phase == 0) {
@@ -3169,7 +3199,11 @@ void Runtime::tick() {
                     intent.speed = config["player"]["fly_speed"].get<float>() / 5.f;
                     fly.step(camera, intent, 1.f / 60.f, {});
                     intent.speed = speed;
-                } else
+                } else if (movement == &walk && !typing && ownsInput())
+                    climbing.step(camera, intent, 1.f / 60.f, world->climbables,
+                                  sim::climbMode(config["movement"]["climb_mode"].get<std::string>()),
+                                  config["graphics"]["reduced_motion"], world->collision, &world->collisionIndex);
+                else
                     movement->step(camera, intent, 1.f / 60.f, world->collision, &world->collisionIndex);
             }
             accumulator -= 1.0 / 60.0;
@@ -3177,6 +3211,7 @@ void Runtime::tick() {
         if (config["player"]["respawn_below"].get<float>() > 0 &&
             camera.position.y < world->spawn().position.y + 1.7f - config["player"]["respawn_below"].get<float>()) {
             auto s = world->spawn();
+            climbing.reset(camera);
             camera.eyeHeight = 1.7f;
             camera.position = s.position + Vec3{0, 1.7f, 0};
             camera.verticalSpeed = 0;
@@ -3292,6 +3327,11 @@ class Pass final : public IPassElement {
                 if (auto hit = runtime->worldHit())
                     prompt(hit->point, "LMB MOUNT HERE");
             }
+            if (!runtime->noclip && runtime->movement == &runtime->walk && !runtime->typing &&
+                (runtime->climbing.active() || runtime->climbing.nearby(runtime->camera, runtime->world->climbables)))
+                prompt(runtime->camera.position + runtime->camera.forward() * 2,
+                       runtime->climbing.prompt(
+                           sim::climbMode(runtime->config["movement"]["climb_mode"].get<std::string>())));
             auto &r = runtime->renderer;
             r.externalWorldFbo = runtime->offload.fbo();
             auto view = r.externalWorldFbo ? runtime->offload.camera() : runtime->camera;
@@ -3422,6 +3462,7 @@ int luaCamera(lua_State *state) {
     if (!runtime)
         return 0;
     if (lua_gettop(state) >= 5) {
+        runtime->climbing.reset(runtime->camera);
         runtime->camera.position = {float(luaL_checknumber(state, 1)), float(luaL_checknumber(state, 2)),
                                     float(luaL_checknumber(state, 3))};
         runtime->camera.yaw = luaL_checknumber(state, 4);

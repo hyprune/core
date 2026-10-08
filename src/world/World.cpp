@@ -70,7 +70,8 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
         return true;
     });
     validateManifest(j);
-    require((j.at("formatVersion") == "0.1" || j.at("formatVersion") == "0.2" || j.at("formatVersion") == "0.3"),
+    require((j.at("formatVersion") == "0.1" || j.at("formatVersion") == "0.2" || j.at("formatVersion") == "0.3" ||
+             j.at("formatVersion") == "0.4"),
             "unsupported world format");
     require(std::regex_match(j.at("id").get<std::string>(), std::regex("[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+")),
             "invalid world ID");
@@ -120,6 +121,26 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
         result->spawns.push_back(sp);
     }
     result->spawn();
+    std::set<std::string> climbIds;
+    for (const auto &entry : j.value("climbables", Json::array())) {
+        sim::Climbable c;
+        c.id = entry.at("id");
+        c.type = entry.at("type");
+        c.bottom = vec(entry.at("bottom"));
+        c.top = vec(entry.at("top"));
+        c.facing = vec(entry.at("facing"));
+        c.bottomExit = vec(entry.at("exits").at("bottom"));
+        c.topExit = vec(entry.at("exits").at("top"));
+        c.width = entry.at("width");
+        c.depth = entry.at("depth");
+        c.speed = entry.value("speed", 2.f);
+        require(climbIds.insert(c.id).second, "duplicate climbable id");
+        require(c.extent() >= .5f && c.extent() <= 100 && c.axis().y >= .25f, "invalid ascending climb segment");
+        require(std::abs(length(c.facing) - 1) <= .001f && std::abs(dot(c.facing, c.axis())) <= .001f,
+                "climb facing must be unit and perpendicular to segment");
+        require(length(c.bottomExit - c.bottom) <= 3 && length(c.topExit - c.top) <= 3, "climb exit too far away");
+        result->climbables.push_back(c);
+    }
     auto scene = safePath(root, j["scene"]);
     cgltf_options opts{};
     cgltf_data *raw = nullptr;
@@ -383,6 +404,17 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
         Vec3 before = c.position;
         sim::resolveCapsule(c, result->collision);
         require(length(c.position - before) < .015f, "spawn capsule obstructed");
+    }
+    for (const auto &ladder : result->climbables) {
+        // Endpoints are safe standing foot positions. A bad optional climbable
+        // rejects activation instead of letting a traversal place us in a wall.
+        for (auto feet : {ladder.bottom, ladder.top, ladder.bottomExit, ladder.topExit}) {
+            sim::Camera c;
+            c.position = feet + Vec3{0, c.eyeHeight, 0};
+            auto expected = c.position;
+            sim::resolveCapsule(c, result->collision);
+            require(length(c.position - expected) < .015f, "climb endpoint capsule obstructed");
+        }
     }
     require(!result->meshes.empty(), "empty scene");
     loadSpatial(*result, root);
