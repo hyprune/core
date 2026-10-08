@@ -43,8 +43,9 @@ Diagnostics are explicitly extensible and non-authoritative. GPU measurements
 use nonblocking disjoint queries; unavailable values are null. The seven named
 cost groups are sky, shared world shading, MSAA resolve, bloom, upscale/sharpen,
 native surfaces/geometry, and output/markers. Fused material effects share the
-world shading measurement and must not be displayed as independent additive
-costs. `deliveredFPS` counts new frames, excluding repeated presentations.
+world shading measurement; transparent world materials share the native
+composition measurement. Neither group gives independent additive costs for
+individual shader switches. `deliveredFPS` counts new frames, excluding repeated presentations.
 
 No SSR, runtime shadow maps or runtime contact-shadow implementation is claimed.
 These are reported in `unsupported`; attempts to set fictitious switches fail.

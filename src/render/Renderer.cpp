@@ -1218,11 +1218,10 @@ void Renderer::debugHUD(int w, int h) {
             << "\nSky " << graphics["sky"].get<std::string>() << "                       " << gpu(6)
             << "\nWorld shading (shared cost)     " << gpu(0) << "\n  normal " << enabled("normal_maps")
             << " | specular " << enabled("specular") << " | IBL " << enabled("reflections") << "\n  AO "
-            << enabled("ambient_occlusion") << " | fog " << graphics["fog"].get<std::string>() << " | haze "
-            << enabled("alpha_haze") << "\n  anisotropy " << graphics["anisotropy"] << "x / baked shadows retained"
+            << enabled("ambient_occlusion") << " | fog " << graphics["fog"].get<std::string>() << "\n  anisotropy " << graphics["anisotropy"] << "x / baked shadows retained"
             << "\nMSAA " << samples_ << "x resolve                 " << gpu(2) << "\nBloom "
             << graphics["bloom"].get<std::string>() << "                       " << gpu(4)
-            << "\nUpscale + sharpen               " << gpu(5) << "\nNative windows + geometry       " << gpu(1)
+            << "\nUpscale + sharpen               " << gpu(5) << "\nNative windows / haze " << enabled("alpha_haze") << "   " << gpu(1)
             << "\nOutput + markers                " << gpu(3) << "\nSSR / runtime shadows: unsupported"
             << "\nRendered " << frames << " / reused " << skipped_;
     panel(14 * scale, 14 * scale, std::min(float(w) - 28 * scale, 740 * scale), 352 * scale);
