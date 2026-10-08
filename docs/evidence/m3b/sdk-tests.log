@@ -1,0 +1,72 @@
+npm notice run @hyprune/sdk@0.3.0 test
+npm notice run npm run check:source && npm run build && tsc -p tsconfig.types.json && node --test test/*.test.mjs
+npm notice run @hyprune/sdk@0.3.0 check:source
+npm notice run node scripts/check-source.mjs
+Pinned schema bytes verified: a1e2f84f2ae34d2232bf0291fe073f2f5495601c
+npm notice run @hyprune/sdk@0.3.0 build
+npm notice run npm run generate && tsc && node scripts/copy.mjs
+npm notice run @hyprune/sdk@0.3.0 generate
+npm notice run node scripts/generate.mjs
+﹣ real hypruned + core Control: camera, waypoint, route, travel, UI and data (0.753953ms) # SKIP
+﹣ real hypruned: loading hints precede reply, failure preserves world and legacy stays exact (0.148459ms) # SKIP
+✔ 0.2 mock serves exact 0.1 projection and prefers 0.2 negotiation (192.450099ms)
+✔ whole-key location/integration replacements survive gaps and resync (39.952268ms)
+✔ travel phases keep identity/output, close UI, commit arrival and recover snapshot (210.442244ms)
+✔ zero duration, cancellation, exit and unsupported camera roll follow real contract (84.419846ms)
+✔ world loading emits before RPC result; failures preserve old world and disconnect cancels (356.487007ms)
+✔ autodrive follows explicit routes and stops at scenario obstacles (285.145648ms)
+✔ core-style hold timing rejects taps, opens after hold, retains on release and closes on escape (805.433286ms)
+✔ publishing requires its own grant, namespace, owner, sequence and bounded rate (121.452613ms)
+✔ sources replace completely and disappear on TTL or disconnect; no hint replay (276.269527ms)
+✔ stale-session/older-revision presentation hints are discarded (50.514817ms)
+✔ warp scenario uses only real 0.2 actions and valid recoverable state (2168.732144ms)
+✔ state.read peer without a subscription gets no 0.2 hints (45.041143ms)
+✔ IPC 0.5 validates hands/app deltas and keeps 0.4 isolated (262.750066ms)
+✔ 0.6 method/state validation uses the pinned input contract (366.901082ms)
+✔ strict JSON rejects {"a":1,"a":2} (1.050415ms)
+✔ strict JSON rejects {"a":1,"\u0061":2} (0.120549ms)
+✔ strict JSON rejects 1e999 (0.064529ms)
+✔ strict JSON rejects [NaN] (0.061467ms)
+✔ strict JSON rejects [1,] (0.090761ms)
+✔ strict JSON rejects {}x (0.056738ms)
+✔ strict JSON protects prototype and rejects excessive nesting (0.265321ms)
+✔ split and coalesced framing preserves UTF-8 and order (2.140168ms)
+✔ length, UTF-8, partial deadline and nonfinite output limits (10.726543ms)
+✔ runtime socket selection never falls back and rejects traversal (0.614122ms)
+✔ subscribe ordering, moving pose, typed mutations, lease cleanup (671.827174ms)
+✔ reducer requires subscription/session/base and replaces complete keys (3.67054ms)
+✔ unauthenticated connections cannot read state or invoke unadvertised methods (5.308386ms)
+✔ launch token is consumed once and bound to client identity (6.030869ms)
+✔ gap triggers fresh snapshot and reconnect uses a fresh token/subscription (381.786939ms)
+✔ real 0.2 methods, state and events replace experimental protocol (42.330978ms)
+✔ mock parse/profile failures close safely and echo valid IDs (4.103995ms)
+✔ revocation stops reconnecting (403.408045ms)
+✔ live sockets are not replaced (3.492227ms)
+✔ daemon restart replaces the session and takes a fresh snapshot (207.45547ms)
+✔ lost mutation replies are rejected and never retried on reconnect (246.779618ms)
+✔ response validation uses method context and rejects extra fields (1.817724ms)
+✔ first session client accepts 0.3 and preserves version isolation (220.300004ms)
+✔ offline schema semantics plus glTF validation and deterministic archive (72.576589ms)
+✔ world rejects unknown spawn (2.895048ms)
+✔ world rejects non-normalized pose (5.739636ms)
+✔ world rejects invalid AABB (2.515045ms)
+✔ world rejects unknown node (3.900117ms)
+✔ world rejects required metadata (2.437976ms)
+✔ world rejects missing attribution (2.577437ms)
+✔ world rejects symlinks, unsafe paths, scripts and malformed JSON (4.754388ms)
+✔ world rejects remote/data glTF resources and cycles (6.756084ms)
+✔ all four scaffolds validate and protect destinations/contribution identity (18.507598ms)
+✔ /proc integration calculates CPU deltas, RAM and network counters (0.650442ms)
+✔ CLI launcher transfers token by FD; call, subscribe and doctor work (1332.415793ms)
+✔ both example manifests are valid and mock demo publishes /proc values (2701.493131ms)
+✔ world rejects unsupported required glTF extensions (1.706649ms)
+✔ world checks lightmap UV1 and supports GLB JSON/BIN packages (11.413773ms)
+✔ world format 0.2 accepts the ratified material profile and retains 0.1 (21.304015ms)
+ℹ tests 55
+ℹ suites 0
+ℹ pass 53
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 4802.866562

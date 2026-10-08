@@ -198,3 +198,7 @@ Consumed presses own releases across handovers. Modified unbound world keys do n
 reach hidden clients; compositor bindings retain priority. Direct texture leases
 avoid snapshot recursion, GL state is guarded, and cursor visibility is deferred
 and coalesced. Nested pointer devices persist across events so popup grabs survive.
+
+M3B adds E use-in-place on window/workspace, F window fullscreen, Super+Tab/Back
+exit stealing, Settings capture, scope and editor overlays. The exhaustive new
+cursor transitions and first-live-session checks are in [M3B.md](M3B.md#supervised-live-test-checklist).

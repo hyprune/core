@@ -1,0 +1,82 @@
+{
+  "title": "Hyprune core M3B \u2014 keymap v2",
+  "tag": "core",
+  "tags": [
+    "hyprune",
+    "core",
+    "m3b",
+    "nested"
+  ],
+  "duration": 59.9,
+  "timeline": [
+    {
+      "time": 0.34,
+      "action": "E: use a real terminal in place; relative cursor and typing"
+    },
+    {
+      "time": 4.1,
+      "action": "E: use the workspace wall in place"
+    },
+    {
+      "time": 7.45,
+      "action": "F: zoom to terminal fullscreen"
+    },
+    {
+      "time": 9.92,
+      "action": "Super+Tab: exit; native colliding bind stays stolen"
+    },
+    {
+      "time": 10.7,
+      "action": "F: zoom to workspace fullscreen"
+    },
+    {
+      "time": 13.8,
+      "action": "Q: scope zoom with wheel and vignette"
+    },
+    {
+      "time": 16.64,
+      "action": "Settings: three capture boxes, native shortcut conflict"
+    },
+    {
+      "time": 23.85,
+      "action": "Position tool: move arrows"
+    },
+    {
+      "time": 26.75,
+      "action": "Position tool: rotation arcs"
+    },
+    {
+      "time": 29.02,
+      "action": "Position tool: axis cubes and uniform scale centre"
+    },
+    {
+      "time": 31.2,
+      "action": "Window tool: lock badge prevents accidental carrying"
+    },
+    {
+      "time": 34.19,
+      "action": "Path tool: open and closed line, curve and arc"
+    },
+    {
+      "time": 41.28,
+      "action": "Lumen Reach: unchanged authored world"
+    },
+    {
+      "time": 44.87,
+      "action": "Switchyard: unchanged authored world"
+    }
+  ],
+  "notes": "Real nested Hyprland, live terminal and verified Quickshell Director. E use-in-place window/workspace, F fullscreen window/workspace, Super+Tab collision stealing, Q scope, Settings capture/core save, position handles, window lock and six path types. Lumen Reach and Switchyard unchanged. Native cursor/focus/workspaces deferred; hardware cursor awaits supervised live test.",
+  "sha256": "781b3c2a594569244005ea3337b0f37aa1ecbc2630d1e310bd774bc334c625c2",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "credits": "Lumen Reach and Switchyard: Hyprune contributors, CC-BY-4.0, unchanged packages from hyprune/worlds/dist. Keymap interaction lab and client fixtures: original CC0 test content.",
+  "testedCoreImplementation": "8407595",
+  "acceptance": {
+    "passed": 100,
+    "pending": "owner-supervised hardware cursor on DRM",
+    "wireResponses": 214,
+    "wireNotifications": 1756
+  }
+}

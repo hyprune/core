@@ -1,0 +1,3 @@
+npm notice run @hyprune/docs@0.1.0 test:browser
+npm notice run node scripts/browser-check.mjs
+Browser checks passed: landing, diagrams, RFC, themes, live search, mobile widths; no page errors or failed requests.

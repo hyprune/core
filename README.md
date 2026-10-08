@@ -221,3 +221,18 @@ The Director HUD and Workspaces app list use frozen IPC 0.5 state.
 Run `./dev/nested/run.sh --m3a` for locked real-client acceptance, or add `--record`
 for a temporary 45–75 second demo. [docs/M3A.md](docs/M3A.md) documents every Lua
 config option, parity evidence and the required supervised hardware cursor checks.
+
+## M3B keymap v2
+
+The current hands-on runtime uses `~/.config/hyprune/input.json`, independently
+watched and validated without Hyprland reload. Defaults compile from
+`config/input.default.json`; the docs Keymap page is generated from it. HJKL /
+WASD / arrows move; E uses a window/workspace in place; F zooms into fullscreen;
+Super+Tab or Back returns. TAB hold defaults to 1000 ms and opens Map. Q scopes,
+Ctrl crouches, U captures debug state. Tools 1–5 show their wheel submodes in HUD.
+Settings captures up to three bindings per action through authenticated IPC 0.6.
+Matching actions steal colliding Hyprland bindings only in their active mode.
+
+Run `dev/nested/run.sh --m3b` for isolated real seat acceptance, or add `--record`
+for the demo. Both use the lifetime flock. See [M3B.md](docs/M3B.md), including the
+complete supervised live cursor checklist, input options, contracts and evidence.

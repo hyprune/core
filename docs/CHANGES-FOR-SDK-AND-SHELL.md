@@ -195,3 +195,25 @@ ad-hoc glTF extras are needed for its lightmaps.
 Negotiate exact `0.5` to receive `interaction:{mode,tool,tools,noclip,cursor,taggedSurfaceId}` and `apps:[{surfaceId,workspaceId,title,appClass,icon}]`. Mode is movement/typing/workspace/fullscreen; tool is 1–5, tools contains five pointer/mount/path slot names. The icon is a local theme name derived from class. Group apps by actual workspace ID in the Director. No title/path scraping or mock-only mode channel is needed. Older projections omit the two keys.
 
 Arbitrary placements add a metre `pose` and `size`, with empty `anchorId`, to the existing world/area/class/title rule. Authored placements retain their original shape. 0.1–0.4 peers omit arbitrary rules from state/lists. Existing mutation methods and grants remain; there is no public raw-input or config RPC. Use the local validated Lua `hl.plugin.hyprune.config` API documented in [M3A.md](M3A.md). SDK types and offline validators support 0.4/0.5; the legacy mock still advertises only the versions it implements. Shell mode/slots/apps use authoritative state and method discovery.
+
+## M3B / exact IPC 0.6
+
+Core input.default.json is canonical; docs generates Keymap from it. Independent
+input.json is watched and persisted only by core. New input.control grants
+input.set/capture/capture.cancel; state.read grants get/preview. Capture requires
+the verified Director lease. Preview returns canonical config, internal conflicts
+and mode-scoped steals Hyprland descriptions. Internal conflicts reject save.
+Snapshot/delta keymap includes config/path/conflicts/steals/capture/error; editor
+includes four-mode state, tool/submode, selection, paths, objects, locked IDs and
+debug toggle. FOV permits 3° for scope in 0.6; older projections remain ≥30°.
+ui.opened.panel map selects Director Map. Existing exact versions remain frozen.
+
+Shell opts into 0.6, requests input.control and provides Settings, mode/submode
+HUD and capture feedback. It never writes config. SDK pins 0.6 and exposes typed
+input methods/state; default 0.2/mock remains unchanged. RFC 0003/0006/0008 and
+schema 0.6 are the contract. See M3B.md for behavior, tests and live cursor checks.
+
+M3B local input uses keymap v2 for all IPC peers. Older protocols keep their
+wire projections; they do not select a legacy physical keymap. Lua input key
+names are superseded by the independent file. M3A interaction documentation and
+recordings are historical; use the M3B acceptance harness for current defaults.

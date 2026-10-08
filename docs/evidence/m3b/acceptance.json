@@ -1,0 +1,1510 @@
+{
+  "steal_inactive_restore": {
+    "passed": true,
+    "evidence": null
+  },
+  "world_unbound_super_tab_native": {
+    "passed": true,
+    "evidence": null
+  },
+  "E_window_in_place": {
+    "passed": true,
+    "evidence": null
+  },
+  "relative_cursor_keyboard": {
+    "passed": true,
+    "evidence": null
+  },
+  "noncolliding_native_interactive": {
+    "passed": true,
+    "evidence": null
+  },
+  "relative_cursor_moves": {
+    "passed": true,
+    "evidence": [
+      0.5059324502944946,
+      0.5026366114616394
+    ]
+  },
+  "SuperTab_interactive_exit_steals": {
+    "passed": true,
+    "evidence": null
+  },
+  "virtual_cursor_free_other_output": {
+    "passed": true,
+    "evidence": [
+      -0.03392094373703003,
+      0.5
+    ]
+  },
+  "SuperTab_other_output_exit_steals": {
+    "passed": true,
+    "evidence": null
+  },
+  "mode_change_restores_native_bind": {
+    "passed": true,
+    "evidence": null
+  },
+  "E_tolerance_preserves_geometry_occlusion": {
+    "passed": true,
+    "evidence": {
+      "active": true,
+      "activeHandle": -1,
+      "aim": "",
+      "captures": [
+        {
+          "collision": false,
+          "commits": 158,
+          "floating": true,
+          "id": "surface-1",
+          "parentId": "",
+          "pixels": [
+            1916,
+            1076
+          ],
+          "position": [
+            2.0,
+            1.7999999523162842,
+            -4.599999904632568
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            1.399999976158142,
+            0.7862213253974915
+          ],
+          "title": "M3B terminal",
+          "visible": true
+        }
+      ],
+      "childSurfaces": [],
+      "children": 0,
+      "config": {
+        "graphics": {
+          "bloom_strength": 0.15,
+          "exposure": 1.0,
+          "fov": 60.0,
+          "quality": "auto",
+          "reduced_motion": false
+        },
+        "input": {
+          "bindings": {
+            "back": "s",
+            "down": "Control_L",
+            "fly": "F4",
+            "focus": "f",
+            "forward": "w",
+            "jump": "space",
+            "left": "a",
+            "noclip": "v",
+            "right": "d",
+            "zoom": "c"
+          },
+          "carry_button": 272,
+          "resize_button": 273,
+          "roll_button": 274,
+          "typing_button": 275,
+          "typing_cursor": true
+        },
+        "player": {
+          "fly_speed": 5.0,
+          "jump_speed": 5.0,
+          "look_inertia": 0.03,
+          "look_sensitivity": 0.0025,
+          "move_inertia": 0.05,
+          "respawn_below": 30.0,
+          "run_multiplier": 1.8,
+          "step_height": 0.35,
+          "walk_speed": 3.5
+        },
+        "tools": {
+          "enabled": true,
+          "slots": [
+            "pointer",
+            "mount",
+            "path",
+            "path",
+            "path"
+          ]
+        },
+        "windows": {
+          "scale": 0.002,
+          "spawn_distance": 5.0,
+          "transition_seconds": 0.35,
+          "wheel_factor": 1.06
+        }
+      },
+      "cursor": "reticle",
+      "error": "",
+      "eyeHeight": 1.7000000476837158,
+      "frames": 471,
+      "fullscreen": 0,
+      "fullscreenId": "",
+      "gesture": 0,
+      "gestureId": "",
+      "grabbed": "",
+      "handover": 0,
+      "keyboardFocus": false,
+      "mode": "movement",
+      "nativeCursorVisible": false,
+      "noclip": false,
+      "ownsInput": true,
+      "pitch": 0.0,
+      "pointer": [
+        0.5,
+        0.5
+      ],
+      "position": [
+        2.0,
+        1.7999999523162842,
+        1.0
+      ],
+      "positionMode": 0,
+      "pressedButtons": 0,
+      "savedCursorHidden": false,
+      "seatGrab": false,
+      "selectedScale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "superHeld": false,
+      "tool": 1,
+      "yaw": 0.0
+    }
+  },
+  "E_use_tolerance_outside_window_edge": {
+    "passed": true,
+    "evidence": {
+      "surface": {
+        "collision": false,
+        "commits": 158,
+        "floating": true,
+        "id": "surface-1",
+        "parentId": "",
+        "pixels": [
+          1916,
+          1076
+        ],
+        "position": [
+          -2.700000047683716,
+          1.7000000476837158,
+          -1.0499999523162842
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "size": [
+          3.200000047683716,
+          1.7970772981643677
+        ],
+        "title": "M3B terminal",
+        "visible": true
+      },
+      "diag": {
+        "active": true,
+        "activeHandle": -1,
+        "aim": "surface-1",
+        "captures": [
+          {
+            "collision": false,
+            "commits": 161,
+            "floating": true,
+            "id": "surface-1",
+            "parentId": "",
+            "pixels": [
+              1916,
+              1076
+            ],
+            "position": [
+              -2.700000047683716,
+              1.7000000476837158,
+              -1.0499999523162842
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "size": [
+              3.200000047683716,
+              1.7970772981643677
+            ],
+            "title": "M3B terminal",
+            "visible": true
+          }
+        ],
+        "childSurfaces": [],
+        "children": 0,
+        "config": {
+          "graphics": {
+            "bloom_strength": 0.15,
+            "exposure": 1.0,
+            "fov": 60.0,
+            "quality": "auto",
+            "reduced_motion": false
+          },
+          "input": {
+            "bindings": {
+              "back": "s",
+              "down": "Control_L",
+              "fly": "F4",
+              "focus": "f",
+              "forward": "w",
+              "jump": "space",
+              "left": "a",
+              "noclip": "v",
+              "right": "d",
+              "zoom": "c"
+            },
+            "carry_button": 272,
+            "resize_button": 273,
+            "roll_button": 274,
+            "typing_button": 275,
+            "typing_cursor": true
+          },
+          "player": {
+            "fly_speed": 5.0,
+            "jump_speed": 5.0,
+            "look_inertia": 0.03,
+            "look_sensitivity": 0.0025,
+            "move_inertia": 0.05,
+            "respawn_below": 30.0,
+            "run_multiplier": 1.8,
+            "step_height": 0.35,
+            "walk_speed": 3.5
+          },
+          "tools": {
+            "enabled": true,
+            "slots": [
+              "pointer",
+              "mount",
+              "path",
+              "path",
+              "path"
+            ]
+          },
+          "windows": {
+            "scale": 0.002,
+            "spawn_distance": 5.0,
+            "transition_seconds": 0.35,
+            "wheel_factor": 1.06
+          }
+        },
+        "cursor": "virtual",
+        "error": "",
+        "eyeHeight": 1.7000000476837158,
+        "frames": 525,
+        "fullscreen": 0,
+        "fullscreenId": "",
+        "gesture": 0,
+        "gestureId": "",
+        "grabbed": "",
+        "handover": 0,
+        "keyboardFocus": true,
+        "mode": "typing",
+        "nativeCursorVisible": false,
+        "noclip": false,
+        "ownsInput": true,
+        "pitch": 0.0,
+        "pointer": [
+          0.48998603224754333,
+          0.5
+        ],
+        "position": [
+          -1.040000081062317,
+          1.7000000476837158,
+          1.9500000476837158
+        ],
+        "positionMode": 0,
+        "pressedButtons": 0,
+        "savedCursorHidden": false,
+        "seatGrab": false,
+        "selectedScale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "superHeld": false,
+        "tool": 1,
+        "yaw": 0.0
+      }
+    }
+  },
+  "normal_LMB_use": {
+    "passed": true,
+    "evidence": null
+  },
+  "F_window_fullscreen": {
+    "passed": true,
+    "evidence": null
+  },
+  "noncolliding_native_window_focus": {
+    "passed": true,
+    "evidence": null
+  },
+  "SuperTab_fullscreen_exit_steals": {
+    "passed": true,
+    "evidence": null
+  },
+  "E_workspace_in_place": {
+    "passed": true,
+    "evidence": null
+  },
+  "E_workspace_keyboard": {
+    "passed": true,
+    "evidence": null
+  },
+  "Back_interactive_exit": {
+    "passed": true,
+    "evidence": null
+  },
+  "F_workspace_fullscreen": {
+    "passed": true,
+    "evidence": null
+  },
+  "noncolliding_native_workspace_focus": {
+    "passed": true,
+    "evidence": null
+  },
+  "SuperTab_workspace_exit_steals": {
+    "passed": true,
+    "evidence": null
+  },
+  "workspace_popup_composed": {
+    "passed": true,
+    "evidence": {
+      "id": "child-3",
+      "offset": [
+        943.0,
+        524.0
+      ],
+      "parentId": "surface-2",
+      "pixels": [
+        322,
+        79
+      ],
+      "position": [
+        0.312000036239624,
+        2.928999900817871,
+        -14.594000816345215
+      ],
+      "size": [
+        0.6440000534057617,
+        0.15800002217292786
+      ],
+      "visible": false
+    }
+  },
+  "interactive_virtual_popup_click": {
+    "passed": true,
+    "evidence": null
+  },
+  "interactive_virtual_scroll": {
+    "passed": true,
+    "evidence": null
+  },
+  "Q_scope_wheel": {
+    "passed": true,
+    "evidence": [
+      30.0,
+      23.915815353393555
+    ]
+  },
+  "F3_debug": {
+    "passed": true,
+    "evidence": null
+  },
+  "Y_debug": {
+    "passed": true,
+    "evidence": null
+  },
+  "U_debug_capture": {
+    "passed": true,
+    "evidence": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/captures"
+  },
+  "move_k": {
+    "passed": true,
+    "evidence": null
+  },
+  "move_w": {
+    "passed": true,
+    "evidence": null
+  },
+  "move_Up": {
+    "passed": true,
+    "evidence": null
+  },
+  "move_j": {
+    "passed": true,
+    "evidence": null
+  },
+  "move_s": {
+    "passed": true,
+    "evidence": null
+  },
+  "move_Down": {
+    "passed": true,
+    "evidence": null
+  },
+  "move_h": {
+    "passed": true,
+    "evidence": null
+  },
+  "move_a": {
+    "passed": true,
+    "evidence": null
+  },
+  "move_Left": {
+    "passed": true,
+    "evidence": null
+  },
+  "move_l": {
+    "passed": true,
+    "evidence": null
+  },
+  "move_d": {
+    "passed": true,
+    "evidence": null
+  },
+  "move_Right": {
+    "passed": true,
+    "evidence": null
+  },
+  "Space_fly_up": {
+    "passed": true,
+    "evidence": null
+  },
+  "Ctrl_fly_down": {
+    "passed": true,
+    "evidence": null
+  },
+  "Shift_boost": {
+    "passed": true,
+    "evidence": [
+      1.1572680473327637,
+      2.0196738243103027
+    ]
+  },
+  "V_noclip": {
+    "passed": true,
+    "evidence": null
+  },
+  "V_collision_restore": {
+    "passed": true,
+    "evidence": null
+  },
+  "F4_fly_toggle": {
+    "passed": true,
+    "evidence": null
+  },
+  "F4_back_fly": {
+    "passed": true,
+    "evidence": null
+  },
+  "Z_transport_notice": {
+    "passed": true,
+    "evidence": null
+  },
+  "X_autopilot_on": {
+    "passed": true,
+    "evidence": {
+      "diag": {
+        "active": true,
+        "activeHandle": -1,
+        "aim": "workspace-10",
+        "captures": [
+          {
+            "collision": false,
+            "commits": 402,
+            "floating": true,
+            "id": "surface-1",
+            "parentId": "",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "position": [
+              -2.700000047683716,
+              1.7000000476837158,
+              -1.0499999523162842
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "size": [
+              3.200000047683716,
+              1.7999999523162842
+            ],
+            "title": "M3B terminal",
+            "visible": false
+          },
+          {
+            "collision": false,
+            "commits": 2,
+            "floating": false,
+            "id": "surface-2",
+            "parentId": "",
+            "pixels": [
+              1896,
+              1056
+            ],
+            "position": [
+              0.0,
+              3.0,
+              -14.600000381469727
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "size": [
+              3.7920002937316895,
+              2.1120002269744873
+            ],
+            "title": "M3B workspace popup",
+            "visible": false
+          }
+        ],
+        "childSurfaces": [],
+        "children": 0,
+        "config": {
+          "graphics": {
+            "bloom_strength": 0.15,
+            "exposure": 1.0,
+            "fov": 60.0,
+            "quality": "auto",
+            "reduced_motion": false
+          },
+          "input": {
+            "bindings": {
+              "back": "s",
+              "down": "Control_L",
+              "fly": "F4",
+              "focus": "f",
+              "forward": "w",
+              "jump": "space",
+              "left": "a",
+              "noclip": "v",
+              "right": "d",
+              "zoom": "c"
+            },
+            "carry_button": 272,
+            "resize_button": 273,
+            "roll_button": 274,
+            "typing_button": 275,
+            "typing_cursor": true
+          },
+          "player": {
+            "fly_speed": 5.0,
+            "jump_speed": 5.0,
+            "look_inertia": 0.03,
+            "look_sensitivity": 0.0025,
+            "move_inertia": 0.05,
+            "respawn_below": 30.0,
+            "run_multiplier": 1.8,
+            "step_height": 0.35,
+            "walk_speed": 3.5
+          },
+          "tools": {
+            "enabled": true,
+            "slots": [
+              "pointer",
+              "mount",
+              "path",
+              "path",
+              "path"
+            ]
+          },
+          "windows": {
+            "scale": 0.002,
+            "spawn_distance": 5.0,
+            "transition_seconds": 0.35,
+            "wheel_factor": 1.06
+          }
+        },
+        "cursor": "reticle",
+        "error": "",
+        "eyeHeight": 1.7000000476837158,
+        "frames": 1471,
+        "fullscreen": 0,
+        "fullscreenId": "",
+        "gesture": 0,
+        "gestureId": "",
+        "grabbed": "",
+        "handover": 0,
+        "keyboardFocus": false,
+        "mode": "movement",
+        "nativeCursorVisible": false,
+        "noclip": false,
+        "ownsInput": true,
+        "pitch": 0.0,
+        "pointer": [
+          0.5,
+          0.5
+        ],
+        "position": [
+          3.201117539444742e-12,
+          2.1692264080047607,
+          1.4579600095748901
+        ],
+        "positionMode": 0,
+        "pressedButtons": 0,
+        "savedCursorHidden": false,
+        "seatGrab": false,
+        "selectedScale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "superHeld": false,
+        "tool": 1,
+        "yaw": 0.0
+      },
+      "location": {
+        "autodrive": true,
+        "route": [
+          {
+            "position": [
+              0.0,
+              2.299999952316284,
+              -8.0
+            ],
+            "target": {
+              "position": [
+                0,
+                2.3,
+                -8
+              ]
+            }
+          }
+        ],
+        "transition": {
+          "id": "transition-2",
+          "monotonicMs": 96514409,
+          "outputId": "output-1",
+          "phase": "arrived",
+          "progress": 1.0,
+          "to": {
+            "position": [
+              0.0,
+              1.7000000476837158,
+              4.0
+            ]
+          }
+        },
+        "waypoint": null,
+        "zones": [
+          {
+            "bounds": {
+              "max": [
+                3,
+                4,
+                -3
+              ],
+              "min": [
+                -3,
+                0,
+                -5
+              ]
+            },
+            "id": "gallery",
+            "name": "Material gallery"
+          }
+        ]
+      }
+    }
+  },
+  "X_autopilot_off": {
+    "passed": true,
+    "evidence": null
+  },
+  "Ctrl_crouch": {
+    "passed": true,
+    "evidence": {
+      "active": true,
+      "activeHandle": -1,
+      "aim": "workspace-10",
+      "captures": [
+        {
+          "collision": false,
+          "commits": 402,
+          "floating": true,
+          "id": "surface-1",
+          "parentId": "",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "position": [
+            -2.700000047683716,
+            1.7000000476837158,
+            -1.0499999523162842
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            3.200000047683716,
+            1.7999999523162842
+          ],
+          "title": "M3B terminal",
+          "visible": false
+        },
+        {
+          "collision": false,
+          "commits": 2,
+          "floating": false,
+          "id": "surface-2",
+          "parentId": "",
+          "pixels": [
+            1896,
+            1056
+          ],
+          "position": [
+            0.0,
+            3.0,
+            -14.600000381469727
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            3.7920002937316895,
+            2.1120002269744873
+          ],
+          "title": "M3B workspace popup",
+          "visible": false
+        }
+      ],
+      "childSurfaces": [],
+      "children": 0,
+      "config": {
+        "graphics": {
+          "bloom_strength": 0.15,
+          "exposure": 1.0,
+          "fov": 60.0,
+          "quality": "auto",
+          "reduced_motion": false
+        },
+        "input": {
+          "bindings": {
+            "back": "s",
+            "down": "Control_L",
+            "fly": "F4",
+            "focus": "f",
+            "forward": "w",
+            "jump": "space",
+            "left": "a",
+            "noclip": "v",
+            "right": "d",
+            "zoom": "c"
+          },
+          "carry_button": 272,
+          "resize_button": 273,
+          "roll_button": 274,
+          "typing_button": 275,
+          "typing_cursor": true
+        },
+        "player": {
+          "fly_speed": 5.0,
+          "jump_speed": 5.0,
+          "look_inertia": 0.03,
+          "look_sensitivity": 0.0025,
+          "move_inertia": 0.05,
+          "respawn_below": 30.0,
+          "run_multiplier": 1.8,
+          "step_height": 0.35,
+          "walk_speed": 3.5
+        },
+        "tools": {
+          "enabled": true,
+          "slots": [
+            "pointer",
+            "mount",
+            "path",
+            "path",
+            "path"
+          ]
+        },
+        "windows": {
+          "scale": 0.002,
+          "spawn_distance": 5.0,
+          "transition_seconds": 0.35,
+          "wheel_factor": 1.06
+        }
+      },
+      "cursor": "reticle",
+      "error": "",
+      "eyeHeight": 1.0,
+      "frames": 1496,
+      "fullscreen": 0,
+      "fullscreenId": "",
+      "gesture": 0,
+      "gestureId": "",
+      "grabbed": "",
+      "handover": 0,
+      "keyboardFocus": false,
+      "mode": "movement",
+      "nativeCursorVisible": false,
+      "noclip": false,
+      "ownsInput": true,
+      "pitch": 0.0,
+      "pointer": [
+        0.5,
+        0.5
+      ],
+      "position": [
+        0.0,
+        1.0,
+        4.0
+      ],
+      "positionMode": 0,
+      "pressedButtons": 0,
+      "savedCursorHidden": false,
+      "seatGrab": false,
+      "selectedScale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "superHeld": false,
+      "tool": 1,
+      "yaw": 0.0
+    }
+  },
+  "Ctrl_stand_height_restore": {
+    "passed": true,
+    "evidence": 1.7000000476837158
+  },
+  "Space_walk_jump": {
+    "passed": true,
+    "evidence": null
+  },
+  "walk_stair_step_up": {
+    "passed": true,
+    "evidence": [
+      -4.0,
+      2.450000047683716,
+      -0.6581606268882751
+    ]
+  },
+  "fall_respawn": {
+    "passed": true,
+    "evidence": null
+  },
+  "IPC_config_persist": {
+    "passed": true,
+    "evidence": null
+  },
+  "watched_atomic_reload": {
+    "passed": true,
+    "evidence": null
+  },
+  "bad_reload_retains_last_good": {
+    "passed": true,
+    "evidence": null
+  },
+  "Tab_short_hold_does_not_open": {
+    "passed": true,
+    "evidence": null
+  },
+  "Tab_hold_Map": {
+    "passed": true,
+    "evidence": {
+      "captured": null,
+      "status": "live",
+      "protocol": "0.6",
+      "screen": "HEADLESS-1",
+      "lease": "lease-d38c4ca0f8227741",
+      "director": true,
+      "revision": 2013,
+      "tab": 0,
+      "warp": false,
+      "phase": "idle",
+      "world": "org.hyprune.m3b",
+      "mode": "movement",
+      "tool": 1,
+      "apps": 2,
+      "map": false,
+      "places": [
+        {
+          "id": "entry",
+          "name": "entry",
+          "position": [
+            0,
+            1.7000000476837158,
+            4
+          ]
+        },
+        {
+          "id": "hall",
+          "name": "hall",
+          "position": [
+            3,
+            1.7000000476837158,
+            1
+          ]
+        }
+      ],
+      "markers": 1
+    }
+  },
+  "noncolliding_native_menu": {
+    "passed": true,
+    "evidence": null
+  },
+  "settings_capture": {
+    "passed": true,
+    "evidence": {
+      "action": "debug",
+      "binding": "Super+Tab",
+      "mode": "world",
+      "slot": 2,
+      "status": "captured"
+    }
+  },
+  "settings_core_save": {
+    "passed": true,
+    "evidence": null
+  },
+  "settings_Hyprland_collision": {
+    "passed": true,
+    "evidence": null
+  },
+  "Esc_menu_exit": {
+    "passed": true,
+    "evidence": null
+  },
+  "SuperRMB_corner_client_resize": {
+    "passed": true,
+    "evidence": {
+      "collision": false,
+      "commits": 457,
+      "floating": true,
+      "id": "surface-1",
+      "parentId": "",
+      "pixels": [
+        1556,
+        918
+      ],
+      "position": [
+        -3.003915309906006,
+        1.565805196762085,
+        -1.0499999523162842
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "size": [
+        2.592169761657715,
+        1.529313564300537
+      ],
+      "title": "M3B terminal",
+      "visible": true
+    }
+  },
+  "SuperWheel_distance": {
+    "passed": true,
+    "evidence": null
+  },
+  "SuperShiftWheel_rotate": {
+    "passed": true,
+    "evidence": null
+  },
+  "window_place_tag": {
+    "passed": true,
+    "evidence": null
+  },
+  "window_place_arbitrary_wall": {
+    "passed": true,
+    "evidence": {
+      "collision": false,
+      "commits": 457,
+      "floating": true,
+      "id": "surface-1",
+      "parentId": "",
+      "pixels": [
+        1556,
+        918
+      ],
+      "position": [
+        6.740000247955322,
+        2.0,
+        0.9999997615814209
+      ],
+      "rotation": [
+        0.0,
+        -0.7071067690849304,
+        0.0,
+        0.7071067690849304
+      ],
+      "size": [
+        3.05098032951355,
+        1.8000000715255737
+      ],
+      "title": "M3B terminal",
+      "visible": true
+    }
+  },
+  "window_lock": {
+    "passed": true,
+    "evidence": null
+  },
+  "locked_carry_rejected": {
+    "passed": true,
+    "evidence": null
+  },
+  "window_unlock": {
+    "passed": true,
+    "evidence": null
+  },
+  "SuperLMB_carry": {
+    "passed": true,
+    "evidence": null
+  },
+  "position_gizmo_select": {
+    "passed": true,
+    "evidence": null
+  },
+  "gizmo_rotate_mode": {
+    "passed": true,
+    "evidence": null
+  },
+  "gizmo_scale_mode": {
+    "passed": true,
+    "evidence": null
+  },
+  "gizmo_window_move": {
+    "passed": true,
+    "evidence": {
+      "collision": false,
+      "commits": 457,
+      "floating": true,
+      "id": "surface-1",
+      "parentId": "",
+      "pixels": [
+        1556,
+        918
+      ],
+      "position": [
+        -2.3792500495910645,
+        1.7000000476837158,
+        -1.0499999523162842
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "size": [
+        3.05098032951355,
+        1.8000000715255737
+      ],
+      "title": "M3B terminal",
+      "visible": true
+    }
+  },
+  "gizmo_uniform_pick": {
+    "passed": true,
+    "evidence": {
+      "active": true,
+      "activeHandle": 3,
+      "aim": "surface-1",
+      "captures": [
+        {
+          "collision": false,
+          "commits": 457,
+          "floating": true,
+          "id": "surface-1",
+          "parentId": "",
+          "pixels": [
+            1556,
+            918
+          ],
+          "position": [
+            -2.3792500495910645,
+            1.7000000476837158,
+            -1.0499999523162842
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            3.05098032951355,
+            1.8000000715255737
+          ],
+          "title": "M3B terminal",
+          "visible": true
+        },
+        {
+          "collision": false,
+          "commits": 30,
+          "floating": false,
+          "id": "surface-2",
+          "parentId": "",
+          "pixels": [
+            1896,
+            1056
+          ],
+          "position": [
+            0.0,
+            3.0,
+            -14.600000381469727
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            3.7920002937316895,
+            2.1120002269744873
+          ],
+          "title": "M3B workspace popup",
+          "visible": false
+        }
+      ],
+      "childSurfaces": [],
+      "children": 0,
+      "config": {
+        "graphics": {
+          "bloom_strength": 0.15,
+          "exposure": 1.0,
+          "fov": 60.0,
+          "quality": "auto",
+          "reduced_motion": false
+        },
+        "input": {
+          "bindings": {
+            "back": "s",
+            "down": "Control_L",
+            "fly": "F4",
+            "focus": "f",
+            "forward": "w",
+            "jump": "space",
+            "left": "a",
+            "noclip": "v",
+            "right": "d",
+            "zoom": "c"
+          },
+          "carry_button": 272,
+          "resize_button": 273,
+          "roll_button": 274,
+          "typing_button": 275,
+          "typing_cursor": true
+        },
+        "player": {
+          "fly_speed": 5.0,
+          "jump_speed": 5.0,
+          "look_inertia": 0.03,
+          "look_sensitivity": 0.0025,
+          "move_inertia": 0.05,
+          "respawn_below": 30.0,
+          "run_multiplier": 1.8,
+          "step_height": 0.35,
+          "walk_speed": 3.5
+        },
+        "tools": {
+          "enabled": true,
+          "slots": [
+            "pointer",
+            "mount",
+            "path",
+            "path",
+            "path"
+          ]
+        },
+        "windows": {
+          "scale": 0.002,
+          "spawn_distance": 5.0,
+          "transition_seconds": 0.35,
+          "wheel_factor": 1.06
+        }
+      },
+      "cursor": "reticle",
+      "error": "",
+      "eyeHeight": 1.7000000476837158,
+      "frames": 2620,
+      "fullscreen": 0,
+      "fullscreenId": "",
+      "gesture": 0,
+      "gestureId": "surface-1",
+      "grabbed": "",
+      "handover": 0,
+      "keyboardFocus": false,
+      "mode": "movement",
+      "nativeCursorVisible": false,
+      "noclip": false,
+      "ownsInput": true,
+      "pitch": 1.401298464324817e-45,
+      "pointer": [
+        0.5,
+        0.5
+      ],
+      "position": [
+        -2.3792500495910645,
+        1.7000000476837158,
+        1.9500000476837158
+      ],
+      "positionMode": 2,
+      "pressedButtons": 0,
+      "savedCursorHidden": false,
+      "seatGrab": false,
+      "selectedScale": [
+        3.05098032951355,
+        1.8000000715255737,
+        1.0
+      ],
+      "superHeld": false,
+      "tool": 4,
+      "yaw": 1.401298464324817e-45
+    }
+  },
+  "gizmo_uniform_client_scale": {
+    "passed": true,
+    "evidence": {
+      "collision": false,
+      "commits": 472,
+      "floating": true,
+      "id": "surface-1",
+      "parentId": "",
+      "pixels": [
+        1362,
+        804
+      ],
+      "position": [
+        -2.3792500495910645,
+        1.7000000476837158,
+        -1.0499999523162842
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "size": [
+        2.6696081161499023,
+        1.5758920907974243
+      ],
+      "title": "M3B terminal",
+      "visible": true
+    }
+  },
+  "gizmo_scale_configure_ack_0": {
+    "passed": true,
+    "evidence": {
+      "before": [
+        1362,
+        804
+      ],
+      "after": [
+        1234,
+        728
+      ]
+    }
+  },
+  "gizmo_scale_configure_ack_1": {
+    "passed": true,
+    "evidence": {
+      "before": [
+        1234,
+        728
+      ],
+      "after": [
+        1312,
+        774
+      ]
+    }
+  },
+  "gizmo_scale_configure_ack_2": {
+    "passed": true,
+    "evidence": {
+      "before": [
+        1312,
+        774
+      ],
+      "after": [
+        1230,
+        726
+      ]
+    }
+  },
+  "gizmo_object_selection": {
+    "passed": true,
+    "evidence": {
+      "debug": false,
+      "locked": [],
+      "mode": "world",
+      "objects": [],
+      "paths": [],
+      "selectedId": "node-17",
+      "selectedKind": "object",
+      "submode": "move",
+      "tool": 4
+    }
+  },
+  "gizmo_object_move_snap": {
+    "passed": true,
+    "evidence": {
+      "areaId": "sun-court",
+      "objectId": "node-17",
+      "position": [
+        2.4000000953674316,
+        1.7999999523162842,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "worldId": "org.hyprune.m3b"
+    }
+  },
+  "gizmo_object_rotate": {
+    "passed": true,
+    "evidence": {
+      "areaId": "sun-court",
+      "objectId": "node-17",
+      "position": [
+        2.4000000953674316,
+        1.7999999523162842,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        -0.15456947684288025,
+        0.987981915473938
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "worldId": "org.hyprune.m3b"
+    }
+  },
+  "gizmo_object_scale": {
+    "passed": true,
+    "evidence": {
+      "areaId": "sun-court",
+      "objectId": "node-17",
+      "position": [
+        2.4000000953674316,
+        1.7999999523162842,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        -0.15456947684288025,
+        0.987981915473938
+      ],
+      "scale": [
+        1.125,
+        1.125,
+        1.125
+      ],
+      "worldId": "org.hyprune.m3b"
+    }
+  },
+  "objects_persist": {
+    "passed": true,
+    "evidence": null
+  },
+  "six_path_types": {
+    "passed": true,
+    "evidence": [
+      "open line",
+      "open curve",
+      "open arc",
+      "closed line",
+      "closed curve",
+      "closed arc"
+    ]
+  },
+  "paths_persist": {
+    "passed": true,
+    "evidence": null
+  },
+  "tool_1": {
+    "passed": true,
+    "evidence": null
+  },
+  "tool_2": {
+    "passed": true,
+    "evidence": null
+  },
+  "tool_3": {
+    "passed": true,
+    "evidence": null
+  },
+  "tool_4": {
+    "passed": true,
+    "evidence": null
+  },
+  "tool_5": {
+    "passed": true,
+    "evidence": null
+  },
+  "noncolliding_native_bind": {
+    "passed": true,
+    "evidence": null
+  },
+  "world_com.hyprune.lumen-reach": {
+    "passed": true,
+    "evidence": null
+  },
+  "world_com.hyprune.switchyard": {
+    "passed": true,
+    "evidence": null
+  },
+  "helper_failure_restores_native_bind": {
+    "passed": true,
+    "evidence": null
+  },
+  "plugin_unload": {
+    "passed": true,
+    "evidence": "ok"
+  },
+  "unload_restores_native_bind": {
+    "passed": true,
+    "evidence": null
+  }
+}
