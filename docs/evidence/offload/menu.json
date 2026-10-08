@@ -1,0 +1,691 @@
+{
+  "protocol": "0.10",
+  "on": {
+    "activeRenderer": "offload",
+    "capW": 50.0,
+    "controls": {
+      "alpha_haze": {
+        "effective": false,
+        "gpuMs": null,
+        "passGpuMs": 0.0,
+        "requested": null,
+        "sharedPass": "native_surfaces_geometry"
+      },
+      "ambient_occlusion": {
+        "effective": true,
+        "gpuMs": null,
+        "passGpuMs": 0.288,
+        "requested": null,
+        "sharedPass": "world_shading_shared"
+      },
+      "anisotropy": {
+        "effective": 1,
+        "gpuMs": null,
+        "passGpuMs": 0.288,
+        "requested": null,
+        "sharedPass": "world_shading_shared"
+      },
+      "bloom": {
+        "effective": "off",
+        "gpuMs": 0.003936,
+        "passGpuMs": 0.003936,
+        "requested": null,
+        "sharedPass": "bloom"
+      },
+      "bloom_strength": {
+        "effective": 0.12,
+        "gpuMs": 0.003936,
+        "passGpuMs": 0.003936,
+        "requested": 0.15,
+        "sharedPass": "bloom"
+      },
+      "dynamic_resolution": {
+        "effective": true,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": true,
+        "sharedPass": null
+      },
+      "exposure": {
+        "effective": 1,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": 1.0,
+        "sharedPass": null
+      },
+      "fog": {
+        "effective": "linear",
+        "gpuMs": null,
+        "passGpuMs": 0.288,
+        "requested": null,
+        "sharedPass": "world_shading_shared"
+      },
+      "fov": {
+        "effective": 60.0,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": 60.0,
+        "sharedPass": null
+      },
+      "msaa": {
+        "effective": 1,
+        "gpuMs": null,
+        "passGpuMs": 0.0016,
+        "requested": null,
+        "sharedPass": "msaa_resolve"
+      },
+      "normal_maps": {
+        "effective": false,
+        "gpuMs": null,
+        "passGpuMs": 0.288,
+        "requested": null,
+        "sharedPass": "world_shading_shared"
+      },
+      "offload": {
+        "effective": "on",
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": "on",
+        "sharedPass": null
+      },
+      "offload_power_cap_w": {
+        "effective": 50.0,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": 80,
+        "sharedPass": null
+      },
+      "quality": {
+        "effective": "low",
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": "auto",
+        "sharedPass": null
+      },
+      "reduced_motion": {
+        "effective": false,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": false,
+        "sharedPass": null
+      },
+      "reflections": {
+        "effective": false,
+        "gpuMs": null,
+        "passGpuMs": 0.288,
+        "requested": null,
+        "sharedPass": "world_shading_shared"
+      },
+      "render_scale": {
+        "effective": "auto",
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": "auto",
+        "sharedPass": null
+      },
+      "scale_max": {
+        "effective": 1.0,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": 1.0,
+        "sharedPass": null
+      },
+      "scale_min": {
+        "effective": 0.375,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": 0.375,
+        "sharedPass": null
+      },
+      "sharpen": {
+        "effective": 0.35,
+        "gpuMs": null,
+        "passGpuMs": 0.044672,
+        "requested": 0.35,
+        "sharedPass": "upscale_sharpen"
+      },
+      "sky": {
+        "effective": "gradient",
+        "gpuMs": 0.019648,
+        "passGpuMs": 0.019648,
+        "requested": null,
+        "sharedPass": "sky"
+      },
+      "specular": {
+        "effective": false,
+        "gpuMs": null,
+        "passGpuMs": 0.288,
+        "requested": null,
+        "sharedPass": "world_shading_shared"
+      },
+      "target_fps": {
+        "effective": 45,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": 60,
+        "sharedPass": null
+      }
+    },
+    "costsMs": {
+      "bloom": 0.003936,
+      "depth_reconstruction": 1.908645,
+      "msaa_resolve": 0.0016,
+      "native_surfaces_geometry": 0.0,
+      "output_markers": 0.128854,
+      "sky": 0.019648,
+      "transfer": 0.424768,
+      "upscale_sharpen": 0.044672,
+      "world_shading_shared": 0.288
+    },
+    "effective": {
+      "alpha_haze": false,
+      "ambient_occlusion": true,
+      "anisotropy": 1,
+      "bloom": "off",
+      "bloom_strength": 0.12,
+      "dynamic_resolution": true,
+      "exposure": 1,
+      "fog": "linear",
+      "fov": 60.0,
+      "msaa": 1,
+      "normal_maps": false,
+      "offload": "on",
+      "offload_power_cap_w": 50.0,
+      "quality": "low",
+      "reduced_motion": false,
+      "reflections": false,
+      "render_scale": "auto",
+      "scale_max": 1.0,
+      "scale_min": 0.375,
+      "sharpen": 0.35,
+      "sky": "gradient",
+      "specular": false,
+      "target_fps": 45
+    },
+    "generation": 4,
+    "mode": "on",
+    "pid": 2115171,
+    "powerW": 25.315,
+    "preset": "custom",
+    "profile": "usb-c",
+    "reason": "ready",
+    "requested": {
+      "alpha_haze": null,
+      "ambient_occlusion": null,
+      "anisotropy": null,
+      "bloom": null,
+      "bloom_strength": 0.15,
+      "dynamic_resolution": true,
+      "exposure": 1.0,
+      "fog": null,
+      "fov": 60.0,
+      "msaa": null,
+      "normal_maps": null,
+      "offload": "on",
+      "offload_power_cap_w": 80,
+      "quality": "auto",
+      "reduced_motion": false,
+      "reflections": null,
+      "render_scale": "auto",
+      "scale_max": 1.0,
+      "scale_min": 0.375,
+      "sharpen": 0.35,
+      "sky": null,
+      "specular": null,
+      "target_fps": 60
+    },
+    "status": "active",
+    "targetFPS": 45,
+    "workerTimings": {
+      "generation": 4,
+      "gpuEffectsMs": {
+        "bloom": 0.003936,
+        "msaa_resolve": 0.0016,
+        "native_surfaces_geometry": 0.0016,
+        "output_markers": 0.872992,
+        "sky": 0.019648,
+        "upscale_sharpen": 0.044672,
+        "world_shading_shared": 0.288
+      },
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "offload": "on",
+        "offload_power_cap_w": 80,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "scale_max": 1.0,
+        "scale_min": 0.375,
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "msaaSamples": 1,
+      "pose": [
+        -8.0,
+        1.7000000476837158,
+        12.0,
+        0.0,
+        0.0,
+        60.0
+      ],
+      "producerReadyMs": 3.3645749986171722,
+      "profile": {
+        "bloom": {
+          "radius": 3,
+          "strength": 0.12,
+          "threshold": 1
+        },
+        "exposure": 1,
+        "fog": {
+          "baseHeight": 0,
+          "color": [
+            0.028,
+            0.045,
+            0.065
+          ],
+          "density": 0.008,
+          "excludeUnlit": true,
+          "heightFalloff": 0
+        },
+        "sky": {
+          "ground": [
+            0.055,
+            0.07,
+            0.085
+          ],
+          "horizon": [
+            0.55,
+            0.61,
+            0.65
+          ],
+          "sun": {
+            "angularRadius": 0.025,
+            "color": [
+              1,
+              0.83,
+              0.6
+            ],
+            "direction": [
+              0.3,
+              1,
+              0.5
+            ],
+            "intensity": 3
+          },
+          "zenith": [
+            0.18,
+            0.3,
+            0.52
+          ]
+        },
+        "toneMapping": "aces"
+      },
+      "renderGpuMs": 1.32784,
+      "renderScale": 1.0,
+      "sent": 136427642.620194,
+      "sequence": 59,
+      "slot": 0,
+      "transferGpuMs": 0.424768,
+      "type": "frame",
+      "version": 1,
+      "workerDone": 136427645.985021
+    }
+  },
+  "off": {
+    "activeRenderer": "in-process",
+    "capW": 50.0,
+    "controls": {
+      "alpha_haze": {
+        "effective": false,
+        "gpuMs": null,
+        "passGpuMs": 0.0,
+        "requested": null,
+        "sharedPass": "native_surfaces_geometry"
+      },
+      "ambient_occlusion": {
+        "effective": true,
+        "gpuMs": null,
+        "passGpuMs": 1.588541,
+        "requested": null,
+        "sharedPass": "world_shading_shared"
+      },
+      "anisotropy": {
+        "effective": 1,
+        "gpuMs": null,
+        "passGpuMs": 1.588541,
+        "requested": null,
+        "sharedPass": "world_shading_shared"
+      },
+      "bloom": {
+        "effective": "off",
+        "gpuMs": 0.005937,
+        "passGpuMs": 0.005937,
+        "requested": null,
+        "sharedPass": "bloom"
+      },
+      "bloom_strength": {
+        "effective": 0.12,
+        "gpuMs": 0.005937,
+        "passGpuMs": 0.005937,
+        "requested": 0.15,
+        "sharedPass": "bloom"
+      },
+      "dynamic_resolution": {
+        "effective": true,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": true,
+        "sharedPass": null
+      },
+      "exposure": {
+        "effective": 1,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": 1.0,
+        "sharedPass": null
+      },
+      "fog": {
+        "effective": "linear",
+        "gpuMs": null,
+        "passGpuMs": 1.588541,
+        "requested": null,
+        "sharedPass": "world_shading_shared"
+      },
+      "fov": {
+        "effective": 60.0,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": 60.0,
+        "sharedPass": null
+      },
+      "msaa": {
+        "effective": 1,
+        "gpuMs": null,
+        "passGpuMs": 0.0,
+        "requested": null,
+        "sharedPass": "msaa_resolve"
+      },
+      "normal_maps": {
+        "effective": false,
+        "gpuMs": null,
+        "passGpuMs": 1.588541,
+        "requested": null,
+        "sharedPass": "world_shading_shared"
+      },
+      "offload": {
+        "effective": "off",
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": "off",
+        "sharedPass": null
+      },
+      "offload_power_cap_w": {
+        "effective": 80,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": 80,
+        "sharedPass": null
+      },
+      "quality": {
+        "effective": "low",
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": "auto",
+        "sharedPass": null
+      },
+      "reduced_motion": {
+        "effective": false,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": false,
+        "sharedPass": null
+      },
+      "reflections": {
+        "effective": false,
+        "gpuMs": null,
+        "passGpuMs": 1.588541,
+        "requested": null,
+        "sharedPass": "world_shading_shared"
+      },
+      "render_scale": {
+        "effective": "auto",
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": "auto",
+        "sharedPass": null
+      },
+      "scale_max": {
+        "effective": 1.0,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": 1.0,
+        "sharedPass": null
+      },
+      "scale_min": {
+        "effective": 0.375,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": 0.375,
+        "sharedPass": null
+      },
+      "sharpen": {
+        "effective": 0.35,
+        "gpuMs": null,
+        "passGpuMs": 0.371875,
+        "requested": 0.35,
+        "sharedPass": "upscale_sharpen"
+      },
+      "sky": {
+        "effective": "gradient",
+        "gpuMs": 0.17677,
+        "passGpuMs": 0.17677,
+        "requested": null,
+        "sharedPass": "sky"
+      },
+      "specular": {
+        "effective": false,
+        "gpuMs": null,
+        "passGpuMs": 1.588541,
+        "requested": null,
+        "sharedPass": "world_shading_shared"
+      },
+      "target_fps": {
+        "effective": 60,
+        "gpuMs": null,
+        "passGpuMs": null,
+        "requested": 60,
+        "sharedPass": null
+      }
+    },
+    "costsMs": {
+      "bloom": 0.005937,
+      "msaa_resolve": 0.0,
+      "native_surfaces_geometry": 0.0,
+      "output_markers": 0.11651,
+      "sky": 0.17677,
+      "upscale_sharpen": 0.371875,
+      "world_shading_shared": 1.588541
+    },
+    "effective": {
+      "alpha_haze": false,
+      "ambient_occlusion": true,
+      "anisotropy": 1,
+      "bloom": "off",
+      "bloom_strength": 0.12,
+      "dynamic_resolution": true,
+      "exposure": 1,
+      "fog": "linear",
+      "fov": 60.0,
+      "msaa": 1,
+      "normal_maps": false,
+      "offload": "off",
+      "offload_power_cap_w": 80,
+      "quality": "low",
+      "reduced_motion": false,
+      "reflections": false,
+      "render_scale": "auto",
+      "scale_max": 1.0,
+      "scale_min": 0.375,
+      "sharpen": 0.35,
+      "sky": "gradient",
+      "specular": false,
+      "target_fps": 60
+    },
+    "generation": 5,
+    "mode": "off",
+    "pid": null,
+    "powerW": null,
+    "preset": "custom",
+    "profile": "usb-c",
+    "reason": "inactive",
+    "requested": {
+      "alpha_haze": null,
+      "ambient_occlusion": null,
+      "anisotropy": null,
+      "bloom": null,
+      "bloom_strength": 0.15,
+      "dynamic_resolution": true,
+      "exposure": 1.0,
+      "fog": null,
+      "fov": 60.0,
+      "msaa": null,
+      "normal_maps": null,
+      "offload": "off",
+      "offload_power_cap_w": 80,
+      "quality": "auto",
+      "reduced_motion": false,
+      "reflections": null,
+      "render_scale": "auto",
+      "scale_max": 1.0,
+      "scale_min": 0.375,
+      "sharpen": 0.35,
+      "sky": null,
+      "specular": null,
+      "target_fps": 60
+    },
+    "status": "local",
+    "targetFPS": 45,
+    "workerTimings": {
+      "generation": 4,
+      "gpuEffectsMs": {
+        "bloom": 0.003584,
+        "msaa_resolve": 0.001248,
+        "native_surfaces_geometry": 0.001696,
+        "output_markers": 0.870432,
+        "sky": 0.019488,
+        "upscale_sharpen": 0.044576,
+        "world_shading_shared": 0.162912
+      },
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "offload": "on",
+        "offload_power_cap_w": 80,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "scale_max": 1.0,
+        "scale_min": 0.375,
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "msaaSamples": 1,
+      "pose": [
+        -8.0,
+        1.7000000476837158,
+        12.0,
+        0.0,
+        0.0,
+        60.0
+      ],
+      "producerReadyMs": 2.789344996213913,
+      "profile": {
+        "bloom": {
+          "radius": 3,
+          "strength": 0.12,
+          "threshold": 1
+        },
+        "exposure": 1,
+        "fog": {
+          "baseHeight": 0,
+          "color": [
+            0.028,
+            0.045,
+            0.065
+          ],
+          "density": 0.008,
+          "excludeUnlit": true,
+          "heightFalloff": 0
+        },
+        "sky": {
+          "ground": [
+            0.055,
+            0.07,
+            0.085
+          ],
+          "horizon": [
+            0.55,
+            0.61,
+            0.65
+          ],
+          "sun": {
+            "angularRadius": 0.025,
+            "color": [
+              1,
+              0.83,
+              0.6
+            ],
+            "direction": [
+              0.3,
+              1,
+              0.5
+            ],
+            "intensity": 3
+          },
+          "zenith": [
+            0.18,
+            0.3,
+            0.52
+          ]
+        },
+        "toneMapping": "aces"
+      },
+      "renderGpuMs": 1.122496,
+      "renderScale": 1.0,
+      "sent": 136428112.069093,
+      "sequence": 80,
+      "slot": 0,
+      "transferGpuMs": 0.465184,
+      "type": "frame",
+      "version": 1,
+      "workerDone": 136428114.858716
+    }
+  },
+  "input": "Performance ComboBox, real nested keyboard events",
+  "sameWorld": true
+}

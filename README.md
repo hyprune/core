@@ -247,3 +247,8 @@ Graphics presets and individual effects use an independent, watched
 validated `graphics.get`/`graphics.set` for Settings while older clients retain
 their method lists. See [graphics controls](docs/GRAPHICS.md) for every option,
 GPU cost attribution and the native-resolution composition contract.
+
+M4 phase 1 adds optional runtime dGPU offload, **off by default**, and exact IPC
+0.10 Performance controls. Build also requires Vulkan and GBM development packages
+for `hyprune-renderer`; the local path continues to run without a discrete GPU.
+See [graphics controls](docs/GRAPHICS.md) and [M4 acceptance](docs/M4.md).

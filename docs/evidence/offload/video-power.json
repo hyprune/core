@@ -1,0 +1,433 @@
+{
+  "reason": null,
+  "returncode": 0,
+  "samples": [
+    {
+      "seconds": 0.00011677297879941761,
+      "watts": 21.45,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 0.4179777749814093,
+      "watts": 21.45,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 0.9171767069783527,
+      "watts": 21.1,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 1.4171065370028373,
+      "watts": 21.09,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 1.9174540329840966,
+      "watts": 21.07,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 2.4174184940056875,
+      "watts": 19.97,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 2.9176481689792126,
+      "watts": 20.0,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 3.4178245099901687,
+      "watts": 20.02,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 3.9180688519845717,
+      "watts": 20.04,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 4.418042017990956,
+      "watts": 20.02,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 4.918096121982671,
+      "watts": 19.96,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 5.418366063997382,
+      "watts": 19.96,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 5.918339667987311,
+      "watts": 20.67,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 6.418496720987605,
+      "watts": 21.14,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 6.918442991998745,
+      "watts": 21.33,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 7.418921361997491,
+      "watts": 21.02,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 7.918821088998811,
+      "watts": 21.06,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 8.419058089988539,
+      "watts": 22.52,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 8.919031508994522,
+      "watts": 22.12,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 9.41936696099583,
+      "watts": 25.37,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 9.919328496005619,
+      "watts": 27.33,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 10.419371837982908,
+      "watts": 26.14,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 10.919439356977819,
+      "watts": 25.82,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 11.41977857699385,
+      "watts": 25.76,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 11.91941269900417,
+      "watts": 26.62,
+      "pstate": "P5",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 12.41987585197785,
+      "watts": 21.46,
+      "pstate": "P5",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 12.919859155983431,
+      "watts": 17.35,
+      "pstate": "P5",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 13.419823745993199,
+      "watts": 9.05,
+      "pstate": "P8",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 13.920176960004028,
+      "watts": 22.29,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 14.4202752209967,
+      "watts": 20.99,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 14.920176419982454,
+      "watts": 24.62,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 15.420311195979593,
+      "watts": 28.02,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 15.92044241700205,
+      "watts": 26.57,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 16.4206063739839,
+      "watts": 26.34,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 16.920712302991888,
+      "watts": 29.27,
+      "pstate": "P5",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 17.420762953988742,
+      "watts": 18.92,
+      "pstate": "P5",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 17.920943602977786,
+      "watts": 15.32,
+      "pstate": "P5",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 18.420946698985063,
+      "watts": 14.47,
+      "pstate": "P8",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 18.920914402988274,
+      "watts": 14.47,
+      "pstate": "P8",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 19.42125621100422,
+      "watts": 25.8,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 19.921470264991513,
+      "watts": 21.2,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 20.4213880939933,
+      "watts": 23.91,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 20.921439516998362,
+      "watts": 26.46,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 21.421681740001077,
+      "watts": 25.8,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 21.92242089798674,
+      "watts": 25.97,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 22.421703717991477,
+      "watts": 25.9,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 22.921690189978108,
+      "watts": 17.52,
+      "pstate": "P5",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 23.421994584001368,
+      "watts": 14.9,
+      "pstate": "P5",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 23.92213183999411,
+      "watts": 14.65,
+      "pstate": "P5",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 24.4221084699966,
+      "watts": 23.15,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 24.922397824004292,
+      "watts": 21.43,
+      "pstate": "P2",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 25.422423449985217,
+      "watts": 24.09,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 25.922294427000452,
+      "watts": 25.76,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 26.422438148991205,
+      "watts": 25.6,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 26.922584087005816,
+      "watts": 25.85,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 27.422659431002103,
+      "watts": 25.75,
+      "pstate": "P2",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 27.922746144002303,
+      "watts": 16.1,
+      "pstate": "P5",
+      "celsius": 48.0,
+      "ac": true
+    },
+    {
+      "seconds": 28.422824899986153,
+      "watts": 14.87,
+      "pstate": "P5",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 28.92298000800656,
+      "watts": 14.47,
+      "pstate": "P5",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 29.423375226993812,
+      "watts": 14.47,
+      "pstate": "P8",
+      "celsius": 47.0,
+      "ac": true
+    },
+    {
+      "seconds": 29.923295811982825,
+      "watts": 7.96,
+      "pstate": "P8",
+      "celsius": 47.0,
+      "ac": true
+    }
+  ]
+}
