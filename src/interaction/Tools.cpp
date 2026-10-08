@@ -119,7 +119,7 @@ void Tools::point(const std::string &world, const std::string &area, Vec3 p) {
     if (paths.size() >= 128 && activePath.empty())
         throw std::runtime_error("path budget");
     if (activePath.empty()) {
-        activePath = "path-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+        activePath = "path-" + std::to_string(deterministicId ? (*deterministicId)++ : std::chrono::steady_clock::now().time_since_epoch().count());
         paths.push_back({{"id", activePath},
                          {"worldId", world},
                          {"areaId", area},

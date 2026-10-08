@@ -47,6 +47,7 @@ extern "C" {
 #include "ipc/Protocol.hpp"
 #include "hud/Telemetry.hpp"
 #include "offload/Client.hpp"
+#include "replay/Session.hpp"
 #include "render/PNG.hpp"
 #include "render/Renderer.hpp"
 #include <fcntl.h>
@@ -75,6 +76,18 @@ struct Runtime {
     surfaces::Layout layout;
     interaction::Hands hands;
     interaction::Input input;
+    replay::Session session;
+    bool replayDispatch = false;
+    Json replayConfig, replayInput, replayEditor;
+    Json sessionState() const;
+    Json sessionInitial() const;
+    void restoreSession(const Json &);
+    uint64_t inputClock() const;
+    std::vector<interaction::Action> inputEvent(const std::string &, const std::string &, unsigned, bool, uint64_t, float = 0, bool = false);
+    Json sessionMethod(const std::string &, const Json &);
+    void stopReplay();
+    void replayBeforeTick();
+    void replayAfterTick();
     interaction::InputFile inputFile;
     interaction::Tools editor;
     std::filesystem::path editorFile;
@@ -350,6 +363,9 @@ bool ownsInput() {
            !runtime->handover.phase;
 }
 void motion(void *self, const Vector2D &delta) {
+    if (runtime && runtime->session.playing && !runtime->replayDispatch) return;
+    if (runtime && runtime->session.recording && ownsInput())
+        runtime->session.event({{"type","motion"},{"dx",delta.x},{"dy",delta.y},{"mode",runtime->inputMode()}});
     if (runtime && runtime->active && runtime->control.uiVisible() && !runtime->captureRequest.is_null() &&
         runtime->captureRequest.value("status", "") == "waiting" &&
         runtime->captureRequest.value("action", "") == "look")
@@ -358,7 +374,7 @@ void motion(void *self, const Vector2D &delta) {
         auto now =
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
                 .count();
-        runtime->input.event(runtime->inputMode(), "MouseMove", runtime->modifiers, true, now, float(delta.x));
+        runtime->inputEvent(runtime->inputMode(), "MouseMove", runtime->modifiers, true, now, float(delta.x));
     }
     if (runtime && runtime->active && runtime->control.uiVisible() && !runtime->directorSurface())
         return;
@@ -380,7 +396,7 @@ void motion(void *self, const Vector2D &delta) {
                 runtime->pointerX += float(delta.x) / float(mon->m_size.x);
                 runtime->pointerY += float(delta.y) / float(mon->m_size.y);
             }
-            if ((runtime->pointerX < 0 || runtime->pointerX >= 1 || runtime->pointerY < 0 || runtime->pointerY >= 1) &&
+            if (!runtime->replayDispatch && (runtime->pointerX < 0 || runtime->pointerX >= 1 || runtime->pointerY < 0 || runtime->pointerY >= 1) &&
                 runtime->buttons.empty()) {
                 auto global =
                     mon->m_position + Vector2D{runtime->pointerX * mon->m_size.x, runtime->pointerY * mon->m_size.y};
@@ -421,6 +437,7 @@ void motion(void *self, const Vector2D &delta) {
     }
     if (runtime && runtime->active && runtime->cursorWarpPending)
         return;
+    if (runtime && runtime->replayDispatch) return;
     originalMove(self, delta);
 }
 Vec3 pointerRay() {
@@ -923,6 +940,7 @@ void Runtime::publish() {
     control.events.clear();
 }
 void Runtime::load(const std::string &id, const std::string &spawnId) {
+    if (session.recording || session.playing) throw ipc::Error(-32004, "stop recording/replay before loading another world");
     if (id.empty() || id.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789.-") != std::string::npos ||
         id == "." || id == "..")
         throw ipc::Error(-32602, "invalid installed world ID");
@@ -1121,6 +1139,8 @@ void Runtime::exit() {
     if (!active)
         return;
     active = false;
+    if (session.recording) session.stopRecording();
+    if (session.playing) stopReplay();
     offloadTick();
     input.clear();
     relativeSurface.clear();
@@ -1994,6 +2014,16 @@ namespace {
 interaction::Transform objectTransform(const interaction::Tools &, const world::World &, const std::string &);
 }
 void Runtime::action(interaction::Action a) {
+    if (a.name == "record.toggle") {
+        if (a.pressed && a.edge && !session.playing) sessionMethod(session.recording ? "recording.stop" : "recording.start", Json::object());
+        return;
+    }
+    if (a.name == "wheel") {
+        if (zoomHeld) zoom = std::clamp(zoom * std::pow(1.12f,a.value),1.f,20.f);
+        else if (editor.slot != 1) {editor.wheel(a.value>0?1:-1);editor.activeHandle=-1;publish();}
+        else axis({.timeMs=0,.axis=WL_POINTER_AXIS_VERTICAL_SCROLL,.delta=-a.value*20.,.deltaDiscrete=int32_t(-a.value*120)});
+        return;
+    }
     auto held = [&](uint32_t key) {
         if (a.pressed)
             keys.insert(key);
@@ -2269,6 +2299,7 @@ float axisPoint(Vec3 origin, Vec3 ray, Vec3 center, Vec3 axis) {
 }
 } // namespace
 void Runtime::saveEditor() {
+    if (session.playing) return;
     auto value = editor.saved();
     if (value == lastEditor)
         return;
@@ -2615,6 +2646,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     auto protocol = params.value("_protocol", "0.1");
     params.erase("_pid");
     params.erase("_protocol");
+    if (method.starts_with("recording.") || method.starts_with("replay.")) return sessionMethod(method, params);
     if (method == "_renderer.channel") {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         if (params.at("generation") != offloadGeneration || !offloadRequest.value("enabled", false))
@@ -2677,7 +2709,13 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             throw ipc::Error(-32602, "config required");
         Json next;
         try {
-            next = interaction::validateInput(params["config"]);
+            auto requested = params["config"];
+            if (!ipc::protocol::atLeast(protocol,"0.12") && requested.contains("modes"))
+                for (auto &[mode,actions] : requested["modes"].items()) {
+                    if(actions.contains("record.toggle")) throw std::runtime_error("record.toggle requires IPC 0.12");
+                    if(input.config["modes"].contains(mode)) actions["record.toggle"]=input.config["modes"][mode]["record.toggle"];
+                }
+            next = interaction::validateInput(requested);
         } catch (const std::exception &e) {
             throw ipc::Error(-32602, e.what());
         }
@@ -2982,6 +3020,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     publish();
     return Json{{"revision", ipc->revision()}};
 }
+#include "Replay.inc"
 void Runtime::tick() {
     if (renderDepth != 0)
         throw std::runtime_error("deferred work inside compositor render pass");
@@ -3005,12 +3044,11 @@ void Runtime::tick() {
     ipc->poll();
     if (auto next = graphicsFile.poll())
         applyGraphics(*next);
-    if (auto next = inputFile.poll())
+    if (!session.playing) if (auto next = inputFile.poll())
         applyInput(*next);
     renderer.debug = debug;
-    for (auto &a : input.tick(
-             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
-                 .count()))
+    replayBeforeTick();
+    for (auto &a : input.tick(inputClock()))
         action(a);
     if (!ipc->healthy()) {
         if (active)
@@ -3040,6 +3078,7 @@ void Runtime::tick() {
     auto now = std::chrono::steady_clock::now();
     float dt = std::chrono::duration<float>(now - lastTick).count();
     lastTick = now;
+    if (session.recording || session.playing) dt = session.playing && session.mode == "camera" ? 0.f : replay::Session::Step;
     for (auto it = bindings.begin(); it != bindings.end();) {
         bool live = false;
         if (processIdentity(it->second.pid).second == it->second.start &&
@@ -3200,6 +3239,7 @@ void Runtime::tick() {
         g_pHyprRenderer->damageMonitor(monitor.lock());
         monitor->scheduleFrame();
     }
+    replayAfterTick();
     renderer.updateMs =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - updateStarted).count();
     cursor();
@@ -3259,6 +3299,7 @@ class Pass final : public IPassElement {
             r.draw(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y, view,
                    surfaces, runtime->typing && !runtime->layerCursor);
             if (r.frames != frames) {
+                if (runtime->session.recording) { auto state=runtime->sessionState(); state["camera"]=replay::pose(view); runtime->session.view(state,r.frames); }
                 runtime->displayedCamera = view;
                 runtime->renderedOffload = r.externalWorldFbo != 0;
             }
@@ -3534,6 +3575,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     {"surface.focus", "surface.control"},
                     {"graphics.get", "state.read"},
                     {"graphics.set", "world.control"},
+                    {"recording.start", "input.control"}, {"recording.stop", "input.control"},
+                    {"recording.mark", "input.control"}, {"recording.status", "input.control"},
+                    {"replay.start", "input.control"}, {"replay.stop", "input.control"}, {"replay.status", "input.control"},
                     {"input.get", "state.read"},
                     {"input.preview", "state.read"},
                     {"input.set", "input.control"},
@@ -3678,6 +3722,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 }
                 if (key.empty())
                     return;
+                if (runtime->session.playing && key != "F12") { info.cancelled=true; return; }
                 unsigned bit = sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R       ? 64
                                : sym == XKB_KEY_Shift_L || sym == XKB_KEY_Shift_R     ? 1
                                : sym == XKB_KEY_Control_L || sym == XKB_KEY_Control_R ? 4
@@ -3728,7 +3773,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                                        runtime->input.gestureHeld() ||
                                        (runtime->editor.activeHandle >= 0 && runtime->superHeld);
                 auto actions =
-                    runtime->input.event(runtime->inputMode(), key, runtime->modifiers, down, now, 0, gestureMovement);
+                    runtime->inputEvent(runtime->inputMode(), key, runtime->modifiers, down, now, 0, gestureMovement);
                 if (!actions.empty()) {
                     info.cancelled = true;
                     if (down)
@@ -3785,6 +3830,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     runtime->listeners.push_back(
         Event::bus()->m_events.input.mouse.button.listen([](IPointer::SButtonEvent event, Event::SCallbackInfo &info) {
             safe([&] {
+                if (runtime->session.playing) { info.cancelled=true; return; }
                 bool down = event.state == WL_POINTER_BUTTON_STATE_PRESSED,
                      owned = !down && runtime->swallowedButtons.erase(event.button);
                 bool scoped = runtime->active && !locked() && runtime->monitor == Desktop::focusState()->monitor() &&
@@ -3803,7 +3849,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 auto mods = runtime->modifiers;
                 if (!down && runtime->buttons.contains(event.button)) {
                     info.cancelled = true;
-                    runtime->input.event(runtime->inputMode(), key, mods, false, 0);
+                    runtime->inputEvent(runtime->inputMode(), key, mods, false, 0);
                     runtime->deferInput([event] { runtime->button(event, false); });
                     return;
                 }
@@ -3815,7 +3861,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     runtime->deferInput([key, mods, down] { runtime->acceptCapture(key, mods, down); });
                     return;
                 }
-                auto actions = runtime->input.event(runtime->inputMode(), key, mods, down,
+                auto actions = runtime->inputEvent(runtime->inputMode(), key, mods, down,
                                                     std::chrono::duration_cast<std::chrono::milliseconds>(
                                                         std::chrono::steady_clock::now().time_since_epoch())
                                                         .count());
@@ -3869,6 +3915,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     runtime->listeners.push_back(Event::bus()->m_events.input.mouse.axis.listen([](IPointer::SAxisEvent event,
                                                                                    Event::SCallbackInfo &info) {
         safe([&] {
+            if (runtime->session.playing) { info.cancelled=true; return; }
             if (!runtime->active || locked() || runtime->monitor != Desktop::focusState()->monitor() ||
                 (runtime->freeCursor && !runtime->layerCursor && !runtime->cursorWarpPending))
                 return;
@@ -3887,7 +3934,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 runtime->deferInput([key, mods] { runtime->acceptCapture(key, mods, true); });
                 return;
             }
-            auto actions = runtime->input.event(runtime->inputMode(), key, mods, true,
+            auto actions = runtime->inputEvent(runtime->inputMode(), key, mods, true,
                                                 std::chrono::duration_cast<std::chrono::milliseconds>(
                                                     std::chrono::steady_clock::now().time_since_epoch())
                                                     .count(),

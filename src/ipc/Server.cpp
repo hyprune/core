@@ -105,6 +105,8 @@ Json Server::snapshot() const {
 }
 Json Server::visibleState(const Peer &p) const {
     Json state = state_;
+    if (!protocol::atLeast(p.protocol, "0.12") && state.contains("keymap"))
+        state["keymap"] = interaction::withoutRecordingAction(state["keymap"]);
     if (!protocol::atLeast(p.protocol, "0.9") && state.contains("keymap"))
         state["keymap"] = hyprune::interaction::legacyInputNames(state["keymap"]);
     if (protocol::atLeast(p.protocol, "0.8"))
@@ -415,6 +417,8 @@ void Server::frame(Peer &p, const std::string &bytes) {
                 command["_protocol"] = p.protocol;
             }
             result = handler_(method, command);
+            if (method.starts_with("input.") && !protocol::atLeast(p.protocol, "0.12"))
+                result = interaction::withoutRecordingAction(std::move(result));
         }
         queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"result", result}});
     } catch (const Error &e) {

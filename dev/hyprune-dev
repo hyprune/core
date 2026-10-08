@@ -5,11 +5,12 @@ root="$(dirname "$(dirname "$(realpath "$0")")")"
 command="${1:-up}"
 if (($#)); then shift; fi
 case "$command" in
+  replay|record-input) exec python3 "$root/dev/replay_cli.py" "$command" "$@" ;;
   up) exec "$root/dev/nested/run.sh" --integration --serve "$@" ;;
   smoke) exec "$root/dev/nested/run.sh" --integration "$@" ;;
   record) exec "$root/dev/nested/run.sh" --integration --record "$@" ;;
   m2) exec "$root/dev/nested/run.sh" --m2 --serve "$@" ;;
   m2-smoke) exec "$root/dev/nested/run.sh" --m2 "$@" ;;
   m2-record) exec "$root/dev/nested/run.sh" --m2 --record "$@" ;;
-  *) echo 'Usage: dev/hyprune-dev up|smoke|record|m2|m2-smoke|m2-record' >&2; exit 2 ;;
+  *) echo 'Usage: dev/hyprune-dev up|smoke|record|m2|m2-smoke|m2-record|replay FILE [--assert SPEC]|record-input ACTION --socket SOCKET --token-fd FD' >&2; exit 2 ;;
 esac

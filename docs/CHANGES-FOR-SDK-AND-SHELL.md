@@ -638,3 +638,30 @@ and proposed docs RFC-0004/RFC-0008 amendment are committed. Launcher-authorised
 package paths work (including the current supervised launcher argument); dynamic
 installed-package discovery is still requested for subsequent world changes.
 No core source edits from shell, no pushes, no owner-session testing.
+
+### Shader warmup and recording/replay: IPC 0.12 (after climbing 0.11)
+
+Core now warms eight programs and driver draw-state variants behind loading;
+`graphics.get().timings.shaderCache` adds hits/misses/rejections, compile time,
+warmup CPU total/maximum and warming state. No Settings switch is needed.
+The binary cache lives in XDG_CACHE_HOME/hyprune/programs, keyed by driver/build.
+Intel PTL worst first-use submission: 26.40 ms before warmup, 0.90 ms after,
+0.57 ms with eight cached programs. See docs/SHADER-WARMUP.md.
+
+Climbing keeps **0.11**; recording/replay adds **0.12**, canonically extending
+0.11. Schema commit `153d4d8`; SDK types include both versions and world 0.4.
+`record.toggle` is unbound by default in all four input modes; it appears in
+input.get for 0.12 Settings clients and uses the existing capture/clear boxes.
+Older keymaps omit the action and old edits preserve its binding. Shell should
+negotiate 0.12 to expose it; 0.10 Performance and 0.9 HUD remain supported.
+
+The input.control grant gates recording.start({includeAppKeys?:false}), stop,
+mark({name}), status and replay.start({path,mode?:"input"|"camera",
+smoothingMs?:0..1000,assertions?:{recorded?,tolerance?,marks?}}), stop/status.
+Results share {recording,playing,path,frame,mode,failures,error}; path/error may
+be null. Runtime notices announce recording paths and replay completion/failure.
+Default recordings redact unhandled/app keystrokes. Opt-in captures raw key
+symbols (potential typed text); do not enable this silently. Camera replay
+never sends application input; input replay never invokes Hyprland keybinds or
+synthesizes application keyboard events. This is a developer/test API, not an
+observer input-injection capability. See docs/REPLAY.md for file format/limits.

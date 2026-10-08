@@ -106,7 +106,8 @@
       ],
       "fly": [
         "F4"
-      ]
+      ],
+      "record.toggle": []
     },
     "interactive": {
       "exit": [
@@ -118,7 +119,8 @@
       ],
       "capture": [
         "Super+u"
-      ]
+      ],
+      "record.toggle": []
     },
     "focus": {
       "exit": [
@@ -130,7 +132,8 @@
       ],
       "capture": [
         "Super+u"
-      ]
+      ],
+      "record.toggle": []
     },
     "menu": {
       "exit": [
@@ -141,7 +144,8 @@
       ],
       "capture": [
         "Super+u"
-      ]
+      ],
+      "record.toggle": []
     }
   },
   "show_area_markers": false

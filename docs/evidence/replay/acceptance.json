@@ -1,0 +1,52 @@
+{
+  "replays": [
+    {
+      "error": null,
+      "failures": [],
+      "frame": 208,
+      "mode": "input",
+      "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-QIzhMq.jsonl",
+      "playing": false,
+      "recording": false
+    },
+    {
+      "error": null,
+      "failures": [],
+      "frame": 208,
+      "mode": "input",
+      "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-QIzhMq.jsonl",
+      "playing": false,
+      "recording": false
+    }
+  ],
+  "camera": {
+    "error": null,
+    "failures": [],
+    "frame": 208,
+    "mode": "camera",
+    "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-QIzhMq.jsonl",
+    "playing": false,
+    "recording": false
+  },
+  "shaderCache": {
+    "compileMs": 62.89693700000001,
+    "hits": 0,
+    "misses": 8,
+    "rejected": 0,
+    "warming": false,
+    "warmupMaxStepMs": 28.128157,
+    "warmupMs": 43.57531899999999
+  },
+  "checks": [
+    "rebindable F8",
+    "raw key/button/axis/motion",
+    "per-frame view",
+    "marker assertions",
+    "two exact fixed-step replays",
+    "camera smoothing",
+    "idempotent stop",
+    "no new effect programs",
+    "real app-key default redaction",
+    "explicit raw-key opt-in"
+  ]
+}

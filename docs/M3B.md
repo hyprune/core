@@ -580,3 +580,16 @@ no owner-session mutation or gallery watcher control occurred.
   USB-C uses 50 W /45 FPS; auto stays off. Do not use a live run to stress the ceiling.
 - [ ] On a fallback notice/state, keep using the local renderer; U captures current
   output and diagnostics. Retry only through off/on after inspecting the cause.
+
+### Recording/replay supervised cursor checks
+
+- [ ] Starting/stopping recording from idle world control retains the reticle;
+      recording performs no cursor changes.
+- [ ] Input replay of E uses the existing reticle → virtual cursor transition;
+      F uses the existing deferred focus handover. Super+Tab/Back returns through
+      the same deferred path. Virtual replay motion cannot warp to another output.
+- [ ] Replay stop, failure and F12 release outstanding pointer grabs and return
+      interactive/focus modes through the existing deferred exit path.
+- [ ] Camera-only replay retains world control and sends no application input.
+      Verify stop returns physical control immediately. Nested software cursors
+      cannot qualify these hardware-cursor transitions.

@@ -1,0 +1,10 @@
+{
+  "recorded": true,
+  "tolerance": 0.002,
+  "marks": {
+    "end": {
+      "tool": 2,
+      "mode": "world"
+    }
+  }
+}

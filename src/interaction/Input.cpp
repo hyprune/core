@@ -101,6 +101,9 @@ Json validateInput(const Json &raw) {
         j["invert_y"] = false;
     auto defaults = inputDefaults();
     if (j.is_object() && j.contains("modes") && j["modes"].is_object())
+        for (auto &[mode, actions] : j["modes"].items())
+            if (actions.is_object() && defaults["modes"].contains(mode) && !actions.contains("record.toggle")) actions["record.toggle"] = Json::array();
+    if (j.is_object() && j.contains("modes") && j["modes"].is_object())
         for (auto mode : {"interactive", "focus", "menu"})
             if (j["modes"].contains(mode) && j["modes"][mode].is_object())
                 for (auto action : {"debug", "capture"})

@@ -22,6 +22,7 @@ std::optional<int> pickHandle(std::span<const Handle>, Vec3 origin, Vec3 ray, fl
 std::vector<Line> pathLines(const Json &path);
 class Tools {
   public:
+    std::optional<uint64_t> deterministicId;
     int slot = 1, windowMode = 0, pathMode = 0, positionMode = 0;
     std::string selected, kind, activePath;
     int activeHandle = -1;
