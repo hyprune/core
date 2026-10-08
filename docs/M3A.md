@@ -127,10 +127,10 @@ move only completed MP4/JSON files into gallery/videos.
 
 ## Verification and parity evidence
 
-Final locked run: **43 automated checks passed**; the 44th entry explicitly
+Final locked run: **45 automated checks passed**; the 46th entry explicitly
 requires owner-supervised DRM hardware-cursor testing. The raw result is
-[evidence/m3a-acceptance.json](evidence/m3a-acceptance.json). All 132 RPC responses
-and 794 notifications from this run validate against frozen IPC 0.5, including
+[evidence/m3a-acceptance.json](evidence/m3a-acceptance.json). All 133 RPC responses
+and 805 notifications from this run validate against frozen IPC 0.5, including
 an actual authenticated Quickshell Director with five workspace apps. The
 Workspaces screenshot was inspected for icons, titles and classes.
 
@@ -139,10 +139,10 @@ Workspaces screenshot was inspected for icons, titles and classes.
 | Hand carry, wheel distance, roll, native resize, zoom and wall extraction | Done | carry_offset_distance, roll, client_resize (900×560 → 642×990), zoom, drag_off_wall; OBB tests |
 | Parent-attached popup/menu/dialog/subsurface input and spawn placement | Done for supported textures | popup_click, x11_menu_click, dialog_keyboard_close, subsurface_click, spawn_in_front |
 | Smooth fullscreen to native 2D and back | Done in nested | fullscreen_in/out; inspected native fullscreen at ~19 seconds |
-| Movement/typing, virtual cursor and neighbouring output cursor | Done in nested | typing_toggle/button, virtual_cursor_typing, typing_neighbour_cursor/return |
+| Movement/typing, virtual cursor and neighbouring output cursor | Done in nested | typing_toggle/button, virtual_cursor_typing/scroll, typing_neighbour_cursor/return |
 | F wall fly-in, back, drop to native tiling | Done | focus_wall/back, drag_off_wall, drop_to_tile |
 | Five slots and arbitrary surface mounting with persistence | Done; path slots are permitted M3B stubs | shell_mode_tools, mount_tag, arbitrary_mount, mount_persistence |
-| Discrete stairs, respawn, noclip and fly toggle | Done | stairs (eye height ~2.45 m after 0.25 m risers), respawn, noclip_on/off, fly_toggle |
+| Discrete stairs, respawn, noclip and fly toggle | Done | stairs (eye height ~2.45 m after 0.25 m risers), respawn, noclip_on/off, noclip_through_wall (x > 7.5 m beyond the 7 m room boundary), fly_toggle |
 | Director Workspaces apps | Done | director_apps; actual rendered list of five clients inspected |
 | Validated Lua configuration and live diff reload | Done | config_reload/rejected, pure invalid/atomic config tests |
 | Hardware cursor on an owner DRM session | Pending supervised test | hardware_cursor_live is deliberately not marked passed |

@@ -12,9 +12,9 @@
         1076
       ],
       "position": [
-        0.6876300573348999,
-        2.5221407413482666,
-        1.5628793239593506
+        0.6876326203346252,
+        2.522141695022583,
+        1.5628700256347656
       ],
       "rotation": [
         0.0,
@@ -43,9 +43,9 @@
         1076
       ],
       "position": [
-        0.6876300573348999,
-        2.5221407413482666,
-        1.5628793239593506
+        0.6876326203346252,
+        2.522141695022583,
+        1.5628700256347656
       ],
       "rotation": [
         0.0,
@@ -65,7 +65,7 @@
     "passed": true,
     "evidence": {
       "collision": false,
-      "commits": 155,
+      "commits": 149,
       "floating": true,
       "id": "surface-2",
       "parentId": "",
@@ -74,9 +74,9 @@
         990
       ],
       "position": [
-        0.6876300573348999,
-        2.5221407413482666,
-        1.5628793239593506
+        0.6876326203346252,
+        2.522141695022583,
+        1.5628700256347656
       ],
       "rotation": [
         0.0,
@@ -105,6 +105,10 @@
     "evidence": null
   },
   "popup_click": {
+    "passed": true,
+    "evidence": null
+  },
+  "virtual_cursor_scroll": {
     "passed": true,
     "evidence": null
   },
@@ -183,7 +187,7 @@
         },
         {
           "collision": false,
-          "commits": 171,
+          "commits": 165,
           "floating": true,
           "id": "surface-2",
           "parentId": "",
@@ -192,9 +196,9 @@
             990
           ],
           "position": [
-            0.6876300573348999,
-            2.5221407413482666,
-            1.5628793239593506
+            0.6876326203346252,
+            2.522141695022583,
+            1.5628700256347656
           ],
           "rotation": [
             0.0,
@@ -269,7 +273,7 @@
       },
       "cursor": "virtual",
       "error": "",
-      "frames": 654,
+      "frames": 665,
       "fullscreen": 0,
       "fullscreenId": "",
       "gesture": 0,
@@ -374,7 +378,7 @@
         },
         {
           "collision": false,
-          "commits": 174,
+          "commits": 168,
           "floating": true,
           "id": "surface-2",
           "parentId": "",
@@ -383,9 +387,9 @@
             990
           ],
           "position": [
-            0.6876300573348999,
-            2.5221407413482666,
-            1.5628793239593506
+            0.6876326203346252,
+            2.522141695022583,
+            1.5628700256347656
           ],
           "rotation": [
             0.0,
@@ -402,7 +406,7 @@
         },
         {
           "collision": false,
-          "commits": 4,
+          "commits": 3,
           "floating": false,
           "id": "surface-5",
           "parentId": "",
@@ -516,7 +520,7 @@
       },
       "cursor": "reticle",
       "error": "",
-      "frames": 858,
+      "frames": 870,
       "fullscreen": 0,
       "fullscreenId": "",
       "gesture": 0,
@@ -578,7 +582,7 @@
       "captures": [
         {
           "collision": false,
-          "commits": 83,
+          "commits": 74,
           "floating": true,
           "id": "surface-1",
           "parentId": "",
@@ -606,7 +610,7 @@
         },
         {
           "collision": false,
-          "commits": 313,
+          "commits": 293,
           "floating": true,
           "id": "surface-2",
           "parentId": "",
@@ -634,7 +638,7 @@
         },
         {
           "collision": false,
-          "commits": 4,
+          "commits": 3,
           "floating": false,
           "id": "surface-5",
           "parentId": "",
@@ -748,7 +752,7 @@
       },
       "cursor": "reticle",
       "error": "",
-      "frames": 1059,
+      "frames": 1069,
       "fullscreen": 0,
       "fullscreenId": "",
       "gesture": 1,
@@ -780,7 +784,11 @@
   },
   "drop_to_tile": {
     "passed": true,
-    "evidence": null
+    "evidence": {
+      "title": "M3A X11 laboratory",
+      "floating": false,
+      "workspaceId": 10
+    }
   },
   "mount_tag": {
     "passed": true,
@@ -794,9 +802,9 @@
         "areaId": "sun-court",
         "pose": {
           "position": [
-            -7.658020973205566,
-            1.776249647140503,
-            9.482229232788086
+            -7.658055305480957,
+            1.7762418985366821,
+            9.48248291015625
           ],
           "rotation": [
             0.0,
@@ -852,12 +860,20 @@
     "evidence": [
       -4.0,
       2.450000047683716,
-      -0.6049874424934387
+      -0.611144483089447
     ]
   },
   "noclip_on": {
     "passed": true,
     "evidence": null
+  },
+  "noclip_through_wall": {
+    "passed": true,
+    "evidence": [
+      8.979715347290039,
+      1.9942471981048584,
+      1.0
+    ]
   },
   "noclip_off": {
     "passed": true,
@@ -926,7 +942,7 @@
     "passed": true,
     "evidence": {
       "collision": false,
-      "commits": 83,
+      "commits": 80,
       "floating": false,
       "id": "surface-26",
       "parentId": "",
@@ -946,8 +962,8 @@
         1.0
       ],
       "size": [
-        2.200000047683716,
-        1.3200000524520874
+        1.284000039100647,
+        1.9800000190734863
       ],
       "title": "M3A spawn",
       "visible": true
@@ -963,9 +979,9 @@
       "status": "live",
       "protocol": "0.5",
       "screen": "HEADLESS-1",
-      "lease": "lease-fb62c735c9ed2644",
+      "lease": "lease-1956d232a2e49cc4",
       "director": false,
-      "revision": 2042,
+      "revision": 2073,
       "tab": 0,
       "warp": false,
       "phase": "failed",
@@ -1003,9 +1019,9 @@
       "status": "live",
       "protocol": "0.5",
       "screen": "HEADLESS-1",
-      "lease": "lease-fb62c735c9ed2644",
+      "lease": "lease-1956d232a2e49cc4",
       "director": true,
-      "revision": 2125,
+      "revision": 2154,
       "tab": 3,
       "warp": false,
       "phase": "failed",
@@ -1048,8 +1064,8 @@
   "ipc_0.5_wire": {
     "passed": true,
     "evidence": {
-      "responses": 132,
-      "notifications": 794
+      "responses": 133,
+      "notifications": 805
     }
   }
 }

@@ -78,9 +78,10 @@
   "credits": "Lumen Reach and Switchyard: Hyprune contributors, CC-BY-4.0, unchanged packages from hyprune/worlds/dist. Hands-on interaction lab and client fixtures: original CC0 test content.",
   "testedCoreImplementation": "a2826ae",
   "acceptance": {
-    "passed": 43,
+    "passed": 45,
     "pending": "owner-supervised hardware cursor on DRM",
-    "wireResponses": 132,
-    "wireNotifications": 794
+    "wireResponses": 133,
+    "wireNotifications": 805,
+    "note": "Strengthened acceptance rerun on the recorded core implementation adds actual client scroll delivery, wall crossing under noclip and native tiling state. Recording run passed 43 checks."
   }
 }

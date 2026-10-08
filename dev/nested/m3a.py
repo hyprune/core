@@ -12,7 +12,7 @@ def acceptance(client,children,args,shell_token,socketpath):
   device.stdin.write(' '.join(map(str,args))+'\n');device.stdin.flush();assert device.stdout.readline().strip()=='ok' 
  s.ctl('dispatch','hl.dsp.focus({ workspace = "10" })')
  term=s.envrun('kitty','--class','hyprune-m3a-terminal','--title','M3A terminal','--override','font_size=18','bash','--noprofile','--norc',stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);children.append(term)
- marker=s.STATE/'popup-selected.txt';marker.unlink(missing_ok=True)
+ marker=s.STATE/'popup-selected.txt';marker.unlink(missing_ok=True);scrollmarker=pathlib.Path(str(marker)+'.scroll');scrollmarker.unlink(missing_ok=True)
  app=s.envrun('env','GDK_BACKEND=wayland',str(ROOT/'build/nested-parity-client'),str(marker),stdout=subprocess.DEVNULL,stderr=open(s.STATE/'popup.log','w'));children.append(app)
  time.sleep(1)
  for window in json.loads(s.ctl('clients','-j')):
@@ -74,7 +74,7 @@ def acceptance(client,children,args,shell_token,socketpath):
  stage(popup['id']);pointer('button',273);wait(lambda:diag()['children']>0);check('xdg_popup_attached',diag()['children']>0);shot('popup-open.png')
  # The fixture menu opens at the clicked root centre, and its first row lies below/right.
  click_child(popup['id']);wait(lambda:marker.exists() and marker.read_text()=='popup click landed\n');check('popup_click',True)
- mode=diag();pointer((.5-mode['pointer'][0])*1920,(.5-mode['pointer'][1])*1080);time.sleep(.15);pointer();wait(lambda:diag()['fullscreen']==2);check('fullscreen_in',state()['interaction']['mode']=='fullscreen');shot('fullscreen.png')
+ mode=diag();pointer((.5-mode['pointer'][0])*1920,(.5-mode['pointer'][1])*1080);time.sleep(.15);pointer('scroll',1);wait(lambda:scrollmarker.exists() and scrollmarker.read_text()=='scroll landed\n');check('virtual_cursor_scroll',True);pointer();wait(lambda:diag()['fullscreen']==2);check('fullscreen_in',state()['interaction']['mode']=='fullscreen');shot('fullscreen.png')
  pointer();wait(lambda:diag()['fullscreen']==0);check('fullscreen_out',state()['interaction']['mode']!='fullscreen')
  # A transient dialog keeps the root pose while receiving its own keyboard.
  client.call('surface.focus',{'surfaceId':popup['id'],'intent':'keyboard'});keys('-k','F10')
@@ -106,13 +106,13 @@ def acceptance(client,children,args,shell_token,socketpath):
  keys('-P','Super_L','-k','Alt_L','-p','Super_L');wait(lambda:state()['mounts']['desktopWorkspaceId'] is None and diag()['handover']==0);check('focus_back',state()['interaction']['mode']=='movement')
  # Native wall extraction uses the real compositor rectangle at the ray hit.
  client.call('surface.return',{'surfaceId':surface['id']});client.call('surface.return',{'surfaceId':popup['id']});pose(client,[0,3,-7]);time.sleep(.3)
- mod=s.envrun('wtype','-P','Super_L','-s','800','-p','Super_L');children.append(mod);time.sleep(.1);pointer('button',272,1);time.sleep(.25);check('drag_off_wall',diag()['gesture']==1,diag());pointer('button',272,0);mod.wait(timeout=5);time.sleep(.25)
- check('drop_to_tile',not any(v['status']=='carried' for v in state()['mounts']['instances']))
+ mod=s.envrun('wtype','-P','Super_L','-s','800','-p','Super_L');children.append(mod);time.sleep(.1);pointer('button',272,1);time.sleep(.25);check('drag_off_wall',diag()['gesture']==1,diag());pulled_title=captured(diag()['gestureId'])['title'];pointer('button',272,0);mod.wait(timeout=5);time.sleep(.25)
+ tiled=next(w for w in json.loads(s.ctl('clients','-j')) if w['title']==pulled_title);check('drop_to_tile',not any(v['status']=='carried' for v in state()['mounts']['instances']) and not tiled['floating'] and tiled['workspace']['id']==10,{'title':pulled_title,'floating':tiled['floating'],'workspaceId':tiled['workspace']['id']})
  stage(surface['id']);keys('-k','2');pointer();time.sleep(.15);check('mount_tag',state()['interaction']['taggedSurfaceId']==surface['id'])
  # Laboratory right wall, independent of authored screen anchors.
  pose(client,[4,2,1],math.pi/2);pointer();time.sleep(.3);check('arbitrary_mount',any('pose' in v for v in state()['mounts']['placements']),state()['mounts']['placements']);saved=state()['mounts']['placements'];client.call('world.load',{'worldId':'org.hyprune.m3a'});surface=wait(lambda:next((v for v in state()['surfaces'] if v['title']=='M3A terminal'),None));time.sleep(.3);check('mount_persistence',state()['mounts']['placements']==saved and not captured(surface['id'])['collision'])
  keys('-k','1');nav();client.call('movement.set',{'modeId':'com.hyprune.walk'});pose(client,[-4,1.7,2]);keys('-P','w','-s','750','-p','w');time.sleep(.2);p=state()['movement']['position'];check('stairs',p[1]>2,p)
- keys('-k','v');check('noclip_on',diag()['noclip']);keys('-P','w','-s','250','-p','w');keys('-k','v');time.sleep(.2);check('noclip_off',not diag()['noclip'])
+ pose(client,[6,2,1],math.pi/2);keys('-k','v');check('noclip_on',diag()['noclip']);keys('-P','w','-s','600','-p','w');time.sleep(.1);p=state()['movement']['position'];check('noclip_through_wall',p[0]>7.5,p);pose(client,[5.5,2,1]);keys('-k','v');time.sleep(.2);check('noclip_off',not diag()['noclip'])
  keys('-k','F4');time.sleep(.2);check('fly_toggle',state()['movement']['modeId']=='com.hyprune.fly')
  pose(client,[0,-35,4]);wait(lambda:state()['movement']['position'][1]>1);check('respawn',state()['movement']['position'])
  before=state()['movement']['position'];s.ctl('eval','hl.plugin.hyprune.config({player={walk_speed=4.2,look_sensitivity=0.003},input={typing_button=276},graphics={fov=72,quality="intel",exposure=0.8,bloom_strength=0.2}})');time.sleep(.2)

@@ -16,6 +16,19 @@ static void selected(GtkMenuItem *item, gpointer data) {
     gtk_menu_popdown(GTK_MENU(menu));
     gtk_widget_destroy(menu);
 }
+static gboolean scroll(GtkWidget *widget, GdkEventScroll *event, gpointer data) {
+    (void)widget;
+    (void)event;
+    (void)data;
+    char *path = g_strconcat(marker, ".scroll", NULL);
+    FILE *f = fopen(path, "w");
+    if (f) {
+        fputs("scroll landed\n", f);
+        fclose(f);
+    }
+    g_free(path);
+    return TRUE;
+}
 static gboolean button(GtkWidget *widget, GdkEventButton *event, gpointer data) {
     (void)widget;
     (void)data;
@@ -91,12 +104,13 @@ int main(int argc, char **argv) {
     gtk_window_set_default_size(GTK_WINDOW(window), 800, 500);
     GtkWidget *box = gtk_event_box_new();
     gtk_widget_set_can_focus(box, TRUE);
-    gtk_widget_add_events(box, GDK_BUTTON_PRESS_MASK | GDK_KEY_PRESS_MASK);
+    gtk_widget_add_events(box, GDK_BUTTON_PRESS_MASK | GDK_KEY_PRESS_MASK | GDK_SCROLL_MASK);
     GtkWidget *label = gtk_label_new("HYPRUNE  /  HANDS-ON DESKTOP\n\nRight click to open a real Wayland popup\nLeft "
                                      "click fullscreen  /  F10 attached dialog");
     gtk_container_add(GTK_CONTAINER(box), label);
     gtk_container_add(GTK_CONTAINER(window), box);
     g_signal_connect(box, "button-press-event", G_CALLBACK(button), NULL);
+    g_signal_connect(box, "scroll-event", G_CALLBACK(scroll), NULL);
     g_signal_connect(window, "key-press-event", G_CALLBACK(key), NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
     gtk_widget_show_all(window);
