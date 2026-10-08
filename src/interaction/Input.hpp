@@ -30,7 +30,8 @@ class Input {
     Json config = inputDefaults();
     std::deque<Json> recent;
     std::vector<Action> event(const std::string &mode, const std::string &key, unsigned mods, bool down, uint64_t now,
-                              float value = 0);
+                              float value = 0, bool gestureMovement = false);
+    bool gestureHeld() const;
     std::vector<Action> tick(uint64_t now);
     void apply(const Json &);
     void clear();

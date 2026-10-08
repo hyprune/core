@@ -9,7 +9,7 @@ class Hands {
     surfaces::Surface start, pose;
     float distance = 1, targetDistance = 1;
     Vec3 offset{}, reference{};
-    std::array<float, 4> grabCamera{0, 0, 0, 1};
+    float grabYaw = 0;
     void begin(Gesture, const surfaces::Surface &, surfaces::Hit, const sim::Camera & = {});
     bool update(const sim::Camera &, Vec3 ray, float dt, std::span<const Triangle>);
     void wheel(float steps);

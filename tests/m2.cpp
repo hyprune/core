@@ -30,8 +30,7 @@ int main(int argc, char **argv) {
         spawnCamera.position = homeSpawn.position + Vec3{0, 1.7f, 0};
         surfaces::Surface proposed;
         proposed.id = opened.id;
-        proposed.width = 1.6f;
-        proposed.height = .9f;
+        proposed.logicalSize(1600, 900, .002f);
         proposed.center = spawnCamera.position + spawnCamera.forward() * 5;
         adopted.spawn(opened, w.get(), spawnCamera, proposed);
         auto adoptedPlane = adopted.locate(opened, w.get(), spawnCamera, 1600, 900);

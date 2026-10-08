@@ -1,0 +1,39 @@
+{
+  "node": "Visual-sun-court",
+  "mesh": 199,
+  "primitive": 5,
+  "material": "sun-court--amber",
+  "triangles": 60,
+  "duplicates": 0,
+  "bounds": [
+    [
+      2.7624999284744263,
+      0.19999989867210388,
+      -23.094999313354492
+    ],
+    [
+      2.837499976158142,
+      2.8999999463558197,
+      -23.045000076293945
+    ]
+  ],
+  "materialData": {
+    "doubleSided": true,
+    "emissiveFactor": [
+      1,
+      0.41999998688697815,
+      0.08500000089406967
+    ],
+    "name": "sun-court--amber",
+    "pbrMetallicRoughness": {
+      "baseColorFactor": [
+        1,
+        0.41999998688697815,
+        0.08500000089406967,
+        1
+      ],
+      "metallicFactor": 0,
+      "roughnessFactor": 0.6000000238418579
+    }
+  }
+}

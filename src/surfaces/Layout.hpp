@@ -11,6 +11,7 @@ struct Instance {
 class Layout {
   public:
     Json bindings = Json::array(), placements = Json::array(), instances = Json::array();
+    float windowScale = .002f;
     std::string carried;
     std::map<std::string, Surface> freePoses;
     std::map<std::string, std::string> spawnAreas;

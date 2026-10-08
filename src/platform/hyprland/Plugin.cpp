@@ -193,7 +193,7 @@ struct Runtime {
     void toggle(const std::string &output = "");
     void exit();
     void tick();
-    void focus(const std::string &, bool keyboard);
+    void focus(const std::string &, bool keyboard, bool enterUse = true);
     void load(const std::string &, const std::string &spawn = "");
     std::optional<Json> method(const std::string &, const Json &);
     void finishLoad();
@@ -929,7 +929,7 @@ void Runtime::exit() {
         g_pHyprRenderer->damageMonitor(monitor.lock());
     publish();
 }
-void Runtime::focus(const std::string &id, bool keyboard) {
+void Runtime::focus(const std::string &id, bool keyboard, bool enterUse) {
     if (renderDepth)
         throw std::runtime_error("focus inside render pass");
     if (auto frame = capture.workspace(id)) {
@@ -997,11 +997,13 @@ void Runtime::focus(const std::string &id, bool keyboard) {
         Desktop::focusState()->fullWindowFocus(w, Desktop::FOCUS_REASON_CLICK);
         Desktop::windowState()->raise(w);
         g_pSeatManager->setKeyboardFocus(w->resource());
-        typing = true;
-        input.clear();
-        keys.clear();
-        smoothIntent = {};
-        lookX = lookY = 0;
+        if (enterUse) {
+            typing = true;
+            input.clear();
+            keys.clear();
+            smoothIntent = {};
+            lookX = lookY = 0;
+        }
         focused = id;
         freeCursor = false;
     }
@@ -1137,6 +1139,18 @@ void Runtime::handTick(float dt) {
 }
 void Runtime::button(IPointer::SButtonEvent event, bool super) {
     bool down = event.state == WL_POINTER_BUTTON_STATE_PRESSED;
+    // A client press owns its physical release even after mode/focus/config changes.
+    if (!down && buttons.erase(event.button)) {
+        if (grabResource) {
+            g_pSeatManager->sendPointerButton(event.timeMs, event.button, event.state);
+            g_pSeatManager->sendPointerFrame();
+        }
+        if (buttons.empty()) {
+            grabbed.clear();
+            grabResource.reset();
+        }
+        return;
+    }
     if (!down && event.button == gestureButton) {
         auto id = hands.pose.id;
         auto g = hands.gesture;
@@ -1273,17 +1287,13 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         toolClick(event.button == 273);
         return;
     }
-    if (down && hit && capture.workspace(hit->first)) {
-        if (relativeSurface != hit->first)
-            useAim(false);
-    }
     if (down && hit)
         if (auto t = capture.target(hit->first, hit->second.u, hit->second.v)) {
             if (buttons.empty()) {
                 // A child press preserves its parent keyboard focus and popup grab serial.
                 if (focused != t->parentId)
-                    focus(t->parentId, true);
-                if (relativeSurface.empty()) {
+                    focus(t->parentId, true, typing);
+                if (typing && relativeSurface.empty()) {
                     relativeSurface = capture.workspace(hit->first) ? hit->first : t->parentId;
                     localX = hit->second.u;
                     localY = hit->second.v;
@@ -2752,7 +2762,7 @@ void Runtime::tick() {
             keys.clear();
             cancelGrab();
         }
-        if (!grabbed.empty() && !capture.find(grabbed))
+        if (!grabbed.empty() && !capture.plane(grabbed))
             cancelGrab();
         sim::Intent intent;
         if (!typing && !handover.phase && fullscreen.phase == 0) {
@@ -2847,11 +2857,14 @@ void Runtime::tick() {
         renderer.pointerX = (typing || editor.activeHandle >= 0) ? pointerX : .5f;
         renderer.pointerY = (typing || editor.activeHandle >= 0) ? pointerY : .5f;
         auto pointerHit = aim();
-        if (!grabbed.empty())
+        if (!grabbed.empty()) {
+            pointerHit.reset();
             if (auto plane = capture.plane(grabbed))
-                if (auto h = surfaces::intersect(*plane, camera.position, pointerRay(), false))
+                if (auto h = surfaces::intersect(*plane, camera.position, pointerRay()))
                     pointerHit = {{grabbed, *h}};
-        if (typing && !layerCursor) {
+        }
+        if (ownsInput() && !layerCursor && hands.gesture == interaction::Gesture::None &&
+            editor.activeHandle < 0 && (typing || editor.slot == 1)) {
             auto time = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
             if (pointerHit)
                 routePointer(pointerHit->first, pointerHit->second, time);
@@ -3373,7 +3386,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
                                std::chrono::steady_clock::now().time_since_epoch())
                                .count();
-                auto actions = runtime->input.event(runtime->inputMode(), key, runtime->modifiers, down, now);
+                bool gestureMovement = runtime->hands.gesture != interaction::Gesture::None ||
+                                       runtime->objectCarry || runtime->input.gestureHeld() ||
+                                       (runtime->editor.activeHandle >= 0 && runtime->superHeld);
+                auto actions = runtime->input.event(runtime->inputMode(), key, runtime->modifiers, down, now, 0,
+                                                    gestureMovement);
                 if (!actions.empty()) {
                     info.cancelled = true;
                     if (down)
@@ -3446,6 +3463,12 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                                   : event.button == 276 ? "Forward"
                                                         : "Button" + std::to_string(event.button);
                 auto mods = runtime->modifiers;
+                if (!down && runtime->buttons.contains(event.button)) {
+                    info.cancelled = true;
+                    runtime->input.event(runtime->inputMode(), key, mods, false, 0);
+                    runtime->deferInput([event] { runtime->button(event, false); });
+                    return;
+                }
                 if (bindingScoped && !runtime->captureRequest.is_null() &&
                     runtime->captureRequest.value("status", "") == "waiting") {
                     info.cancelled = true;

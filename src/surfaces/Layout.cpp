@@ -407,18 +407,23 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
     s.pixelHeight = ph;
     auto p = saved(i, w);
     std::string anchorId;
-    if (freePoses.contains(i.id))
+    if (freePoses.contains(i.id)) {
         s = freePoses.at(i.id);
+        auto old = s;
+        s.logicalSize(pw, ph, windowScale);
+        if ((s.width != old.width || s.height != old.height) && !pushOut(s, w->collision))
+            return {}; // Never publish a newly resized quad through geometry.
+        freePoses[i.id] = s;
+    }
     else if (carried == i.id || recalled.contains(i.id))
-        s = carryPlane(camera, 1.4f, 1.4f * ph / pw, w->collision, recalled.contains(i.id) ? recalled[i.id] : 0);
+        s = carryPlane(camera, pw * windowScale, ph * windowScale, w->collision, recalled.contains(i.id) ? recalled[i.id] : 0);
     else if (p && p->contains("pose")) {
         s.center = vec(p->at("pose").at("position"));
         s.rotation = p->at("pose").at("rotation").get<std::array<float, 4>>();
-        s.width = p->at("size")[0];
-        s.height = s.width * ph / pw;
+        s.logicalSize(pw, ph, windowScale);
         if (!pushOut(s, w->collision)) {
             recalled[i.id] = 0;
-            s = carryPlane(camera, 1.4f, 1.4f * ph / pw, w->collision);
+            s = carryPlane(camera, pw * windowScale, ph * windowScale, w->collision);
         }
     } else if (p) {
         anchorId = temporaryAnchors.contains(i.id) ? temporaryAnchors[i.id] : p->at("anchorId").get<std::string>();
@@ -515,7 +520,7 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                 }
                 if (!zoned) {
                     recalled[i.id] = 0;
-                    s = carryPlane(camera, 1.4f, 1.4f * ph / pw, w->collision);
+                    s = carryPlane(camera, pw * windowScale, ph * windowScale, w->collision);
                 }
                 if (!zoned)
                     anchorId.clear();

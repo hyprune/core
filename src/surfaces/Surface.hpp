@@ -12,6 +12,13 @@ struct Surface {
     Vec3 up() const { return rotate(rotation, {0, 1, 0}); }
     Vec3 normal() const { return cross(right(), up()); }
     int pixelWidth = 1, pixelHeight = 1;
+    // Logical client units, never buffer pixels or output scale.
+    void logicalSize(int w, int h, float metresPerUnit) {
+        pixelWidth = std::max(1, w);
+        pixelHeight = std::max(1, h);
+        width = pixelWidth * metresPerUnit;
+        height = pixelHeight * metresPerUnit;
+    }
     unsigned texture = 0;
     bool focused = false;
 };

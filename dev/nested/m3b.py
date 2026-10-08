@@ -62,7 +62,34 @@ def acceptance(client,children,args,shell_token,socketpath):
  check('virtual_cursor_free_other_output',diag()['cursor']=='desktop',diag()['pointer']);chord();check('SuperTab_other_output_exit_steals',state()['editor']['mode']=='world' and not native.exists());chord();wait(native.exists);check('mode_change_restores_native_bind',True);native.unlink()
  client.call('surface.place',{'surfaceId':sid,'anchorId':'occluded-window'});pose(client,[2,1.8,1]);time.sleep(.3);keys('-k','e');check('E_tolerance_preserves_geometry_occlusion',state()['editor']['mode']=='world',diag())
  client.call('surface.place',{'surfaceId':sid,'anchorId':'sun-court-slot-01-operator-desk-01'});time.sleep(.3);plane=cap(sid);p=plane['position'];pose(client,[p[0]+plane['size'][0]/2+.06,p[1],p[2]+3]);time.sleep(.3);keys('-k','e');check('E_use_tolerance_outside_window_edge',state()['editor']['mode']=='interactive',{'surface':plane,'diag':diag()});back()
- target();pointer();wait(lambda:state()['editor']['mode']=='interactive');check('normal_LMB_use',True);back();
+ target();pointer();time.sleep(.2);check('normal_LMB_keeps_world',state()['editor']['mode']=='world');
+ # Round 3: real client events, with mixed backing buffer scales.
+ probes=[]
+ for scale in [1,2]:
+  title='Round3 pointer '+str(scale);log=s.STATE/('round3-pointer-'+str(scale)+'.log')
+  proc=s.envrun('env','GDK_BACKEND=wayland','GDK_SCALE='+str(scale),'HYPRUNE_POINTER_TEST=1',str(ROOT/'build/nested-parity-client'),str(s.STATE/'round3-marker'),title,stdout=subprocess.DEVNULL,stderr=open(log,'w'));children.append(proc)
+  probe=wait(lambda:builtins.next((v for v in state()['surfaces'] if v['title']==title),None));pid=probe['id']
+  native_probe=builtins.next(v for v in json.loads(s.ctl('clients','-j')) if v['title']==title)
+  address=native_probe['address'];s.ctl('eval',f'hl.dispatch(hl.dsp.window.float({{window="address:{address}",action="enable"}}))');s.ctl('eval',f'hl.dispatch(hl.dsp.window.resize({{window="address:{address}",x=800,y=500,relative=false}}))')
+  pose(client,[0,2.3,4]);client.call('surface.pull',{'surfaceId':pid});time.sleep(.4)
+  plane=cap(pid);p=plane['position'];pose(client,[p[0],p[1],p[2]+3]);time.sleep(.3)
+  hold=s.envrun('wtype','-P','Super_L','-s','650','-p','Super_L');children.append(hold);wait(lambda:diag()['superHeld']);pointer('button',272,1);pointer('button',272,0);hold.wait(timeout=5)
+  plane=cap(pid);check('logical_scale_'+str(scale),all(abs(plane['size'][n]-plane['pixels'][n]*.002)<.001 for n in [0,1]),plane)
+  pointer('button',272,1);pointer(25,0);pointer('button',272,0);time.sleep(.2)
+  text=log.read_text();check('plain_drag_release_'+str(scale),'fixture button 1' in text and len(set(line for line in text.splitlines() if line.startswith('fixture drag ')))>1 and 'fixture release 1' in text,text)
+  check('plain_click_stays_world_'+str(scale),state()['editor']['mode']=='world')
+  pointer(-25,0);time.sleep(.2);pointer('button',272,1);pointer(500,0);pointer('button',272,0);time.sleep(.2)
+  text=log.read_text();check('off_window_release_balanced_'+str(scale),text.count('fixture button 1')==text.count('fixture release 1'),text)
+  proc.terminate();proc.wait(timeout=5);time.sleep(.2)
+ pose(client,[0,2.3,4]);client.call('surface.pull',{'surfaceId':sid});time.sleep(.3);target()
+ stolen=s.STATE/'round3-native-w';stolen.unlink(missing_ok=True)
+ s.ctl('eval',f'hl.bind("SUPER + w",hl.dsp.exec_cmd("touch {stolen}"))')
+ mod=s.envrun('wtype','-M','logo','-P','Super_L','-s','900','-P','w','-s','700','-p','w','-s','2200','-p','Super_L','-m','logo');children.append(mod);wait(lambda:diag()['superHeld']);pointer('button',272,1);wait(lambda:diag()['gesture']==1)
+ before=state()['movement']['position'];time.sleep(1.7);check('carry_SuperW_moves_and_steals',state()['movement']['position']!=before and not stolen.exists(),{'before':before,'camera':diag(),'stolen':stolen.exists()})
+ rotation=cap(sid)['rotation'];pointer(0,-90);time.sleep(.3);after=cap(sid)
+ check('carry_pitch_preserves_orientation',all(abs(a-b)<.0001 for a,b in zip(rotation,after['rotation'])),after)
+ pointer('button',272,0);mod.wait(timeout=6)
+ keys('-M','logo','-P','Super_L','-k','w','-p','Super_L','-m','logo');wait(stolen.exists);check('SuperW_native_restored_after_carry',True)
  target();keys('-k','f');wait(lambda:diag()['fullscreen']==2);check('F_window_fullscreen',state()['editor']['mode']=='focus');shot('window-fullscreen.png');unrelatedIn('window_focus');chord();wait(lambda:diag()['fullscreen']==0);check('SuperTab_fullscreen_exit_steals',not native.exists())
  # Workspace wall faces the camera at its authored pose.
  client.call('surface.return',{'surfaceId':sid});pose(client,[0,3,-10]);time.sleep(.3)

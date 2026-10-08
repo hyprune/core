@@ -32,8 +32,12 @@ static gboolean scroll(GtkWidget *widget, GdkEventScroll *event, gpointer data) 
 static gboolean button(GtkWidget *widget, GdkEventButton *event, gpointer data) {
     (void)widget;
     (void)data;
+    if (event->type != GDK_BUTTON_PRESS)
+        return TRUE;
     fprintf(stderr, "fixture button %u at %.1f %.1f\n", event->button, event->x, event->y);
     fflush(stderr);
+    if (g_getenv("HYPRUNE_POINTER_TEST"))
+        return TRUE;
     if (event->button == 1) {
         fs = !fs;
         if (fs)
@@ -50,6 +54,20 @@ static gboolean button(GtkWidget *widget, GdkEventButton *event, gpointer data) 
     g_signal_connect(item, "activate", G_CALLBACK(selected), NULL);
     gtk_widget_show_all(menu);
     gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
+    return TRUE;
+}
+static gboolean release(GtkWidget *widget, GdkEventButton *event, gpointer data) {
+    (void)widget; (void)data;
+    fprintf(stderr, "fixture release %u at %.1f %.1f\n", event->button, event->x, event->y);
+    fflush(stderr);
+    return TRUE;
+}
+static gboolean motion(GtkWidget *widget, GdkEventMotion *event, gpointer data) {
+    (void)widget; (void)data;
+    if (event->state & GDK_BUTTON1_MASK) {
+        fprintf(stderr, "fixture drag %.1f %.1f\n", event->x, event->y);
+        fflush(stderr);
+    }
     return TRUE;
 }
 static gboolean dialog_key(GtkWidget *widget, GdkEventKey *event, gpointer data) {
@@ -104,12 +122,14 @@ int main(int argc, char **argv) {
     gtk_window_set_default_size(GTK_WINDOW(window), 800, 500);
     GtkWidget *box = gtk_event_box_new();
     gtk_widget_set_can_focus(box, TRUE);
-    gtk_widget_add_events(box, GDK_BUTTON_PRESS_MASK | GDK_KEY_PRESS_MASK | GDK_SCROLL_MASK);
+    gtk_widget_add_events(box, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_POINTER_MOTION_MASK | GDK_KEY_PRESS_MASK | GDK_SCROLL_MASK);
     GtkWidget *label = gtk_label_new("HYPRUNE  /  HANDS-ON DESKTOP\n\nRight click to open a real Wayland popup\nLeft "
                                      "click fullscreen  /  F10 attached dialog");
     gtk_container_add(GTK_CONTAINER(box), label);
     gtk_container_add(GTK_CONTAINER(window), box);
     g_signal_connect(box, "button-press-event", G_CALLBACK(button), NULL);
+    g_signal_connect(box, "button-release-event", G_CALLBACK(release), NULL);
+    g_signal_connect(box, "motion-notify-event", G_CALLBACK(motion), NULL);
     g_signal_connect(box, "scroll-event", G_CALLBACK(scroll), NULL);
     g_signal_connect(window, "key-press-event", G_CALLBACK(key), NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);

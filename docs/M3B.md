@@ -382,3 +382,53 @@ clients before destroying Hyprland's monitor/workspace controllers: 0.56's
 shutdown-only fullscreen cleanup otherwise produced SIGSEGV coredumps, unrelated
 to a render-pass crash. Those backtraces were inspected from nested PID 1677404;
 no debugger or mutation targeted the owner's session.
+
+## Live round 3: direct clicks, carry, and logical client size
+
+Normal-tool LMB/RMB sends a client button at the crosshair without entering use
+mode. Pointer motion follows the moving ray hit while dragging. The pressed
+client owns the release, including after leaving its quad; leaving the quad
+retains its last valid local position. E remains explicit window-relative use.
+During a Super gesture, configured movement bindings ignore Super and take
+priority over native Hyprland chords. Their releases remain owned after ending
+the gesture. Other native bindings retain their previous scope.
+
+Carry applies only the camera's change in yaw to the window and the grabbed
+point offset. Initial pitch/roll stay unchanged; looking vertically changes the
+position along the aim ray. Free windows and user mounts use `windows.scale`
+metres per current logical client unit on both axes. A configure acknowledgement
+replaces stale pending dimensions; buffer/output scale is not a geometry factor.
+Authored tool mounts retain their explicit fit-to-mount sizing contract.
+
+The owner's three round-3 captures were inspected read-only. The first shows
+surface-15 at logical 576×670 but a 2.35262×1.34842 m quad, and surface-17 at
+573×548 with a 2.39409×1.09586 m quad: stale resize width was stretching content.
+The second confirms the Intel PTL device and GPU-bound frame times. The third's
+floating amber strip is `Entry light` at Blender (2.8,23.07,1.55), authored in
+`worlds/lumen-reach/build.py:223`. Export: `Visual-sun-court`, mesh 199, primitive
+5, material `sun-court--amber`, world bounds approximately
+(2.7625,0.2,-23.095)–(2.8375,2.9,-23.045). It stands in the open entrance gap;
+worlds should move it onto a pier or remove it. Its 60 exported triangles contain
+no exact duplicates, and its material is opaque. A still capture cannot establish
+the cause of temporal flicker; that remains unconfirmed. Worlds was not edited.
+
+### Supervised live test checklist additions
+
+- [ ] Plain LMB press/drag/release selects text at the moving crosshair and keeps
+  the reticle; it must not transition to a virtual or desktop cursor.
+- [ ] Release after looking off the window stops selection; a subsequent click
+  works. Close a pressed client and verify no stuck button or leaked click.
+- [ ] Hold Super+LMB and move with HJKL / WASD / arrows. No native Super movement
+  chord fires. Release the gesture and check native chords work again.
+- [ ] Turn horizontally while carrying, then look up/down: yaw follows, original
+  pitch/roll remain fixed, grab offset is retained.
+- [ ] Resize terminals on differently scaled outputs: equal fonts retain equal
+  world density in free windows; no horizontal stretching after configure ACK.
+- [ ] E still changes reticle → virtual cursor; Super+Tab/Back returns to reticle.
+  No new cursor shape/visibility calls were introduced in this fix.
+
+Validation: 8/8 CTests and 114/114 nested M3B checks, including actual balanced
+client press/moving drag/off-window release at GDK_SCALE=1 and 2, carry with a
+colliding native Super+W, pitch preservation, and native chord restoration.
+Nested also loaded Lumen Reach and Switchyard. Evidence:
+`docs/evidence/live-round3/acceptance.json` and `unit.txt`.

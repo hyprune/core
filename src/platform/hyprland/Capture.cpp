@@ -26,8 +26,10 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         }
         return remove;
     });
-    if (layout)
+    if (layout) {
         layout->instances = world::Json::array();
+        layout->windowScale = windowScale;
+    }
     std::erase_if(knownWindows_, [](auto &w) { return !w || !w->m_isMapped; });
     std::erase_if(adoptedWindows_, [](auto &w) { return !w.window || !w.window->m_isMapped; });
     std::set<std::string> refreshed;
@@ -68,9 +70,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             e.surface.id =
                 remembered != adoptedWindows_.end() ? remembered->id : "surface-" + std::to_string(++sequence_);
             size_t i = entries.size();
-            e.surface.width = std::clamp(float(surface->m_current.size.x) * windowScale, .2f, 6.f);
-            e.surface.height =
-                e.surface.width * float(surface->m_current.size.y) / std::max(1.f, float(surface->m_current.size.x));
+            e.surface.logicalSize(int(surface->m_current.size.x), int(surface->m_current.size.y), windowScale);
             e.surface.center = {float(int(i % 3) - 1) * 3.8f, 2.0f, -2.f - float(i / 3) * 3};
             if (i == 0)
                 e.surface.center = {0, 2, -2};
@@ -140,7 +140,9 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             it->surface.texture = pixels.texture;
             it->surface.pixelWidth = pixels.pixelWidth;
             it->surface.pixelHeight = pixels.pixelHeight;
-            it->surface.height = it->surface.width * float(pixels.pixelHeight) / pixels.pixelWidth;
+            it->surface.logicalSize(pixels.pixelWidth, pixels.pixelHeight, windowScale);
+            if (!surfaces::pushOut(it->surface, world->collision))
+                it->visible = false;
         }
         if (layout && camera && world && !world->areas.empty()) {
             it->visible = false;

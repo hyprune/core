@@ -288,3 +288,11 @@ changes reuse the existing atlas. Invalid themes leave the prior style active.
 The trusted bridge inserts its owned lease; QML never receives credentials or
 writes core configuration files. Themes are runtime state, not a package edit.
 The official shell supplies its Tokens palette and font when it receives a lease.
+
+### Live round 3 interaction corrections
+
+Normal-tool clicks now remain in world mode; only E enters window-relative use.
+Movement bindings also work with Super during owned gestures. Carry follows yaw
+only, preserving pitch/roll. Free-window quads follow current logical client
+size × windows.scale; authored mount fitting is unchanged. No IPC wire changes
+or shell upgrade required. See M3B.md for evidence and supervised checks.

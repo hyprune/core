@@ -157,7 +157,7 @@ Json inputConflicts(const Json &j) {
     return result;
 }
 std::vector<Action> Input::event(const std::string &mode, const std::string &key, unsigned mods, bool down,
-                                 uint64_t now, float value) {
+                                 uint64_t now, float value, bool gestureMovement) {
     std::string identity = key;
     recent.push_back(
         {{"timeMs", now}, {"mode", mode}, {"key", key}, {"mods", mods}, {"pressed", down}, {"value", value}});
@@ -181,22 +181,33 @@ std::vector<Action> Input::event(const std::string &mode, const std::string &key
         return {};
     // Exact modifiers for chords; unmodified held movement actions accept Shift/Ctrl
     // so sprint and crouch can be combined with every movement variant.
+    for (int pass = 0; pass < (gestureMovement && mode == "world" ? 2 : 1); ++pass)
     for (auto &[action, bindings] : config["modes"][mode].items())
         for (auto &binding : bindings) {
             auto t = parseBinding(binding);
             bool move = action == "forward" || action == "back" || action == "left" || action == "right" ||
                         action == "up" || action == "down" || action == "sprint";
+            bool gesturePass = gestureMovement && mode == "world" && pass == 0;
+            if (gesturePass && !move)
+                continue;
+            unsigned matchMods = gesturePass ? mods & ~Super : mods;
             unsigned own = t.key == "Shift_L" || t.key == "Shift_R"       ? Shift
                            : t.key == "Control_L" || t.key == "Control_R" ? Ctrl
                                                                           : 0;
             if ((t.key != key && !(t.key == "Wheel" && key.starts_with("Wheel"))) ||
-                ((mods & ~own) != t.mods && !(move && t.mods == 0 && (mods & ~(Shift | Ctrl)) == 0)))
+                ((matchMods & ~own) != t.mods && !(move && t.mods == 0 && (matchMods & ~(Shift | Ctrl)) == 0)))
                 continue;
             if (!key.starts_with("Wheel") && key != "MouseMove")
                 held[identity] = {action, now, t.hold, false};
             return {{action, t.hold ? false : true, value}};
         }
     return {};
+}
+bool Input::gestureHeld() const {
+    for (auto &[key, press] : held)
+        if (press.action == "carry" || press.action == "resize" || press.action == "rotate")
+            return true;
+    return false;
 }
 std::vector<Action> Input::tick(uint64_t now) {
     std::vector<Action> out;

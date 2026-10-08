@@ -98,10 +98,36 @@ int main() {
     carryCamera.pitch = .15f;
     assert(carry.update(carryCamera, carryCamera.forward(), .016f, {}));
     auto facing = carry.pose.normal();
-    assert(dot(facing, carryCamera.forward() * -1) > .9999f);
-    assert(length(carry.pose.center + rotate(carryCamera.orientation(), initialOffset) -
+    assert(std::abs(facing.y) < .0001f);
+    auto yawOnly = carryCamera;
+    yawOnly.pitch = 0;
+    assert(dot(facing, yawOnly.forward() * -1) > .9999f);
+    assert(length(carry.pose.center + rotate(yawOnly.orientation(), initialOffset) -
                   (carryCamera.position + carryCamera.forward() * 3)) < .0001f);
     assert(carry.pose.center.x > 0);
+    // Initial pitch/roll survive arbitrary look pitch and a world-Y yaw delta.
+    carried.rotation = quaternionProduct(orientation({0, .3f, 1}),
+                                        std::array<float,4>{0, 0, std::sin(.2f), std::cos(.2f)});
+    carryCamera.pitch = -.3f;
+    carry.begin(Gesture::Carry, carried, {3, .6f, .4f}, carryCamera);
+    auto startRotation = carry.pose.rotation;
+    carryCamera.pitch = .7f;
+    assert(carry.update(carryCamera, carryCamera.forward(), .016f, {}));
+    assert(carry.pose.rotation == startRotation);
+    for (auto key : {"w", "a", "s", "d", "h", "j", "k", "l", "Up", "Down", "Left", "Right", "space"})
+        for (unsigned mods : {unsigned(Super), unsigned(Super | Shift), unsigned(Super | Ctrl)}) {
+            Input gesture;
+            auto press = gesture.event("world", key, mods, true, 0, 0, true);
+            assert(press.size() == 1);
+            auto release = gesture.event("world", key, 0, false, 1);
+            assert(release.size() == 1 && !release[0].pressed);
+        }
+    Input native;
+    assert(native.event("world", "w", Super, true, 0).empty());
+    surfaces::Surface logical;
+    logical.logicalSize(576, 670, .002f);
+    assert(std::abs(logical.width - 1.152f) < .00001f);
+    assert(std::abs(logical.width / logical.height - 576.f / 670) < .00001f);
     for (auto normal : {Vec3{1, 0, 0}, Vec3{0, 0, -1}, Vec3{0, 1, 0}})
         assert(length(rotate(orientation(normal), Vec3{0, 0, 1}) - normal) < .0001f);
     auto positiveY = std::array<float, 4>{0, std::sin(.5235988f / 2), 0, std::cos(.5235988f / 2)};
