@@ -71,7 +71,7 @@ inline void validateState(const Json &state) {
         state.at("positionMode") > 2)
         throw std::runtime_error("recorded tool out of range");
     std::string mode = state.at("mode"), move = state.at("movement");
-    if ((mode != "world" && mode != "menu" && mode != "focus" && mode != "interactive") ||
+    if ((mode != "world" && mode != "menu" && mode != "focus" && mode != "interactive" && mode != "cursor") ||
         (move != "walk" && move != "fly"))
         throw std::runtime_error("recorded mode invalid");
     state.at("noclip").get<bool>();

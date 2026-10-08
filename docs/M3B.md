@@ -593,3 +593,29 @@ no owner-session mutation or gallery watcher control occurred.
 - [ ] Camera-only replay retains world control and sends no application input.
       Verify stop returns physical control immediately. Nested software cursors
       cannot qualify these hardware-cursor transitions.
+
+### Supervised live test checklist — free cursor toggle
+
+Nested testing uses a software cursor; the owner must verify hardware cursors:
+
+- [ ] Walking → Back and Super+Tab: reticle hidden, native cursor visible, camera
+  and gravity frozen; neither shortcut triggers the owner's overview binding.
+- [ ] E-use window and E-use workspace → free cursor: virtual cursor disappears,
+  real cursor appears. Toggle back restores the same relative cursor and target.
+- [ ] F-window and F-workspace → free cursor: focus handover finishes after the
+  frame; world is visible with the real cursor. Toggle back restores that focus.
+- [ ] Carry/resize/gizmo → free cursor: finish/drop first; release remains balanced.
+- [ ] Cross each physical output boundary and return: real cursor remains visible;
+  no automatic recapture. Back/Super+Tab on another output returns to the saved
+  world mode and warps to the world output after the frame.
+- [ ] Launcher/bar/notification and the owner's shell receive native clicks and
+  keyboard. World windows receive projected clicks/drags/scroll; empty world
+  swallows pointer input. Movement/debug/menu keys type normally while free.
+- [ ] Return from free cursor to walking hides native cursor; E restores virtual
+  cursor; F restores native 2D cursor. No extra shape change on every frame.
+- [ ] Close the saved client while free: returning safely falls back to world.
+- [ ] Deactivate/unload while free: restore desktop cursor ownership and original
+  visibility, discard saved target, restore the owner's Super+Tab binding.
+
+Every transition runs via `deferInput`/the deferred tick. Native pointer motion
+passes through Hyprland; core never warps, focuses or hides a cursor in a pass.

@@ -31,14 +31,14 @@ Walking checklist ([full M3B detail](../../docs/M3B.md#supervised-live-test-chec
 
 - [ ] Desktop → world: native cursor hides, reticle appears; main shell stays alive.
 - [ ] Super+Enter opens a terminal in view, clear of geometry; it survives toggling out/back and appears in Workspaces.
-- [ ] Back in world → real cursor: click launcher/bar and its popups; over the world, hidden desktops receive no pointer input. Back/Super+Tab returns to reticle.
+- [ ] Back or Super+Tab in world → real cursor: click launcher/bar and projected world windows; empty world swallows clicks. Either toggle returns to reticle.
 - [ ] E window: stationary camera, relative cursor, hover/click/scroll/typing reach root and popup.
 - [ ] Cursor off world output: deferred warp/show gives free native cursor; returning hides it and restores relative pointer.
-- [ ] E → Super+Tab/Back: release keys/buttons/focus, restore reticle. Repeat from neighbouring output.
-- [ ] F window: cursor hidden through zoom, visible/centred at 2D handover; Super+Tab/Back restores view/reticle.
+- [ ] E → Super+Tab/Back: native free cursor and frozen camera; toggle again restores E-use. Repeat from a neighbouring output.
+- [ ] F window: cursor hidden through zoom, visible/centred at 2D handover; Super+Tab/Back shows world with a free cursor; a second toggle restores fullscreen.
 - [ ] E wall: stationary camera, deferred workspace/focus switch, relative clicks/typing. Test both exits.
-- [ ] F wall: hidden through fly-in, visible at handover; exits fly back to saved camera.
-- [ ] Super+Tab never opens native overview in E/F, including release; it does in world/inactive. Unrelated binds work in every mode.
+- [ ] F wall: hidden through fly-in, visible at handover; free-cursor toggle shows the world and the return toggle restores focus.
+- [ ] Super+Tab never opens native overview while world/use/focus/free cursor is active, including release; it does when inactive. Other native binds keep working; free cursor intercepts only Back/Super+Tab.
 - [ ] TAB hold → Map: release grabs, show cursor/focus Director after frame. Settings captures chords/buttons/wheel; Esc cancels/leaves menu, clears focus, restores reticle.
 - [ ] Workspaces lists real desktops/apps even without configured homes. Click Help; alternate Help/Workspaces/Settings several times and keep the menu open.
 - [ ] Q scope/vignette, tool/submodes, lock and gizmo: overlays only, no cursor shape/visibility changes. Try carry/resize and Shift snap.

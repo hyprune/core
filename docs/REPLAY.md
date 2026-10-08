@@ -6,7 +6,7 @@ world mode. All four modes have the action. Start from idle world control with
 no held movement/gesture; subsequent mode/tool transitions are recorded. Stop
 before changing worlds. World exit, a size limit or an I/O error stops capture.
 A notice gives the private file path under `$XDG_STATE_HOME/hyprune/recordings/`
-(default `~/.local/state/hyprune/recordings/`). F12 remains emergency world exit.
+(default `~/.local/state/hyprune/recordings/`). F12 remains emergency world exit outside native free-cursor mode.
 
 ## Privacy and scope
 

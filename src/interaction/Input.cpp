@@ -100,6 +100,8 @@ Json validateInput(const Json &raw) {
     if (j.is_object() && !j.contains("invert_y"))
         j["invert_y"] = false;
     auto defaults = inputDefaults();
+    if (j.is_object() && j.contains("modes") && j["modes"].contains("world") && !j["modes"]["world"].contains("exit"))
+        j["modes"]["world"]["exit"] = defaults["modes"]["world"]["exit"];
     if (j.is_object() && j.contains("modes") && j["modes"].is_object())
         for (auto &[mode, actions] : j["modes"].items())
             if (actions.is_object() && defaults["modes"].contains(mode) && !actions.contains("record.toggle")) actions["record.toggle"] = Json::array();

@@ -147,9 +147,9 @@ void inheritance(const std::string &runtime) {
                     {"workspaces", Json::object()},
                     {"mounts", mounts},
                     {"presentation", {{"fov", 10}}},
-                    {"interaction", Json::object()},
+                    {"interaction", {{"mode", "cursor"}}},
                     {"apps", Json::array_t(17, Json::object())},
-                    {"editor", Json::object()},
+                    {"editor", {{"mode", "cursor"}}},
                     {"keymap", {{"holds", Json::array({Json{{"action", "menu.open"}}})}}}});
     std::atomic<bool> sendMounts = false;
     std::jthread polling([&](std::stop_token stop) {
@@ -210,6 +210,10 @@ void inheritance(const std::string &runtime) {
         check(state["movement"].contains("ladderId") == atLeast(version, "0.11"), "climbing version projection");
         if (atLeast(version, "0.11"))
             check(state["movement"]["state"] == "climbing", "climbing state lost");
+        if (atLeast(version, "0.6")) {
+            check(state["editor"]["mode"] == (atLeast(version, "0.12") ? "cursor" : "interactive"), "cursor editor projection");
+            check(state["interaction"]["mode"] == (atLeast(version, "0.12") ? "cursor" : "typing"), "cursor interaction projection");
+        }
         previousMethods = advertised;
         previousEvents = events;
         previousState = state;

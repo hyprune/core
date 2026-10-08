@@ -3,18 +3,18 @@
     {
       "error": null,
       "failures": [],
-      "frame": 207,
+      "frame": 225,
       "mode": "input",
-      "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-j3OYo9.jsonl",
+      "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-CKLgvw.jsonl",
       "playing": false,
       "recording": false
     },
     {
       "error": null,
       "failures": [],
-      "frame": 207,
+      "frame": 225,
       "mode": "input",
-      "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-j3OYo9.jsonl",
+      "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-CKLgvw.jsonl",
       "playing": false,
       "recording": false
     }
@@ -22,20 +22,20 @@
   "camera": {
     "error": null,
     "failures": [],
-    "frame": 207,
+    "frame": 225,
     "mode": "camera",
-    "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-j3OYo9.jsonl",
+    "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-CKLgvw.jsonl",
     "playing": false,
     "recording": false
   },
   "shaderCache": {
-    "compileMs": 62.067145,
+    "compileMs": 62.413212,
     "hits": 0,
     "misses": 8,
     "rejected": 0,
     "warming": false,
-    "warmupMaxStepMs": 27.69602,
-    "warmupMs": 41.862322
+    "warmupMaxStepMs": 27.500221,
+    "warmupMs": 41.13961299999999
   },
   "checks": [
     "rebindable F8",
@@ -46,6 +46,7 @@
     "camera smoothing",
     "idempotent stop",
     "no new effect programs",
+    "free cursor mode replay",
     "real app-key default redaction",
     "explicit raw-key opt-in"
   ]

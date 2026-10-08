@@ -22,6 +22,9 @@ def acceptance(client,children,args,shell_token,socketpath):
     keys('-P','w','-s','450','-p','w');keys('-P','d','-s','300','-p','d')
     keys('-k','2');pointer('button','272');pointer('scroll','-120');keys('-P','q','-s','150','-p','q')
     pointer('45','-15');time.sleep(.4)
+    keys('-M','logo','-P','Super_L','-s','40','-k','Tab','-p','Super_L','-m','logo');wait(lambda:state()['editor']['mode']=='cursor')
+    client.call('recording.mark',{'name':'free'})
+    pointer('button',275);wait(lambda:state()['editor']['mode']=='world')
     keys('-P','Tab','-s','1300','-p','Tab');time.sleep(.15);keys('-k','Escape');time.sleep(.2)
     client.call('recording.mark',{'name':'end'})
     keys('-k','F8');record=wait(lambda: (lambda v: v if not v['recording'] else None)(client.call('recording.status',{})))
@@ -31,7 +34,7 @@ def acceptance(client,children,args,shell_token,socketpath):
     assert path.stat().st_mode&0o777==0o600
     results=[]
     for attempt in range(2):
-        client.call('replay.start',{'path':str(path),'assertions':{'recorded':True,'tolerance':.002,'marks':{'end':{'tool':2,'mode':'world'}}}})
+        client.call('replay.start',{'path':str(path),'assertions':{'recorded':True,'tolerance':.002,'marks':{'end':{'tool':2,'mode':'world'},'free':{'mode':'cursor'}}}})
         done=wait(lambda: (lambda v: v if not v['playing'] else None)(client.call('replay.status',{})),timeout=20)
         assert not done['failures'],done
         results.append(done)
@@ -41,15 +44,17 @@ def acceptance(client,children,args,shell_token,socketpath):
     client.call('replay.start',{'path':str(path)});client.call('replay.stop',{});client.call('replay.stop',{})
     evidence=s.ROOT/'docs/evidence/replay';evidence.mkdir(exist_ok=True)
     shutil.copyfile(path,evidence/'scripted.jsonl')
-    (evidence/'acceptance.json').write_text(json.dumps({'replays':results,'camera':done,'shaderCache':after,'checks':['rebindable F8','raw key/button/axis/motion','per-frame view','marker assertions','two exact fixed-step replays','camera smoothing','idempotent stop','no new effect programs']},indent=2)+'\n')
-    (evidence/'assert.json').write_text(json.dumps({'recorded':True,'tolerance':.002,'marks':{'end':{'tool':2,'mode':'world'}}},indent=2)+'\n')
+    (evidence/'acceptance.json').write_text(json.dumps({'replays':results,'camera':done,'shaderCache':after,'checks':['rebindable F8','raw key/button/axis/motion','per-frame view','marker assertions','two exact fixed-step replays','camera smoothing','idempotent stop','no new effect programs','free cursor mode replay']},indent=2)+'\n')
+    (evidence/'assert.json').write_text(json.dumps({'recorded':True,'tolerance':.002,'marks':{'end':{'tool':2,'mode':'world'},'free':{'mode':'cursor'}}},indent=2)+'\n')
     # Verify the real keyboard routing boundary, not just the recorder's redaction helper.
     children.append(s.envrun('kitty','--class','replay-private','--title','Replay privacy','bash','--noprofile','--norc',stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
     surface=wait(lambda:next((v for v in state()['surfaces'] if v['title']=='Replay privacy'),None))
     for opt in [False,True]:
         client.call('recording.start',{'includeAppKeys':opt})
         client.call('surface.focus',{'surfaceId':surface['id'],'intent':'keyboard'})
-        keys('z');time.sleep(.15);keys('-M','logo','-P','Super_L','-s','40','-k','Tab','-p','Super_L','-m','logo');wait(lambda:state()['editor']['mode']=='world')
+        keys('z');time.sleep(.15);keys('-M','logo','-P','Super_L','-s','40','-k','Tab','-p','Super_L','-m','logo');wait(lambda:state()['editor']['mode']=='cursor')
+        pointer('button',275);wait(lambda:state()['editor']['mode']=='interactive')
+        client.call('workspace.unfocus',{});wait(lambda:state()['editor']['mode']=='world')
         clip=client.call('recording.stop',{})
         private=[json.loads(line) for line in pathlib.Path(clip['path']).read_text().splitlines()]
         events=[v['event'] for v in private if v['kind']=='input']

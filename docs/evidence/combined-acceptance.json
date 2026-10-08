@@ -1,0 +1,20 @@
+{
+  "coreSuites": 13,
+  "schemaTests": 97,
+  "sdkTests": 56,
+  "sdkIntentionalSkips": 2,
+  "freeCursorChecks": 20,
+  "climbingChecks": 46,
+  "replayFramesPerRun": 225,
+  "inputReplayRuns": 2,
+  "cliReplay": "passed",
+  "cameraReplay": "passed, 100 ms smoothing; encoded /tmp/hyprune-replay-tour.mp4 (3.683 s)",
+  "wire": {
+    "cursor012": "74 responses / 152 notifications",
+    "replay012": "148 responses / 210 notifications",
+    "climbing011": "259 responses / 750 notifications"
+  },
+  "isolation": "Every nested compositor held /tmp/worldshell-nested.lock; no real-session control; no gallery watcher interaction",
+  "cursorLimitation": "Software cursor automated; hardware transitions require owner checklist",
+  "shellHandoff": "IPC cursor mode and chip text documented; separate shell agent owns UI"
+}

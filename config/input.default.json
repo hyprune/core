@@ -107,7 +107,11 @@
       "fly": [
         "F4"
       ],
-      "record.toggle": []
+      "record.toggle": [],
+      "exit": [
+        "Super+Tab",
+        "Back"
+      ]
     },
     "interactive": {
       "exit": [

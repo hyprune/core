@@ -207,6 +207,11 @@ void Runtime::replayBeforeTick() {
                 modifiers = e.at("mods");
                 superHeld = modifiers & interaction::Super;
                 altHeld = modifiers & interaction::Alt;
+                if (interaction::freeCursorToggle(e.at("key"), modifiers)) {
+                    if (e.at("down").get<bool>()) toggleFreeCursor();
+                    continue;
+                }
+                if (layerCursor) continue;
                 bool gesture = hands.gesture != interaction::Gesture::None || objectCarry || input.gestureHeld() ||
                                (editor.activeHandle >= 0 && superHeld);
                 auto actions =

@@ -1,0 +1,24 @@
+{
+  "checks": [
+    "world SuperTab shows real cursor",
+    "cursor freezes movement and camera",
+    "free cursor does not consume debug binding",
+    "Back restores world",
+    "E use returns with original camera",
+    "F window round trip",
+    "F workspace focus round trip",
+    "E workspace round trip",
+    "carry ends and release balanced",
+    "real pointer leaves output",
+    "return to output stays free",
+    "world projected click release balanced",
+    "native typing into projected window",
+    "projected drag releases on another output",
+    "native layer clickable",
+    "native layer drag releases over world",
+    "empty world swallowed",
+    "SuperTab on other output returns",
+    "closed return target safely restores world",
+    "deactivation restores native SuperTab"
+  ]
+}

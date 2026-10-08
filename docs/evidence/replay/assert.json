@@ -5,6 +5,9 @@
     "end": {
       "tool": 2,
       "mode": "world"
+    },
+    "free": {
+      "mode": "cursor"
     }
   }
 }

@@ -14,6 +14,13 @@
 using namespace hyprune;
 using namespace interaction;
 int main() {
+    assert(freeCursorToggle("Back", 0) && freeCursorToggle("Back", Super));
+    assert(freeCursorToggle("Tab", Super));
+    assert(!freeCursorToggle("Tab", 0) && !freeCursorToggle("Tab", Super | Shift));
+    assert(!freeCursorToggle("w", 0) && !freeCursorToggle("F12", 0));
+    auto oldInput = inputDefaults(); oldInput["modes"]["world"].erase("exit");
+    assert(validateInput(oldInput)["modes"]["world"]["exit"] == inputDefaults()["modes"]["world"]["exit"]);
+    assert(!withoutRecordingAction(inputDefaults())["modes"]["world"].contains("exit"));
     Input hudInput;
     auto cycle = hudInput.event("world", "5", 0, true, 0);
     assert(cycle.size() == 1 && cycle[0].name == "hud.cycle" && cycle[0].edge);

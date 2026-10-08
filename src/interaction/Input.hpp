@@ -14,6 +14,9 @@ struct Trigger {
 Trigger parseBinding(const std::string &);
 std::string bindingKey(xkb_state *, uint32_t keycode);
 std::string bindingName(const Trigger &);
+inline bool freeCursorToggle(const std::string &key, unsigned mods) {
+    return key == "Back" || (key == "Tab" && mods == Super);
+}
 Json inputDefaults();
 Json validateInput(const Json &);
 // Project canonical action names into frozen pre-0.9 responses (including capture/conflict metadata).
@@ -21,6 +24,7 @@ Json legacyInputNames(Json);
 inline Json withoutRecordingAction(Json j) {
     if (j.is_object()) {
         j.erase("record.toggle");
+        if (j.contains("modes") && j["modes"].contains("world")) j["modes"]["world"].erase("exit");
         for (auto &v : j) v = withoutRecordingAction(std::move(v));
     } else if (j.is_array()) for (auto &v : j) v = withoutRecordingAction(std::move(v));
     return j;

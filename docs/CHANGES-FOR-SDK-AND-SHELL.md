@@ -665,3 +665,21 @@ symbols (potential typed text); do not enable this silently. Camera replay
 never sends application input; input replay never invokes Hyprland keybinds or
 synthesizes application keyboard events. This is a developer/test API, not an
 observer input-injection capability. See docs/REPLAY.md for file format/limits.
+
+### Free cursor addition to the unreleased IPC 0.12 contract
+
+`state.interaction.mode` and `state.editor.mode` can now be `cursor`. Show the
+screen-UI chip **CURSOR · Back/Super+Tab to return** while this is set. This is a
+real, visible Hyprland pointer, not the E-use virtual cursor. Older peers see
+`typing` / `interactive`; their frozen enums and keymaps are preserved. The
+canonical 0.12 world keymap gains `exit: ["Super+Tab", "Back"]`; migrate missing
+world `exit` to those defaults. The two return gestures remain available across
+all active world states and other outputs, and no other Hyprune key bindings run
+in cursor mode. Menu Escape remains close-menu.
+
+Back or Super+Tab finishes a carry, suspends world/use/focus while the Director is closed,
+and shows the native pointer. Another press restores the saved mode and target;
+a closed target falls back to world control. From F focus the first press shows
+the world; the second re-enters that focus. Layer/native-output input is ordinary
+Hyprland input; projected world presses own balanced releases and empty world
+presses are swallowed. Core keeps the camera frozen. No shell files changed.

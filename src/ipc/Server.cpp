@@ -105,6 +105,10 @@ Json Server::snapshot() const {
 }
 Json Server::visibleState(const Peer &p) const {
     Json state = state_;
+    if (!protocol::atLeast(p.protocol, "0.12")) {
+        if (state.contains("editor") && state["editor"].value("mode", "") == "cursor") state["editor"]["mode"] = "interactive";
+        if (state.contains("interaction") && state["interaction"].value("mode", "") == "cursor") state["interaction"]["mode"] = "typing";
+    }
     if (!protocol::atLeast(p.protocol, "0.12") && state.contains("keymap"))
         state["keymap"] = interaction::withoutRecordingAction(state["keymap"]);
     if (!protocol::atLeast(p.protocol, "0.9") && state.contains("keymap"))
