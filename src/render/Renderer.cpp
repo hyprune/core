@@ -43,9 +43,9 @@ layout(location=0) in vec3 position;
 layout(location=1) in vec3 normal;
 layout(location=2) in vec2 uv0;
 layout(location=3) in vec2 uv1;
-uniform mat4 vp;
+uniform mat4 vp,model;
 out vec3 n;out vec3 worldPosition;out vec2 uv;out vec2 lightUV;
-void main(){gl_Position=vp*vec4(position,1);n=normal;uv=uv0;lightUV=uv1;worldPosition=position;}
+void main(){vec4 pos=model*vec4(position,1);gl_Position=vp*pos;n=mat3(transpose(inverse(model)))*normal;uv=uv0;lightUV=uv1;worldPosition=pos.xyz;}
 )";
 const char *fragment = R"(#version 300 es
 precision highp float;
@@ -118,12 +118,13 @@ void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));uv=p;gl_
 )";
 const char *toneFragment = R"(#version 300 es
 precision highp float;
-in vec2 uv;uniform sampler2D frame,bloomMap;uniform vec2 resolution,pointer;uniform int typing,toneMapping;uniform float exposure,bloomStrength;out vec4 result;
+in vec2 uv;uniform sampler2D frame,bloomMap;uniform vec2 resolution,pointer;uniform int typing,toneMapping,scope;uniform float exposure,bloomStrength;out vec4 result;
 vec3 encode(vec3 x){return mix(12.92*x,1.055*pow(max(x,vec3(0)),vec3(1./2.4))-.055,step(vec3(.0031308),x));}
 void main(){vec2 st=vec2(uv.x,1.-uv.y);vec4 sampleColor=texture(frame,st);vec3 x=(sampleColor.rgb+texture(bloomMap,st).rgb*bloomStrength)*exposure;
  vec3 mapped=toneMapping==0?clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.):toneMapping==1?x/(1.+x):clamp(x,0.,1.);
  vec3 c=encode(mix(sampleColor.rgb,mapped,sampleColor.a));
  vec2 p=abs(gl_FragCoord.xy-resolution*vec2(pointer.x,1.-pointer.y));if((p.x<1.&&p.y<7.)||(p.y<1.&&p.x<7.))c=typing!=0?vec3(.5,1.,.65):vec3(.9);
+ if(scope!=0){vec2 q=(gl_FragCoord.xy/resolution-.5)*vec2(resolution.x/resolution.y,1.);c*=1.-.86*smoothstep(.24,.48,length(q));float ring=abs(length(q)-.28);if(ring<.001)c=mix(c,vec3(.5,.8,.65),.4);}
  result=vec4(c,1);}
 )";
 const char *bloomFragment = R"(#version 300 es
@@ -289,6 +290,7 @@ void Renderer::prepare(std::shared_ptr<const world::World> world) {
             layout(b.vao, b.vbo);
             b.count = mesh.vertices.size();
             b.material = mesh.material;
+            b.node = mesh.node;
             for (auto &v : mesh.vertices)
                 b.center += v.position;
             if (!mesh.vertices.empty())
@@ -514,6 +516,8 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glUniform1iv(glGetUniformLocation(scene_, "present"), 5, present);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m.lightmap >= 0 ? textures_[m.lightmap] : 0);
+        auto model = transforms.contains(b.node) ? transforms.at(b.node) : Mat4::identity();
+        glUniformMatrix4fv(glGetUniformLocation(scene_, "model"), 1, GL_FALSE, model.v.data());
         glBindVertexArray(b.vao);
         glDrawArrays(GL_TRIANGLES, 0, b.count);
     }
@@ -525,6 +529,8 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     uniform(scene_, "unlit", 1);
     uniform(scene_, "surface", 1);
     uniform(scene_, "emission", Vec3{});
+    auto identity = Mat4::identity();
+    glUniformMatrix4fv(glGetUniformLocation(scene_, "model"), 1, GL_FALSE, identity.v.data());
     for (const auto &s : surfaces) {
         Vec3 right = s.right(), up = s.up(), normal = s.normal();
         auto quad = [&](float width, float height, Vec3 center, bool border) {
@@ -548,6 +554,32 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         };
         quad(s.width + .07f, s.height + .07f, s.center - normal * .015f, true);
         quad(s.width, s.height, s.center, false);
+    }
+    // Editor primitives are plain vertices under the same GL guard. No seat or
+    // compositor callbacks occur while the render pass draws handles/path strokes.
+    glDisable(GL_DEPTH_TEST);
+    uniform(scene_, "hasTexture", 0);
+    std::map<std::array<float, 3>, std::vector<world::Vertex>> strokes;
+    for (auto &l : lines) {
+        auto delta = l.b - l.a;
+        auto side = normalized(cross(delta, camera.position - (l.a + l.b) * .5f)) * l.width;
+        if (length(side) < .00001f)
+            continue;
+        std::array<Vec3, 6> p = {l.a - side, l.b - side, l.b + side, l.a - side, l.b + side, l.a + side};
+        world::Vertex v[6];
+        for (int i = 0; i < 6; i++) {
+            v[i].position = p[i];
+            v[i].normal = {0, 0, 1};
+        }
+        auto &group = strokes[{l.color.x, l.color.y, l.color.z}];
+        group.insert(group.end(), std::begin(v), std::end(v));
+    }
+    for (auto &[color, vertices] : strokes) {
+        uniform(scene_, "color", Vec3{color[0], color[1], color[2]});
+        glBindVertexArray(quadVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(world::Vertex), vertices.data(), GL_STREAM_DRAW);
+        glDrawArrays(GL_TRIANGLES, 0, vertices.size());
     }
     glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa_);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolve_);
@@ -588,6 +620,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glUniform1f(glGetUniformLocation(tone_, "exposure"), profile["exposure"].get<float>());
     glUniform1f(glGetUniformLocation(tone_, "bloomStrength"), effects ? bloom["strength"].get<float>() : 0);
     glUniform2f(glGetUniformLocation(tone_, "pointer"), pointerX, pointerY);
+    uniform(tone_, "scope", scopeVignette ? 1 : 0);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, bloomTexture_[0]);
     glBindSampler(1, clamp_);

@@ -43,7 +43,16 @@ Bridge::Bridge(const std::string &helper, Handler handler) : handler_(std::move(
         env.push_back(s.data());
     env.push_back(nullptr);
     char *args[] = {const_cast<char *>(helper.c_str()), nullptr};
-    int rc = posix_spawn(&child_, helper.c_str(), &actions, nullptr, args, env.data());
+    // Hyprland may block termination signals for its own event loop. The helper
+    // has independent handlers and must be able to shut down on SIGTERM.
+    posix_spawnattr_t attributes;
+    posix_spawnattr_init(&attributes);
+    sigset_t empty;
+    sigemptyset(&empty);
+    posix_spawnattr_setsigmask(&attributes, &empty);
+    posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSIGMASK);
+    int rc = posix_spawn(&child_, helper.c_str(), &actions, &attributes, args, env.data());
+    posix_spawnattr_destroy(&attributes);
     posix_spawn_file_actions_destroy(&actions);
     close(source);
     if (grant >= 0)

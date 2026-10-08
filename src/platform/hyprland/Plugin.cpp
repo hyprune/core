@@ -1,6 +1,8 @@
 #include "control/Control.hpp"
 #include "interaction/Config.hpp"
 #include "interaction/Hands.hpp"
+#include "interaction/InputFile.hpp"
+#include "interaction/Tools.hpp"
 #include "world/Mounts.hpp"
 #include "world/Spatial.hpp"
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
@@ -51,6 +53,38 @@ struct Runtime {
     Capture capture;
     surfaces::Layout layout;
     interaction::Hands hands;
+    interaction::Input input;
+    interaction::InputFile inputFile;
+    interaction::Tools editor;
+    std::filesystem::path editorFile;
+    Json lastEditor, lastPublished, captureRequest = nullptr;
+    std::deque<Json> recentIPC, recentEvents;
+    unsigned modifiers = 0;
+    bool debug = false, lookHeld = false;
+    std::string relativeSurface;
+    float localX = .5f, localY = .5f;
+    std::string inputMode() const;
+    void applyInput(const Json &);
+    Json steals(const Json &) const;
+    void acceptCapture(const std::string &, unsigned, bool);
+    void action(interaction::Action);
+    void useAim(bool zoom);
+    void leaveInteraction();
+    void debugCapture();
+    void toolClick(bool secondary = false);
+    void toolsTick();
+    std::optional<interaction::WorldHit> worldHit();
+    void saveEditor();
+    std::optional<std::pair<std::string, interaction::WorldHit>> objectAim();
+    std::vector<Triangle> originalCollision;
+    std::map<unsigned, Mat4> objectModels;
+    interaction::Transform selectedTransform, dragStart;
+    int dragPixelWidth = 0, dragPixelHeight = 0;
+    Vec3 dragPoint{}, dragNormal{};
+    bool objectCarry = false;
+    float objectDistance = 0;
+    void projectCursor();
+
     Json config = interaction::defaultConfig(), configured = config;
     std::set<std::string> graphicsOverrides;
     bool superHeld = false, altHeld = false, noclip = false, freeCursor = false, zoomHeld = false,
@@ -60,7 +94,7 @@ struct Runtime {
     int tool = 1;
     std::string tagged;
     uint32_t gestureButton = 0;
-    std::set<uint32_t> swallowedButtons, swallowedKeys;
+    std::set<uint32_t> swallowedButtons, swallowedKeys, nativeButtons, nativeKeys;
     WP<CWLSurfaceResource> grabResource;
     std::string cursorState = "desktop";
     bool savedCursorHidden = false, cursorHidden = false;
@@ -122,6 +156,8 @@ struct Runtime {
     std::vector<CHyprSignalListener> listeners;
     CFunctionHook *motionHook = nullptr, *cursorHook = nullptr, *keyboardHook = nullptr;
     WP<IKeyboard> eventKeyboard;
+    WP<IPointer> eventPointer;
+    CFunctionHook *buttonHook = nullptr, *axisHook = nullptr;
     std::optional<bool> pendingCursorHide;
     uint64_t deferred = 0, tickDeferred = 0;
     std::vector<uint64_t> inputDeferred;
@@ -203,6 +239,22 @@ void keyboardInput(void *self, const IKeyboard::SKeyEvent &event, SP<IKeyboard> 
     originalKeyboardInput(self, event, keyboard);
     runtime->eventKeyboard = previous;
 }
+using MouseButtonInput = void (*)(void *, IPointer::SButtonEvent, SP<IPointer>);
+using MouseAxisInput = void (*)(void *, IPointer::SAxisEvent, SP<IPointer>);
+MouseButtonInput originalMouseButton = nullptr;
+MouseAxisInput originalMouseAxis = nullptr;
+void mouseButtonInput(void *self, IPointer::SButtonEvent event, SP<IPointer> pointer) {
+    auto previous = runtime->eventPointer;
+    runtime->eventPointer = pointer;
+    originalMouseButton(self, event, pointer);
+    runtime->eventPointer = previous;
+}
+void mouseAxisInput(void *self, IPointer::SAxisEvent event, SP<IPointer> pointer) {
+    auto previous = runtime->eventPointer;
+    runtime->eventPointer = pointer;
+    originalMouseAxis(self, event, pointer);
+    runtime->eventPointer = previous;
+}
 bool ownsInput() {
     return runtime && runtime->active && !runtime->loading && !runtime->control.uiVisible() && !locked() &&
            runtime->monitor == Desktop::focusState()->monitor() && runtime->layout.desktop.is_null() &&
@@ -210,13 +262,36 @@ bool ownsInput() {
            !runtime->handover.phase;
 }
 void motion(void *self, const Vector2D &delta) {
+    if (runtime && runtime->active && runtime->control.uiVisible() && !runtime->captureRequest.is_null() &&
+        runtime->captureRequest.value("status", "") == "waiting" &&
+        runtime->captureRequest.value("action", "") == "look")
+        runtime->deferInput([] { runtime->acceptCapture("MouseMove", runtime->modifiers, true); });
+    if (runtime && runtime->active) {
+        auto now =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+                .count();
+        runtime->input.event(runtime->inputMode(), "MouseMove", runtime->modifiers, true, now, float(delta.x));
+    }
     if (runtime && runtime->active && runtime->control.uiVisible() && !runtime->directorSurface())
         return;
     if (ownsInput()) {
+        if (runtime->editor.activeHandle >= 0) {
+            runtime->pointerX =
+                std::clamp(runtime->pointerX + float(delta.x / runtime->monitor->m_size.x), 0.f, .9999f);
+            runtime->pointerY =
+                std::clamp(runtime->pointerY + float(delta.y / runtime->monitor->m_size.y), 0.f, .9999f);
+            return;
+        }
         if (runtime->typing && runtime->config["input"]["typing_cursor"] == true) {
             auto mon = runtime->monitor.lock();
-            runtime->pointerX += float(delta.x) / float(mon->m_size.x);
-            runtime->pointerY += float(delta.y) / float(mon->m_size.y);
+            if (auto plane = runtime->capture.plane(runtime->relativeSurface)) {
+                runtime->localX += float(delta.x) / std::max(1, plane->pixelWidth);
+                runtime->localY += float(delta.y) / std::max(1, plane->pixelHeight);
+                runtime->projectCursor();
+            } else {
+                runtime->pointerX += float(delta.x) / float(mon->m_size.x);
+                runtime->pointerY += float(delta.y) / float(mon->m_size.y);
+            }
             if ((runtime->pointerX < 0 || runtime->pointerX >= 1 || runtime->pointerY < 0 || runtime->pointerY >= 1) &&
                 runtime->buttons.empty()) {
                 auto global =
@@ -238,6 +313,18 @@ void motion(void *self, const Vector2D &delta) {
             runtime->pointerY = std::clamp(runtime->pointerY, 0.f, .9999f);
             return;
         }
+        auto now =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+                .count();
+        (void)now;
+        bool mouseLook = runtime->lookHeld;
+        for (auto &v : runtime->input.config["modes"]["world"]["look"]) {
+            auto t = interaction::parseBinding(v);
+            if (t.key == "MouseMove" && (!t.mods || t.mods == runtime->modifiers))
+                mouseLook = true;
+        }
+        if (!mouseLook)
+            return;
         runtime->lookX += float(delta.x) * runtime->config["player"]["look_sensitivity"].get<float>();
         runtime->lookY -= float(delta.y) * runtime->config["player"]["look_sensitivity"].get<float>();
         return;
@@ -250,8 +337,11 @@ Vec3 pointerRay() {
     auto forward = runtime->camera.forward(), right = normalized(cross(forward, {0, 1, 0})), up = cross(right, forward);
     float tan = std::tan(runtime->camera.fov * .01745329252f / 2),
           aspect = runtime->monitor ? runtime->monitor->m_pixelSize.x / float(runtime->monitor->m_pixelSize.y) : 1;
-    return normalized(forward + right * (((runtime->typing ? runtime->pointerX : .5f) * 2 - 1) * tan * aspect) +
-                      up * ((1 - (runtime->typing ? runtime->pointerY : .5f) * 2) * tan));
+    return normalized(
+        forward +
+        right * ((((runtime->typing || runtime->editor.activeHandle >= 0) ? runtime->pointerX : .5f) * 2 - 1) * tan *
+                 aspect) +
+        up * ((1 - ((runtime->typing || runtime->editor.activeHandle >= 0) ? runtime->pointerY : .5f) * 2) * tan));
 }
 std::optional<std::pair<std::string, surfaces::Hit>> aim() {
     std::optional<std::pair<std::string, surfaces::Hit>> best;
@@ -517,45 +607,72 @@ void Runtime::publish() {
                             {"title", e.instance.title},
                             {"appClass", e.instance.appClass},
                             {"icon", e.instance.appClass}});
-    ipc->publish({{"interaction",
-                   {{"mode", !layout.desktop.is_null() ? "workspace"
-                             : fullscreen.phase == 2   ? "fullscreen"
-                             : typing                  ? "typing"
-                                                       : "movement"},
-                    {"tool", tool},
-                    {"tools", config["tools"]["slots"]},
-                    {"noclip", noclip},
-                    {"cursor", cursorState},
-                    {"taggedSurfaceId", tagged.empty() ? Json(nullptr) : Json(tagged)}}},
-                  {"apps", apps},
-                  {"mounts", layout.state(world.get())},
-                  {"presentation",
-                   {{"profile", world ? renderer.profile : Json(nullptr)},
-                    {"fov", camera.fov},
-                    {"quality", renderer.intelQuality ? "intel" : "high"}}},
-                  {"spatial", spatial},
-                  {"workspaces",
-                   {{"currentId", monitor && monitor->m_activeWorkspace && monitor->m_activeWorkspace->m_id > 0
-                                      ? Json(monitor->m_activeWorkspace->m_id)
-                                      : Json(nullptr)},
-                    {"locations", homes}}},
-                  {"runtime",
-                   {{"active", active},
-                    {"outputs", monitor ? Json::array({"output-" + std::to_string(monitor->m_id)}) : Json::array()}}},
-                  {"world", world ? Json{{"id", world->id}, {"spawnId", world->defaultSpawn}} : Json(nullptr)},
-                  {"surfaces", surfaces},
-                  {"movement",
-                   {{"modeId", movement == &walk ? "com.hyprune.walk" : "com.hyprune.fly"},
-                    {"position", {camera.position.x, camera.position.y, camera.position.z}},
-                    {"orientation", {cy * sp, sy * cp, -sy * sp, cy * cp}}}},
-                  {"shell", {{"leases", control.leases}}},
-                  {"location", control.location},
-                  {"integrations", {{"sources", control.sources}}}});
+    Json publication = {
+        {"interaction",
+         {{"mode", !layout.desktop.is_null() ? "workspace"
+                   : fullscreen.phase == 2   ? "fullscreen"
+                   : typing                  ? "typing"
+                                             : "movement"},
+          {"tool", tool},
+          {"tools", config["tools"]["slots"]},
+          {"noclip", noclip},
+          {"cursor", cursorState},
+          {"taggedSurfaceId", tagged.empty() ? Json(nullptr) : Json(tagged)}}},
+        {"keymap",
+         {{"config", input.config},
+          {"path", inputFile.path.string()},
+          {"conflicts", interaction::inputConflicts(input.config)},
+          {"steals", steals(input.config)},
+          {"capture", captureRequest},
+          {"error", inputFile.error}}},
+        {"editor",
+         {{"mode", inputMode()},
+          {"tool", editor.slot},
+          {"submode", editor.submode()},
+          {"selectedId", editor.selected.empty() ? Json(nullptr) : Json(editor.selected)},
+          {"selectedKind", editor.kind},
+          {"paths", editor.paths},
+          {"objects", editor.objects},
+          {"locked", Json::array()},
+          {"debug", debug}}},
+        {"apps", apps},
+        {"mounts", layout.state(world.get())},
+        {"presentation",
+         {{"profile", world ? renderer.profile : Json(nullptr)},
+          {"fov", camera.fov},
+          {"quality", renderer.intelQuality ? "intel" : "high"}}},
+        {"spatial", spatial},
+        {"workspaces",
+         {{"currentId", monitor && monitor->m_activeWorkspace && monitor->m_activeWorkspace->m_id > 0
+                            ? Json(monitor->m_activeWorkspace->m_id)
+                            : Json(nullptr)},
+          {"locations", homes}}},
+        {"runtime",
+         {{"active", active},
+          {"outputs", monitor ? Json::array({"output-" + std::to_string(monitor->m_id)}) : Json::array()}}},
+        {"world", world ? Json{{"id", world->id}, {"spawnId", world->defaultSpawn}} : Json(nullptr)},
+        {"surfaces", surfaces},
+        {"movement",
+         {{"modeId", movement == &walk ? "com.hyprune.walk" : "com.hyprune.fly"},
+          {"position", {camera.position.x, camera.position.y, camera.position.z}},
+          {"orientation", {cy * sp, sy * cp, -sy * sp, cy * cp}}}},
+        {"shell", {{"leases", control.leases}}},
+        {"location", control.location},
+        {"integrations", {{"sources", control.sources}}}};
+    for (auto &e : capture.entries)
+        if (world && editor.locked(world->id, e.instance))
+            publication["editor"]["locked"].push_back(e.surface.id);
+    lastPublished = publication;
+    ipc->publish(publication);
     for (auto &[event, params] : layout.events)
         ipc->notify(event, params);
     layout.events.clear();
-    for (auto &[event, params] : control.events)
+    for (auto &[event, params] : control.events) {
+        recentEvents.push_back({{"event", event}, {"params", params}});
+        while (recentEvents.size() > 32)
+            recentEvents.pop_front();
         ipc->notify(event, params);
+    }
     control.events.clear();
 }
 void Runtime::load(const std::string &id, const std::string &spawnId) {
@@ -605,6 +722,12 @@ void Runtime::finishLoad() {
         restoreFullscreenWindows();
         fullscreen = {};
         handover = {};
+        relativeSurface.clear();
+        editor.selected.clear();
+        editor.activeHandle = -1;
+        objectModels.clear();
+        renderer.transforms.clear();
+        originalCollision = world->collision;
         hands.end();
         auto transition = control.location["transition"];
         control.reset(world.get());
@@ -703,6 +826,11 @@ void Runtime::exit() {
     if (!active)
         return;
     active = false;
+    input.clear();
+    relativeSurface.clear();
+    captureRequest = nullptr;
+    editor.activeHandle = -1;
+    objectCarry = false;
     pendingCursorHide.reset(); // an old hide request must not outlive cursor restoration
     cursorWarpPending = false;
     restoreFullscreenWindows();
@@ -776,6 +904,7 @@ void Runtime::focus(const std::string &id, bool keyboard) {
         Desktop::windowState()->raise(w);
         g_pSeatManager->setKeyboardFocus(w->resource());
         typing = true;
+        input.clear();
         keys.clear();
         smoothIntent = {};
         lookX = lookY = 0;
@@ -873,7 +1002,8 @@ void Runtime::handTick(float dt) {
     }
     if (hands.update(camera, pointerRay(), dt, world->collision)) {
         layout.freePoses[e->surface.id] = hands.pose;
-        if (hands.gesture == interaction::Gesture::Resize && e->window->m_target) {
+        if ((hands.gesture == interaction::Gesture::Resize || hands.gesture == interaction::Gesture::CornerResize) &&
+            e->window->m_target) {
             auto w = e->window.lock();
             auto box = w->m_target->position();
             double width = std::clamp(double(hands.pose.width / hands.start.width * hands.start.pixelWidth), 160.,
@@ -983,7 +1113,7 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
                     }
                 }
         }
-        if (!e || !e->parentId.empty())
+        if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance))
             return;
         cancelGrab();
         typing = false;
@@ -992,9 +1122,9 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         if (layout.binding(e->instance.workspaceId, world.get()))
             layout.pull(e->instance, world.get());
         auto g = event.button == config["input"]["carry_button"].get<uint32_t>()    ? interaction::Gesture::Carry
-                 : event.button == config["input"]["resize_button"].get<uint32_t>() ? interaction::Gesture::Resize
+                 : event.button == config["input"]["resize_button"].get<uint32_t>() ? interaction::Gesture::CornerResize
                                                                                     : interaction::Gesture::Roll;
-        if (g == interaction::Gesture::Resize &&
+        if ((g == interaction::Gesture::Resize || g == interaction::Gesture::CornerResize) &&
             Fullscreen::controller()->isFullscreen(e->window.lock(), Fullscreen::FSMODE_MAXIMIZED))
             Fullscreen::controller()->setFullscreenMode(e->window.lock(), Fullscreen::FSMODE_NONE,
                                                         Fullscreen::FSMODE_NONE);
@@ -1003,7 +1133,7 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         gestureButton = event.button;
         return;
     }
-    if (down && config["tools"]["enabled"] == true && config["tools"]["slots"][tool - 1] == "mount") {
+    if (down && !typing && config["tools"]["enabled"] == true && editor.slot == 2 && editor.windowMode == 0) {
         if (hit && capture.find(hit->first)) {
             tagged = hit->first;
             layout.freePoses[tagged] = capture.find(tagged)->surface;
@@ -1012,7 +1142,7 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         }
         if (!tagged.empty())
             if (auto e = capture.find(tagged))
-                if (auto wall = interaction::raycast(camera.position, pointerRay(), *world)) {
+                if (auto wall = worldHit()) {
                     auto s = e->surface;
                     s.yaw = 0;
                     s.rotation = interaction::orientation(wall->normal);
@@ -1027,11 +1157,13 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
                 }
         return;
     }
-    if (down && config["tools"]["enabled"] == true && config["tools"]["slots"][tool - 1] == "path")
+    if (down && editor.slot != 1) {
+        toolClick(event.button == 273);
         return;
+    }
     if (down && hit && capture.workspace(hit->first)) {
-        focusWall(hit->first);
-        return;
+        if (relativeSurface != hit->first)
+            useAim(false);
     }
     if (down && hit)
         if (auto t = capture.target(hit->first, hit->second.u, hit->second.v)) {
@@ -1039,6 +1171,12 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
                 // A child press preserves its parent keyboard focus and popup grab serial.
                 if (focused != t->parentId)
                     focus(t->parentId, true);
+                if (relativeSurface.empty()) {
+                    relativeSurface = capture.workspace(hit->first) ? hit->first : t->parentId;
+                    localX = hit->second.u;
+                    localY = hit->second.v;
+                    projectCursor();
+                }
                 grabbed = hit->first;
                 grabResource = t->resource;
             }
@@ -1064,7 +1202,7 @@ void Runtime::axis(IPointer::SAxisEvent event) {
     float steps =
         std::clamp(event.relativeDirection == WL_POINTER_AXIS_RELATIVE_DIRECTION_INVERTED ? raw : -raw, -2.f, 2.f);
     if (zoomHeld) {
-        zoom = std::clamp(zoom * std::pow(config["windows"]["wheel_factor"].get<float>(), steps), 1.f, 10.f);
+        zoom = std::clamp(zoom * std::pow(1.12f, steps), 1.f, 20.f);
         return;
     }
     if (hands.gesture == interaction::Gesture::Carry) {
@@ -1074,14 +1212,6 @@ void Runtime::axis(IPointer::SAxisEvent event) {
     auto hit = aim();
     if (!hit)
         return;
-    if (superHeld && !typing)
-        if (auto e = capture.find(hit->first)) {
-            hands.begin(interaction::Gesture::Carry, e->surface, hit->second);
-            hands.wheel(steps);
-            handTick(.1f);
-            hands.end();
-            return;
-        }
     routePointer(hit->first, hit->second, event.timeMs);
     if (capture.target(hit->first, hit->second.u, hit->second.v)) {
         g_pSeatManager->sendPointerAxis(event.timeMs, event.axis, event.delta, event.deltaDiscrete / 120,
@@ -1193,8 +1323,854 @@ void Runtime::transitionTick(float dt) {
         }
     }
 }
+std::string Runtime::inputMode() const {
+    if (control.uiVisible())
+        return "menu";
+    if (!layout.desktop.is_null() || fullscreen.phase || handover.phase)
+        return "focus";
+    return typing ? "interactive" : "world";
+}
+void Runtime::applyInput(const Json &j) {
+    auto next = interaction::validateInput(j);
+    if (next == input.config)
+        return;
+    if (next["modes"] != input.config["modes"]) {
+        cancelGrab();
+        keys.clear();
+        smoothIntent = {};
+        lookHeld = false;
+        zoomHeld = false;
+        editor.activeHandle = -1;
+        objectCarry = false;
+    }
+    input.apply(next);
+    control.holdSeconds = input.config["longHoldMs"].get<float>() / 1000.f;
+    publish();
+}
+Json Runtime::steals(const Json &config) const {
+    Json out = Json::array();
+    for (auto &[mode, actions] : config["modes"].items())
+        for (auto &[action, bindings] : actions.items())
+            for (auto &value : bindings) {
+                auto t = interaction::parseBinding(value);
+                auto sym = xkb_keysym_from_name(t.key.c_str(), XKB_KEYSYM_CASE_INSENSITIVE);
+                std::string native = t.key == "LMB"       ? "mouse:272"
+                                     : t.key == "RMB"     ? "mouse:273"
+                                     : t.key == "MMB"     ? "mouse:274"
+                                     : t.key == "Back"    ? "mouse:275"
+                                     : t.key == "Forward" ? "mouse:276"
+                                                          : t.key;
+                for (auto &bind : g_pKeybindManager->m_keybinds) {
+                    if (!bind->enabled || (!bind->ignoreMods && bind->modmask != t.mods))
+                        continue;
+                    auto bs = xkb_keysym_from_name(bind->key.c_str(), XKB_KEYSYM_CASE_INSENSITIVE);
+                    bool match = bind->key == native || (sym != XKB_KEY_NoSymbol && bs == sym) ||
+                                 (t.key == "Wheel" && (bind->key == "mouse_up" || bind->key == "mouse_down")) ||
+                                 (t.key == "WheelUp" && bind->key == "mouse_up") ||
+                                 (t.key == "WheelDown" && bind->key == "mouse_down");
+                    if (match)
+                        out.push_back({{"mode", mode},
+                                       {"action", action},
+                                       {"binding", value},
+                                       {"description", bind->description.empty() ? bind->handler + " " + bind->arg
+                                                                                 : bind->description},
+                                       {"submap", bind->submap.name}});
+                }
+            }
+    return out;
+}
+void Runtime::acceptCapture(const std::string &key, unsigned mods, bool down) {
+    if (captureRequest.is_null() || captureRequest.value("status", "") != "waiting")
+        return;
+    bool modifier = key == "Super_L" || key == "Super_R" || key == "Shift_L" || key == "Shift_R" ||
+                    key == "Control_L" || key == "Control_R" || key == "Alt_L" || key == "Alt_R";
+    if ((modifier && down) || (!modifier && !down))
+        return;
+    if (modifier) {
+        unsigned bit = key.starts_with("Super")     ? 64
+                       : key.starts_with("Shift")   ? 1
+                       : key.starts_with("Control") ? 4
+                                                    : 8;
+        mods &= ~bit;
+    }
+    bool hold = captureRequest["action"] == "menu";
+    auto existing =
+        input.config["modes"][captureRequest["mode"].get<std::string>()][captureRequest["action"].get<std::string>()];
+    auto slot = captureRequest["slot"].get<size_t>();
+    if (slot < existing.size())
+        hold = hold || interaction::parseBinding(existing[slot]).hold;
+    if (key.starts_with("Wheel") || key == "MouseMove")
+        hold = false;
+    captureRequest["binding"] = interaction::bindingName({key, mods, hold});
+    captureRequest["status"] = "captured";
+    publish();
+}
+void Runtime::projectCursor() {
+    if (auto s = capture.plane(relativeSurface)) {
+        auto point = s->center + s->right() * ((localX - .5f) * s->width) + s->up() * ((.5f - localY) * s->height);
+        auto rel = point - camera.position, forward = camera.forward(), right = normalized(cross(forward, {0, 1, 0})),
+             up = cross(right, forward);
+        float depth = dot(rel, forward), tan = std::tan(camera.fov * .01745329252f / 2),
+              aspect = monitor->m_size.x / monitor->m_size.y;
+        if (depth > .01f) {
+            pointerX = .5f + dot(rel, right) / (2 * depth * tan * aspect);
+            pointerY = .5f - dot(rel, up) / (2 * depth * tan);
+        }
+    }
+}
+void Runtime::useAim(bool zoom) {
+    if (!world || loading)
+        return;
+    auto hit = aim();
+    if (!hit) {
+        float best = input.config["useDistance"];
+        for (auto &s : capture.visible())
+            if (auto h = surfaces::intersect(s, camera.position, pointerRay(), false)) {
+                float margin = input.config["useTolerance"];
+                if (h->u >= -margin / s.width && h->u <= 1 + margin / s.width && h->v >= -margin / s.height &&
+                    h->v <= 1 + margin / s.height && h->distance < best) {
+                    best = h->distance;
+                    h->u = std::clamp(h->u, 0.f, 1.f);
+                    h->v = std::clamp(h->v, 0.f, 1.f);
+                    hit = {{s.id, *h}};
+                }
+            }
+    }
+    if (!hit || (!zoom && hit->second.distance > input.config["useDistance"].get<float>()))
+        return;
+    cancelGrab();
+    input.clear();
+    keys.clear();
+    smoothIntent = {};
+    zoomHeld = false;
+    this->zoom = 1;
+    camera.fov = baseFov;
+    if (auto wall = capture.workspace(hit->first)) {
+        if (zoom) {
+            relativeSurface.clear();
+            focusWall(hit->first);
+            return;
+        }
+        if (auto b = layout.binding(wall->workspaceId, world.get()))
+            resolvedLocation =
+                std::to_string(wall->workspaceId) + ":" + world->id + ":" + b->at("areaId").get<std::string>();
+        Desktop::focusState()->rawMonitorFocus(monitor.lock());
+        auto r = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(wall->workspaceId));
+        if (!r.success)
+            throw std::runtime_error("workspace use failed");
+        typing = true;
+        relativeSurface = hit->first;
+        localX = hit->second.u;
+        localY = hit->second.v;
+        projectCursor();
+        if (auto target = capture.target(hit->first, localX, localY)) {
+            focus(target->parentId, true);
+            relativeSurface = hit->first;
+        }
+        cursor();
+        publish();
+        return;
+    }
+    auto target = capture.target(hit->first, hit->second.u, hit->second.v);
+    if (!target)
+        return;
+    focus(target->parentId, true);
+    relativeSurface = target->parentId;
+    localX = hit->second.u;
+    localY = hit->second.v;
+    projectCursor();
+    if (zoom)
+        if (auto e = capture.find(target->parentId)) {
+            relativeSurface.clear();
+            if (auto w = e->window.lock(); w && w->m_target) {
+                auto box = w->m_target->position();
+                w->m_target->rememberFloatingSize({box.w, box.h});
+            }
+            Fullscreen::controller()->setFullscreenMode(e->window.lock(), Fullscreen::FSMODE_FULLSCREEN,
+                                                        Fullscreen::FSMODE_FULLSCREEN);
+        }
+    cursor();
+    publish();
+}
+void Runtime::leaveInteraction() {
+    if (monitor && (freeCursor || monitor != Desktop::focusState()->monitor())) {
+        Desktop::focusState()->rawMonitorFocus(monitor.lock());
+        Pointer::pointerController()->warpTo(monitor->m_position + monitor->m_size * .5, true);
+        freeCursor = false;
+    }
+    captureRequest = nullptr;
+    input.clear();
+    cancelGrab();
+    keys.clear();
+    smoothIntent = {};
+    zoomHeld = false;
+    relativeSurface.clear();
+    objectCarry = false;
+    editor.activeHandle = -1;
+    if (control.uiVisible()) {
+        control.stop();
+        cursor();
+        publish();
+        return;
+    }
+    if (!layout.desktop.is_null()) {
+        unfocus();
+        return;
+    }
+    if (fullscreen.phase) {
+        if (auto e = capture.find(fullscreen.id))
+            Fullscreen::controller()->setFullscreenMode(e->window.lock(), Fullscreen::FSMODE_NONE,
+                                                        Fullscreen::FSMODE_NONE);
+        return;
+    }
+    typing = false;
+    freeCursor = false;
+    focused.clear();
+    focusedParent.clear();
+    g_pSeatManager->setPointerFocus(nullptr, {});
+    g_pSeatManager->setKeyboardFocus(nullptr);
+    pointerX = pointerY = .5f;
+    cursor();
+    publish();
+}
+void Runtime::debugCapture() {
+    auto base = getenv("XDG_STATE_HOME") ? std::filesystem::path(getenv("XDG_STATE_HOME"))
+                                         : std::filesystem::path(getenv("HOME")) / ".local/state";
+    auto now = std::chrono::system_clock::now();
+    auto stamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    auto path = base / "hyprune/captures" / ("capture-" + std::to_string(stamp) + ".json");
+    Json surfaces = Json::array();
+    for (auto &e : capture.entries)
+        surfaces.push_back({{"id", e.surface.id},
+                            {"title", e.surface.title},
+                            {"position", {e.surface.center.x, e.surface.center.y, e.surface.center.z}},
+                            {"rotation", e.surface.rotation},
+                            {"size", {e.surface.width, e.surface.height}},
+                            {"parentId", e.parentId},
+                            {"visible", e.visible}});
+    for (auto &child : capture.children)
+        surfaces.push_back({{"id", child.surface.id},
+                            {"parentId", child.parentId},
+                            {"visible", child.visible},
+                            {"offset", {child.offset.x, child.offset.y}},
+                            {"position", {child.surface.center.x, child.surface.center.y, child.surface.center.z}},
+                            {"size", {child.surface.width, child.surface.height}}});
+    Json value = {{"version", 1},
+                  {"timestampMs", stamp},
+                  {"camera",
+                   {{"position", {camera.position.x, camera.position.y, camera.position.z}},
+                    {"yaw", camera.yaw},
+                    {"pitch", camera.pitch},
+                    {"fov", camera.fov},
+                    {"eyeHeight", camera.eyeHeight}}},
+                  {"mode", inputMode()},
+                  {"tool", editor.slot},
+                  {"submode", editor.submode()},
+                  {"state", lastPublished},
+                  {"surfaces", surfaces},
+                  {"placements", layout.state(world.get())},
+                  {"recentIPC", recentIPC},
+                  {"recentEvents", recentEvents},
+                  {"input", input.recent}};
+    interaction::atomicJSON(path, value, 4 * 1048576);
+    ipc->notify("runtime.notice",
+                {{"level", "info"}, {"code", "capture.saved"}, {"message", "Saved capture: " + path.string()}});
+}
+namespace {
+interaction::Transform objectTransform(const interaction::Tools &, const world::World &, const std::string &);
+}
+void Runtime::action(interaction::Action a) {
+    auto held = [&](uint32_t key) {
+        if (a.pressed)
+            keys.insert(key);
+        else
+            keys.erase(key);
+    };
+    if (a.name == "look")
+        lookHeld = a.pressed;
+    else if (a.name == "forward")
+        held(KEY_W);
+    else if (a.name == "back")
+        held(KEY_S);
+    else if (a.name == "left")
+        held(KEY_A);
+    else if (a.name == "right")
+        held(KEY_D);
+    else if (a.name == "up")
+        held(KEY_SPACE);
+    else if (a.name == "down")
+        held(KEY_LEFTCTRL);
+    else if (a.name == "sprint")
+        held(KEY_LEFTSHIFT);
+    else if (a.name == "scope") {
+        zoomHeld = a.pressed;
+        if (a.pressed && a.edge)
+            zoom = 2;
+    } else if (a.name == "carry" || a.name == "resize") {
+        uint32_t code = a.name == "carry" ? config["input"]["carry_button"].get<uint32_t>()
+                                          : config["input"]["resize_button"].get<uint32_t>();
+        if (a.name == "carry" && a.pressed && editor.slot == 4 && !aim())
+            if (auto object = objectAim()) {
+                editor.selected = object->first;
+                editor.kind = "object";
+                objectCarry = true;
+                objectDistance = object->second.distance;
+                dragPoint = object->second.point - objectTransform(editor, *world, editor.selected).position;
+                return;
+            }
+        if (objectCarry && !a.pressed) {
+            objectCarry = false;
+            saveEditor();
+            return;
+        }
+        button({.timeMs = 0,
+                .button = code,
+                .state = a.pressed ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED},
+               true);
+    } else if (a.name == "primary" || a.name == "secondary") {
+        if (editor.activeHandle >= 0 && !a.pressed) {
+            editor.activeHandle = -1;
+            saveEditor();
+            return;
+        }
+        if (editor.slot != 1) {
+            if (a.pressed)
+                toolClick(a.name == "secondary");
+            return;
+        }
+        uint32_t code = a.name == "primary" ? 272 : 273;
+        button({.timeMs = 0,
+                .button = code,
+                .state = a.pressed ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED},
+               false);
+    } else if (a.name == "distance" || a.name == "rotate") {
+        if (!a.pressed || !world)
+            return;
+        auto hit = aim();
+        auto e = hands.gesture != interaction::Gesture::None ? capture.find(hands.pose.id)
+                 : hit                                       ? capture.find(hit->first)
+                                                             : nullptr;
+        if (!e) {
+            auto object = objectCarry ? std::optional<std::pair<std::string, interaction::WorldHit>>{} : objectAim();
+            if (objectCarry || object) {
+                if (object) {
+                    editor.selected = object->first;
+                    editor.kind = "object";
+                    selectedTransform = objectTransform(editor, *world, editor.selected);
+                } else
+                    selectedTransform = objectTransform(editor, *world, editor.selected);
+                if (a.name == "distance") {
+                    if (objectCarry)
+                        objectDistance = std::clamp(objectDistance * std::pow(1.12f, a.value), .3f, 30.f);
+                    else
+                        selectedTransform.position += pointerRay() * a.value * .25f;
+                } else {
+                    auto q = selectedTransform.rotation;
+                    float sn = std::sin(a.value * .1308997f), cs = std::cos(a.value * .1308997f);
+                    selectedTransform.rotation = {q[0] * cs + q[1] * sn, q[1] * cs - q[0] * sn, q[2] * cs + q[3] * sn,
+                                                  q[3] * cs - q[2] * sn};
+                }
+                auto b =
+                    layout.binding(monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
+                Json next = {
+                    {"worldId", world->id},
+                    {"areaId", b ? b->at("areaId").get<std::string>() : ""},
+                    {"objectId", editor.selected},
+                    {"position",
+                     {selectedTransform.position.x, selectedTransform.position.y, selectedTransform.position.z}},
+                    {"rotation", selectedTransform.rotation},
+                    {"scale", {selectedTransform.scale.x, selectedTransform.scale.y, selectedTransform.scale.z}}};
+                auto it = std::find_if(editor.objects.begin(), editor.objects.end(), [&](auto &v) {
+                    return v["worldId"] == world->id && v["objectId"] == editor.selected;
+                });
+                if (it != editor.objects.end())
+                    *it = next;
+                else if (editor.objects.size() < 128)
+                    editor.objects.push_back(next);
+                toolsTick();
+                saveEditor();
+                publish();
+            }
+            return;
+        }
+        if (editor.locked(world->id, e->instance))
+            return;
+        if (a.name == "distance") {
+            bool temporary = hands.gesture == interaction::Gesture::None;
+            if (temporary)
+                hands.begin(interaction::Gesture::Carry, e->surface, hit->second);
+            hands.wheel(a.value);
+            handTick(.1f);
+            if (temporary) {
+                hands.end();
+                layout.carried.clear();
+                if (layout.binding(e->instance.workspaceId, world.get()))
+                    layout.mount(e->instance, world.get(), hands.pose);
+            }
+        } else {
+            auto old = hands.gesture != interaction::Gesture::None ? hands.pose : e->surface;
+            auto next = old;
+            auto q = old.rotation;
+            float s = std::sin(a.value * .1308997f), c = std::cos(a.value * .1308997f);
+            next.rotation = {q[0] * c + q[1] * s, q[1] * c - q[0] * s, q[2] * c + q[3] * s, q[3] * c - q[2] * s};
+            if (interaction::sweepSafe(old, next, world->collision)) {
+                layout.freePoses[e->surface.id] = next;
+                if (hands.gesture != interaction::Gesture::None) {
+                    auto x = dot(hands.offset, old.right()), y = dot(hands.offset, old.up());
+                    hands.pose = next;
+                    hands.offset = next.right() * x + next.up() * y;
+                } else if (layout.binding(e->instance.workspaceId, world.get()))
+                    layout.mount(e->instance, world.get(), next);
+            }
+        }
+    } else if (!a.pressed || !a.edge)
+        return;
+    else if (a.name == "exit")
+        leaveInteraction();
+    else if (a.name == "menu") {
+        input.clear();
+        control.openMenu();
+    } else if (a.name == "use")
+        useAim(false);
+    else if (a.name == "focus")
+        useAim(true);
+    else if (a.name == "debug")
+        debug = !debug;
+    else if (a.name == "capture")
+        debugCapture();
+    else if (a.name == "noclip") {
+        noclip = !noclip;
+        camera.verticalSpeed = 0;
+    } else if (a.name == "fly") {
+        movement = movement == &walk ? static_cast<sim::MotionStrategy *>(&fly) : &walk;
+        keys.clear();
+        smoothIntent = {};
+        camera.verticalSpeed = 0;
+    } else if (a.name == "transport")
+        ipc->notify("runtime.notice", {{"level", "info"},
+                                       {"code", "transport.pending"},
+                                       {"message", "Transport summon is reserved for the transport milestone."}});
+    else if (a.name == "autopilot") {
+        if (control.driving())
+            control.execute("autodrive.stop", Json::object(), "", "", world.get(), camera, {});
+        else if (!control.location["route"].empty())
+            control.execute("autodrive.start", Json::object(), "", "", world.get(), camera, {});
+        else if (!control.location["waypoint"].is_null()) {
+            control.execute("route.set", {{"points", {control.location["waypoint"]["target"]}}}, "", "", world.get(),
+                            camera, {});
+            control.execute("autodrive.start", Json::object(), "", "", world.get(), camera, {});
+        } else
+            ipc->notify("runtime.notice", {{"level", "info"},
+                                           {"code", "autopilot.target"},
+                                           {"message", "Set a waypoint or route before enabling autopilot."}});
+    } else if (a.name.starts_with("tool")) {
+        cancelGrab();
+        editor.activeHandle = -1;
+        objectCarry = false;
+        editor.slot = tool = std::stoi(a.name.substr(4));
+        tagged.clear();
+        editor.finishPath();
+    }
+    publish();
+}
+namespace {
+std::optional<unsigned> editorNode(const world::World &w, const std::string &id) {
+    if (w.objectNodes.contains(id))
+        return w.objectNodes.at(id);
+    if (id.starts_with("node-")) {
+        auto text = id.substr(5);
+        if (!text.empty() && text.find_first_not_of("0123456789") == std::string::npos) {
+            auto n = std::stoul(text);
+            if (n < w.nodeParents.size())
+                return n;
+        }
+    }
+    return {};
+}
+bool belongs(const world::World &w, unsigned n, unsigned root) {
+    for (int i = n; i >= 0 && size_t(i) < w.nodeParents.size(); i = w.nodeParents[i])
+        if (unsigned(i) == root)
+            return true;
+    return false;
+}
+Vec3 objectOrigin(const world::World &w, const std::string &id) {
+    for (auto &o : w.objects)
+        if (o["id"] == id)
+            return {o["pose"]["position"][0], o["pose"]["position"][1], o["pose"]["position"][2]};
+    auto node = editorNode(w, id);
+    if (!node)
+        return {};
+    Vec3 lo{100000, 100000, 100000}, hi{-100000, -100000, -100000};
+    bool found = false;
+    for (auto &m : w.meshes)
+        if (belongs(w, m.node, *node))
+            for (auto &v : m.vertices) {
+                found = true;
+                lo = {std::min(lo.x, v.position.x), std::min(lo.y, v.position.y), std::min(lo.z, v.position.z)};
+                hi = {std::max(hi.x, v.position.x), std::max(hi.y, v.position.y), std::max(hi.z, v.position.z)};
+            }
+    return found ? (lo + hi) * .5f : Vec3{};
+}
+interaction::Transform objectTransform(const interaction::Tools &editor, const world::World &w, const std::string &id) {
+    interaction::Transform t;
+    t.position = objectOrigin(w, id);
+    for (auto &o : editor.objects)
+        if (o["worldId"] == w.id && o["objectId"] == id) {
+            t.position = {o["position"][0], o["position"][1], o["position"][2]};
+            t.rotation = o["rotation"].get<std::array<float, 4>>();
+            t.scale = {o["scale"][0], o["scale"][1], o["scale"][2]};
+            break;
+        }
+    return t;
+}
+std::array<float, 4> turn(std::array<float, 4> q, Vec3 axis, float angle) {
+    auto u = axis * std::sin(angle / 2);
+    float w = std::cos(angle / 2);
+    Vec3 v{q[0], q[1], q[2]};
+    auto n = v * w + u * q[3] + cross(u, v);
+    return {n.x, n.y, n.z, w * q[3] - dot(u, v)};
+}
+std::optional<Vec3> planePoint(Vec3 origin, Vec3 ray, Vec3 center, Vec3 normal) {
+    float d = dot(ray, normal);
+    if (std::abs(d) < .001f)
+        return {};
+    float distance = dot(center - origin, normal) / d;
+    if (distance <= 0)
+        return {};
+    return origin + ray * distance;
+}
+float axisPoint(Vec3 origin, Vec3 ray, Vec3 center, Vec3 axis) {
+    auto v = center - origin;
+    float a = dot(axis, ray);
+    return std::abs(1 - a * a) > .01f ? (a * dot(v, ray) - dot(v, axis)) / (1 - a * a) : 0;
+}
+} // namespace
+void Runtime::saveEditor() {
+    auto value = editor.saved();
+    if (value == lastEditor)
+        return;
+    interaction::atomicJSON(editorFile, value);
+    lastEditor = value;
+}
+std::optional<std::pair<std::string, interaction::WorldHit>> Runtime::objectAim() {
+    if (!world)
+        return {};
+    std::optional<std::pair<std::string, interaction::WorldHit>> result;
+    float nearest = 100000;
+    for (auto &m : world->meshes) {
+        auto model = renderer.transforms.contains(m.node) ? renderer.transforms.at(m.node) : Mat4::identity();
+        for (size_t i = 0; i + 2 < m.vertices.size(); i += 3) {
+            Triangle t{model.point(m.vertices[i].position), model.point(m.vertices[i + 1].position),
+                       model.point(m.vertices[i + 2].position)};
+            auto h = interaction::raycast(camera.position, pointerRay(), std::span<const Triangle>(&t, 1));
+            if (!h || h->distance >= nearest)
+                continue;
+            nearest = h->distance;
+            std::string id = "node-" + std::to_string(m.node);
+            for (auto &[name, root] : world->objectNodes)
+                if (belongs(*world, m.node, root)) {
+                    id = name;
+                    break;
+                }
+            result = {{id, *h}};
+        }
+    }
+    return result;
+}
+std::optional<interaction::WorldHit> Runtime::worldHit() {
+    if (!world)
+        return {};
+    auto mesh = objectAim();
+    auto collision = interaction::raycast(camera.position, pointerRay(), world->collision);
+    if (mesh && (!collision || mesh->second.distance < collision->distance))
+        return mesh->second;
+    return collision;
+}
+void Runtime::toolClick(bool secondary) {
+    if (!world)
+        return;
+    if (editor.slot == 2) {
+        if (editor.windowMode == 0) {
+            if (secondary) {
+                tagged.clear();
+                return;
+            }
+            button({.timeMs = 0, .button = 272, .state = WL_POINTER_BUTTON_STATE_PRESSED}, false);
+            return;
+        }
+        if (auto h = aim())
+            if (auto e = capture.find(h->first)) {
+                editor.toggleLock(world->id, e->instance);
+                saveEditor();
+                publish();
+            }
+        return;
+    }
+    if (editor.slot == 3) {
+        if (secondary) {
+            editor.finishPath();
+            saveEditor();
+            return;
+        }
+        if (auto h = worldHit()) {
+            auto b =
+                layout.binding(monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
+            editor.point(world->id, b ? b->at("areaId").get<std::string>() : "", h->point + h->normal * .03f);
+            saveEditor();
+            publish();
+        }
+        return;
+    }
+    if (editor.slot != 4)
+        return;
+    // A client configure can change the captured aspect after selection. Start
+    // each gesture from the current surface, rather than the cached selection.
+    if (editor.kind == "window")
+        if (auto e = capture.find(editor.selected)) {
+            interaction::Hands normalized;
+            normalized.begin(interaction::Gesture::Carry, e->surface, {.u = .5f, .v = .5f});
+            selectedTransform = {
+                e->surface.center, {e->surface.width, e->surface.height, 1}, normalized.start.rotation};
+        }
+    if (!editor.selected.empty()) {
+        auto handles = interaction::gizmo(selectedTransform.position, editor.submode());
+        if (auto picked = interaction::pickHandle(handles, camera.position, pointerRay())) {
+            if (editor.kind == "window")
+                if (auto e = capture.find(editor.selected))
+                    if (editor.locked(world->id, e->instance))
+                        return;
+            editor.activeHandle = *picked;
+            dragStart = selectedTransform;
+            if (editor.kind == "window")
+                if (auto e = capture.find(editor.selected)) {
+                    dragPixelWidth = e->surface.pixelWidth;
+                    dragPixelHeight = e->surface.pixelHeight;
+                }
+            auto h = handles[*picked];
+            std::array<Vec3, 3> axes = {Vec3{1, 0, 0}, Vec3{0, 1, 0}, Vec3{0, 0, 1}};
+            dragNormal = h.axis < 3 ? axes[h.axis] : camera.forward();
+            if (editor.positionMode == 1)
+                dragPoint =
+                    planePoint(camera.position, pointerRay(), selectedTransform.position, dragNormal).value_or(h.end) -
+                    selectedTransform.position;
+            else
+                dragPoint = {axisPoint(camera.position, pointerRay(), selectedTransform.position, dragNormal), .5f,
+                             .5f};
+            pointerX = pointerY = .5f;
+            keys.clear();
+            smoothIntent = {};
+            return;
+        }
+    }
+    if (auto h = aim())
+        if (auto e = capture.find(h->first)) {
+            editor.selected = e->surface.id;
+            editor.kind = "window";
+            auto s = e->surface;
+            interaction::Hands normalized;
+            normalized.begin(interaction::Gesture::Carry, s, h->second);
+            selectedTransform = {s.center, {s.width, s.height, 1}, normalized.start.rotation};
+            publish();
+            return;
+        }
+    if (auto h = objectAim()) {
+        editor.selected = h->first;
+        editor.kind = "object";
+        selectedTransform = objectTransform(editor, *world, editor.selected);
+        publish();
+    }
+}
+void Runtime::toolsTick() {
+    if (!world)
+        return;
+    if (originalCollision.empty())
+        originalCollision = world->collision;
+    if (objectCarry) {
+        selectedTransform = objectTransform(editor, *world, editor.selected);
+        selectedTransform.position = camera.position + pointerRay() * objectDistance - dragPoint;
+    }
+    if (editor.activeHandle >= 0) {
+        auto handles = interaction::gizmo(dragStart.position, editor.submode());
+        if (size_t(editor.activeHandle) >= handles.size()) {
+            editor.activeHandle = -1;
+            return;
+        }
+        auto h = handles[editor.activeHandle];
+        selectedTransform = dragStart;
+        float delta = axisPoint(camera.position, pointerRay(), dragStart.position, dragNormal) - dragPoint.x;
+        if (std::abs(dot(dragNormal, camera.forward())) > .95f)
+            delta = (pointerX - .5f) * length(dragStart.position - camera.position) * 2;
+        if (keys.contains(KEY_LEFTSHIFT))
+            delta = std::round(delta / .1f) * .1f;
+        if (editor.positionMode == 0)
+            selectedTransform.position += dragNormal * delta;
+        else if (editor.positionMode == 1) {
+            auto p = planePoint(camera.position, pointerRay(), dragStart.position, dragNormal);
+            float angle = p ? std::atan2(dot(cross(dragPoint, *p - dragStart.position), dragNormal),
+                                         dot(dragPoint, *p - dragStart.position))
+                            : (pointerX - .5f) * 6.283185f;
+            if (keys.contains(KEY_LEFTSHIFT))
+                angle = std::round(angle / .2617994f) * .2617994f;
+            selectedTransform.rotation = turn(dragStart.rotation, dragNormal, angle);
+        } else {
+            float factor = std::clamp(1 + delta, .05f, 20.f);
+            if (h.uniform)
+                factor = std::clamp(1 + (pointerX - .5f - pointerY + .5f) * 3, .05f, 20.f);
+            if (keys.contains(KEY_LEFTSHIFT))
+                factor = std::max(.1f, std::round(factor / .1f) * .1f);
+            if (h.uniform)
+                selectedTransform.scale = dragStart.scale * factor;
+            else if (h.axis == 0)
+                selectedTransform.scale.x = dragStart.scale.x * factor;
+            else if (h.axis == 1)
+                selectedTransform.scale.y = dragStart.scale.y * factor;
+            else
+                selectedTransform.scale.z = dragStart.scale.z * factor;
+        }
+    }
+    selectedTransform.scale = {std::clamp(selectedTransform.scale.x, .01f, 100.f),
+                               std::clamp(selectedTransform.scale.y, .01f, 100.f),
+                               std::clamp(selectedTransform.scale.z, .01f, 100.f)};
+    if (editor.activeHandle >= 0 || objectCarry) {
+        if (editor.kind == "window") {
+            if (auto e = capture.find(editor.selected)) {
+                auto next = e->surface;
+                next.center = selectedTransform.position;
+                next.rotation = selectedTransform.rotation;
+                next.yaw = 0;
+                next.width = std::clamp(selectedTransform.scale.x, .1f, 12.f);
+                next.height = std::clamp(selectedTransform.scale.y, .1f, 8.f);
+                if (interaction::sweepSafe(e->surface, next, world->collision)) {
+                    layout.freePoses[e->surface.id] = next;
+                    layout.carried.clear();
+                    if (editor.positionMode == 2 && e->window->m_target) {
+                        auto w = e->window.lock();
+                        auto box = w->m_target->position();
+                        // Configure against the gesture baseline: the world pose
+                        // updates before the client acknowledges its new pixels.
+                        // Feeding those pending pixels back cancels the resize.
+                        auto width = std::clamp(double(next.width / dragStart.scale.x * dragPixelWidth), 160.,
+                                                monitor->m_size.x),
+                             height = std::clamp(double(next.height / dragStart.scale.y * dragPixelHeight), 100.,
+                                                 monitor->m_size.y);
+                        if (std::abs(box.w - width) > 1 || std::abs(box.h - height) > 1) {
+                            Fullscreen::controller()->setFullscreenMode(w, Fullscreen::FSMODE_NONE,
+                                                                        Fullscreen::FSMODE_NONE);
+                            Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_ENABLE, w);
+                            Config::Actions::resize({width, height}, false, w);
+                            w->sendWindowSize(true);
+                        }
+                    }
+                    if (layout.binding(e->instance.workspaceId, world.get()))
+                        layout.mount(e->instance, world.get(), next);
+                }
+            } else
+                editor.selected.clear();
+        } else if (editor.kind == "object") {
+            auto b =
+                layout.binding(monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
+            Json next = {{"worldId", world->id},
+                         {"areaId", b ? b->at("areaId").get<std::string>() : ""},
+                         {"objectId", editor.selected},
+                         {"position",
+                          {selectedTransform.position.x, selectedTransform.position.y, selectedTransform.position.z}},
+                         {"rotation", selectedTransform.rotation},
+                         {"scale", {selectedTransform.scale.x, selectedTransform.scale.y, selectedTransform.scale.z}}};
+            auto it = std::find_if(editor.objects.begin(), editor.objects.end(), [&](auto &o) {
+                return o["worldId"] == world->id && o["objectId"] == editor.selected;
+            });
+            if (it != editor.objects.end())
+                *it = next;
+            else if (editor.objects.size() < 128)
+                editor.objects.push_back(next);
+        }
+    }
+    renderer.transforms.clear();
+    for (auto &o : editor.objects)
+        if (o["worldId"] == world->id) {
+            auto node = editorNode(*world, o["objectId"]);
+            if (!node)
+                continue;
+            auto t = objectTransform(editor, *world, o["objectId"]);
+            auto matrix = t.matrix(objectOrigin(*world, o["objectId"]));
+            for (size_t n = 0; n < world->nodeParents.size(); n++)
+                if (belongs(*world, n, *node))
+                    renderer.transforms[n] = matrix;
+        }
+    if (renderer.transforms != objectModels) {
+        objectModels = renderer.transforms;
+        world->collision = originalCollision;
+        for (size_t i = 0; i < world->collision.size(); i++)
+            if (i < world->collisionNodes.size() && renderer.transforms.contains(world->collisionNodes[i])) {
+                auto m = renderer.transforms.at(world->collisionNodes[i]);
+                auto &t = world->collision[i];
+                t = {m.point(t.a), m.point(t.b), m.point(t.c)};
+            }
+    }
+    renderer.lines.clear();
+    for (auto &path : editor.paths)
+        if (path["worldId"] == world->id) {
+            auto lines = interaction::pathLines(path);
+            renderer.lines.insert(renderer.lines.end(), lines.begin(), lines.end());
+        }
+    for (auto &e : capture.entries)
+        if (editor.locked(world->id, e.instance) && e.visible) {
+            auto &s = e.surface;
+            auto c = s.center + s.right() * (s.width * .5f - .1f) + s.up() * (s.height * .5f - .1f) + s.normal() * .04f;
+            auto r = s.right() * .05f, u = s.up() * .05f;
+            Vec3 gold{1, .7f, .1f};
+            renderer.lines.push_back({c - r - u, c + r - u, gold});
+            renderer.lines.push_back({c + r - u, c + r + u, gold});
+            renderer.lines.push_back({c + r + u, c - r + u, gold});
+            renderer.lines.push_back({c - r + u, c - r - u, gold});
+            renderer.lines.push_back({c - r * .7f + u, c - r * .7f + u * 1.7f, gold});
+            renderer.lines.push_back({c - r * .7f + u * 1.7f, c + r * .7f + u * 1.7f, gold});
+            renderer.lines.push_back({c + r * .7f + u * 1.7f, c + r * .7f + u, gold});
+        }
+    if (editor.slot == 4 && !editor.selected.empty()) {
+        if (editor.activeHandle < 0) {
+            if (editor.kind == "window") {
+                if (auto e = capture.find(editor.selected))
+                    selectedTransform.position = e->surface.center;
+                else
+                    editor.selected.clear();
+            } else
+                selectedTransform = objectTransform(editor, *world, editor.selected);
+        }
+        for (auto &h : interaction::gizmo(selectedTransform.position, editor.submode())) {
+            Vec3 color = h.axis == 0   ? Vec3{1, .2f, .2f}
+                         : h.axis == 1 ? Vec3{.2f, 1, .3f}
+                         : h.axis == 2 ? Vec3{.2f, .5f, 1}
+                                       : Vec3{1, .9f, .6f};
+            renderer.lines.push_back({h.start, h.end, color});
+            if (h.shape == "arrow") {
+                auto axis = normalized(h.end - h.start), side = normalized(cross(axis, camera.forward()));
+                if (length(side) < .1f)
+                    side = {1, 0, 0};
+                renderer.lines.push_back({h.end, h.end - axis * .18f + side * .09f, color});
+                renderer.lines.push_back({h.end, h.end - axis * .18f - side * .09f, color});
+            }
+            if (h.shape == "cube") {
+                auto c = h.uniform ? selectedTransform.position : h.end;
+                std::array<Vec3, 8> p;
+                for (int i = 0; i < 8; i++)
+                    p[i] = c + Vec3{(i & 1) ? .065f : -.065f, (i & 2) ? .065f : -.065f, (i & 4) ? .065f : -.065f};
+                for (int i = 0; i < 8; i++)
+                    for (int bit : {1, 2, 4})
+                        if (!(i & bit))
+                            renderer.lines.push_back({p[i], p[i | bit], color});
+            }
+        }
+    }
+}
 std::optional<Json> Runtime::method(const std::string &method, const Json &wire) {
     Json params = wire;
+    recentIPC.push_back({{"method", method},
+                         {"timeMs", std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now().time_since_epoch())
+                                        .count()}});
+    while (recentIPC.size() > 32)
+        recentIPC.pop_front();
     std::string actor = params.value("_actor", ""), client = params.value("_client", "");
     params.erase("_actor");
     params.erase("_client");
@@ -1202,6 +2178,51 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     auto protocol = params.value("_protocol", "0.1");
     params.erase("_pid");
     params.erase("_protocol");
+    if (method == "input.get") {
+        if (!params.empty())
+            throw ipc::Error(-32602, "unexpected params");
+        return Json{{"config", input.config},
+                    {"path", inputFile.path.string()},
+                    {"steals", steals(input.config)},
+                    {"conflicts", interaction::inputConflicts(input.config)}};
+    }
+    if (method == "input.set" || method == "input.preview") {
+        if (params.size() != 1 || !params.contains("config"))
+            throw ipc::Error(-32602, "config required");
+        Json next;
+        try {
+            next = interaction::validateInput(params["config"]);
+        } catch (const std::exception &e) {
+            throw ipc::Error(-32602, e.what());
+        }
+        if (method == "input.preview")
+            return Json{{"config", next}, {"steals", steals(next)}, {"conflicts", interaction::inputConflicts(next)}};
+        if (!interaction::inputConflicts(next).empty())
+            throw ipc::Error(-32602, "conflicting Hyprune actions in one mode");
+        inputFile.save(next);
+        applyInput(next);
+        return Json{{"revision", ipc->revision()}};
+    }
+    if (method == "input.capture.cancel") {
+        if (!params.empty())
+            throw ipc::Error(-32602, "unexpected params");
+        captureRequest = nullptr;
+        publish();
+        return Json{{"revision", ipc->revision()}};
+    }
+    if (method == "input.capture") {
+        if (params.size() != 4 || !params.contains("leaseId") || !control.ownsLease(actor, params["leaseId"]) ||
+            !control.uiVisible() || !directorSurface())
+            throw ipc::Error(-32002, "capture requires the active verified Director lease");
+        auto mode = params.at("mode").get<std::string>(), name = params.at("action").get<std::string>();
+        if (!input.config["modes"].contains(mode) || !input.config["modes"][mode].contains(name) ||
+            !params["slot"].is_number_integer() || params["slot"] < 0 || params["slot"] > 2)
+            throw ipc::Error(-32602, "unknown capture slot");
+        captureRequest = {
+            {"mode", mode}, {"action", name}, {"slot", params["slot"]}, {"status", "waiting"}, {"binding", nullptr}};
+        publish();
+        return Json{{"revision", ipc->revision()}};
+    }
     if (method == "_layout.restore") {
         layout.restore(params);
         publish();
@@ -1243,7 +2264,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
         auto placements = layout.placements;
-        if (protocol != "0.5")
+        if (protocol != "0.5" && protocol != "0.6")
             std::erase_if(placements.get_ref<Json::array_t &>(), [](auto &p) { return p.contains("pose"); });
         return Json{{"placements", placements}};
     }
@@ -1420,7 +2441,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     }
     if (control::Control::methods().contains(method)) {
         if (method == "shell.overlay" && params.value("exclusiveInput", false) &&
-            (protocol != "0.3" && protocol != "0.4" && protocol != "0.5"))
+            (protocol != "0.3" && protocol != "0.4" && protocol != "0.5" && protocol != "0.6"))
             throw ipc::Error(-32007, "verified association requires IPC 0.3");
         if ((method == "travel.start" || method == "autodrive.start") && !active)
             throw ipc::Error(-32005, "world mode inactive");
@@ -1473,6 +2494,12 @@ void Runtime::tick() {
     if (renderDepth != 0)
         throw std::runtime_error("deferred work inside compositor render pass");
     ipc->poll();
+    if (auto next = inputFile.poll())
+        applyInput(*next);
+    for (auto &a : input.tick(
+             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+                 .count()))
+        action(a);
     if (!ipc->healthy()) {
         if (active)
             exit();
@@ -1555,6 +2582,7 @@ void Runtime::tick() {
             intent.right = float(keys.contains(KEY_D)) - float(keys.contains(KEY_A));
             intent.up = float(keys.contains(KEY_SPACE)) - float(keys.contains(KEY_LEFTCTRL));
             intent.jump = keys.contains(KEY_SPACE);
+            intent.crouch = keys.contains(KEY_LEFTCTRL) && movement == &walk;
             intent.jumpSpeed = config["player"]["jump_speed"];
             intent.stepHeight = config["player"]["step_height"];
             intent.speed = (movement == &walk ? config["player"]["walk_speed"].get<float>() / 3.5f
@@ -1567,7 +2595,8 @@ void Runtime::tick() {
         camera.pitch = std::clamp(camera.pitch + lookY * blend, -1.48f, 1.48f);
         lookX *= 1 - blend;
         lookY *= 1 - blend;
-        camera.fov = std::max(30.f, baseFov / (zoomHeld ? zoom : 1.f));
+        camera.fov = std::max(3.f, baseFov / (zoomHeld ? zoom : 1.f));
+        renderer.scopeVignette = zoomHeld && input.config["scopeVignette"].get<bool>();
         float moveT = config["player"]["move_inertia"];
         float mb = moveT > 0 ? 1 - std::exp(-dt / moveT) : 1;
         smoothIntent.forward += (intent.forward - smoothIntent.forward) * mb;
@@ -1592,6 +2621,7 @@ void Runtime::tick() {
         if (config["player"]["respawn_below"].get<float>() > 0 &&
             camera.position.y < world->spawn().position.y + 1.7f - config["player"]["respawn_below"].get<float>()) {
             auto s = world->spawn();
+            camera.eyeHeight = 1.7f;
             camera.position = s.position + Vec3{0, 1.7f, 0};
             camera.verticalSpeed = 0;
             keys.clear();
@@ -1599,6 +2629,7 @@ void Runtime::tick() {
             cancelGrab();
         }
         handTick(dt);
+        toolsTick();
         refresh();
         if (fullscreen.phase == 1 || fullscreen.phase == 3)
             transitionTick(0);
@@ -1624,8 +2655,8 @@ void Runtime::tick() {
             if (auto e = capture.find(focused))
                 if (g_pSeatManager->m_state.keyboardFocus != e->window->resource())
                     g_pSeatManager->setKeyboardFocus(e->window->resource());
-        renderer.pointerX = typing ? pointerX : .5f;
-        renderer.pointerY = typing ? pointerY : .5f;
+        renderer.pointerX = (typing || editor.activeHandle >= 0) ? pointerX : .5f;
+        renderer.pointerY = (typing || editor.activeHandle >= 0) ? pointerY : .5f;
         auto pointerHit = aim();
         if (!grabbed.empty())
             if (auto plane = capture.plane(grabbed))
@@ -1811,41 +2842,50 @@ int luaCamera(lua_State *state) {
         runtime->camera.pitch = std::clamp(float(luaL_checknumber(state, 5)), -1.48f, 1.48f);
         runtime->camera.verticalSpeed = 0;
     }
-    Json j = {{"position", {runtime->camera.position.x, runtime->camera.position.y, runtime->camera.position.z}},
-              {"yaw", runtime->camera.yaw},
-              {"pitch", runtime->camera.pitch},
-              {"frames", runtime->renderer.frames},
-              {"grabbed", runtime->grabbed},
-              {"gesture", int(runtime->hands.gesture)},
-              {"superHeld", runtime->superHeld},
-              {"ownsInput", ownsInput()},
-              {"aim", aim() ? aim()->first : ""},
-              {"gestureId", runtime->hands.pose.id},
-              {"mode", runtime->typing ? "typing" : "movement"},
-              {"tool", runtime->tool},
-              {"noclip", runtime->noclip},
-              {"fullscreen", runtime->fullscreen.phase},
-              {"fullscreenId", runtime->fullscreen.id},
-              {"handover", runtime->handover.phase},
-              {"cursor", runtime->cursorState},
-              {"nativeCursorVisible", g_pHyprRenderer->shouldRenderCursor()},
-              {"savedCursorHidden", runtime->savedCursorHidden},
-              {"pointer", {runtime->pointerX, runtime->pointerY}},
-              {"config", runtime->config},
-              {"children", runtime->capture.children.size()},
-              {"seatGrab", bool(g_pSeatManager->m_seatGrab)},
-              {"keyboardFocus", runtime->capture.find(runtime->focused)
-                                    ? bool(g_pSeatManager->m_state.keyboardFocus ==
-                                           runtime->capture.find(runtime->focused)->window->resource())
-                                    : false},
-              {"pressedButtons", runtime->buttons.size()},
-              {"error", runtime->lastError},
-              {"active", runtime->active}};
+    Json j = {
+        {"position", {runtime->camera.position.x, runtime->camera.position.y, runtime->camera.position.z}},
+        {"yaw", runtime->camera.yaw},
+        {"eyeHeight", runtime->camera.eyeHeight},
+        {"pitch", runtime->camera.pitch},
+        {"frames", runtime->renderer.frames},
+        {"grabbed", runtime->grabbed},
+        {"gesture", int(runtime->hands.gesture)},
+        {"activeHandle", runtime->editor.activeHandle},
+        {"positionMode", runtime->editor.positionMode},
+        {"selectedScale",
+         {runtime->selectedTransform.scale.x, runtime->selectedTransform.scale.y, runtime->selectedTransform.scale.z}},
+        {"superHeld", runtime->superHeld},
+        {"ownsInput", ownsInput()},
+        {"aim", aim() ? aim()->first : ""},
+        {"gestureId", runtime->hands.pose.id},
+        {"mode", runtime->typing ? "typing" : "movement"},
+        {"tool", runtime->tool},
+        {"noclip", runtime->noclip},
+        {"fullscreen", runtime->fullscreen.phase},
+        {"fullscreenId", runtime->fullscreen.id},
+        {"handover", runtime->handover.phase},
+        {"cursor", runtime->cursorState},
+        {"nativeCursorVisible", g_pHyprRenderer->shouldRenderCursor()},
+        {"savedCursorHidden", runtime->savedCursorHidden},
+        {"pointer", {runtime->pointerX, runtime->pointerY}},
+        {"config", runtime->config},
+        {"children", runtime->capture.children.size()},
+        {"seatGrab", bool(g_pSeatManager->m_seatGrab)},
+        {"keyboardFocus", runtime->capture.find(runtime->focused)
+                              ? bool(g_pSeatManager->m_state.keyboardFocus ==
+                                     runtime->capture.find(runtime->focused)->window->resource())
+                              : false},
+        {"pressedButtons", runtime->buttons.size()},
+        {"error", runtime->lastError},
+        {"active", runtime->active}};
     j["childSurfaces"] = Json::array();
     for (auto &child : runtime->capture.children)
         j["childSurfaces"].push_back(
             {{"id", child.surface.id},
              {"parentId", child.parentId},
+             {"offset", {child.offset.x, child.offset.y}},
+             {"pixels", {child.surface.pixelWidth, child.surface.pixelHeight}},
+             {"visible", child.visible},
              {"position", {child.surface.center.x, child.surface.center.y, child.surface.center.z}},
              {"size", {child.surface.width, child.surface.height}},
              {"pixels", {child.surface.pixelWidth, child.surface.pixelHeight}}});
@@ -1879,6 +2919,16 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         throw std::runtime_error("Hyprune: Hyprland ABI mismatch");
     handle = pluginHandle;
     runtime = std::make_unique<Runtime>();
+    runtime->input.apply(runtime->inputFile.current);
+    if (auto p = getenv("HYPRUNE_EDITOR_FILE"))
+        runtime->editorFile = p;
+    else if (auto p = getenv("XDG_STATE_HOME"))
+        runtime->editorFile = std::filesystem::path(p) / "hyprune/editor.json";
+    else
+        runtime->editorFile = std::filesystem::path(getenv("HOME")) / ".local/state/hyprune/editor.json";
+    if (std::filesystem::exists(runtime->editorFile))
+        runtime->editor.restore(interaction::readJSON(runtime->editorFile));
+    runtime->lastEditor = runtime->editor.saved();
     const char *installed = getenv("HYPRUNE_WORLD_DIR");
     runtime->installed = installed ? installed : std::string(getenv("HOME")) + "/.local/share/hyprune/worlds";
     const char *dir = getenv("XDG_RUNTIME_DIR");
@@ -1902,25 +2952,18 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         }
     }
     auto methods = hyprune::control::Control::methods();
-    methods.insert({{"workspace.bind", "world.control"},
-                    {"workspace.focus", "surface.control"},
-                    {"workspace.unfocus", "surface.control"},
-                    {"surface.pull", "surface.control"},
-                    {"surface.place", "surface.control"},
-                    {"surface.return", "surface.control"},
-                    {"surfaces.recall", "surface.control"},
-                    {"placements.list", "state.read"},
-                    {"placements.remove", "surface.control"},
-                    {"data.object.bind", "data.publish"},
-                    {"atmosphere.get", "state.read"},
-                    {"atmosphere.set", "world.control"},
-                    {"camera.fov", "movement.control"},
-                    {"shell.bind", "shell.control"},
-                    {"workspace.activate", "world.control"},
-                    {"world.load", "world.control"},
-                    {"surface.focus", "surface.control"},
-                    {"movement.set", "movement.control"},
-                    {"runtime.exit", "runtime.control"}});
+    methods.insert({{"workspace.bind", "world.control"},      {"workspace.focus", "surface.control"},
+                    {"workspace.unfocus", "surface.control"}, {"surface.pull", "surface.control"},
+                    {"surface.place", "surface.control"},     {"surface.return", "surface.control"},
+                    {"surfaces.recall", "surface.control"},   {"placements.list", "state.read"},
+                    {"placements.remove", "surface.control"}, {"data.object.bind", "data.publish"},
+                    {"atmosphere.get", "state.read"},         {"atmosphere.set", "world.control"},
+                    {"camera.fov", "movement.control"},       {"shell.bind", "shell.control"},
+                    {"workspace.activate", "world.control"},  {"world.load", "world.control"},
+                    {"surface.focus", "surface.control"},     {"input.get", "state.read"},
+                    {"input.preview", "state.read"},          {"input.set", "input.control"},
+                    {"input.capture", "input.control"},       {"input.capture.cancel", "input.control"},
+                    {"movement.set", "movement.control"},     {"runtime.exit", "runtime.control"}});
     runtime->ipc->advertise(std::move(methods));
     HyprlandAPI::addDispatcherV2(handle, "hyprune.toggle", [](std::string arg) {
         deferToggle(arg);
@@ -1954,6 +2997,22 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 originalKeyboardInput = (KeyboardInput)runtime->keyboardHook->m_original;
             break;
         }
+    for (auto &match : HyprlandAPI::findFunctionsByName(handle, "onMouseButton"))
+        if (match.demangled.starts_with("CInputManager::onMouseButton(")) {
+            runtime->buttonHook = HyprlandAPI::createFunctionHook(handle, match.address, (void *)mouseButtonInput);
+            if (runtime->buttonHook && runtime->buttonHook->hook())
+                originalMouseButton = (MouseButtonInput)runtime->buttonHook->m_original;
+            break;
+        }
+    for (auto &match : HyprlandAPI::findFunctionsByName(handle, "onMouseWheel"))
+        if (match.demangled.starts_with("CInputManager::onMouseWheel(")) {
+            runtime->axisHook = HyprlandAPI::createFunctionHook(handle, match.address, (void *)mouseAxisInput);
+            if (runtime->axisHook && runtime->axisHook->hook())
+                originalMouseAxis = (MouseAxisInput)runtime->axisHook->m_original;
+            break;
+        }
+    if (!originalMouseButton || !originalMouseAxis)
+        throw std::runtime_error("input source hooks unavailable");
     if (!originalKeyboardInput)
         throw std::runtime_error("Hyprune: event keyboard hook unavailable");
     runtime->listeners.push_back(Event::bus()->m_events.render.stage.listen([](eRenderStage stage) {
@@ -1979,6 +3038,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     runtime->pointerY = (pos.y - m->m_position.y) / m->m_size.y;
                     runtime->deferInput([] {
                         Desktop::focusState()->rawMonitorFocus(runtime->monitor.lock());
+                        if (auto plane = runtime->capture.plane(runtime->relativeSurface))
+                            if (auto hit = surfaces::intersect(*plane, runtime->camera.position, pointerRay(), false)) {
+                                runtime->localX = hit->u;
+                                runtime->localY = hit->v;
+                            }
                         runtime->cursor();
                     });
                     info.cancelled = true;
@@ -1989,102 +3053,97 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                                 (!runtime->freeCursor || runtime->cursorWarpPending) && !runtime->directorSurface()))
                 info.cancelled = true;
         }));
-    runtime->listeners.push_back(Event::bus()->m_events.input.keyboard.key.listen([](IKeyboard::SKeyEvent event,
-                                                                                     Event::SCallbackInfo &info) {
-        safe([&] {
-            bool down = event.state == WL_KEYBOARD_KEY_STATE_PRESSED;
-            if (!down && runtime->swallowedKeys.erase(event.keycode)) {
-                info.cancelled = true;
-                runtime->keys.erase(event.keycode);
-            }
-            if (!runtime->active || locked() || runtime->monitor != Desktop::focusState()->monitor())
-                return;
-            auto kb = runtime->eventKeyboard.lock();
-            if (!kb)
-                kb = g_pSeatManager->m_keyboard.lock();
-            if (!kb || !kb->m_xkbSymState)
-                return;
-            auto sym = xkb_state_key_get_one_sym(kb->m_xkbSymState, event.keycode + 8);
-            if (sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R)
-                runtime->superHeld = down;
-            if (sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R)
-                runtime->altHeld = down;
-            auto consume = [&] {
+    runtime->listeners.push_back(
+        Event::bus()->m_events.input.keyboard.key.listen([](IKeyboard::SKeyEvent event, Event::SCallbackInfo &info) {
+            safe([&] {
+                auto kb = runtime->eventKeyboard.lock();
+                if (!kb)
+                    kb = g_pSeatManager->m_keyboard.lock();
+                if (!kb || !kb->m_xkbSymState)
+                    return;
+                auto sym = xkb_state_key_get_one_sym(kb->m_xkbSymState, event.keycode + 8);
+                char buffer[128];
+                if (xkb_keysym_get_name(sym, buffer, sizeof buffer) <= 0)
+                    return;
+                std::string key = buffer;
+                bool down = event.state == WL_KEYBOARD_KEY_STATE_PRESSED;
+                unsigned bit = sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R       ? 64
+                               : sym == XKB_KEY_Shift_L || sym == XKB_KEY_Shift_R     ? 1
+                               : sym == XKB_KEY_Control_L || sym == XKB_KEY_Control_R ? 4
+                               : sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R         ? 8
+                                                                                      : 0;
+                if (bit) {
+                    if (down)
+                        runtime->modifiers |= bit;
+                    else
+                        runtime->modifiers &= ~bit;
+                }
+                runtime->superHeld = runtime->modifiers & 64;
+                runtime->altHeld = runtime->modifiers & 8;
+                bool owned = !down && runtime->swallowedKeys.erase(event.keycode);
+                if (owned)
+                    info.cancelled = true;
+                bool scoped = runtime->active && !locked() && runtime->monitor == Desktop::focusState()->monitor() &&
+                              !runtime->freeCursor;
+                bool bindingScoped = runtime->active && !locked();
+                if (!bindingScoped && !owned)
+                    return;
+                if (bindingScoped && key == "F12") {
+                    info.cancelled = true;
+                    if (down) {
+                        runtime->swallowedKeys.insert(event.keycode);
+                        runtime->deferInput([] { runtime->exit(); });
+                    }
+                    return;
+                }
+                if (bindingScoped && !runtime->captureRequest.is_null() &&
+                    runtime->captureRequest.value("status", "") == "waiting") {
+                    info.cancelled = true;
+                    if (down)
+                        runtime->swallowedKeys.insert(event.keycode);
+                    auto mods = runtime->modifiers;
+                    runtime->deferInput([key, mods, down] {
+                        if (key == "Escape" && down)
+                            runtime->leaveInteraction();
+                        else
+                            runtime->acceptCapture(key, mods, down);
+                    });
+                    return;
+                }
+                auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch())
+                               .count();
+                auto actions = runtime->input.event(runtime->inputMode(), key, runtime->modifiers, down, now);
+                if (!actions.empty()) {
+                    info.cancelled = true;
+                    if (down)
+                        runtime->swallowedKeys.insert(event.keycode);
+                    runtime->deferInput([actions] {
+                        for (auto a : actions)
+                            runtime->action(a);
+                    });
+                    return;
+                }
+                if (!scoped && !owned)
+                    return;
+                // Uncolliding binds retain native dispatch in 2D/menu. Owned releases
+                // stay swallowed after transitions; forwarded world presses receive a
+                // matching manager release, without typing into hidden desktop clients.
+                bool native = !runtime->layout.desktop.is_null() || runtime->fullscreen.phase == 2 ||
+                              runtime->control.uiVisible();
+                if (native && !owned)
+                    return;
                 info.cancelled = true;
                 if (down)
                     runtime->swallowedKeys.insert(event.keycode);
-            };
-            if (sym == XKB_KEY_F12) {
-                consume();
-                if (down)
-                    deferToggle("");
-                return;
-            }
-            if (down && runtime->superHeld && runtime->altHeld &&
-                (sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R || sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R)) {
-                consume();
-                runtime->deferInput([] { runtime->modeToggle(); });
-                return;
-            }
-            if (!runtime->layout.desktop.is_null() || runtime->fullscreen.phase == 2)
-                return;
-            if (sym == XKB_KEY_Escape) {
-                consume();
-                if (down)
-                    runtime->deferInput([] {
-                        if (runtime->loading)
-                            runtime->loadCancelled = true;
-                        runtime->control.stop();
-                        runtime->cancelGrab();
-                        runtime->typing = false;
-                        runtime->freeCursor = false;
-                        runtime->focused.clear();
-                        runtime->tagged.clear();
-                        runtime->keys.clear();
-                        runtime->smoothIntent = {};
-                        runtime->lookX = runtime->lookY = 0;
-                        runtime->cursor();
-                    });
-                return;
-            }
-            if (runtime->loading || runtime->handover.phase || runtime->fullscreen.phase) {
-                consume();
-                runtime->keys.clear();
-                return;
-            }
-            if (runtime->control.uiVisible()) {
-                auto surface = runtime->control.exclusive() ? runtime->directorSurface() : nullptr;
-                if (!surface)
-                    consume();
-                else
-                    runtime->deferInput([surface] { g_pSeatManager->setKeyboardFocus(surface); });
-                return;
-            }
-            std::string action;
-            for (auto &[name, key] : runtime->config["input"]["bindings"].items())
-                if (sym == xkb_keysym_from_name(key.get<std::string>().c_str(), XKB_KEYSYM_CASE_INSENSITIVE))
-                    action = name;
-            uint32_t move = action == "forward"      ? KEY_W
-                            : action == "back"       ? KEY_S
-                            : action == "left"       ? KEY_A
-                            : action == "right"      ? KEY_D
-                            : action == "jump"       ? KEY_SPACE
-                            : action == "down"       ? KEY_LEFTCTRL
-                            : sym == XKB_KEY_Shift_L ? KEY_LEFTSHIFT
-                                                     : 0;
-            // Releases clear semantic movement even when mode or modifiers changed.
-            if (!down && move)
-                runtime->keys.erase(move);
-            if (runtime->typing) {
-                bool modified = runtime->superHeld || runtime->altHeld || sym == XKB_KEY_Super_L ||
-                                sym == XKB_KEY_Super_R || sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R;
-                consume();
-                if (runtime->focused.empty() || runtime->freeCursor)
+                if (owned && !runtime->nativeKeys.erase(event.keycode))
                     return;
-                runtime->deferInput([event, kb, modified] {
-                    if (modified && !g_pKeybindManager->onKeyEvent(event, kb))
+                if (down)
+                    runtime->nativeKeys.insert(event.keycode);
+                runtime->deferInput([event, kb] {
+                    if (!g_pKeybindManager->onKeyEvent(event, kb))
                         return;
-                    if (!runtime->typing)
+                    if (!runtime->active || !runtime->typing || runtime->freeCursor || runtime->control.uiVisible())
                         return;
                     auto entry = runtime->capture.find(runtime->focused);
                     if (!entry)
@@ -2105,129 +3164,122 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     g_pSeatManager->sendKeyboardKey(event.timeMs, event.keycode, event.state);
                     if (event.state == WL_KEYBOARD_KEY_STATE_PRESSED)
                         runtime->appKeys.insert(event.keycode);
-                    else
-                        runtime->appKeys.erase(event.keycode);
                 });
-                return;
-            }
-            if (runtime->superHeld || runtime->altHeld || sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R ||
-                sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R) {
-                consume();
-                runtime->keys.clear();
-                runtime->smoothIntent = {};
-                runtime->deferInput([event, kb] { g_pKeybindManager->onKeyEvent(event, kb); });
-                return;
-            }
-            if (sym == XKB_KEY_Tab) {
-                consume();
-                runtime->control.hold(down);
-                return;
-            }
-            if (runtime->config["tools"]["enabled"] == true && sym >= XKB_KEY_1 && sym <= XKB_KEY_5) {
-                consume();
-                if (down) {
-                    runtime->tool = int(sym - XKB_KEY_1) + 1;
-                    runtime->tagged.clear();
-                }
-                return;
-            }
-            if (action == "zoom") {
-                consume();
-                runtime->zoomHeld = down;
-                if (down)
-                    runtime->zoom = 2.f;
-                return;
-            }
-            if (action == "focus") {
-                consume();
-                if (down)
-                    runtime->deferInput([] {
-                        if (auto hit = aim())
-                            if (runtime->capture.workspace(hit->first))
-                                runtime->focusWall(hit->first);
-                    });
-                return;
-            }
-            if (action == "noclip") {
-                consume();
-                if (down)
-                    runtime->deferInput([] {
-                        runtime->noclip = !runtime->noclip;
-                        runtime->keys.clear();
-                        if (!runtime->noclip && runtime->world) {
-                            auto candidate = runtime->camera;
-                            sim::resolveCapsule(candidate, runtime->world->collision);
-                            if (length(candidate.position - runtime->camera.position) > .2f) {
-                                auto sp = runtime->world->spawn();
-                                candidate.position = sp.position + Vec3{0, 1.7f, 0};
-                            }
-                            runtime->camera = candidate;
-                        }
-                    });
-                return;
-            }
-            if (action == "fly") {
-                consume();
-                if (down)
-                    runtime->deferInput([] {
-                        runtime->movement = runtime->movement == &runtime->walk
-                                                ? static_cast<sim::MotionStrategy *>(&runtime->fly)
-                                                : &runtime->walk;
-                        runtime->keys.clear();
-                        runtime->smoothIntent = {};
-                        runtime->camera.verticalSpeed = 0;
-                    });
-                return;
-            }
-            if (move) {
-                consume();
-                if (down) {
-                    runtime->control.stop();
-                    runtime->keys.insert(move);
-                } else
-                    runtime->keys.erase(move);
-                return;
-            }
-            consume(); // World navigation must never type into an occluded desktop client.
-        });
-    }));
-    runtime->listeners.push_back(
-        Event::bus()->m_events.input.mouse.button.listen([](IPointer::SButtonEvent event, Event::SCallbackInfo &info) {
-            bool down = event.state == WL_POINTER_BUTTON_STATE_PRESSED;
-            bool held = !down && runtime->swallowedButtons.erase(event.button);
-            bool back = runtime->active && runtime->monitor == Desktop::focusState()->monitor() &&
-                        event.button == runtime->config["input"]["typing_button"].get<uint32_t>() &&
-                        !runtime->layout.desktop.is_null();
-            bool world = runtime->active && runtime->monitor == Desktop::focusState()->monitor() &&
-                         runtime->layout.desktop.is_null() && runtime->fullscreen.phase != 2 &&
-                         (!runtime->freeCursor || runtime->cursorWarpPending) && !runtime->directorSurface();
-            if (!held && !world && !back)
-                return;
-            info.cancelled = true;
-            if (down)
-                runtime->swallowedButtons.insert(event.button);
-            bool super = runtime->superHeld;
-            runtime->deferInput([event, super, back] {
-                if (back) {
-                    if (event.state == WL_POINTER_BUTTON_STATE_PRESSED)
-                        runtime->unfocus();
-                    return;
-                }
-                runtime->button(event, super);
             });
         }));
     runtime->listeners.push_back(
-        Event::bus()->m_events.input.mouse.axis.listen([](IPointer::SAxisEvent event, Event::SCallbackInfo &info) {
-            bool world = runtime->active && runtime->monitor == Desktop::focusState()->monitor() &&
-                         runtime->layout.desktop.is_null() && runtime->fullscreen.phase != 2 &&
-                         (!runtime->freeCursor || runtime->cursorWarpPending) && !runtime->directorSurface();
-            if (!world)
+        Event::bus()->m_events.input.mouse.button.listen([](IPointer::SButtonEvent event, Event::SCallbackInfo &info) {
+            safe([&] {
+                bool down = event.state == WL_POINTER_BUTTON_STATE_PRESSED,
+                     owned = !down && runtime->swallowedButtons.erase(event.button);
+                bool scoped = runtime->active && !locked() && runtime->monitor == Desktop::focusState()->monitor() &&
+                              (!runtime->freeCursor || runtime->cursorWarpPending);
+                if (owned)
+                    info.cancelled = true;
+                bool bindingScoped = runtime->active && !locked();
+                if (!bindingScoped && !owned)
+                    return;
+                std::string key = event.button == 272   ? "LMB"
+                                  : event.button == 273 ? "RMB"
+                                  : event.button == 274 ? "MMB"
+                                  : event.button == 275 ? "Back"
+                                  : event.button == 276 ? "Forward"
+                                                        : "Button" + std::to_string(event.button);
+                auto mods = runtime->modifiers;
+                if (bindingScoped && !runtime->captureRequest.is_null() &&
+                    runtime->captureRequest.value("status", "") == "waiting") {
+                    info.cancelled = true;
+                    if (down)
+                        runtime->swallowedButtons.insert(event.button);
+                    runtime->deferInput([key, mods, down] { runtime->acceptCapture(key, mods, down); });
+                    return;
+                }
+                auto actions = runtime->input.event(runtime->inputMode(), key, mods, down,
+                                                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                        std::chrono::steady_clock::now().time_since_epoch())
+                                                        .count());
+                if (!actions.empty()) {
+                    info.cancelled = true;
+                    if (down)
+                        runtime->swallowedButtons.insert(event.button);
+                    runtime->deferInput([actions] {
+                        for (auto a : actions)
+                            runtime->action(a);
+                    });
+                    return;
+                }
+                if (!scoped && !owned)
+                    return;
+                bool native = runtime->control.uiVisible() || !runtime->layout.desktop.is_null() ||
+                              runtime->fullscreen.phase == 2;
+                if (native && !owned)
+                    return;
+                info.cancelled = true;
+                if (down)
+                    runtime->swallowedButtons.insert(event.button);
+                if (owned && !runtime->nativeButtons.erase(event.button))
+                    return;
+                if (down)
+                    runtime->nativeButtons.insert(event.button);
+                auto pointer = runtime->eventPointer.lock();
+                runtime->deferInput([event, pointer] {
+                    if (g_pKeybindManager->onMouseEvent(event, pointer) && runtime->typing)
+                        runtime->button(event, false);
+                });
+            });
+        }));
+    runtime->listeners.push_back(Event::bus()->m_events.input.mouse.axis.listen([](IPointer::SAxisEvent event,
+                                                                                   Event::SCallbackInfo &info) {
+        safe([&] {
+            if (!runtime->active || locked() || runtime->monitor != Desktop::focusState()->monitor() ||
+                (runtime->freeCursor && !runtime->cursorWarpPending))
+                return;
+            float raw = event.deltaDiscrete ? event.deltaDiscrete / 120.f : event.delta * .05f;
+            float steps = std::clamp(
+                event.relativeDirection == WL_POINTER_AXIS_RELATIVE_DIRECTION_INVERTED ? raw : -raw, -2.f, 2.f);
+            std::string key = steps > 0 ? "WheelUp" : "WheelDown";
+            auto mods = runtime->modifiers;
+            if (!runtime->captureRequest.is_null() && runtime->captureRequest.value("status", "") == "waiting") {
+                info.cancelled = true;
+                runtime->deferInput([key, mods] { runtime->acceptCapture(key, mods, true); });
+                return;
+            }
+            auto actions = runtime->input.event(runtime->inputMode(), key, mods, true,
+                                                std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                    std::chrono::steady_clock::now().time_since_epoch())
+                                                    .count(),
+                                                steps);
+            if (!actions.empty()) {
+                info.cancelled = true;
+                runtime->deferInput([actions, event] {
+                    for (auto a : actions) {
+                        if (a.name == "wheel") {
+                            if (runtime->zoomHeld) {
+                                runtime->zoom = std::clamp(runtime->zoom * std::pow(1.12f, a.value), 1.f, 20.f);
+                            } else if (runtime->editor.slot != 1) {
+                                runtime->editor.wheel(a.value > 0 ? 1 : -1);
+                                runtime->editor.activeHandle = -1;
+                                runtime->publish();
+                            } else
+                                runtime->axis(event);
+                        } else
+                            runtime->action(a);
+                    }
+                });
+                return;
+            }
+            if (runtime->control.uiVisible() || !runtime->layout.desktop.is_null() || runtime->fullscreen.phase == 2)
                 return;
             info.cancelled = true;
-            runtime->deferInput([event] { runtime->axis(event); });
-        }));
+            auto pointer = runtime->eventPointer.lock();
+            runtime->deferInput([event, pointer] {
+                if (g_pKeybindManager->onAxisEvent(event, pointer) && runtime->typing)
+                    runtime->axis(event);
+            });
+        });
+    }));
     runtime->listeners.push_back(Event::bus()->m_events.monitor.removed.listen([](PHLMONITOR monitor) {
-        safe([&] {
+        runtime->deferInput([monitor] {
             if (runtime->monitor == monitor) {
                 runtime->exit();
                 runtime->monitor.reset();
@@ -2274,6 +3326,12 @@ APICALL EXPORT void PLUGIN_EXIT() {
         HyprlandAPI::removeFunctionHook(handle, runtime->motionHook);
     if (runtime->keyboardHook)
         HyprlandAPI::removeFunctionHook(handle, runtime->keyboardHook);
+    if (runtime->buttonHook)
+        HyprlandAPI::removeFunctionHook(handle, runtime->buttonHook);
+    if (runtime->axisHook)
+        HyprlandAPI::removeFunctionHook(handle, runtime->axisHook);
+    originalMouseButton = nullptr;
+    originalMouseAxis = nullptr;
     if (runtime->cursorHook)
         HyprlandAPI::removeFunctionHook(handle, runtime->cursorHook);
     originalHideCursor = nullptr;

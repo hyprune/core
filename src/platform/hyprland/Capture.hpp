@@ -28,6 +28,7 @@ class Capture {
         surfaces::Surface surface;
         std::string parentId;
         Vector2D offset;
+        bool visible = true;
     };
     std::vector<Child> children;
     struct Target {

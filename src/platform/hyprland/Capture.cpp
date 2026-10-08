@@ -180,7 +180,7 @@ std::vector<surfaces::Surface> Capture::visible() const {
     for (auto &f : workspaces)
         result.push_back(f.surface);
     for (auto &c : children)
-        if (c.resource)
+        if (c.resource && c.visible)
             result.push_back(c.surface);
     return result;
 }
@@ -195,6 +195,39 @@ surfaces::Surface *Capture::plane(const std::string &id) {
     return nullptr;
 }
 std::optional<Capture::Target> Capture::target(const std::string &id, float u, float v) {
+    if (auto wall = workspace(id)) {
+        PHLMONITOR mon;
+        for (auto &e : entries)
+            if (e.instance.workspaceId == wall->workspaceId) {
+                mon = e.window->m_monitor.lock();
+                break;
+            }
+        if (!mon)
+            return {};
+        Vector2D global{mon->m_position.x + u * mon->m_size.x, mon->m_position.y + v * mon->m_size.y};
+        for (auto it = entries.rbegin(); it != entries.rend(); ++it)
+            if (it->instance.workspaceId == wall->workspaceId && !it->visible) {
+                auto box = it->window->surfaceLogicalBox();
+                if (!box)
+                    continue;
+                for (auto child = children.rbegin(); child != children.rend(); ++child)
+                    if (child->parentId == it->surface.id && child->resource) {
+                        auto local = global - Vector2D{box->x, box->y} - child->offset;
+                        if (local.x >= 0 && local.y >= 0 && local.x < child->surface.pixelWidth &&
+                            local.y < child->surface.pixelHeight &&
+                            child->resource->m_current.effectiveInputRegion().containsPoint(local))
+                            return Target{child->resource.lock(), local, it->surface.id};
+                    }
+                if (global.x < box->x || global.y < box->y || global.x >= box->x + box->w ||
+                    global.y >= box->y + box->h)
+                    continue;
+                auto local = global - Vector2D{box->x, box->y};
+                auto [resource, sub] = it->window->resource()->at(local, true);
+                if (resource)
+                    return Target{resource, sub, it->parentKeyboard ? it->parentId : it->surface.id};
+            }
+        return {};
+    }
     if (auto e = find(id)) {
         Vector2D local{u * e->surface.pixelWidth, v * e->surface.pixelHeight};
         auto [resource, subLocal] = e->window->resource()->at(local, true);
@@ -225,6 +258,7 @@ void Capture::attach() {
         child.resource = r;
         child.texture = r->m_current.texture;
         child.parentId = owner.surface.id;
+        child.visible = owner.visible;
         child.offset = offset;
         auto old = std::find_if(previous.begin(), previous.end(), [&](auto &c) { return c.resource == r; });
         child.surface.id = old == previous.end() ? "child-" + std::to_string(++sequence_) : old->surface.id;
@@ -274,8 +308,6 @@ void Capture::attach() {
                     }
                     break;
                 }
-        if (!e.visible)
-            continue;
         auto root = w->resource();
         root->breadthfirst(
             [&](SP<CWLSurfaceResource> r, const Vector2D &off, void *) {

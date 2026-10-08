@@ -84,4 +84,12 @@ if(BUILD_TESTING)
  add_executable(m3b-tests tests/m3b.cpp)
  target_link_libraries(m3b-tests PRIVATE hyprune_runtime)
  add_test(NAME m3b COMMAND m3b-tests)
+ add_executable(bridge-tests tests/bridge.cpp)
+ target_link_libraries(bridge-tests PRIVATE hyprune_runtime)
+ add_test(NAME bridge COMMAND bridge-tests)
+ # RelWithDebInfo defines NDEBUG. These standalone suites use assert for
+ # invariants, so keep checks (and their existing setup calls) enabled.
+ foreach(test_target core-tests ipc-tests control-tests render-tests m2-tests m3a-tests m3b-tests bridge-tests)
+  target_compile_options(${test_target} PRIVATE -UNDEBUG)
+ endforeach()
 endif()

@@ -1,4 +1,5 @@
 #pragma once
+#include "interaction/Tools.hpp"
 #include "surfaces/Surface.hpp"
 #include "world/World.hpp"
 #include <GLES3/gl3.h>
@@ -13,6 +14,9 @@ class Renderer {
     world::Json profile;
     bool intelQuality = false, effects = true;
     float pointerX = .5f, pointerY = .5f;
+    bool scopeVignette = false;
+    std::vector<interaction::Line> lines;
+    std::map<unsigned, Mat4> transforms;
     bool materialDetails = true; // Also permits like-for-like benchmark comparisons.
     uint64_t frames = 0;
 
@@ -20,7 +24,7 @@ class Renderer {
     struct Batch {
         GLuint vao = 0, vbo = 0;
         GLsizei count = 0;
-        unsigned material = 0;
+        unsigned material = 0, node = 0;
         Vec3 center;
     };
     std::shared_ptr<const world::World> world_;
