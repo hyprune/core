@@ -68,3 +68,13 @@ if(BUILD_TESTING)
   target_link_libraries(nested-parity-client PRIVATE PkgConfig::GTK3)
  endif()
 endif()
+
+if(BUILD_TESTING)
+ pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
+ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/xdg-shell.h ${CMAKE_CURRENT_BINARY_DIR}/xdg-shell.c
+  COMMAND ${WAYLAND_SCANNER} client-header ${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml ${CMAKE_CURRENT_BINARY_DIR}/xdg-shell.h
+  COMMAND ${WAYLAND_SCANNER} private-code ${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml ${CMAKE_CURRENT_BINARY_DIR}/xdg-shell.c)
+ add_executable(nested-subsurface-client dev/nested/subsurface-client.c ${CMAKE_CURRENT_BINARY_DIR}/xdg-shell.c)
+ target_include_directories(nested-subsurface-client PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+ target_link_libraries(nested-subsurface-client PRIVATE PkgConfig::WAYLAND_CLIENT)
+endif()
