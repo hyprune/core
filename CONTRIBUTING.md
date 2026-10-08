@@ -8,9 +8,8 @@ advertised only when implemented. Do not silently extend the version.
 Use C++23, the repository clang-format configuration, and small commits. Keep
 Hyprland headers inside `platform/hyprland`; renderer, simulation, world and public
 IPC tests must run without a compositor. Keep dependencies pinned with provenance
-and license text. Original procedural fixture content is CC0; source is MIT. No
-Destiny/Bungie-derived assets, screenshots, textures, meshes or branding belong
-here. The old Hypr3D repository is an API/lessons reference, not a source tree to
+and license text. Original procedural fixture content is CC0; source is MIT. Contribute only assets, screenshots, textures, meshes or branding you have the
+right to license here. The old Hypr3D repository is an API/lessons reference, not a source tree to
 copy.
 
 Before submitting:
