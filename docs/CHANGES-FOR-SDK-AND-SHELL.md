@@ -469,3 +469,56 @@ the same switch/persistence/banner path for nested testing and video.
 Concept order: Vanguard → Instrument → Minimal → Vanguard. This is presentation
 only, not an editor tool mutation. The reference is private; no reference image,
 third-party logo, game name or copied icon is being added to shell/core assets.
+
+### Core response / in progress: HUD 0.9, Performance 0.10
+
+Core is implementing exact IPC **0.9** for HUD data first. Planned event names:
+`hud.frame` (opt-in, maximum 4 Hz), `hud.pose` (opt-in, maximum 30 Hz),
+`zone.entered`, `zone.exited`, `tool.changed`, and **`ui.hud.cycle`**.
+The last event is sent only to the verified associated shell, with
+`leaseId`, `outputId`, `sequence`, `monotonicMs`, plus `sessionId`/`revision`.
+`hud.cycle` replaces reserved `tool5` in the input action list and defaults to
+`5` in world mode only. Core owns press/release and repeat suppression; the
+shell owns concept order, persistence, and its banner. Canonical schema and SDK
+publication will follow here before enabling the new protocol in live tooling.
+
+Offload/performance is planned for **0.10**, preserving frozen 0.9 graphics:
+requested/effective settings, preset versus Custom overrides, live off/auto/on,
+active renderer, warming/fallback reason, power/profile/cap and FPS, dynamic
+scale min/max, and existing effects with shared/independent GPU costs identified.
+Hot switches keep the local renderer prepared and drawing throughout startup;
+no reload/restart is part of a settings mutation. Offload remains default off.
+Do not treat this paragraph as a landed schema; exact handoff follows validation.
+
+### IPC 0.9 implementation available for integration
+
+Canonical schema `schema/v0.9/ipc.schema.json` and `input.schema.json` are committed
+in schema `d9da091`. SDK generation now includes `HudMethodMap`, `Ipc09_*` and
+protocol `'0.9'` (tests green). Core unit tests are green; nested acceptance is
+being run before its commit. Exact payloads are defined in that schema and the
+RFC-0008 HUD amendment; no graphics fields changed in 0.9.
+
+Call `hud.subscribe({topics:["hud.frame","hud.pose","zone.entered","zone.exited","tool.changed"]})`
+with `state.read`; retain returned `subscriptionId` for `hud.unsubscribe`.
+No state subscription is needed for these opt-in streams. Common event fields:
+`subscriptionId/sessionId/revision/monotonicMs`. `hud.frame` adds
+`fps/frameMs/cpuMs/gpuMs/renderScale/preset`; `hud.pose` adds
+`outputId/worldId/worldName/position/heading/pitch/zone/tool/subtype`.
+Heading is radians, zero -Z, positive right; +Y up. Zone is null or
+`{id,homeName,worldId,worldName}`. Enter/exit events carry `zone`; tool change
+carries `slot/name/subtype`. Initial zone/tool come from pose; transitions are
+not replayed. Slow readers drop stale telemetry. No player resource stat exists.
+
+**Bind the mapped HUD early** using `shell.bind`, before the first Director open:
+5 emits `ui.hud.cycle` only to the verified associated lease owner with a state
+subscription. Payload `leaseId/outputId/sequence/monotonicMs/sessionId/revision`.
+Core does not change tools. Canonical world action is `hud.cycle` (not `tool5`);
+input files migrate the reserved binding, and old peers receive projected names.
+Please use numeric protocol floors in bridge code; its explicit version lists
+currently stop at 0.8 and would otherwise silently disable 0.9 UI behavior.
+
+Nested HUD acceptance passed: 42 pose and 8 frame samples over two seconds,
+verified native 5 press/repeat suppression with scoped lease delivery, no tool
+mutation, zone enter/exit, subtype notification, live rebind and unsubscribe.
+Evidence: `docs/evidence/hud-09/acceptance.json`. Core CTest 9/9; schema 89/89;
+SDK 55 passing / 2 intentional skips. HUD concepts themselves remain shell-owned.

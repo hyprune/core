@@ -1,4 +1,5 @@
 #include "interaction/Config.hpp"
+#include "hud/Telemetry.hpp"
 #include "interaction/InputFile.hpp"
 #include "interaction/Resize.hpp"
 #include "interaction/Tools.hpp"
@@ -13,6 +14,24 @@
 using namespace hyprune;
 using namespace interaction;
 int main() {
+    Input hudInput;
+    auto cycle = hudInput.event("world", "5", 0, true, 0);
+    assert(cycle.size() == 1 && cycle[0].name == "hud.cycle" && cycle[0].edge);
+    auto repeat = hudInput.event("world", "5", 0, true, 10);
+    assert(repeat.empty() || !repeat[0].edge);
+    hudInput.event("world", "5", 0, false, 20);
+    for (auto mode : {"interactive", "focus", "menu"})
+        assert(hudInput.event(mode, "5", 0, true, 30).empty());
+    auto legacyCycle = legacyInputNames(inputDefaults());
+    assert(legacyCycle["modes"]["world"].contains("tool5"));
+    assert(validateInput(legacyCycle) == validateInput(inputDefaults()));
+    world::World testWorld;
+    testWorld.id = "test"; testWorld.name = "Test world";
+    testWorld.manifest = {{"zones", {{{"id", "home"}, {"name", "Room"},
+        {"bounds", {{"min", {-1, 0, -1}}, {"max", {1, 3, 1}}}}}}}};
+    assert(hud::zoneAt(&testWorld, {0, 1, 0})["homeName"] == "Room");
+    assert(hud::zoneAt(&testWorld, {2, 1, 0}).is_null());
+    assert(hud::zoneAt(nullptr, {}).is_null());
     assert(resizeExtent(800, 160, 640) == 640 && resizeExtent(600, 100, 480) == 480);
     assert(resizeExtent(80, 160, 640) == 160 && resizeExtent(40, 100, 480) == 100);
     assert(resizeExtent(200, 160, 80) == 80 && resizeExtent(150, 100, 60) == 60);

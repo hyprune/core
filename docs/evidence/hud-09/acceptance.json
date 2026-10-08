@@ -1,0 +1,61 @@
+{
+  "protocol": "0.9",
+  "poseSamples": 42,
+  "frameSamples": 8,
+  "sampleFrame": {
+    "cpuMs": 0.367231,
+    "fps": 59.99928372855084,
+    "frameMs": 16.662625,
+    "gpuMs": 2.253591,
+    "monotonicMs": 133672064,
+    "preset": "low",
+    "renderScale": 1.0,
+    "revision": 28,
+    "sessionId": "e13e71c35cd1d37d5fb347359dab63398963544d0257a6f0b2044b04e761e519",
+    "subscriptionId": "hud-2"
+  },
+  "samplePose": {
+    "heading": 0.0,
+    "monotonicMs": 133672113,
+    "outputId": "output-1",
+    "pitch": 0.0,
+    "position": [
+      -8.0,
+      2.0,
+      12.0
+    ],
+    "revision": 29,
+    "sessionId": "e13e71c35cd1d37d5fb347359dab63398963544d0257a6f0b2044b04e761e519",
+    "subscriptionId": "hud-2",
+    "subtype": "normal",
+    "tool": 1,
+    "worldId": "com.hyprune.lumen-reach",
+    "worldName": "Lumen Reach",
+    "zone": {
+      "homeName": "Sun Court",
+      "id": "sun-court",
+      "worldId": "com.hyprune.lumen-reach",
+      "worldName": "Lumen Reach"
+    }
+  },
+  "cycle": {
+    "jsonrpc": "2.0",
+    "method": "ui.hud.cycle",
+    "params": {
+      "leaseId": "lease-70e3fc28f3ac0601",
+      "monotonicMs": 133672171,
+      "outputId": "output-1",
+      "revision": 29,
+      "sequence": 1,
+      "sessionId": "e13e71c35cd1d37d5fb347359dab63398963544d0257a6f0b2044b04e761e519"
+    }
+  },
+  "checks": [
+    "scoped nonrepeat cycle",
+    "no tool mutation",
+    "zone exit/enter",
+    "tool changed",
+    "live rebind",
+    "unsubscribe"
+  ]
+}

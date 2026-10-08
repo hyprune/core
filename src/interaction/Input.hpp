@@ -16,6 +16,8 @@ std::string bindingKey(xkb_state *, uint32_t keycode);
 std::string bindingName(const Trigger &);
 Json inputDefaults();
 Json validateInput(const Json &);
+// Project canonical action names into frozen pre-0.9 responses (including capture/conflict metadata).
+Json legacyInputNames(Json);
 Json inputConflicts(const Json &);
 struct Action {
     std::string name;

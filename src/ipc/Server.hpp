@@ -27,7 +27,7 @@ class Server {
     bool connected(const std::string &actor) const;
     void poll(); // Called only outside the render pass; bounded nonblocking I/O.
     void publish(Json state);
-    void notify(const std::string &event, Json params);
+    void notify(const std::string &event, Json params, const std::string &actor = "");
     void contextual(bool enabled) { contextual_ = enabled; }
     Json snapshot() const;
     void advertise(std::map<std::string, std::string> methods) { methods_ = std::move(methods); }
@@ -41,7 +41,9 @@ class Server {
         size_t written = 0;
         bool hello = false, closing = false;
         std::string subscription, protocol, actor, client;
-        std::set<std::string> ids, grants;
+        std::set<std::string> ids, grants, hudTopics;
+        std::string hudSubscription;
+        std::map<std::string, std::chrono::steady_clock::time_point> hudLast;
         uint64_t baseline = 0;
         std::chrono::steady_clock::time_point accepted = std::chrono::steady_clock::now(), frameStart = accepted,
                                               lastDelta = accepted;

@@ -75,7 +75,7 @@ int main() {
                     layouts.save(j.at("state").at("mounts"));
                 server->publish(j.at("state"));
             } else if (j.at("type") == "event") {
-                server->notify(j.at("event"), j.at("params"));
+                server->notify(j.at("event"), j.at("params"), j.value("actor", ""));
                 server->flush();
             } else if (j.at("type") == "methods")
                 server->advertise(j.at("methods").get<std::map<std::string, std::string>>());

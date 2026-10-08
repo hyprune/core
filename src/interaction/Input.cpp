@@ -70,8 +70,31 @@ std::string bindingName(const Trigger &t) {
 Json inputDefaults() {
     return Json::parse(defaultInputJSON);
 }
+Json legacyInputNames(Json j) {
+    if (j.is_array()) {
+        for (auto &v : j)
+            v = legacyInputNames(std::move(v));
+    } else if (j.is_object()) {
+        if (j.contains("hud.cycle")) {
+            j["tool5"] = std::move(j["hud.cycle"]);
+            j.erase("hud.cycle");
+        }
+        for (auto &v : j)
+            v = legacyInputNames(std::move(v));
+    } else if (j == "hud.cycle")
+        j = "tool5";
+    return j;
+}
 Json validateInput(const Json &raw) {
     auto j = raw;
+    if (j.is_object() && j.contains("modes") && j["modes"].is_object() &&
+        j["modes"].contains("world") && j["modes"]["world"].is_object()) {
+        auto &w = j["modes"]["world"];
+        if (w.contains("tool5") && !w.contains("hud.cycle")) {
+            w["hud.cycle"] = std::move(w["tool5"]);
+            w.erase("tool5");
+        }
+    }
     if (j.is_object() && !j.contains("show_area_markers"))
         j["show_area_markers"] = false;
     if (j.is_object() && !j.contains("invert_y"))

@@ -12,8 +12,8 @@ class Bridge {
     ~Bridge();
     void advertise(std::map<std::string, std::string>);
     void publish(Json);
-    void notify(const std::string &event, Json params) {
-        send({{"type", "event"}, {"event", event}, {"params", std::move(params)}});
+    void notify(const std::string &event, Json params, const std::string &actor = "") {
+        send({{"type", "event"}, {"event", event}, {"params", std::move(params)}, {"actor", actor}});
     }
     void poll();
     void complete(Json result);

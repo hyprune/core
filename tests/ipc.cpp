@@ -5,6 +5,7 @@
 #include <atomic>
 #include <filesystem>
 #include <iostream>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <thread>
@@ -67,6 +68,45 @@ Json hello(const std::string &token = "") {
     if (!token.empty())
         p["token"] = token;
     return req("hello", "session.hello", p);
+}
+void hudStreams(const std::string &runtime) {
+    auto token = randomId();
+    Server server(runtime, "hud", {{token, "org.hyprune.test", {"state.read"}}},
+                  [](auto &, auto &p) { return Json{{"actor", p.at("_actor")}}; });
+    server.contextual(true);
+    server.advertise({{"camera.get", "state.read"}});
+    Client c(server.path());
+    auto request = [&](Json j) {
+        c.sendJson(j);
+        for (int i = 0; i < 3; ++i) server.poll();
+        return c.receive();
+    };
+    auto h = hello(token); h["params"]["protocols"] = {"0.9"};
+    check(request(h)["result"]["protocol"] == "0.9", "HUD negotiation");
+    auto actor = request(req("actor", "camera.get"))["result"]["actor"].get<std::string>();
+    auto unread = [&] { pollfd p{c.fd, POLLIN, 0}; return ::poll(&p, 1, 5) > 0; };
+    server.notify("hud.pose", {{"heading", 0}}); server.flush();
+    check(!unread(), "telemetry without opt-in");
+    auto sub = request(req("hud", "hud.subscribe", {{"topics", {"hud.pose", "zone.entered"}}}))["result"]["subscriptionId"];
+    server.notify("hud.frame", {{"fps", 60}}); server.flush();
+    check(!unread(), "unrequested telemetry stream");
+    server.notify("hud.pose", {{"heading", 1}}); server.flush();
+    auto pose = c.receive();
+    check(pose["params"]["subscriptionId"] == sub && pose["params"]["heading"] == 1, "HUD subscription scope");
+    server.notify("hud.pose", {{"heading", 2}}); server.flush();
+    check(!unread(), "HUD exceeded 30 Hz");
+    server.notify("zone.entered", {{"zone", "home"}}); server.flush();
+    check(c.receive()["method"] == "zone.entered", "zone event delivery");
+    request(req("state", "state.subscribe", {{"topics", {"state"}}}));
+    server.notify("ui.hud.cycle", {{"sequence", 1}}); server.flush();
+    check(!unread(), "HUD cycle broadcast leaked");
+    server.notify("ui.hud.cycle", {{"sequence", 1}}, "wrong-actor"); server.flush();
+    check(!unread(), "HUD cycle actor mismatch");
+    server.notify("ui.hud.cycle", {{"sequence", 1}}, actor); server.flush();
+    check(c.receive()["params"]["sequence"] == 1, "targeted cycle delivery");
+    request(req("unsub", "hud.unsubscribe", {{"subscriptionId", sub}}));
+    server.notify("zone.entered", {{"zone", "home"}}); server.flush();
+    check(!unread(), "HUD unsubscribe did not stop delivery");
 }
 // Exercise every negotiated version, not a hand-picked latest pair. Appending
 // Supported automatically includes the next release in the inheritance matrix.
@@ -181,6 +221,7 @@ int main() {
     std::thread loop;
     try {
         inheritance(dir);
+        hudStreams(dir);
         auto token = randomId(), token02 = randomId(), token03 = randomId(), token04 = randomId(), token05 = randomId();
         auto token06 = randomId(), token07 = randomId(), token08 = randomId();
         std::atomic<int> disconnected = 0;

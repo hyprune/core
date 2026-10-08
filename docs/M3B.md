@@ -556,3 +556,13 @@ shell 98b677a IPC 0.8 hold/Director/graphics acceptance all pass. The live-tool
 run includes helper SIGKILL and idempotent TTY cleanup. Raw evidence is under
 `docs/evidence/protocol-workspace/`. All nested lifetimes held the shared flock;
 no owner-session mutation or gallery watcher control occurred.
+
+### HUD 0.9 supervised check
+
+- [ ] In world control, tap 5: only the associated shell cycles its HUD concept;
+  holding 5 cycles once. Tool selection stays unchanged. Keys 1–4 select tools.
+- [ ] Rebind `hud.cycle` in Settings, then verify the old binding no longer cycles.
+- [ ] In E/F and Director, 5 remains ordinary client/menu input. HUD cycling does
+  not change cursor visibility, shape, focus, or workspace (no new cursor transitions).
+- [ ] Radar/compass track movement; zone title changes Sun Court → Array Hall;
+  telemetry subscription/unsubscription changes no input authority.

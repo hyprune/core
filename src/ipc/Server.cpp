@@ -1,5 +1,6 @@
 #include "Server.hpp"
 #include "Protocol.hpp"
+#include "interaction/Input.hpp"
 #include <cstring>
 #include <fcntl.h>
 #include <filesystem>
@@ -104,6 +105,8 @@ Json Server::snapshot() const {
 }
 Json Server::visibleState(const Peer &p) const {
     Json state = state_;
+    if (!protocol::atLeast(p.protocol, "0.9") && state.contains("keymap"))
+        state["keymap"] = hyprune::interaction::legacyInputNames(state["keymap"]);
     if (protocol::atLeast(p.protocol, "0.8"))
         return state;
     if (state.contains("keymap"))
@@ -145,10 +148,36 @@ Json Server::visibleState(const Peer &p) const {
 Json Server::snapshot(const Peer &p) const {
     return {{"sessionId", session_}, {"revision", revision_}, {"state", visibleState(p)}};
 }
-void Server::notify(const std::string &event, Json params) {
+void Server::notify(const std::string &event, Json params, const std::string &actor) {
     if (event != "runtime.notice") {
         params["sessionId"] = session_;
         params["revision"] = revision_;
+    }
+    const bool hud = event.starts_with("hud.") || event.starts_with("zone.") || event == "tool.changed";
+    if (hud || event == "ui.hud.cycle") {
+        for (auto &p : peers_) {
+            if (!p.hello || p.closing || !protocol::atLeast(p.protocol, "0.9") || !p.grants.contains("state.read") ||
+                (!actor.empty() && actor != p.actor))
+                continue;
+            if (event == "ui.hud.cycle") {
+                // Never broadcast shell-local commands, even if a caller forgets its target.
+                if (actor.empty() || p.subscription.empty())
+                    continue;
+            } else {
+                if (!p.hudTopics.contains(event))
+                    continue;
+                auto now = Clock::now();
+                auto interval = std::chrono::milliseconds(event == "hud.frame" ? 250 : event == "hud.pose" ? 34 : 0);
+                if (interval.count() && (now - p.hudLast[event] < interval || !p.output.empty()))
+                    continue; // Latest sample wins; slow readers never build a telemetry backlog.
+                p.hudLast[event] = now;
+            }
+            auto payload = params;
+            if (hud)
+                payload["subscriptionId"] = p.hudSubscription;
+            queue(p, {{"jsonrpc", "2.0"}, {"method", event}, {"params", payload}});
+        }
+        return;
     }
     for (auto &p : peers_)
         if (p.hello && !p.closing && protocol::atLeast(p.protocol, "0.2") && !p.subscription.empty() &&
@@ -274,12 +303,18 @@ void Server::frame(Peer &p, const std::string &bytes) {
             if (p.grants.contains("state.read"))
                 for (auto s : {"state.subscribe", "state.snapshot", "state.unsubscribe"})
                     methods.push_back(s);
+            if (p.grants.contains("state.read") && protocol::atLeast(p.protocol, "0.9"))
+                for (auto m : {"hud.subscribe", "hud.unsubscribe"})
+                    methods.push_back(m);
             for (auto &[m, grant] : methods_)
                 if (p.grants.contains(grant) && protocol::methodAvailable(p.protocol, m))
                     methods.push_back(m);
             Json events = Json::array();
             if (p.grants.contains("state.read")) {
                 events.push_back("state.delta");
+                if (protocol::atLeast(p.protocol, "0.9"))
+                    for (auto e : {"hud.frame", "hud.pose", "zone.entered", "zone.exited", "tool.changed", "ui.hud.cycle"})
+                        events.push_back(e);
                 if (protocol::atLeast(p.protocol, "0.2"))
                     for (auto event : {"location.transition", "ui.opened", "ui.closed", "data.updated"})
                         events.push_back(event);
@@ -300,6 +335,33 @@ void Server::frame(Peer &p, const std::string &bytes) {
             exact(params, {});
             result = {{"monotonicMs",
                        std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count()}};
+        } else if (method == "hud.subscribe" || method == "hud.unsubscribe") {
+            check(protocol::atLeast(p.protocol, "0.9") && p.grants.contains("state.read"), -32601, "method not advertised");
+            if (method == "hud.subscribe") {
+                exact(params, {"topics"});
+                check(params["topics"].is_array() && !params["topics"].empty() && params["topics"].size() <= 5,
+                      -32602, "choose 1-5 HUD topics");
+                std::set<std::string> topics;
+                for (auto &topic : params["topics"]) {
+                    check(topic.is_string(), -32602, "invalid HUD topic");
+                    auto name = topic.get<std::string>();
+                    check(name == "hud.frame" || name == "hud.pose" || name == "zone.entered" ||
+                          name == "zone.exited" || name == "tool.changed", -32602, "unknown HUD topic");
+                    check(topics.insert(name).second, -32602, "duplicate HUD topic");
+                }
+                check(p.hudSubscription.empty(), -32004, "already subscribed");
+                p.hudSubscription = "hud-" + std::to_string(++subscriptions_);
+                p.hudTopics = std::move(topics);
+                p.hudLast.clear();
+                result = {{"subscriptionId", p.hudSubscription}};
+            } else {
+                exact(params, {"subscriptionId"});
+                check(!p.hudSubscription.empty() && params["subscriptionId"] == p.hudSubscription,
+                      -32003, "unknown subscription");
+                p.hudSubscription.clear();
+                p.hudTopics.clear();
+                result = {{"ok", true}};
+            }
         } else if (method.starts_with("state.") &&
                    (method == "state.subscribe" || method == "state.snapshot" || method == "state.unsubscribe")) {
             check(p.grants.contains("state.read"), -32601, "method not advertised");

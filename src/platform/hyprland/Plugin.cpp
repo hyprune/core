@@ -45,6 +45,7 @@ extern "C" {
 #include "interaction/Resize.hpp"
 #include "ipc/Bridge.hpp"
 #include "ipc/Protocol.hpp"
+#include "hud/Telemetry.hpp"
 #include "render/PNG.hpp"
 #include "render/Renderer.hpp"
 #include <fcntl.h>
@@ -223,6 +224,10 @@ struct Runtime {
     void workspaceLocation();
     SP<CWLSurfaceResource> directorSurface();
     void publish();
+    void publishHUD();
+    Json hudZone = nullptr, hudTool = nullptr;
+    uint64_t hudSequence = 0;
+    std::chrono::steady_clock::time_point nextHUDPose{}, nextHUDFrame{};
     void toggle(const std::string &output = "");
     void exit();
     void tick();
@@ -620,6 +625,42 @@ void Runtime::workspaceLocation() {
             return;
         }
 }
+void Runtime::publishHUD() {
+    auto now = std::chrono::steady_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    Json zone = active && monitor ? hud::zoneAt(world.get(), camera.position) : Json(nullptr);
+    auto emit = [&](const char *event, Json data) {
+        data["monotonicMs"] = ms;
+        ipc->notify(event, std::move(data));
+    };
+    if (zone != hudZone) {
+        if (!hudZone.is_null())
+            emit("zone.exited", {{"zone", hudZone}});
+        hudZone = zone;
+        if (!hudZone.is_null())
+            emit("zone.entered", {{"zone", hudZone}});
+    }
+    if (!active || !monitor || !world)
+        return;
+    if (now >= nextHUDPose) {
+        nextHUDPose = now + std::chrono::milliseconds(34);
+        emit("hud.pose", {{"outputId", "output-" + std::to_string(monitor->m_id)},
+                         {"worldId", world->id}, {"worldName", world->name},
+                         {"position", {camera.position.x, camera.position.y, camera.position.z}},
+                         {"heading", camera.yaw}, {"pitch", camera.pitch}, {"zone", zone},
+                         {"tool", editor.slot}, {"subtype", editor.submode()}});
+    }
+    Json toolState = {{"slot", editor.slot}, {"name", config["tools"]["slots"][editor.slot - 1]},
+                      {"subtype", editor.submode()}};
+    if (hudTool != toolState) {
+        hudTool = toolState;
+        emit("tool.changed", toolState);
+    }
+    if (now >= nextHUDFrame) {
+        nextHUDFrame = now + std::chrono::milliseconds(250);
+        emit("hud.frame", hud::frame(renderer.timings()));
+    }
+}
 void Runtime::publish() {
     if (!ipc)
         return;
@@ -777,6 +818,8 @@ void Runtime::publish() {
     for (auto &e : capture.entries)
         if (world && editor.locked(world->id, e.instance))
             publication["editor"]["locked"].push_back(e.surface.id);
+    if (publication["interaction"]["tools"].size() > 4)
+        publication["interaction"]["tools"].erase(publication["interaction"]["tools"].begin() + 4, publication["interaction"]["tools"].end());
     lastPublished = publication;
     ipc->publish(publication);
     for (auto &[event, params] : layout.events)
@@ -2031,7 +2074,16 @@ void Runtime::action(interaction::Action a) {
         ipc->notify("runtime.notice", {{"level", "info"},
                                        {"code", "transport.pending"},
                                        {"message", "Transport summon is reserved for the transport milestone."}});
-    else if (a.name == "autopilot") {
+    else if (a.name == "hud.cycle") {
+        auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now().time_since_epoch()).count();
+        ++hudSequence;
+        for (auto &[actor, b] : bindings)
+            if (monitor && control.ownsLease(actor, b.lease))
+                ipc->notify("ui.hud.cycle", {{"leaseId", b.lease},
+                    {"outputId", "output-" + std::to_string(monitor->m_id)},
+                    {"sequence", hudSequence}, {"monotonicMs", now}}, actor);
+    } else if (a.name == "autopilot") {
         if (control.driving())
             control.execute("autodrive.stop", Json::object(), "", "", world.get(), camera, {});
         else if (!control.location["route"].empty())
@@ -2500,10 +2552,9 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     if (method == "input.get") {
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
-        return Json{{"config", input.config},
-                    {"path", inputFile.path.string()},
-                    {"steals", steals(input.config)},
-                    {"conflicts", interaction::inputConflicts(input.config)}};
+        auto response = Json{{"config", input.config}, {"path", inputFile.path.string()},
+                             {"steals", steals(input.config)}, {"conflicts", interaction::inputConflicts(input.config)}};
+        return ipc::protocol::atLeast(protocol, "0.9") ? response : interaction::legacyInputNames(response);
     }
     if (method == "overlay.style") {
         if (renderDepth || params.size() != 2 || !params.contains("leaseId") || !params["leaseId"].is_string() ||
@@ -2522,8 +2573,10 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         } catch (const std::exception &e) {
             throw ipc::Error(-32602, e.what());
         }
-        if (method == "input.preview")
-            return Json{{"config", next}, {"steals", steals(next)}, {"conflicts", interaction::inputConflicts(next)}};
+        if (method == "input.preview") {
+            auto response = Json{{"config", next}, {"steals", steals(next)}, {"conflicts", interaction::inputConflicts(next)}};
+            return ipc::protocol::atLeast(protocol, "0.9") ? response : interaction::legacyInputNames(response);
+        }
         if (!interaction::inputConflicts(next).empty())
             throw ipc::Error(-32602, "conflicting Hyprune actions in one mode");
         inputFile.save(next);
@@ -2542,6 +2595,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             !control.uiVisible() || !directorSurface())
             throw ipc::Error(-32002, "capture requires the active verified Director lease");
         auto mode = params.at("mode").get<std::string>(), name = params.at("action").get<std::string>();
+        if (!ipc::protocol::atLeast(protocol, "0.9") && name == "tool5")
+            name = "hud.cycle";
         if (!input.config["modes"].contains(mode) || !input.config["modes"][mode].contains(name) ||
             !params["slot"].is_number_integer() || params["slot"] < 0 || params["slot"] > 2)
             throw ipc::Error(-32602, "unknown capture slot");
@@ -3045,6 +3100,7 @@ void Runtime::tick() {
         nextPublish = ipcStarted + std::chrono::milliseconds(33);
         publish();
     }
+    publishHUD();
     ipc->poll();
     renderer.gpuCaptureMs = captureGPU.available ? captureGPU.milliseconds : -1;
     renderer.ipcMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ipcStarted).count();
