@@ -53,7 +53,8 @@ struct World {
     std::string id, name, defaultSpawn;
     std::vector<Spawn> spawns;
     std::vector<Mesh> meshes;
-    std::vector<Triangle> collision;
+    std::vector<Triangle> collision, visualTriangles;
+    sim::TriangleIndex collisionIndex, visualIndex;
     std::vector<Material> materials;
     std::vector<Image> images;
     std::vector<Sampler> samplers;

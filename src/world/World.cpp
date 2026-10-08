@@ -399,6 +399,11 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
                          : 128;
     result->environmentHigh = prefilterEnvironment(*result, resolution);
     result->environmentLow = prefilterEnvironment(*result, std::min(64, resolution));
+    result->collisionIndex.rebuild(result->collision);
+    for (const auto &mesh : result->meshes)
+        for (size_t i=0;i+2<mesh.vertices.size();i+=3)
+            result->visualTriangles.push_back({mesh.vertices[i].position,mesh.vertices[i+1].position,mesh.vertices[i+2].position});
+    result->visualIndex.rebuild(result->visualTriangles);
     return result;
 }
 } // namespace hyprune::world

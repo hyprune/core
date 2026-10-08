@@ -1,5 +1,6 @@
 #pragma once
 #include "Math.hpp"
+#include "TriangleIndex.hpp"
 #include <span>
 #include <string_view>
 namespace hyprune::sim {
@@ -47,19 +48,19 @@ class MotionStrategy {
   public:
     virtual ~MotionStrategy() = default;
     virtual std::string_view name() const = 0;
-    virtual void step(Camera &, Intent, float, std::span<const Triangle>) const = 0;
+    virtual void step(Camera &, Intent, float, std::span<const Triangle>, const TriangleIndex * = nullptr) const = 0;
 };
 class Walk final : public MotionStrategy {
   public:
     std::string_view name() const override { return "walk"; }
-    void step(Camera &, Intent, float, std::span<const Triangle>) const override;
+    void step(Camera &, Intent, float, std::span<const Triangle>, const TriangleIndex * = nullptr) const override;
 };
 class Fly final : public MotionStrategy {
   public:
     std::string_view name() const override { return "fly"; }
-    void step(Camera &, Intent, float, std::span<const Triangle>) const override;
+    void step(Camera &, Intent, float, std::span<const Triangle>, const TriangleIndex * = nullptr) const override;
 };
 // Capsule eye height 1.7 m, total height 1.8 m, radius .3 m.
-bool setCrouch(Camera &, bool, std::span<const Triangle>);
-void resolveCapsule(Camera &, std::span<const Triangle>);
+bool setCrouch(Camera &, bool, std::span<const Triangle>, const TriangleIndex * = nullptr);
+void resolveCapsule(Camera &, std::span<const Triangle>, const TriangleIndex * = nullptr);
 } // namespace hyprune::sim

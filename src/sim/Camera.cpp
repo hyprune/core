@@ -52,34 +52,58 @@ std::pair<Vec3, Vec3> nearest(Vec3 a, Vec3 b, const Triangle &t) {
     return {p, q};
 }
 } // namespace
-void resolveCapsule(Camera &c, std::span<const Triangle> mesh) {
+void resolveCapsule(Camera &c, std::span<const Triangle> mesh, const TriangleIndex *index) {
     constexpr float r = .3f;
     c.grounded = false;
-    for (int iteration = 0; iteration < 4; iteration++)
-        for (const auto &t : mesh) {
-            Vec3 a = c.position + Vec3{0, -c.eyeHeight + r, 0}, b = c.position + Vec3{0, .1f - r, 0};
-            Vec3 low{std::min({t.a.x, t.b.x, t.c.x}) - r, std::min({t.a.y, t.b.y, t.c.y}) - r,
-                     std::min({t.a.z, t.b.z, t.c.z}) - r};
-            Vec3 high{std::max({t.a.x, t.b.x, t.c.x}) + r, std::max({t.a.y, t.b.y, t.c.y}) + r,
-                      std::max({t.a.z, t.b.z, t.c.z}) + r};
-            if (a.x < low.x || a.x > high.x || a.z < low.z || a.z > high.z || b.y < low.y || a.y > high.y)
-                continue;
-            auto [p, q] = nearest(a, b, t);
-            Vec3 d = p - q;
-            float l = length(d);
-            if (l > r + .001f)
-                continue;
-            Vec3 n = l > 1e-6f ? d / l : normalized(cross(t.b - t.a, t.c - t.a));
-            c.position += n * std::max(0.f, r - l);
-            if (n.y > .65f) {
-                c.grounded = true;
-                c.verticalSpeed = std::max(0.f, c.verticalSpeed);
-            }
-            if (n.y < -.65f)
-                c.verticalSpeed = std::min(0.f, c.verticalSpeed);
+    auto contact = [&](const Triangle &t) {
+        Vec3 a = c.position + Vec3{0, -c.eyeHeight + r, 0}, b = c.position + Vec3{0, .1f - r, 0};
+        Vec3 low{std::min({t.a.x, t.b.x, t.c.x}) - r, std::min({t.a.y, t.b.y, t.c.y}) - r,
+                 std::min({t.a.z, t.b.z, t.c.z}) - r};
+        Vec3 high{std::max({t.a.x, t.b.x, t.c.x}) + r, std::max({t.a.y, t.b.y, t.c.y}) + r,
+                  std::max({t.a.z, t.b.z, t.c.z}) + r};
+        if (a.x < low.x || a.x > high.x || a.z < low.z || a.z > high.z || b.y < low.y || a.y > high.y)
+            return;
+        auto [p, q] = nearest(a, b, t);
+        Vec3 d = p - q;
+        float l = length(d);
+        if (l > r + .001f)
+            return;
+        Vec3 n = l > 1e-6f ? d / l : normalized(cross(t.b - t.a, t.c - t.a));
+        c.position += n * std::max(0.f, r - l);
+        if (n.y > .65f) {
+            c.grounded = true;
+            c.verticalSpeed = std::max(0.f, c.verticalSpeed);
         }
+        if (n.y < -.65f)
+            c.verticalSpeed = std::min(0.f, c.verticalSpeed);
+    };
+    auto candidates = [&] {
+        return index->overlap(c.position + Vec3{-.301f, -c.eyeHeight - .001f, -.301f},
+                              c.position + Vec3{.301f, .101f, .301f});
+    };
+    for (int iteration = 0; iteration < 4; ++iteration) {
+        if (!index || index->size() != mesh.size()) {
+            for (const auto &t : mesh)
+                contact(t);
+            continue;
+        }
+        auto nearby = candidates();
+        size_t cursor = 0;
+        while (cursor < nearby.size()) {
+            unsigned id = nearby[cursor++];
+            auto before = c.position;
+            contact(mesh[id]);
+            if (length(c.position - before) > 0) {
+                // A contact may push us into another leaf. Requery only as needed,
+                // retaining the original forward scan's triangle ordering.
+                nearby = candidates();
+                cursor = std::upper_bound(nearby.begin(), nearby.end(), id) - nearby.begin();
+            }
+        }
+    }
 }
-bool setCrouch(Camera &c, bool crouch, std::span<const Triangle> mesh) {
+
+bool setCrouch(Camera &c, bool crouch, std::span<const Triangle> mesh, const TriangleIndex *index) {
     float height = crouch ? 1.0f : 1.7f;
     if (c.eyeHeight == height)
         return true;
@@ -87,14 +111,14 @@ bool setCrouch(Camera &c, bool crouch, std::span<const Triangle> mesh) {
     candidate.position.y += height - c.eyeHeight;
     candidate.eyeHeight = height;
     auto expected = candidate.position;
-    resolveCapsule(candidate, mesh);
+    resolveCapsule(candidate, mesh, index);
     if (!crouch && length(candidate.position - expected) > .004f)
         return false;
     c = candidate;
     return true;
 }
-void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) const {
-    setCrouch(c, i.crouch, mesh);
+void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh, const TriangleIndex *index) const {
+    setCrouch(c, i.crouch, mesh, index);
     dt = std::clamp(dt, 0.f, .05f);
     Vec3 d{std::sin(c.yaw) * i.forward + std::cos(c.yaw) * i.right, 0,
            -std::cos(c.yaw) * i.forward + std::sin(c.yaw) * i.right};
@@ -111,7 +135,7 @@ void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) c
         auto before = c;
         auto desired = c.position + d * (3.5f * i.speed * h) + Vec3{0, c.verticalSpeed * h, 0};
         c.position = desired;
-        resolveCapsule(c, mesh);
+        resolveCapsule(c, mesh, index);
         Vec3 lost = desired - c.position;
         lost.y = 0;
         if (supported && i.stepHeight > 0 && length(d) > .001f && length(lost) > .0005f) {
@@ -119,7 +143,7 @@ void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) c
             // up and forward. A tall wall or a low ceiling must never become a step.
             auto probe = desired + d * .3f;
             probe.y = before.position.y - before.eyeHeight + i.stepHeight + .01f;
-            auto hit = interaction::raycast(probe, {0, -1, 0}, mesh);
+            auto hit = interaction::raycast(probe, {0, -1, 0}, mesh, index);
             float rise = hit ? hit->point.y - (before.position.y - before.eyeHeight) : 0;
             if (hit && hit->normal.y > .65f && rise > .002f && rise <= i.stepHeight + .001f) {
                 bool clear = true;
@@ -128,7 +152,7 @@ void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) c
                     auto check = before;
                     check.position.y += std::min(y, rise) + .002f;
                     auto expected = check.position;
-                    resolveCapsule(check, mesh);
+                    resolveCapsule(check, mesh, index);
                     if (length(check.position - expected) > .004f) {
                         clear = false;
                         break;
@@ -137,7 +161,7 @@ void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) c
                 candidate.position = desired;
                 candidate.position.y = hit->point.y + candidate.eyeHeight + .002f;
                 auto expected = candidate.position;
-                resolveCapsule(candidate, mesh);
+                resolveCapsule(candidate, mesh, index);
                 if (clear && length(candidate.position - expected) < .004f) {
                     candidate.grounded = true;
                     candidate.verticalSpeed = 0;
@@ -150,14 +174,14 @@ void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) c
         if (supported && !c.grounded && c.verticalSpeed <= 0) {
             auto candidate = c;
             candidate.position.y -= .025f;
-            resolveCapsule(candidate, mesh);
+            resolveCapsule(candidate, mesh, index);
             if (candidate.grounded && candidate.position.y <= c.position.y &&
                 candidate.position.y > c.position.y - .025f)
                 c = candidate;
         }
     }
 }
-void Fly::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) const {
+void Fly::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh, const TriangleIndex *index) const {
     Vec3 r{std::cos(c.yaw), 0, std::sin(c.yaw)};
     Vec3 forward{std::sin(c.yaw), 0, -std::cos(c.yaw)};
     Vec3 d = forward * i.forward + r * i.right + Vec3{0, i.up, 0};
@@ -168,7 +192,7 @@ void Fly::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) co
     for (int k = 0; k < steps; ++k) {
         c.position += d * (5 * i.speed * dt / steps);
         if (!mesh.empty())
-            resolveCapsule(c, mesh);
+            resolveCapsule(c, mesh, index);
     }
     c.verticalSpeed = 0;
 }

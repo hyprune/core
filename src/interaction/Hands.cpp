@@ -1,27 +1,39 @@
 #include "Hands.hpp"
 namespace hyprune::interaction {
-std::optional<WorldHit> raycast(Vec3 o, Vec3 d, std::span<const Triangle> mesh) {
+std::optional<WorldHit> raycast(Vec3 o, Vec3 d, std::span<const Triangle> mesh, const sim::TriangleIndex *index) {
     std::optional<WorldHit> best;
-    for (auto &t : mesh) {
+    auto test = [&](const Triangle &t) {
         auto e = t.b - t.a, f = t.c - t.a, p = cross(d, f);
         float det = dot(e, p);
         if (std::abs(det) < 1e-7f)
-            continue;
+            return;
         auto v = o - t.a;
         float u = dot(v, p) / det;
         auto q = cross(v, e);
         float w = dot(d, q) / det, distance = dot(f, q) / det;
         if (u < 0 || w < 0 || u + w > 1 || distance <= 0 || (best && distance >= best->distance))
-            continue;
+            return;
         auto n = normalized(cross(e, f));
         if (dot(n, d) > 0)
             n = n * -1;
         best = WorldHit{distance, o + d * distance, n};
-    }
+    };
+    if (index && index->size() == mesh.size()) {
+        for (auto id : index->ray(o, d))
+            test(mesh[id]);
+    } else
+        for (const auto &t : mesh)
+            test(t);
     return best;
 }
 std::optional<WorldHit> raycast(Vec3 origin, Vec3 direction, const world::World &world) {
-    auto best = raycast(origin, direction, world.collision);
+    auto best = raycast(origin, direction, world.collision, &world.collisionIndex);
+    if (world.visualIndex.size() == world.visualTriangles.size() && !world.visualTriangles.empty()) {
+        auto hit = raycast(origin, direction, world.visualTriangles, &world.visualIndex);
+        if (hit && (!best || hit->distance < best->distance))
+            best = hit;
+        return best;
+    }
     for (auto &mesh : world.meshes)
         for (size_t i = 0; i + 2 < mesh.vertices.size(); i += 3) {
             Triangle t{mesh.vertices[i].position, mesh.vertices[i + 1].position, mesh.vertices[i + 2].position};

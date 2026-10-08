@@ -70,3 +70,12 @@ The native HDR intermediate now uses alpha 1 for linear world pixels and alpha 0
 for already encoded native-client pixels. `present()` tone-maps only the former.
 When MSAA is off, the world draws directly to the resolve colour/depth textures;
 an offload backend must not read the unused multisample target in that mode.
+
+Pointer and capsule broad phases now share a triangle BVH, built during CPU world
+loading and rebuilt after object transforms. It preserves triangle order and
+re-queries after capsule correction. Lumen Reach's 3,994 collision triangles:
+ray 0.01361 → 0.000267 ms (51×), stationary walk step 0.2302 → 0.0900 ms (2.56×),
+in the same process on this machine. Dense 10,002-triangle fixture: 323× ray,
+5.54× walk. These are query benchmarks, not whole-frame FPS claims. Randomized
+indexed/reference equivalence covers ray hits and capsule results; nine unit
+suites pass. Raw measurements are under `evidence/review-audit/`.

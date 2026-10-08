@@ -1,0 +1,10 @@
+{
+  "indexedRayMs": 0.0002666533333333333,
+  "indexedWalkMs": 0.08996383333333333,
+  "linearRayMs": 0.013610506666666668,
+  "linearWalkMs": 0.23019236666666665,
+  "rayCandidates": 24,
+  "raySpeedup": 51.041952097604884,
+  "triangles": 3994,
+  "walkSpeedup": 2.5587211898114615
+}

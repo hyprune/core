@@ -405,26 +405,11 @@ std::optional<std::pair<std::string, surfaces::Hit>> aim() {
         if (auto h = surfaces::intersect(surface, runtime->camera.position, pointerRay());
             h && (!best || h->distance < best->second.distance))
             best = {{surface.id, *h}};
-    if (best && runtime->world)
-        for (const auto &t : runtime->world->collision) {
-            auto direction = pointerRay();
-            auto edge1 = t.b - t.a, edge2 = t.c - t.a, p = cross(direction, edge2);
-            float det = dot(edge1, p);
-            if (std::abs(det) < 1e-7f)
-                continue;
-            float inv = 1 / det;
-            auto offset = runtime->camera.position - t.a;
-            float u = dot(offset, p) * inv;
-            if (u < 0 || u > 1)
-                continue;
-            auto q = cross(offset, edge1);
-            float v = dot(direction, q) * inv;
-            if (v < 0 || u + v > 1)
-                continue;
-            float d = dot(edge2, q) * inv;
-            if (d > 0 && d < best->second.distance - .01f)
-                return std::nullopt;
-        }
+    if (best && runtime->world) {
+        auto &world=*runtime->world;
+        auto hit=interaction::raycast(runtime->camera.position,pointerRay(),world.collision,&world.collisionIndex);
+        if(hit && hit->distance<best->second.distance-.01f)return std::nullopt;
+    }
     return best;
 }
 void Runtime::deferInput(std::function<void()> operation) {
@@ -536,7 +521,7 @@ void Runtime::home(const Json &binding, bool travel) {
     auto yaw = spawn.yaw, pitch = spawn.pitch;
     sim::Camera test = camera;
     test.position = position;
-    sim::resolveCapsule(test, world->collision);
+    sim::resolveCapsule(test, world->collision, &world->collisionIndex);
     if (length(test.position - position) > .02f)
         throw ipc::Error(-32005, "area arrival obstructed");
     typing = false;
@@ -1586,7 +1571,7 @@ void Runtime::useAim(bool zoom) {
             best = std::min(best, hit->second.distance);
         // The tolerance margin must keep the same occlusion policy as aim().
         // Otherwise a rejected ray can re-enter a window through solid geometry.
-        if (auto obstacle = interaction::raycast(camera.position, pointerRay(), world->collision))
+        if (auto obstacle = interaction::raycast(camera.position, pointerRay(), world->collision, &world->collisionIndex))
             best = std::min(best, obstacle->distance + .01f);
         for (auto &s : capture.visible())
             if (auto h = surfaces::intersect(s, camera.position, pointerRay(), false)) {
@@ -2077,7 +2062,7 @@ std::optional<interaction::WorldHit> Runtime::worldHit() {
     if (!world)
         return {};
     auto mesh = objectAim();
-    auto collision = interaction::raycast(camera.position, pointerRay(), world->collision);
+    auto collision = interaction::raycast(camera.position, pointerRay(), world->collision, &world->collisionIndex);
     if (mesh && (!collision || mesh->second.distance < collision->distance))
         return mesh->second;
     return collision;
@@ -2304,6 +2289,16 @@ void Runtime::toolsTick() {
             }
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         layout.invalidateCollision();
+        world->collisionIndex.rebuild(world->collision);
+        world->visualTriangles.clear();
+        for(const auto &mesh : world->meshes) {
+            auto it=renderer.transforms.find(mesh.node);
+            auto matrix=it==renderer.transforms.end()?Mat4::identity():it->second;
+            for(size_t i=0;i+2<mesh.vertices.size();i+=3)
+                world->visualTriangles.push_back({matrix.point(mesh.vertices[i].position),
+                    matrix.point(mesh.vertices[i+1].position),matrix.point(mesh.vertices[i+2].position)});
+        }
+        world->visualIndex.rebuild(world->visualTriangles);
         renderer.collisionChanged();
     }
     renderer.lines.clear();
@@ -2868,7 +2863,7 @@ void Runtime::tick() {
                     fly.step(camera, intent, 1.f / 60.f, {});
                     intent.speed = speed;
                 } else
-                    movement->step(camera, intent, 1.f / 60.f, world->collision);
+                    movement->step(camera, intent, 1.f / 60.f, world->collision, &world->collisionIndex);
             }
             accumulator -= 1.0 / 60.0;
         }
