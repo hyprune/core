@@ -25,6 +25,9 @@ class Layout {
     void release(const Instance &, const world::World *);
     void recall(std::span<const Instance>);
     bool pulled(const Instance &, const world::World *) const;
+    bool hasPlacement(const Instance &instance, const world::World *world) const {
+        return saved(instance, world) != nullptr;
+    }
     std::optional<Surface> locate(const Instance &, const world::World *, const sim::Camera &, int pw, int ph);
     std::vector<std::pair<std::string, Json>> events;
 

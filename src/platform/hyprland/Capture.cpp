@@ -79,7 +79,10 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                     e.surface = surfaces::carryPlane(*camera, e.surface.width, e.surface.height, world->collision);
                     e.surface.id = id;
                 }
-                if (spawnNew && layout && layout->binding(w->m_workspace ? int(w->m_workspace->m_id) : 0, world))
+                surfaces::Instance instance{e.surface.id, w->m_class, w->m_title,
+                                            w->m_workspace ? int(w->m_workspace->m_id) : 0};
+                if (spawnNew && layout && layout->binding(instance.workspaceId, world) &&
+                    !layout->hasPlacement(instance, world))
                     layout->freePoses[e.surface.id] = e.surface;
             }
             e.commitListener = surface->m_events.commit.listen([count = e.commits] { ++*count; });

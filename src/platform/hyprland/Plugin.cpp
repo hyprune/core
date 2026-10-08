@@ -114,6 +114,7 @@ struct Runtime {
     double accumulator = 0;
     std::string focused, focusedParent, lastError, grabbed;
     std::set<uint32_t> buttons, appKeys;
+    WP<CWLSurfaceResource> appKeyResource;
     void cancelGrab();
     std::set<uint32_t> keys;
     SP<CEventLoopTimer> timer;
@@ -293,9 +294,11 @@ void Runtime::cancelGrab() {
         auto now =
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
                 .count();
-        for (auto key : appKeys)
-            g_pSeatManager->sendKeyboardKey(now, key, WL_KEYBOARD_KEY_STATE_RELEASED);
+        if (appKeyResource && g_pSeatManager->m_state.keyboardFocus == appKeyResource)
+            for (auto key : appKeys)
+                g_pSeatManager->sendKeyboardKey(now, key, WL_KEYBOARD_KEY_STATE_RELEASED);
         appKeys.clear();
+        appKeyResource.reset();
     }
     if (!buttons.empty() && grabResource) {
         auto now =
@@ -453,8 +456,6 @@ void Runtime::publish() {
         surfaces.push_back({{"id", e.surface.id},
                             {"kind", "window"},
                             {"title", e.surface.title},
-                            {"parentId", e.parentId},
-                            {"floating", e.window->m_isFloating},
                             {"logicalSize", {e.surface.pixelWidth, e.surface.pixelHeight}},
                             {"focused", e.surface.id == focused}});
     for (auto &f : capture.workspaces)
@@ -614,6 +615,13 @@ void Runtime::finishLoad() {
         layout.desktop = nullptr;
         pendingArea.clear();
         movement = world->collision.empty() ? static_cast<sim::MotionStrategy *>(&fly) : &walk;
+        if (active) {
+            // These are existing clients entering a different world, not newly mapped
+            // windows. Resolve authored/durable mounts before enabling spawn placement.
+            capture.spawnNew = false;
+            refresh();
+            capture.spawnNew = true;
+        }
         publish();
         ipc->complete(Json{{"revision", ipc->revision()}});
         if (toggleAfterLoad) {
@@ -689,6 +697,7 @@ void Runtime::exit() {
     if (!active)
         return;
     active = false;
+    pendingCursorHide.reset(); // an old hide request must not outlive cursor restoration
     restoreFullscreenWindows();
     fullscreen = {};
     handover = {};
@@ -714,6 +723,10 @@ void Runtime::focus(const std::string &id, bool keyboard) {
     if (renderDepth)
         throw std::runtime_error("focus inside render pass");
     if (auto frame = capture.workspace(id)) {
+        cancelGrab();
+        keys.clear();
+        smoothIntent = {};
+        lookX = lookY = 0;
         if (!handover.animated)
             handover.before = camera;
         Desktop::focusState()->rawMonitorFocus(monitor.lock());
@@ -732,6 +745,8 @@ void Runtime::focus(const std::string &id, bool keyboard) {
     if (!entry)
         throw ipc::Error(-32003, "unknown surface");
     auto w = entry->window.lock();
+    if (keyboard && focused != id)
+        cancelGrab();
     if (keyboard && w->m_workspace && !w->m_workspace->isVisible()) {
         auto b = layout.binding(entry->instance.workspaceId, world.get());
         if (!b || !world || world->areas.empty() || !layout.pulled(entry->instance, world.get()))
@@ -755,6 +770,8 @@ void Runtime::focus(const std::string &id, bool keyboard) {
         g_pSeatManager->setKeyboardFocus(w->resource());
         typing = true;
         keys.clear();
+        smoothIntent = {};
+        lookX = lookY = 0;
         focused = id;
         freeCursor = false;
     }
@@ -783,6 +800,8 @@ void Runtime::cursor() {
         Pointer::pointerController()->warpTo(monitor->m_position + monitor->m_size * .5, true);
 }
 void Runtime::modeToggle() {
+    if (!active)
+        return;
     if (!layout.desktop.is_null()) {
         unfocus();
         return;
@@ -962,6 +981,7 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         cancelGrab();
         typing = false;
         keys.clear();
+        smoothIntent = {};
         if (layout.binding(e->instance.workspaceId, world.get()))
             layout.pull(e->instance, world.get());
         auto g = event.button == config["input"]["carry_button"].get<uint32_t>()    ? interaction::Gesture::Carry
@@ -1307,7 +1327,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         float f = params.at("degrees");
         if (!std::isfinite(f) || f < 30 || f > 110)
             throw ipc::Error(-32602, "FOV outside 30..110 degrees");
-        camera.fov = f;
+        baseFov = camera.fov = f;
+        config["graphics"]["fov"] = configured["graphics"]["fov"] = f;
         publish();
         ipc->notify("presentation.changed", {{"presentation",
                                               {{"profile", world ? renderer.profile : Json(nullptr)},
@@ -1392,7 +1413,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     }
     if (control::Control::methods().contains(method)) {
         if (method == "shell.overlay" && params.value("exclusiveInput", false) &&
-            (protocol != "0.3" && protocol != "0.4"))
+            (protocol != "0.3" && protocol != "0.4" && protocol != "0.5"))
             throw ipc::Error(-32007, "verified association requires IPC 0.3");
         if ((method == "travel.start" || method == "autodrive.start") && !active)
             throw ipc::Error(-32005, "world mode inactive");
@@ -1786,6 +1807,8 @@ int luaCamera(lua_State *state) {
               {"fullscreenId", runtime->fullscreen.id},
               {"handover", runtime->handover.phase},
               {"cursor", runtime->cursorState},
+              {"nativeCursorVisible", g_pHyprRenderer->shouldRenderCursor()},
+              {"savedCursorHidden", runtime->savedCursorHidden},
               {"pointer", {runtime->pointerX, runtime->pointerY}},
               {"config", runtime->config},
               {"children", runtime->capture.children.size()},
@@ -2041,6 +2064,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     auto entry = runtime->capture.find(runtime->focused);
                     if (!entry)
                         return;
+                    if (event.state == WL_KEYBOARD_KEY_STATE_RELEASED) {
+                        if (!runtime->appKeys.erase(event.keycode))
+                            return;
+                        if (!runtime->appKeyResource || runtime->appKeyResource != entry->window->resource())
+                            return;
+                    } else if (runtime->appKeys.empty())
+                        runtime->appKeyResource = entry->window->resource();
                     if (g_pSeatManager->m_keyboard != kb) {
                         g_pSeatManager->setKeyboard(kb);
                         g_pSeatManager->updateActiveKeyboardData();
@@ -2119,6 +2149,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                                                 ? static_cast<sim::MotionStrategy *>(&runtime->fly)
                                                 : &runtime->walk;
                         runtime->keys.clear();
+                        runtime->smoothIntent = {};
                         runtime->camera.verticalSpeed = 0;
                     });
                 return;
