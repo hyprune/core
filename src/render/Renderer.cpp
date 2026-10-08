@@ -122,6 +122,18 @@ precision highp float;
 out vec2 uv;
 void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));uv=p;gl_Position=vec4(p*2.-1.,0,1);}
 )";
+// Bilinear reconstruction with bounded unsharp masking. Depth is nearest-sampled
+// (never interpolated across a wall edge), preserving native window occlusion.
+const char *upscaleFragment = R"(#version 300 es
+precision highp float;
+in vec2 uv;uniform sampler2D image,depthImage;uniform float sharpness;out vec4 result;
+void main(){vec2 st=uv,d=1./vec2(textureSize(image,0));
+ vec4 c=texture(image,st);vec3 a=texture(image,st+vec2(d.x,0)).rgb,b=texture(image,st-vec2(d.x,0)).rgb;
+ vec3 e=texture(image,st+vec2(0,d.y)).rgb,f=texture(image,st-vec2(0,d.y)).rgb;
+ vec3 lo=min(c.rgb,min(min(a,b),min(e,f))),hi=max(c.rgb,max(max(a,b),max(e,f)));
+ result=vec4(clamp(c.rgb+sharpness*(c.rgb-(a+b+e+f)*.25),lo,hi),c.a);
+ ivec2 size=textureSize(depthImage,0);gl_FragDepth=texelFetch(depthImage,clamp(ivec2(st*vec2(size)),ivec2(0),size-1),0).r;}
+)";
 const char *toneFragment = R"(#version 300 es
 precision highp float;
 in vec2 uv;uniform sampler2D frame,bloomMap;uniform vec2 resolution,pointer;uniform int typing,toneMapping,scope;uniform float exposure,bloomStrength;out vec4 result;
@@ -172,6 +184,7 @@ void Renderer::init() {
     device = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
     scene_ = program(vertex, fragment);
     tone_ = program(screenVertex, toneFragment);
+    upscale_ = program(screenVertex, upscaleFragment);
     bloom_ = program(screenVertex, bloomFragment);
     sky_ = program(screenVertex, skyFragment);
     auto gpu = std::string(reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
@@ -367,10 +380,17 @@ void Renderer::freeTargets() {
     glDeleteFramebuffers(2, bloomFbo_);
     glDeleteTextures(2, bloomTexture_);
     bloomFbo_[0] = bloomFbo_[1] = bloomTexture_[0] = bloomTexture_[1] = 0;
-    width_ = height_ = 0;
+    glDeleteTextures(1, &resolvedDepth_);
+    glDeleteTextures(1, &nativeTexture_);
+    glDeleteRenderbuffers(1, &nativeDepth_);
+    glDeleteFramebuffers(1, &nativeFbo_);
+    resolvedDepth_ = nativeTexture_ = nativeDepth_ = nativeFbo_ = 0;
+    width_ = height_ = scaledWidth_ = scaledHeight_ = 0;
 }
 void Renderer::targets(int w, int h) {
-    if (w == width_ && h == height_ && allocatedIntel_ == intelQuality)
+    int sw = std::max(1, int(std::round(w * resolution_.scale)));
+    int sh = std::max(1, int(std::round(h * resolution_.scale)));
+    if (w == width_ && h == height_ && sw == scaledWidth_ && sh == scaledHeight_ && allocatedIntel_ == intelQuality)
         return;
     freeTargets();
     GLint maxSamples = 0;
@@ -381,11 +401,11 @@ void Renderer::targets(int w, int h) {
     glBindFramebuffer(GL_FRAMEBUFFER, msaa_);
     glGenRenderbuffers(1, &color_);
     glBindRenderbuffer(GL_RENDERBUFFER, color_);
-    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_RGBA16F, w, h);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_RGBA16F, sw, sh);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, color_);
     glGenRenderbuffers(1, &depth_);
     glBindRenderbuffer(GL_RENDERBUFFER, depth_);
-    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_DEPTH_COMPONENT24, w, h);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_DEPTH_COMPONENT24, sw, sh);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         throw std::runtime_error("HDR MSAA framebuffer unavailable");
@@ -395,18 +415,38 @@ void Renderer::targets(int w, int h) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, resolveTexture_);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_HALF_FLOAT, nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, sw, sh, 0, GL_RGBA, GL_HALF_FLOAT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, resolveTexture_, 0);
+    glGenTextures(1, &resolvedDepth_);
+    glBindTexture(GL_TEXTURE_2D, resolvedDepth_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, sw, sh, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, resolvedDepth_, 0);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         throw std::runtime_error("HDR resolve framebuffer unavailable");
+    glGenFramebuffers(1, &nativeFbo_);
+    glBindFramebuffer(GL_FRAMEBUFFER, nativeFbo_);
+    glGenTextures(1, &nativeTexture_);
+    glBindTexture(GL_TEXTURE_2D, nativeTexture_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_HALF_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, nativeTexture_, 0);
+    glGenRenderbuffers(1, &nativeDepth_);
+    glBindRenderbuffer(GL_RENDERBUFFER, nativeDepth_);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, nativeDepth_);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        throw std::runtime_error("native surfaces framebuffer unavailable");
     glGenFramebuffers(2, bloomFbo_);
     glGenTextures(2, bloomTexture_);
     for (int i = 0; i < 2; i++) {
         glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[i]);
         glBindTexture(GL_TEXTURE_2D, bloomTexture_[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, std::max(1, w / 2), std::max(1, h / 2), 0, GL_RGBA, GL_HALF_FLOAT,
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, std::max(1, sw / 2), std::max(1, sh / 2), 0, GL_RGBA, GL_HALF_FLOAT,
                      nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -416,6 +456,8 @@ void Renderer::targets(int w, int h) {
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
             throw std::runtime_error("bloom target unavailable");
     }
+    scaledWidth_ = sw;
+    scaledHeight_ = sh;
     width_ = w;
     height_ = h;
 }
@@ -451,6 +493,15 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     frameTyping_ = typing;
     GLState state;
     init();
+    if (!width_ || w != width_ || h != height_ || resolution_.requested != renderScale ||
+        resolution_.targetFPS != targetFPS)
+        resolution_.reset(renderScale, targetFPS, intelQuality, w * h);
+    else if (std::all_of(gpu_.begin(), gpu_.end(), [](auto &timer) { return timer.available; })) {
+        double ms = 0;
+        for (auto &timer : gpu_)
+            ms += timer.milliseconds;
+        resolution_.sample(ms, frameMs_ / 1000.);
+    }
     targets(w, h);
     glLineWidth(1);
     gpu_[0].begin();
@@ -469,7 +520,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glDepthRangef(0, 1);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glBindFramebuffer(GL_FRAMEBUFFER, msaa_);
-    glViewport(0, 0, w, h);
+    glViewport(0, 0, scaledWidth_, scaledHeight_);
     glClearColor(.028f, .045f, .065f, 1);
     glClearDepthf(1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -597,6 +648,64 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glUniformMatrix4fv(glGetUniformLocation(scene_, "model"), 1, GL_FALSE, identity.v.data());
     cpu_[0] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
     gpu_[0].end();
+    gpu_[2].begin();
+    auto bloomStarted = std::chrono::steady_clock::now();
+    {
+        int w = scaledWidth_, h = scaledHeight_;
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa_);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolve_);
+        glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        // Application pixels carry alpha zero and never contribute to world bloom.
+        glDisable(GL_DEPTH_TEST);
+        glUseProgram(bloom_);
+        uniform(bloom_, "image", 0);
+        glBindVertexArray(screenVao_);
+        glActiveTexture(GL_TEXTURE0);
+        glBindSampler(0, clamp_);
+        glViewport(0, 0, std::max(1, w / 2), std::max(1, h / 2));
+        glUniform1f(glGetUniformLocation(bloom_, "threshold"), effects ? bloom["threshold"].get<float>() : 1e20f);
+        float radius = bloom["radius"];
+        if (!effects || bloom["strength"].get<float>() <= 0) {
+            glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[0]);
+            glClearColor(0, 0, 0, 0);
+            glClear(GL_COLOR_BUFFER_BIT);
+        } else
+            for (int pass = 0; pass < 3; pass++) {
+                glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[pass == 1 ? 1 : 0]);
+                glBindTexture(GL_TEXTURE_2D, pass == 0 ? resolveTexture_ : bloomTexture_[pass == 1 ? 0 : 1]);
+                uniform(bloom_, "extract", pass == 0);
+                glUniform2f(glGetUniformLocation(bloom_, "stepSize"),
+                            pass == 2   ? 0
+                            : pass == 0 ? 1.f / w
+                                        : radius / w,
+                            pass == 1   ? 0
+                            : pass == 0 ? 1.f / h
+                                        : radius / h);
+                glDrawArrays(GL_TRIANGLES, 0, 3);
+            }
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, nativeFbo_);
+    glViewport(0, 0, w, h);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
+    glDepthMask(GL_TRUE);
+    glUseProgram(upscale_);
+    uniform(upscale_, "image", 0);
+    uniform(upscale_, "depthImage", 1);
+    glUniform1f(glGetUniformLocation(upscale_, "sharpness"), resolution_.scale < 1 ? .35f : 0.f);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, resolveTexture_);
+    glBindSampler(0, clamp_);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, resolvedDepth_);
+    glBindSampler(1, 0);
+    glBindVertexArray(screenVao_);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDepthFunc(GL_LESS);
+    glUseProgram(scene_);
+    glActiveTexture(GL_TEXTURE0);
+    cpu_[2] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - bloomStarted).count();
+    gpu_[2].end();
     gpu_[1].begin();
     auto surfacesStarted = std::chrono::steady_clock::now();
     for (const auto &s : surfaces) {
@@ -679,41 +788,6 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     }
     cpu_[1] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - surfacesStarted).count();
     gpu_[1].end();
-    gpu_[2].begin();
-    auto bloomStarted = std::chrono::steady_clock::now();
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa_);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolve_);
-    glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    // Application pixels carry alpha zero and never contribute to world bloom.
-    glDisable(GL_DEPTH_TEST);
-    glUseProgram(bloom_);
-    uniform(bloom_, "image", 0);
-    glBindVertexArray(screenVao_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindSampler(0, clamp_);
-    glViewport(0, 0, std::max(1, w / 2), std::max(1, h / 2));
-    glUniform1f(glGetUniformLocation(bloom_, "threshold"), effects ? bloom["threshold"].get<float>() : 1e20f);
-    float radius = bloom["radius"];
-    if (!effects || bloom["strength"].get<float>() <= 0) {
-        glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[0]);
-        glClearColor(0, 0, 0, 0);
-        glClear(GL_COLOR_BUFFER_BIT);
-    } else
-        for (int pass = 0; pass < 3; pass++) {
-            glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[pass == 1 ? 1 : 0]);
-            glBindTexture(GL_TEXTURE_2D, pass == 0 ? resolveTexture_ : bloomTexture_[pass == 1 ? 0 : 1]);
-            uniform(bloom_, "extract", pass == 0);
-            glUniform2f(glGetUniformLocation(bloom_, "stepSize"),
-                        pass == 2   ? 0
-                        : pass == 0 ? 1.f / w
-                                    : radius / w,
-                        pass == 1   ? 0
-                        : pass == 0 ? 1.f / h
-                                    : radius / h);
-            glDrawArrays(GL_TRIANGLES, 0, 3);
-        }
-    cpu_[2] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - bloomStarted).count();
-    gpu_[2].end();
     gpu_[3].begin();
     auto outputStarted = std::chrono::steady_clock::now();
     present(target, w, h, typing);
@@ -744,7 +818,7 @@ void Renderer::present(GLuint target, int w, int h, bool typing) {
     glBindSampler(1, clamp_);
     glUniform2f(glGetUniformLocation(tone_, "resolution"), w, h);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, resolveTexture_);
+    glBindTexture(GL_TEXTURE_2D, nativeTexture_);
     glBindSampler(0, clamp_);
     glBindVertexArray(screenVao_);
     glDrawArrays(GL_TRIANGLES, 0, 3);
@@ -769,7 +843,8 @@ void Renderer::debugHUD(int w, int h) {
             message << total << " ms";
         } else
             message << "N/A (timer unavailable/disjoint/enclosing query)";
-        message << "\nScene/windows/bloom/output CPU ";
+        message << "\nScale " << resolution_.scale << " (" << scaledWidth_ << "x" << scaledHeight_ << ") target "
+                << targetFPS << " FPS\nScene/windows/bloom+upscale/output CPU ";
         for (auto &v : cpu_)
             message << v << " ";
         text(22, 24, message.str(), {.4f, 1, .6f}, w, h);
@@ -1126,7 +1201,11 @@ world::Json Renderer::timings() const {
         cpu.push_back(v);
     for (auto &timer : gpu_)
         gpu.push_back(timer.available ? world::Json(timer.milliseconds) : world::Json(nullptr));
-    return {{"frameMs", frameMs_},
+    return {{"renderScale", resolution_.scale},
+            {"internalSize", {scaledWidth_, scaledHeight_}},
+            {"nativeSize", {width_, height_}},
+            {"targetFPS", targetFPS},
+            {"frameMs", frameMs_},
             {"cpuRenderMs", renderMs_},
             {"cpuUpdateMs", updateMs},
             {"captureMs", captureMs},
@@ -1217,6 +1296,8 @@ void Renderer::destroy() {
     collisionCount_ = 0;
     glDeleteProgram(scene_);
     glDeleteProgram(tone_);
+    glDeleteProgram(upscale_);
+    upscale_ = 0;
     glDeleteProgram(bloom_);
     glDeleteProgram(sky_);
     glDeleteBuffers(1, &quadVbo_);

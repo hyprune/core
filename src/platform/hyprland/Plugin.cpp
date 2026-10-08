@@ -801,6 +801,8 @@ void Runtime::finishLoad() {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         renderer.intelQuality = render::Renderer::intelTier(config["graphics"]["quality"],
                                                             reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
+        renderer.renderScale = config["graphics"]["render_scale"] == "auto" ? 0.f : config["graphics"]["render_scale"].get<float>();
+        renderer.targetFPS = config["graphics"]["target_fps"];
         renderer.prepare(candidate);
         if (graphicsOverrides.contains("exposure"))
             renderer.profile["exposure"] = config["graphics"]["exposure"];
@@ -3042,6 +3044,8 @@ int luaConfig(lua_State *L) {
             runtime->tagged.clear();
         }
         runtime->config = next;
+        runtime->renderer.renderScale = next["graphics"]["render_scale"] == "auto" ? 0.f : next["graphics"]["render_scale"].get<float>();
+        runtime->renderer.targetFPS = next["graphics"]["target_fps"];
         if (old["graphics"]["fov"] != next["graphics"]["fov"]) {
             runtime->baseFov = next["graphics"]["fov"];
             runtime->camera.fov = runtime->baseFov;

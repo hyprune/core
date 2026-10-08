@@ -296,3 +296,11 @@ Movement bindings also work with Super during owned gestures. Carry follows yaw
 only, preserving pitch/roll. Free-window quads follow current logical client
 size × windows.scale; authored mount fitting is unchanged. No IPC wire changes
 or shell upgrade required. See M3B.md for evidence and supervised checks.
+
+### Live round 3 rendering
+
+Core now scales only 3D world rendering, preserving native windows and core
+markers. Lua graphics options: render_scale="auto" (or 0.375..1), target_fps=60
+(30..240 integer). Diagnostic captures include internal/native dimensions and
+current scale. No public IPC/schema fields change; shell rendering and input
+contracts are unchanged.

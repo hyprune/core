@@ -111,6 +111,19 @@ def acceptance(logs,recorded,children,check):
         check('4K_core_cpu_gpu_profile',all(v['cpuRenderMs']>0 for v in samples))
         check('core_GPU_queue_is_bounded',all(v['inFlight']<=2 for v in samples))
         check('auto_Intel_quality_applied_on_world_load',all('Intel' not in v['renderer'] or (v['quality']=='intel' and v['msaaSamples']<=2) for v in samples))
+        check('auto_render_scale_preserves_native_output',all(v['nativeSize']==[3840,2160] and .375<=v['renderScale']<=1 for v in samples))
+        baseline=[]
+        s.ctl('eval','hl.plugin.hyprune.config({graphics={render_scale=1}})');time.sleep(1)
+        for n in range(40):
+            pointer(1 if n%2 else -1,0);baseline.append(s.camera()['timings'])
+        check('fixed_native_scale_reload',all(v['internalSize']==[3840,2160] for v in baseline))
+        before=[(v['id'],v['size'],v['pixels']) for v in s.camera()['captures']]
+        s.ctl('eval','hl.plugin.hyprune.config({graphics={render_scale=0.5,target_fps=90}})')
+        wait(lambda:s.camera()['timings']['internalSize']==[1920,1080])
+        check('scale_reload_keeps_native_windows',before==[(v['id'],v['size'],v['pixels']) for v in s.camera()['captures']] and s.camera()['timings']['targetFPS']==90)
+        s.ctl('eval','hl.plugin.hyprune.config({graphics={render_scale="auto",target_fps=60}})');time.sleep(2)
+        (logs/'render-scale-profile.json').write_text(json.dumps({'resolution':[3840,2160],'auto':samples,'native':baseline},indent=2)+'\n')
+
     def capture_in(mode):
         previous=time.time();keys('-M','logo','-P','Super_L','-k','u','-p','Super_L','-m','logo')
         result=wait(lambda:next((p for p in capture_dir.glob('capture-*.json') if p.stat().st_mtime>=previous),None),20)

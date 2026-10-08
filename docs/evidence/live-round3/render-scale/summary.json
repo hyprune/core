@@ -1,0 +1,42 @@
+{
+  "auto": {
+    "samples": 80,
+    "median": {
+      "frameMs": 16.670695000000002,
+      "cpuRenderMs": 0.2976975,
+      "cpuUpdateMs": 3.823077,
+      "captureMs": 3.320539,
+      "ipcMs": 0.0014785,
+      "renderScale": 0.375
+    },
+    "p95FrameMs": 33.39673,
+    "medianGpuPassMs": [
+      5.740311999999999,
+      3.3806770000000004,
+      1.514713,
+      0.834687
+    ],
+    "reusedFramesDuringSample": 91
+  },
+  "native": {
+    "samples": 40,
+    "median": {
+      "frameMs": 66.62319099999999,
+      "cpuRenderMs": 0.321994,
+      "cpuUpdateMs": 3.82787,
+      "captureMs": 3.3459895,
+      "ipcMs": 0.0014355000000000001,
+      "renderScale": 1.0
+    },
+    "p95FrameMs": 71.586748,
+    "medianGpuPassMs": [
+      22.380781,
+      3.2486715000000004,
+      7.199739,
+      0.8393744999999999
+    ],
+    "reusedFramesDuringSample": 190
+  },
+  "environment": "Nested Hyprland, Intel PTL, native 3840x2160, Lumen Reach. Owner session was not altered; GPU exclusivity was not assumed.",
+  "conclusion": "Large GPU reduction; median near 60 FPS cadence, but p95 and reused frames do not establish sustained 60 FPS."
+}

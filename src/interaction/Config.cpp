@@ -35,7 +35,13 @@ Json defaultConfig() {
         {"windows", {{"spawn_distance", 5.0}, {"scale", .002}, {"wheel_factor", 1.06}, {"transition_seconds", .35}}},
         {"tools", {{"enabled", true}, {"slots", Json::array({"pointer", "mount", "path", "path", "path"})}}},
         {"graphics",
-         {{"quality", "auto"}, {"fov", 60.0}, {"exposure", 1.0}, {"bloom_strength", .15}, {"reduced_motion", false}}}};
+         {{"quality", "auto"},
+          {"render_scale", "auto"},
+          {"target_fps", 60},
+          {"fov", 60.0},
+          {"exposure", 1.0},
+          {"bloom_strength", .15},
+          {"reduced_motion", false}}}};
 }
 Json configPatch(const Json &current, const Json &patch) {
     if (!patch.is_object())
@@ -62,6 +68,12 @@ Json configPatch(const Json &current, const Json &patch) {
                         throw std::runtime_error("duplicate binding");
                 continue;
             }
+            if (section == "graphics" && key == "render_scale") {
+                if (v != "auto" && (!v.is_number() || !std::isfinite(v.get<double>()) || v < .375 || v > 1))
+                    throw std::runtime_error("render_scale must be auto or 0.375..1");
+                result[section][key] = v;
+                continue;
+            }
             auto old = result[section][key];
             if (old.is_boolean()) {
                 if (!v.is_boolean())
@@ -75,6 +87,12 @@ Json configPatch(const Json &current, const Json &patch) {
                     max = 767;
                     if (!v.is_number_integer())
                         throw std::runtime_error("typing_button must be an evdev integer");
+                }
+                if (key == "target_fps") {
+                    min = 30;
+                    max = 240;
+                    if (!v.is_number_integer())
+                        throw std::runtime_error("target_fps must be integer");
                 }
                 if (key == "walk_speed" || key == "fly_speed") {
                     min = .1;

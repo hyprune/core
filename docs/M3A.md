@@ -207,3 +207,31 @@ The supervised live follow-up adds a real layer cursor (Back from world),
 Back/Super+Tab exit, native launcher/bar routing and presentation restart
 association. Every added transition is listed in
 [M3B's supervised live additions](M3B.md#supervised-live-test-checklist-additions).
+
+### Internal world resolution (live round 3)
+
+`graphics.render_scale` accepts `"auto"` (default) or a fixed number from 0.375
+through 1.0. `graphics.target_fps` is an integer from 30 through 240, default 60.
+Both are validated and diff-applied by `hl.plugin.hyprune.config({...})`; changing
+them does not reload the plugin or change client sizes.
+
+```lua
+hl.plugin.hyprune.config({graphics={render_scale="auto", target_fps=60}})
+-- Deterministic quality/diagnosis:
+-- hl.plugin.hyprune.config({graphics={render_scale=0.75}})
+```
+
+Only world geometry, lighting and bloom use the internal resolution. A bounded
+bilinear/sharpen reconstruction restores world colour and nearest world depth to
+a native HDR target. Window/workspace textures, core world-locked overlays,
+gizmos and debug wires then render at native output resolution; labels and the
+reticle remain native too. U still captures the complete native-resolution frame.
+The F3 overlay and capture timings show the scale and internal/native sizes.
+
+Automatic mode initially uses 0.6875 on Intel outputs above 2560×1440 and 1
+otherwise. Nonblocking GPU pass timers control 1/16 scale steps, bounded to
+0.375–1. A smoothed GPU budget reserves 25% of the requested frame interval for
+compositor work. Reduction requires 0.6 seconds above 108% of that budget;
+increase requires 3 seconds below 75%. Missing/disjoint timer samples do not
+change resolution. This is a GPU-work target, not a guarantee of compositor FPS
+under concurrent GPU load. Fixed scale disables automatic adaptation.

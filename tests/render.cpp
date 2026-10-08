@@ -179,6 +179,35 @@ int main(int argc, char **argv) {
         glReadPixels(180, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
         check(std::abs(int(pixel[0]) - 128) <= 1, "app pixels were tone mapped or gamma decoded twice");
         check(glGetError() == GL_NO_ERROR, "GL error");
+        glFinish();
+        renderer.renderScale = .5f;
+        renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
+        glFinish();
+        glReadPixels(180, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+        check(std::abs(int(pixel[0]) - 128) <= 1, "scaled world changed native application colour");
+        check(renderer.timings()["nativeSize"] == world::Json::array({320, 180}), "native window target size");
+        // A high-frequency client texture must be identical at both world
+        // scales. This detects accidentally upscaling the application pass too.
+        std::vector<unsigned char> stripes(256 * 4);
+        for (int x = 0; x < 256; ++x) {
+            stripes[x * 4] = stripes[x * 4 + 1] = stripes[x * 4 + 2] = x % 2 ? 240 : 20;
+            stripes[x * 4 + 3] = 255;
+        }
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, app);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, stripes.data());
+        std::array<unsigned char, 32 * 4> nativeStrip{}, scaledStrip{};
+        renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
+        glFinish();
+        glReadPixels(125, 100, 32, 1, GL_RGBA, GL_UNSIGNED_BYTE, scaledStrip.data());
+        renderer.renderScale = 1;
+        renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
+        glFinish();
+        glReadPixels(125, 100, 32, 1, GL_RGBA, GL_UNSIGNED_BYTE, nativeStrip.data());
+        check(nativeStrip == scaledStrip, "world scale blurred native client stripes");
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, app);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, gray);
         // Compare transformed UV1 against explicitly transformed UV0 for every material slot.
         auto materialWorld = std::make_shared<world::World>();
         world::Image pattern{2, 2, {255, 20, 10, 255, 30, 220, 40, 255, 20, 40, 240, 255, 220, 210, 30, 255}};
@@ -461,6 +490,68 @@ int main(int argc, char **argv) {
         renderer.draw(fbo, 320, 180, camera, {}, false);
         glFinish();
         check(renderer.timings()["msaaSamples"] <= 2, "live MSAA tier did not reallocate targets");
+        // Dynamic world resolution must leave application pixels and capture
+        // dimensions native, with depth and all compositor GL state intact.
+        renderer.renderScale = .5f;
+        renderer.draw(fbo, 320, 180, camera, {}, false);
+        glFinish();
+        check(renderer.timings()["internalSize"] == world::Json::array({160, 90}), "fixed internal resolution");
+        auto half = renderer.snapshot();
+        check(half.width == 320 && half.height == 180, "capture was downscaled");
+        check(glGetError() == GL_NO_ERROR, "scaled depth resolve/upscale GL error");
+        render::Resolution scale;
+        scale.reset(0, 60, true, 3840 * 2160);
+        auto initial = scale.scale;
+        for (int i = 0; i < 20; ++i)
+            scale.sample(30, .016);
+        check(scale.scale == initial, "resolution hysteresis ignored");
+        for (int i = 0; i < 30; ++i)
+            scale.sample(30, .016);
+        check(scale.scale < initial, "resolution did not reduce above GPU budget");
+        for (int i = 0; i < 1000; ++i)
+            scale.sample(100, .016);
+        check(scale.scale == .375f, "resolution lower bound");
+        scale.reset(.75f, 60, true, 3840 * 2160);
+        for (int i = 0; i < 1000; ++i)
+            scale.sample(100, .016);
+        check(scale.scale == .75f, "fixed render scale drifted");
+        // The intermediate upscale must not perform the final output Y flip.
+        // A world panel above the eye and a native surface behind/in front of it
+        // pin both colour orientation and reconstructed-depth orientation.
+        auto orientationWorld = std::make_shared<world::World>();
+        world::Material magenta;
+        magenta.unlit = true;
+        magenta.color = {1, 0, 1};
+        magenta.doubleSided = true;
+        orientationWorld->materials = {magenta};
+        world::Mesh panel;
+        for (auto xy : {Vec3{0, 0, 0}, Vec3{1, 0, 0}, Vec3{1, 1, 0}, Vec3{0, 0, 0}, Vec3{1, 1, 0}, Vec3{0, 1, 0}}) {
+            world::Vertex v{};
+            v.position = {-.8f + xy.x * 1.6f, 2.3f + xy.y, 0};
+            v.normal = {0, 0, 1};
+            panel.vertices.push_back(v);
+        }
+        orientationWorld->meshes = {panel};
+        renderer.prepare(orientationWorld);
+        renderer.effects = false;
+        camera = sim::Camera{};
+        surface.center = {0, 2.8f, -.2f};
+        surface.width = 1.4f;
+        surface.height = .8f;
+        for (float scale : {1.f, .5f}) {
+            renderer.renderScale = scale;
+            glFinish();
+            renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
+            glFinish();
+            glReadPixels(150, 48, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+            check(pixel[0] > 150 && pixel[1] < 20 && pixel[2] > 150, "scaled world colour/depth Y flip or occlusion");
+            surface.center.z = .2f;
+            renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
+            glFinish();
+            glReadPixels(150, 48, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+            check(std::abs(int(pixel[0]) - 128) <= 1, "native surface incorrectly hidden by scaled world depth");
+            surface.center.z = -.2f;
+        }
         renderer.destroy();
         glDeleteTextures(1, &app);
         glDeleteTextures(1, &texture);

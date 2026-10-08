@@ -1,6 +1,7 @@
 #pragma once
 #include "GPUTimer.hpp"
 #include "OverlayStyle.hpp"
+#include "Resolution.hpp"
 #include "interaction/Tools.hpp"
 #include "surfaces/Surface.hpp"
 #include "world/World.hpp"
@@ -48,6 +49,8 @@ class Renderer {
         return quality == "intel" || (quality == "auto" && device.find("Intel") != std::string::npos);
     }
     bool intelQuality = false, effects = true;
+    float renderScale = 0; // zero = automatic
+    int targetFPS = 60;
     float pointerX = .5f, pointerY = .5f;
     bool scopeVignette = false;
     std::vector<interaction::Line> lines;
@@ -70,6 +73,9 @@ class Renderer {
     int cubeLevels_ = 1;
     GLuint bloomFbo_[2]{}, bloomTexture_[2]{};
     GLuint msaa_ = 0, color_ = 0, depth_ = 0, resolve_ = 0, resolveTexture_ = 0;
+    GLuint resolvedDepth_ = 0, nativeFbo_ = 0, nativeTexture_ = 0, nativeDepth_ = 0, upscale_ = 0;
+    Resolution resolution_;
+    int scaledWidth_ = 0, scaledHeight_ = 0;
     int width_ = 0, height_ = 0, samples_ = 4;
     bool allocatedIntel_ = false;
     std::deque<GLsync> frameFences_;

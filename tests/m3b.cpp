@@ -1,3 +1,4 @@
+#include "interaction/Config.hpp"
 #include "interaction/InputFile.hpp"
 #include "interaction/Tools.hpp"
 #include "render/OverlayStyle.hpp"
@@ -30,6 +31,18 @@ int main() {
     xkb_state_unref(keyboard);
     xkb_keymap_unref(keymap);
     xkb_context_unref(context);
+    auto graphics = configPatch(defaultConfig(), {{"graphics", {{"render_scale", .5}, {"target_fps", 90}}}});
+    assert(graphics["graphics"]["render_scale"] == .5);
+    assert(configPatch(graphics, {{"graphics", {{"render_scale", "auto"}}}})["graphics"]["render_scale"] == "auto");
+    for (auto bad : {world::Json(.1), world::Json(2), world::Json("fast"), world::Json(true)}) {
+        bool rejected = false;
+        try {
+            configPatch(graphics, {{"graphics", {{"render_scale", bad}}}});
+        } catch (...) {
+            rejected = true;
+        }
+        assert(rejected);
+    }
     auto defaults = validateInput(inputDefaults());
     assert(inputConflicts(defaults).empty());
     unsigned checked = 0;
@@ -106,8 +119,8 @@ int main() {
                   (carryCamera.position + carryCamera.forward() * 3)) < .0001f);
     assert(carry.pose.center.x > 0);
     // Initial pitch/roll survive arbitrary look pitch and a world-Y yaw delta.
-    carried.rotation = quaternionProduct(orientation({0, .3f, 1}),
-                                        std::array<float,4>{0, 0, std::sin(.2f), std::cos(.2f)});
+    carried.rotation =
+        quaternionProduct(orientation({0, .3f, 1}), std::array<float, 4>{0, 0, std::sin(.2f), std::cos(.2f)});
     carryCamera.pitch = -.3f;
     carry.begin(Gesture::Carry, carried, {3, .6f, .4f}, carryCamera);
     auto startRotation = carry.pose.rotation;

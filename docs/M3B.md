@@ -438,3 +438,32 @@ client now queues a matching logical client configure. Floating/configure action
 run on a later event-loop turn, after capture iteration, so layout callbacks
 cannot invalidate the compositor window list being traversed. The 4K live-like
 harness verified the arriving terminal is visible, collision-free and in view.
+
+### Live round 3 render resolution
+
+The world render scale is independent of client logical/buffer scale. See M3A.md
+for `graphics.render_scale` and `graphics.target_fps`. No new cursor transitions
+are introduced. For the supervised follow-up:
+
+- [ ] F3 shows internal scale, native output size and frame/GPU timings; allow
+  several seconds for auto resolution to settle while turning in Sun Court.
+- [ ] Text, workspace walls, prompts and markers stay sharp as scale changes;
+  a window behind a world wall remains occluded.
+- [ ] U saves a native-resolution PNG with the reported scale in its JSON.
+- [ ] Open a desktop-sized terminal at 4K: the client receives a safe logical
+  configure size rather than a stretched quad or an invisible oversized window.
+
+4K profile (`evidence/live-round3/render-scale/summary.json`): Intel PTL, Lumen
+Reach, native 3840×2160. Auto settled at 0.375 in this nested run. Median GPU
+scene/windows/bloom+upscale/output: 5.74/3.38/1.51/0.83 ms, versus
+22.38/3.25/7.20/0.84 ms at fixed native world resolution. Median frame interval
+16.67 ms versus 66.62 ms. Auto p95 was 33.40 ms, with 91 reused presentations
+during the 80-sample interval; sustained ≥60 FPS is **not yet demonstrated**.
+The owner session was not altered to obtain exclusive GPU access.
+CPU render/update/capture/IPC medians: 0.30/3.82/3.32/0.001 ms. The capture metric
+covers texture leasing and placement refresh, not PNG capture. Snapshot readback
+remains an explicit U-only operation. GPU tests preserve native client stripe
+pixels exactly across 1.0 and 0.5 world scales, verify world colour/depth
+orientation, native window occlusion, capture dimensions and GL state, and
+exercise fixed/auto bounds and hysteresis. Live-like 4K acceptance: 55/55,
+including scale diff reload, new-window spawn, captures and recovery. CTests: 8/8.
