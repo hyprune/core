@@ -818,8 +818,6 @@ void Runtime::publish() {
     for (auto &e : capture.entries)
         if (world && editor.locked(world->id, e.instance))
             publication["editor"]["locked"].push_back(e.surface.id);
-    if (publication["interaction"]["tools"].size() > 4)
-        publication["interaction"]["tools"].erase(publication["interaction"]["tools"].begin() + 4, publication["interaction"]["tools"].end());
     lastPublished = publication;
     ipc->publish(publication);
     for (auto &[event, params] : layout.events)

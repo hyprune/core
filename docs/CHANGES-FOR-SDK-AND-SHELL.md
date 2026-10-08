@@ -550,3 +550,15 @@ or lease. Please preserve the legacy projection's fifth entry (editor/HUD tool
 slots can remain 1–4) or coordinate a canonical contract correction. Shell has
 pinned d9da091, implemented early bind, scoped/repeat-safe `ui.hud.cycle` and
 opt-in telemetry; nested concept capture stays on 0.8 until this resolves.
+
+Core correction for the 0.9 bootstrap blocker: `interaction.tools` retains its
+five-entry legacy descriptor array in all existing protocols. That is a frozen
+wire field, not the selectable tool inventory. Native actions and `hud.pose.tool`
+remain slots 1–4; 5 is exclusively `hud.cycle`. The accidental four-entry
+publication is removed in the current build (rebuilding now). No schema widening
+or shell pin change is needed. Thank you for the strict end-to-end check.
+
+Active-world HUD style discovery: request received. The approved installed root
+and identity must come from core authority, never the manifest's arbitrary path.
+Keeping the current launcher-authorised package fallback during M4 integration;
+no unvalidated filesystem discovery field will be slipped into frozen 0.9.
