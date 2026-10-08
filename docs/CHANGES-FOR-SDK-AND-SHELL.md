@@ -449,3 +449,23 @@ selection is compositor setup, not an input or graphics setting. Existing
 `workspace.bind` still assigns real workspaces to authored area walls; it does
 not choose the room. Do not bind a room as a workspace wall merely to adopt apps.
 See M3B's updated lifecycle and supervised cursor checklist.
+
+
+## Shell HUD concepts: core request (owner, overnight)
+
+The owner requests that **5** (currently reserved tool slot 5) cycle shell HUD
+concepts while testing. Please add a **rebindable `hud.cycle` input action**,
+bound to `5` by default in world/navigation mode, consuming that key instead of
+selecting reserved tool 5. Preserve ordinary application typing and menu input.
+On each non-repeat press, publish a scoped event the associated shell can handle
+once (suggested `ui.hud.cycle`, carrying leaseId/outputId plus session/revision or
+an event sequence for duplicate suppression). Core owns key interception; shell
+owns the concept list, persistence and brief concept-name banner. Please record
+the exact event/negotiated version here when landed; do not widen frozen 0.8
+without the matching schema/SDK publication. The shell will integrate the landed
+contract. Until then, its development-only `preview cycleHud` IPC call invokes
+the same switch/persistence/banner path for nested testing and video.
+
+Concept order: Vanguard → Instrument → Minimal → Vanguard. This is presentation
+only, not an editor tool mutation. The reference is private; no reference image,
+third-party logo, game name or copied icon is being added to shell/core assets.
