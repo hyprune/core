@@ -1,5 +1,6 @@
 #include "Capture.hpp"
 #include "render/GLState.hpp"
+#include "render/SurfaceSampler.hpp"
 #include <GLES3/gl3.h>
 #include <algorithm>
 #include <hyprland/src/desktop/Workspace.hpp>
@@ -123,7 +124,8 @@ void Capture::release() {
     workspaces.clear();
     glDeleteProgram(program_);
     glDeleteVertexArrays(1, &vao_);
-    program_ = vao_ = 0;
+    glDeleteSamplers(1, &sampler_);
+    program_ = vao_ = sampler_ = 0;
 }
 Capture::Entry *Capture::find(const std::string &id) {
     for (auto &e : entries)
@@ -182,6 +184,7 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         if (!ok)
             throw std::runtime_error("workspace composite link failed");
         glGenVertexArrays(1, &vao_);
+        sampler_ = render::createSurfaceSampler();
     }
     std::set<int> live;
     for (const auto &b : layout.bindings) {
@@ -237,7 +240,7 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         glUniform1i(glGetUniformLocation(program_, "image"), 0);
         glBindVertexArray(vao_);
         glActiveTexture(GL_TEXTURE0);
-        glBindSampler(0, 0);
+        glBindSampler(0, sampler_);
         glEnable(GL_BLEND);
         glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
         glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);

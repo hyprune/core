@@ -33,7 +33,7 @@ class Capture {
     Entry *find(const std::string &id);
 
   private:
-    unsigned sequence_ = 0, program_ = 0, vao_ = 0;
+    unsigned sequence_ = 0, program_ = 0, vao_ = 0, sampler_ = 0;
     void compose(PHLMONITOR, const world::World *, surfaces::Layout &);
 };
 } // namespace hyprune::platform

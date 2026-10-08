@@ -1,4 +1,6 @@
+#include "render/GLState.hpp"
 #include "render/Renderer.hpp"
+#include "render/SurfaceSampler.hpp"
 #include "world/Mounts.hpp"
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -7,6 +9,85 @@ using namespace hyprune;
 void check(bool ok, const char *why) {
     if (!ok)
         throw std::runtime_error(why);
+}
+void checkSurfaceSampler(GLuint target) {
+    render::GLState state;
+    GLuint source, vao;
+    glGenTextures(1, &source);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, source);
+    unsigned char pixels[4 * 4 * 4];
+    for (int i = 0; i < 16; ++i) {
+        pixels[i * 4] = 80;
+        pixels[i * 4 + 1] = 120;
+        pixels[i * 4 + 2] = 200;
+        pixels[i * 4 + 3] = 255;
+    }
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 4, 4, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    // Match an imported client buffer before Hyprland has set its filtering.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
+    auto shader = [](GLenum type, const char *text) {
+        GLuint id = glCreateShader(type);
+        glShaderSource(id, 1, &text, nullptr);
+        glCompileShader(id);
+        GLint ok;
+        glGetShaderiv(id, GL_COMPILE_STATUS, &ok);
+        check(ok, "surface sampler test shader");
+        return id;
+    };
+    GLuint vertex = shader(GL_VERTEX_SHADER, R"(#version 300 es
+void main(){vec2 p[3]=vec2[3](vec2(-1,-1),vec2(3,-1),vec2(-1,3));gl_Position=vec4(p[gl_VertexID],0,1);})");
+    GLuint fragment = shader(GL_FRAGMENT_SHADER, R"(#version 300 es
+precision highp float;uniform sampler2D image;out vec4 color;void main(){color=texture(image,vec2(.5));})");
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vertex);
+    glAttachShader(program, fragment);
+    glLinkProgram(program);
+    GLint linked;
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    check(linked, "surface sampler test program");
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+    glBindFramebuffer(GL_FRAMEBUFFER, target);
+    glViewport(0, 0, 320, 180);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_BLEND);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glUseProgram(program);
+    glUniform1i(glGetUniformLocation(program, "image"), 0);
+    glBindSampler(0, 0);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    unsigned char pixel[4];
+    glReadPixels(160, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+    check(pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0, "missing-mipmap negative control");
+    GLuint sampler = render::createSurfaceSampler(), foreign;
+    glGenSamplers(1, &foreign);
+    glBindSampler(0, foreign);
+    glActiveTexture(GL_TEXTURE5);
+    {
+        render::GLState restored;
+        glActiveTexture(GL_TEXTURE0);
+        glBindSampler(0, sampler);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glReadPixels(160, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+        check(pixel[0] == 80 && pixel[1] == 120 && pixel[2] == 200, "level-zero client buffer sampled black");
+    }
+    GLint active, bound, filter;
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &active);
+    glActiveTexture(GL_TEXTURE0);
+    glGetIntegerv(GL_SAMPLER_BINDING, &bound);
+    glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, &filter);
+    check(active == GL_TEXTURE5 && bound == GLint(foreign), "workspace sampler state leaked");
+    check(filter == GL_NEAREST_MIPMAP_LINEAR, "compositor-owned texture filtering changed");
+    check(glGetError() == GL_NO_ERROR, "surface sampler GL error");
+    glDeleteSamplers(1, &foreign);
+    glDeleteSamplers(1, &sampler);
+    glDeleteTextures(1, &source);
+    glDeleteVertexArrays(1, &vao);
+    glDeleteProgram(program);
+    glDeleteShader(vertex);
+    glDeleteShader(fragment);
 }
 int main(int argc, char **argv) {
     if (argc != 2)
@@ -42,6 +123,7 @@ int main(int argc, char **argv) {
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
         check(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "test framebuffer");
+        checkSurfaceSampler(fbo);
         render::Renderer renderer;
         renderer.prepare(world::load(argv[1]));
         unsigned char gray[] = {128, 128, 128, 255};

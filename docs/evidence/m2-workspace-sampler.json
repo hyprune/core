@@ -1,0 +1,154 @@
+{
+  "issue": "Imported level-zero window textures sample black in mounted workspaces when their native minification filter requires missing mip levels.",
+  "negativeControl": {
+    "sourceTextureMinFilter": "GL_NEAREST_MIPMAP_LINEAR",
+    "sourceBrightPixels": 3209,
+    "sourceMaxRGB": 255,
+    "workspaceBrightPixels": 0,
+    "workspaceMaxRGB": 11,
+    "framebuffersComplete": true,
+    "glError": 0,
+    "note": "Before fix; btop minimum-size warning still provides visible pixels in this source."
+  },
+  "fix": "Core-owned GL_LINEAR / GL_CLAMP_TO_EDGE sampler; native texture state unchanged; GLState restores bindings.",
+  "unitRegression": [
+    "Missing-mipmap buffer samples black without owned sampler",
+    "Owned sampler recovers exact source RGB",
+    "Foreign sampler and active texture restored",
+    "Native texture minification filter unchanged"
+  ],
+  "lockedNested": {
+    "lock": "/tmp/worldshell-nested.lock",
+    "package": "com.hyprune.lumen-reach",
+    "worldManifestSHA256": "e7db7fe048f6094e7677a121b5736b0ea8a593a5dc7a2fd7f064ae9b70867eba",
+    "diagnosticPluginSHA256": "1c33ac495cde608f530a6f58f8bc4e519ffabf872671b5dd3d8787e2583b387d",
+    "note": "Separate diagnostic build of the same sampler fix; GPU readback is confined to this disposable build and absent from production.",
+    "nativeHomeSize": [
+      900,
+      600
+    ],
+    "workspaceIds": [
+      10,
+      11,
+      12,
+      13
+    ],
+    "status": "PASS",
+    "readbacks": [
+      {
+        "id": "surface-1",
+        "width": 900,
+        "height": 600,
+        "brightPixels": 51987,
+        "maxRGB": 255,
+        "status": 36053,
+        "glError": 0,
+        "title": "Lumen Reach / sun-court / Home",
+        "workspace": 10,
+        "minFilter": 9986
+      },
+      {
+        "id": "workspace-10",
+        "width": 1280,
+        "height": 720,
+        "brightPixels": 24364,
+        "maxRGB": 255,
+        "status": 36053,
+        "glError": 0
+      },
+      {
+        "id": "surface-3",
+        "width": 900,
+        "height": 600,
+        "brightPixels": 51826,
+        "maxRGB": 255,
+        "status": 36053,
+        "glError": 0,
+        "title": "Lumen Reach / array-hall / Home",
+        "workspace": 11,
+        "minFilter": 9986
+      },
+      {
+        "id": "workspace-11",
+        "width": 1280,
+        "height": 720,
+        "brightPixels": 24260,
+        "maxRGB": 255,
+        "status": 36053,
+        "glError": 0
+      },
+      {
+        "id": "surface-5",
+        "width": 900,
+        "height": 600,
+        "brightPixels": 51554,
+        "maxRGB": 255,
+        "status": 36053,
+        "glError": 0,
+        "title": "Lumen Reach / rime-vault / Home",
+        "workspace": 12,
+        "minFilter": 9986
+      },
+      {
+        "id": "workspace-12",
+        "width": 1280,
+        "height": 720,
+        "brightPixels": 24111,
+        "maxRGB": 255,
+        "status": 36053,
+        "glError": 0
+      },
+      {
+        "id": "surface-7",
+        "width": 900,
+        "height": 600,
+        "brightPixels": 51226,
+        "maxRGB": 255,
+        "status": 36053,
+        "glError": 0,
+        "title": "Lumen Reach / signal-rise / Home",
+        "workspace": 13,
+        "minFilter": 9986
+      },
+      {
+        "id": "workspace-13",
+        "width": 1280,
+        "height": 720,
+        "brightPixels": 23877,
+        "maxRGB": 255,
+        "status": 36053,
+        "glError": 0
+      }
+    ]
+  },
+  "productionNested": {
+    "status": "PASS",
+    "lock": "/tmp/worldshell-nested.lock",
+    "loadedPluginSHA256": "6271d582299280b592256be20dd48440a39376784df581051c790fd333b1a2bf",
+    "allFourHomesVisuallyVerified": true,
+    "allFourToolsPlaced": true,
+    "realTerminalTypingVerified": true,
+    "stills": [
+      {
+        "file": "live-workspace-01-sun-court.png",
+        "sha256": "9ddb337d91db00d4a6ccaf4946a37ac3e6e3ffdda6b88d9df87c77535235ffb9",
+        "visuallyVerifiedLiveBtop": true
+      },
+      {
+        "file": "live-workspace-02-array-hall.png",
+        "sha256": "f29fe61df86c7dfe767ccc138b0b5529f84aa7a10105fba0e9a9494f8738c0ba",
+        "visuallyVerifiedLiveBtop": true
+      },
+      {
+        "file": "live-workspace-03-rime-vault.png",
+        "sha256": "faf0cad983b0c34f34d7b5d1dcc997c1c544de35c501daf535dbb05c26d5f186",
+        "visuallyVerifiedLiveBtop": true
+      },
+      {
+        "file": "live-workspace-04-signal-rise.png",
+        "sha256": "9e4d7c67be215a6e3d936218eda1e352b0902d7d593551a8ca058445af033530",
+        "visuallyVerifiedLiveBtop": true
+      }
+    ]
+  }
+}

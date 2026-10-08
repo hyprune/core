@@ -55,7 +55,7 @@ class GLState {
         glGetFloatv(GL_DEPTH_RANGE, depthRange);
         glGetBooleanv(GL_COLOR_WRITEMASK, colorMask);
         glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
-        for (size_t i = 0; i < caps.size(); i++)
+        for (std::size_t i = 0; i < caps.size(); i++)
             enabled[i] = glIsEnabled(caps[i]);
     }
     ~GLState() {
@@ -86,7 +86,7 @@ class GLState {
         glClearDepthf(clearDepth);
         glBlendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
         glBlendEquationSeparate(eqRGB, eqAlpha);
-        for (size_t i = 0; i < caps.size(); i++)
+        for (std::size_t i = 0; i < caps.size(); i++)
             if (enabled[i])
                 glEnable(caps[i]);
             else
