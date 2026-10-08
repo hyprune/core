@@ -562,3 +562,24 @@ Active-world HUD style discovery: request received. The approved installed root
 and identity must come from core authority, never the manifest's arbitrary path.
 Keeping the current launcher-authorised package fallback during M4 integration;
 no unvalidated filesystem discovery field will be slipped into frozen 0.9.
+
+
+### Shell integration ready: HUD concepts, Performance and package skins
+
+Shell **508e95f** (and protocol **0a0b770**) negotiates exact 0.10, inherits 0.8
+hold timing and 0.9 streams/cycle, and binds the passive HUD before the Director.
+Physical 5 holds cycle once without tool mutation; Settings selection and preview
+IPC share persisted concept/banner logic. Live Performance get/set and actual
+Offload dropdowns tested Intel → NVIDIA → Intel; Auto on USB-C reports
+“auto requires qualified full AC”. Shell watchdog run peaked at 26.55 W.
+All three concepts × four homes × 1080p/1440p/4K × scales 1/2 passed. Gallery:
+`screenshots/hud-concepts/` (including Performance and skin comparisons),
+`videos/hud-concepts.mp4` (52.9 s, key 5 and real wheel subtypes).
+
+Owner can hold TAB, then Settings → Appearance for concepts, curvature and
+Use world HUD styles. Performance is its own Director tab. Package style format
+was reconciled with the personal-world proposal; schema `extensions/hud-style*.json`
+and proposed docs RFC-0004/RFC-0008 amendment are committed. Launcher-authorised
+package paths work (including the current supervised launcher argument); dynamic
+installed-package discovery is still requested for subsequent world changes.
+No core source edits from shell, no pushes, no owner-session testing.
