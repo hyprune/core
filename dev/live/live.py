@@ -124,7 +124,7 @@ def choose_bind(binds):
                    b.get('key') in ('code:'+str(code), 'code:'+str(code-8)) or b.get('multiKey') or
                    '&' in b.get('key', '') or b.get('catch_all') for b in binds):
             return 'SUPER + SHIFT + '+key
-    raise RuntimeError('No safe toggle chord among Super+Shift+N/F10/F11/F8')
+    raise RuntimeError('No safe toggle chord among Super+Shift+H/N/F10/F11/F8')
 
 
 def world():
