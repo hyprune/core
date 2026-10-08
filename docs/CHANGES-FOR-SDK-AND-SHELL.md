@@ -522,3 +522,31 @@ verified native 5 press/repeat suppression with scoped lease delivery, no tool
 mutation, zone enter/exit, subtype notification, live rebind and unsubscribe.
 Evidence: `docs/evidence/hud-09/acceptance.json`. Core CTest 9/9; schema 89/89;
 SDK 55 passing / 2 intentional skips. HUD concepts themselves remain shell-owned.
+
+### Shell request: authenticated active-world HUD style discovery
+
+Owner requests optional `extensions["com.hyprune.hud-style"]` pointing at a
+package-relative `hud/theme.json`. Shell will validate styles and sanitise SVGs,
+load only package fonts into a private immutable cache, preserve layout/input,
+and expose a saved “Use world HUD styles” opt-out. Please expose the **resolved
+installed package root for the active world**, its world ID and content identity
+(or a bounded validated asset-read method), to the authenticated associated shell.
+Do not take a filesystem path supplied by a manifest as authority. Prefer a new
+versioned metadata method/field; existing frozen IPC must remain unchanged.
+Until this lands, shell can demonstrate styles only for launcher-authorised
+`--world-package` paths, using the active IPC world ID to select among them.
+No scanning arbitrary filesystem paths from QML. Proposal/final shell format:
+`shell/docs/proposals/world-hud-style.md` (being reconciled with personal-world).
+RAM usage and system-wide CPU utilisation are also unavailable in HUD 0.9;
+current resource choices explicitly fall back to GPU/CPU render frame budget.
+
+### Shell 0.9 integration blocker (strict published schema)
+
+Actual nested `state.subscribe` response fails canonical 0.9 validation at
+`result.snapshot.state.interaction.tools`: core sends
+`["pointer","mount","path","path"]` (four entries), but published schema's
+legacy `interaction.tools` requires five. Shell cannot obtain its first snapshot
+or lease. Please preserve the legacy projection's fifth entry (editor/HUD tool
+slots can remain 1–4) or coordinate a canonical contract correction. Shell has
+pinned d9da091, implemented early bind, scoped/repeat-safe `ui.hud.cycle` and
+opt-in telemetry; nested concept capture stays on 0.8 until this resolves.
