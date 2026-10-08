@@ -352,11 +352,43 @@ int main(int argc, char **argv) {
         glReadPixels(180, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
         check(std::abs(int(pixel[0]) - 128) <= 1, "world bloom/exposure changed app color");
         check(glGetError() == GL_NO_ERROR, "material GL error");
+        glFinish(); // Test-only synchronization; production fences never wait.
+        renderer.waypoint = {{"position", {0, 1.7, -4}}, {"label", "ACTIVE WAYPOINT"}};
+        renderer.route = {{{"position", {0, 1.7, -4}}}};
+        renderer.draw(fbo, 320, 180, camera, {}, false);
+        check(renderer.overlayDiagnostics["routeSegments"] == 1, "active route absent from core frame");
+        check(renderer.overlayDiagnostics["labels"].size() == 2, "default overlays should only show active waypoint");
+        glFinish();
+        camera.yaw = .2f;
+        renderer.draw(fbo, 320, 180, camera, {}, false);
+        check(renderer.overlayDiagnostics["heading"] == camera.yaw, "overlay camera lags renderer");
+        camera.yaw = 0;
+        renderer.waypoint = nullptr;
+        renderer.route = world::Json::array();
+        auto atlasPath = std::filesystem::temp_directory_path() / "hyprune-test-icon-atlas.png";
+        std::vector<uint8_t> atlasBytes(32 * 32 * 4, 255);
+        render::writePNG(atlasPath, 32, 32, atlasBytes);
+        auto atlas = render::readAtlasPNG(atlasPath);
+        check(atlas.width == 32 && atlas.rgba == atlasBytes, "bounded PNG atlas roundtrip");
+        renderer.applyOverlayStyle(
+            {{"waypointColor", {1, 0, 0}},
+             {"iconAtlas",
+              {{"path", atlasPath.string()}, {"cellSize", 32}, {"waypointIndex", 0}, {"promptIndex", 0}}}});
+        glFinish();
+        renderer.waypoint = {{"position", {0, 1.7, -4}}, {"label", "ICON"}};
+        renderer.draw(fbo, 320, 180, camera, {}, false);
+        glReadPixels(160, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+        check(pixel[0] > 240 && pixel[1] < 10, "themed core icon missing");
+        renderer.applyOverlayStyle({{"iconAtlas", nullptr}});
+        std::filesystem::remove(atlasPath);
+        renderer.waypoint = nullptr;
+        glFinish();
         renderer.pointerX = .3f;
         renderer.pointerY = .25f;
         renderer.draw(fbo, 320, 180, camera, {}, true);
         glReadPixels(96, 45, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
         check(pixel[1] > pixel[0] && pixel[1] > pixel[2], "reticle native screen Y disagrees with pointer ray");
+        glFinish();
         auto screenshot = renderer.snapshot();
         check(screenshot.width == 320 && screenshot.height == 180 && screenshot.rgba.size() == 320 * 180 * 4,
               "completed-frame snapshot dimensions");
@@ -365,6 +397,7 @@ int main(int argc, char **argv) {
         glPixelStorei(GL_PACK_ROW_LENGTH, 400);
         glPixelStorei(GL_PACK_SKIP_ROWS, 2);
         glPixelStorei(GL_PACK_ALIGNMENT, 8);
+        glFinish();
         auto guarded = renderer.snapshot();
         GLint packRow, packSkip, packAlignment;
         glGetIntegerv(GL_PACK_ROW_LENGTH, &packRow);
@@ -374,8 +407,10 @@ int main(int argc, char **argv) {
         glPixelStorei(GL_PACK_ROW_LENGTH, 0);
         glPixelStorei(GL_PACK_SKIP_ROWS, 0);
         glPixelStorei(GL_PACK_ALIGNMENT, 4);
+        glFinish();
         renderer.debug = true;
         renderer.draw(fbo, 320, 180, camera, {}, false);
+        glFinish();
         auto debugFrame = renderer.snapshot();
         check(debugFrame.rgba != screenshot.rgba, "core debug overlay absent");
         auto png = std::filesystem::temp_directory_path() / "hyprune-render-snapshot.png";
@@ -383,6 +418,49 @@ int main(int argc, char **argv) {
         check(std::filesystem::file_size(png) > 100, "PNG encode failed");
         std::filesystem::remove(png);
         check(glGetError() == GL_NO_ERROR, "snapshot/debug GL error");
+        GLuint landmarkTexture;
+        glGenTextures(1, &landmarkTexture);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, landmarkTexture);
+        const uint8_t magenta[4] = {255, 0, 200, 255};
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, magenta);
+        auto landmark = surface;
+        landmark.center = camera.position + Vec3{0, 0, -1};
+        landmark.width = landmark.height = .15f;
+        landmark.texture = landmarkTexture;
+        renderer.debug = false;
+        renderer.applyOverlayStyle({{"iconAtlas", nullptr}});
+        float centres[2];
+        int direction = 0;
+        for (float pitch : {-.2f, .2f}) {
+            glFinish();
+            camera.pitch = pitch;
+            renderer.draw(fbo, 320, 180, camera, std::span(&landmark, 1), false);
+            glFinish();
+            auto image = renderer.snapshot();
+            float sum = 0, count = 0;
+            for (int y = 0; y < 180; ++y)
+                for (int x = 0; x < 320; ++x) {
+                    auto i = (y * 320 + x) * 4;
+                    if (image.rgba[i] > 240 && image.rgba[i + 1] < 5 && image.rgba[i + 2] > 180) {
+                        sum += y;
+                        ++count;
+                    }
+                }
+            check(count > 0, "native pitch test landmark absent");
+            centres[direction++] = sum / count;
+        }
+        check(centres[0] < 90 && centres[1] > 90, "look-up render sign is inverted in native target coordinates");
+        camera.pitch = 0;
+        glDeleteTextures(1, &landmarkTexture);
+        check(render::Renderer::intelTier("auto", "Mesa Intel(R) Graphics"), "auto Intel tier not selected");
+        check(!render::Renderer::intelTier("high", "Intel") && !render::Renderer::intelTier("auto", "AMD"),
+              "explicit/device quality mismatch");
+        glFinish();
+        renderer.intelQuality = true;
+        renderer.draw(fbo, 320, 180, camera, {}, false);
+        glFinish();
+        check(renderer.timings()["msaaSamples"] <= 2, "live MSAA tier did not reallocate targets");
         renderer.destroy();
         glDeleteTextures(1, &app);
         glDeleteTextures(1, &texture);

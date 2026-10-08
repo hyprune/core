@@ -278,7 +278,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
             const std::set<std::string> legacy{"world.load",  "surface.focus", "movement.set", "runtime.exit",
                                                "shell.claim", "shell.release", "shell.overlay"};
             for (auto &[m, grant] : methods_)
-                if ((p.protocol == "0.6" || !m.starts_with("input.")) && p.grants.contains(grant) &&
+                if ((p.protocol == "0.6" || (!m.starts_with("input.") && m != "overlay.style")) && p.grants.contains(grant) &&
                     (p.protocol != "0.1" || legacy.contains(m)) &&
                     ((p.protocol == "0.6" || p.protocol == "0.5" || p.protocol == "0.4") ||
                      ((m != "workspace.bind" && m != "workspace.focus" && m != "workspace.unfocus" &&
@@ -349,7 +349,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
                 }
             }
         } else {
-            check(p.protocol == "0.6" || !method.starts_with("input."), -32601, "method not advertised for protocol");
+            check(p.protocol == "0.6" || (!method.starts_with("input.") && method != "overlay.style"), -32601, "method not advertised for protocol");
             auto it = methods_.find(method);
             check(it != methods_.end() && p.grants.contains(it->second), -32601, "method not advertised");
             const std::set<std::string> legacy{"world.load",  "surface.focus", "movement.set", "runtime.exit",

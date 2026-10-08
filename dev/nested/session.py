@@ -114,6 +114,8 @@ def run(args):
     environment=os.environ.copy();environment.update(AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read),HYPRUNE_LAYOUT_FILE=str(STATE/"layout.json"),HYPRUNE_INPUT_FILE=str(STATE/"input.json"),HYPRUNE_EDITOR_FILE=str(STATE/"editor.json"),XDG_STATE_HOME=str(STATE/"statehome"))
     if args.integration: environment['HYPRUNE_WORKSPACE_LOCATIONS']=str(STATE/'locations.json')
     config=str(HERE/'hyprland.lua')
+    if os.environ.get('HYPRUNE_NESTED_4K')=='1':
+        config=str(STATE/'4k-hyprland.lua');pathlib.Path(config).write_text((HERE/'hyprland.lua').read_text().replace('1920x1080@60','3840x2160@60'))
     if args.live:
         config=str(STATE/'live-hyprland.lua')
         pathlib.Path(config).write_text((HERE/'hyprland.lua').read_text().replace('general = {','input = { resolve_binds_by_sym = true },\n    general = {')+'\nhl.bind("SUPER + SHIFT + N",hl.dsp.exec_cmd("true"),{description="Keep this binding"})\nhl.bind("SUPER + SHIFT + H",hl.dsp.exec_cmd("true"),{description="Keep H binding"})\n')
@@ -121,6 +123,8 @@ def run(args):
         config=str(STATE/'hyprland.lua')
         Path=pathlib.Path
         Path(config).write_text((HERE/'hyprland.lua').read_text().replace('general = {','input = { resolve_binds_by_sym = true },\n    general = {')+ '\nhl.bind("SUPER + TAB", hl.dsp.exec_cmd("touch '+str(STATE/'native-super-tab')+'"))\nhl.bind("SUPER + F9", hl.dsp.exec_cmd("touch '+str(STATE/'native-unrelated')+'"))\n')
+    if os.environ.get('HYPRUNE_NESTED_4K')=='1':
+        text=pathlib.Path(config).read_text().replace('1920x1080@60','3840x2160@60');config=str(STATE/'4k-hyprland.lua');pathlib.Path(config).write_text(text)
     log=open(STATE/'hyprland.log','w')
     if args.live: environment.pop('HYPRUNE_LAUNCH_FD',None)
     process=subprocess.Popen(['Hyprland','-c',config],env=environment,pass_fds=(read,),stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True);os.close(read)

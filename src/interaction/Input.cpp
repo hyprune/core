@@ -72,6 +72,8 @@ Json inputDefaults() {
 }
 Json validateInput(const Json &raw) {
     auto j = raw;
+    if (j.is_object() && !j.contains("show_area_markers"))
+        j["show_area_markers"] = false;
     if (j.is_object() && !j.contains("invert_y"))
         j["invert_y"] = false;
     auto defaults = inputDefaults();
@@ -93,6 +95,8 @@ Json validateInput(const Json &raw) {
     integer("version", 2, 2);
     integer("longHoldMs", 100, 5000);
     integer("captureInputLimit", 16, 1024);
+    if (!j.at("show_area_markers").is_boolean())
+        throw std::runtime_error("show_area_markers must be boolean");
     if (!j.at("invert_y").is_boolean())
         throw std::runtime_error("invert_y must be boolean");
     if (!j.at("scopeVignette").is_boolean())

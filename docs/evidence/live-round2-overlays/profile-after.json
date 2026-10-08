@@ -1,0 +1,2170 @@
+{
+  "resolution": [
+    3840,
+    2160
+  ],
+  "world": "Lumen Reach",
+  "debug": false,
+  "samples": [
+    {
+      "captureMs": 0.040329,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.246276,
+        0.065454,
+        0.01442,
+        0.006713
+      ],
+      "cpuRenderMs": 0.334621,
+      "cpuUpdateMs": 0.596433,
+      "debug": false,
+      "frameMs": 66.697654,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.995468,
+        2.747604,
+        6.1,
+        0.83927
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000609,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 526
+    },
+    {
+      "captureMs": 0.039709,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.266409,
+        0.068084,
+        0.01343,
+        0.006826
+      ],
+      "cpuRenderMs": 0.356546,
+      "cpuUpdateMs": 0.542937,
+      "debug": false,
+      "frameMs": 66.658431,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        26.273854,
+        2.767447,
+        8.274791,
+        0.83651
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.12366,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 531
+    },
+    {
+      "captureMs": 0.062744,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.22749,
+        0.061525,
+        0.013583,
+        0.006744
+      ],
+      "cpuRenderMs": 0.31108,
+      "cpuUpdateMs": 0.57715,
+      "debug": false,
+      "frameMs": 83.261957,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuPassMs": [
+        27.191875,
+        2.918125,
+        6.063593,
+        0.88677
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.00062,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 537
+    },
+    {
+      "captureMs": 0.055255,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.271244,
+        0.087014,
+        0.022954,
+        0.009501
+      ],
+      "cpuRenderMs": 0.393651,
+      "cpuUpdateMs": 0.559846,
+      "debug": false,
+      "frameMs": 83.418459,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.831666,
+        2.772031,
+        4.956822,
+        0.831666
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.00652,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 542
+    },
+    {
+      "captureMs": 0.039325,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.235031,
+        0.058572,
+        0.011959,
+        0.006746
+      ],
+      "cpuRenderMs": 0.314023,
+      "cpuUpdateMs": 0.534982,
+      "debug": false,
+      "frameMs": 66.548984,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        22.86927,
+        2.771979,
+        7.21052,
+        0.839791
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.066992,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 547
+    },
+    {
+      "captureMs": 0.047239,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.226088,
+        0.059056,
+        0.012331,
+        0.007351
+      ],
+      "cpuRenderMs": 0.306545,
+      "cpuUpdateMs": 0.463461,
+      "debug": false,
+      "frameMs": 67.924491,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuPassMs": [
+        25.106093,
+        2.724843,
+        7.28427,
+        0.832916
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000472,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 552
+    },
+    {
+      "captureMs": 0.052609,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.2609,
+        0.092843,
+        0.014058,
+        0.007645
+      ],
+      "cpuRenderMs": 0.377593,
+      "cpuUpdateMs": 0.587462,
+      "debug": false,
+      "frameMs": 65.461488,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        27.075572,
+        2.759635,
+        3.869895,
+        0.837968
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000623,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 558
+    },
+    {
+      "captureMs": 0.083096,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.258945,
+        0.070138,
+        0.014642,
+        0.008265
+      ],
+      "cpuRenderMs": 0.354666,
+      "cpuUpdateMs": 0.809807,
+      "debug": false,
+      "frameMs": 66.655385,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.083593,
+        2.802656,
+        6.990937,
+        0.835208
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.964921,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 563
+    },
+    {
+      "captureMs": 0.053254,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.309962,
+        0.085288,
+        0.019579,
+        0.010338
+      ],
+      "cpuRenderMs": 0.428717,
+      "cpuUpdateMs": 0.602955,
+      "debug": false,
+      "frameMs": 83.508726,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        22.636197,
+        2.765572,
+        7.472604,
+        0.841041
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.001289,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 568
+    },
+    {
+      "captureMs": 0.067771,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.275928,
+        0.102185,
+        0.015145,
+        0.009132
+      ],
+      "cpuRenderMs": 0.40491,
+      "cpuUpdateMs": 0.585191,
+      "debug": false,
+      "frameMs": 66.856633,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        23.175677,
+        2.817291,
+        5.745156,
+        0.832864
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.001717,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 573
+    },
+    {
+      "captureMs": 0.053644,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.234459,
+        0.062666,
+        0.012712,
+        0.006833
+      ],
+      "cpuRenderMs": 0.318841,
+      "cpuUpdateMs": 0.446784,
+      "debug": false,
+      "frameMs": 66.647154,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.567656,
+        2.858125,
+        8.315625,
+        0.829843
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000575,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 578
+    },
+    {
+      "captureMs": 0.039153,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.252514,
+        0.069228,
+        0.015811,
+        0.008282
+      ],
+      "cpuRenderMs": 0.348145,
+      "cpuUpdateMs": 0.414201,
+      "debug": false,
+      "frameMs": 83.369429,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        26.328697,
+        2.73401,
+        7.113697,
+        0.836041
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.828508,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 584
+    },
+    {
+      "captureMs": 0.027864,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.248503,
+        0.088407,
+        0.013043,
+        0.006876
+      ],
+      "cpuRenderMs": 0.359162,
+      "cpuUpdateMs": 0.487312,
+      "debug": false,
+      "frameMs": 83.310929,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        28.540885,
+        2.753229,
+        7.472552,
+        0.839479
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000706,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 589
+    },
+    {
+      "captureMs": 0.060019,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.259583,
+        0.068859,
+        0.015358,
+        0.008388
+      ],
+      "cpuRenderMs": 0.35512,
+      "cpuUpdateMs": 0.566945,
+      "debug": false,
+      "frameMs": 66.645535,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        22.39625,
+        2.774166,
+        4.765729,
+        0.835208
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000509,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 594
+    },
+    {
+      "captureMs": 0.055352,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.232018,
+        0.060318,
+        0.013458,
+        0.006604
+      ],
+      "cpuRenderMs": 0.314164,
+      "cpuUpdateMs": 0.562684,
+      "debug": false,
+      "frameMs": 66.7186,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.33651,
+        2.771822,
+        5.419479,
+        0.838958
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.053208,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 599
+    },
+    {
+      "captureMs": 0.056143,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.258769,
+        0.060464,
+        0.012537,
+        0.006362
+      ],
+      "cpuRenderMs": 0.339982,
+      "cpuUpdateMs": 0.608236,
+      "debug": false,
+      "frameMs": 83.333543,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.108489,
+        2.83177,
+        8.367916,
+        0.831354
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000669,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 605
+    },
+    {
+      "captureMs": 0.058626,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.247401,
+        0.066572,
+        0.01515,
+        0.008174
+      ],
+      "cpuRenderMs": 0.33971,
+      "cpuUpdateMs": 0.597562,
+      "debug": false,
+      "frameMs": 83.67399,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.094843,
+        2.755729,
+        7.033593,
+        0.834947
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000887,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 610
+    },
+    {
+      "captureMs": 0.053747,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.237836,
+        0.064274,
+        0.013979,
+        0.007228
+      ],
+      "cpuRenderMs": 0.325299,
+      "cpuUpdateMs": 0.274028,
+      "debug": false,
+      "frameMs": 66.33928,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.897135,
+        2.805156,
+        5.798802,
+        0.829947
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.269834,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 615
+    },
+    {
+      "captureMs": 0.057751,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.320736,
+        0.07715,
+        0.022361,
+        0.009975
+      ],
+      "cpuRenderMs": 0.439253,
+      "cpuUpdateMs": 0.58376,
+      "debug": false,
+      "frameMs": 66.76174,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.393854,
+        2.747291,
+        8.279687,
+        0.834218
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000559,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 620
+    },
+    {
+      "captureMs": 0.052699,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.278501,
+        0.104327,
+        0.016471,
+        0.009722
+      ],
+      "cpuRenderMs": 0.411552,
+      "cpuUpdateMs": 0.596202,
+      "debug": false,
+      "frameMs": 83.235397,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.53,
+        2.729947,
+        6.966093,
+        0.834531
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.002507,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 626
+    },
+    {
+      "captureMs": 0.05044,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.246992,
+        0.061851,
+        0.014828,
+        0.00713
+      ],
+      "cpuRenderMs": 0.33315,
+      "cpuUpdateMs": 0.581966,
+      "debug": false,
+      "frameMs": 83.320016,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuPassMs": [
+        24.274166,
+        2.810781,
+        7.549166,
+        0.840885
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.098024,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 631
+    },
+    {
+      "captureMs": 0.070045,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.252403,
+        0.068765,
+        0.01489,
+        0.00834
+      ],
+      "cpuRenderMs": 0.346986,
+      "cpuUpdateMs": 0.656247,
+      "debug": false,
+      "frameMs": 66.727963,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        22.030781,
+        2.794583,
+        7.797604,
+        0.846406
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.002629,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 636
+    },
+    {
+      "captureMs": 0.053454,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.228581,
+        0.089425,
+        0.012411,
+        0.006797
+      ],
+      "cpuRenderMs": 0.338888,
+      "cpuUpdateMs": 0.563495,
+      "debug": false,
+      "frameMs": 66.684819,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.114427,
+        2.782968,
+        7.284166,
+        0.838177
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000586,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 641
+    },
+    {
+      "captureMs": 0.033694,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.287345,
+        0.071529,
+        0.013636,
+        0.008245
+      ],
+      "cpuRenderMs": 0.382999,
+      "cpuUpdateMs": 0.521509,
+      "debug": false,
+      "frameMs": 83.431913,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        23.32276,
+        2.772708,
+        7.380364,
+        0.834739
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.148914,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 647
+    },
+    {
+      "captureMs": 0.042102,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.256191,
+        0.076958,
+        0.014388,
+        0.007958
+      ],
+      "cpuRenderMs": 0.357745,
+      "cpuUpdateMs": 0.435922,
+      "debug": false,
+      "frameMs": 65.628105,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        23.910677,
+        2.827604,
+        4.962031,
+        0.832395
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.0005,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 652
+    },
+    {
+      "captureMs": 0.046364,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.298118,
+        0.110733,
+        0.025641,
+        0.017694
+      ],
+      "cpuRenderMs": 0.455593,
+      "cpuUpdateMs": 0.514978,
+      "debug": false,
+      "frameMs": 83.3518,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuPassMs": [
+        27.313072,
+        2.76526,
+        4.85776,
+        0.838645
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000526,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 657
+    },
+    {
+      "captureMs": 0.04934,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.23862,
+        0.095314,
+        0.013766,
+        0.00751
+      ],
+      "cpuRenderMs": 0.357632,
+      "cpuUpdateMs": 0.566884,
+      "debug": false,
+      "frameMs": 66.615966,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.574687,
+        2.773645,
+        5.876614,
+        0.832968
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.564629,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 663
+    },
+    {
+      "captureMs": 0.079095,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.244113,
+        0.068111,
+        0.013357,
+        0.007473
+      ],
+      "cpuRenderMs": 0.335271,
+      "cpuUpdateMs": 0.651031,
+      "debug": false,
+      "frameMs": 66.669155,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.059843,
+        2.809427,
+        6.78651,
+        0.834947
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.001062,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 668
+    },
+    {
+      "captureMs": 0.056667,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.244968,
+        0.065128,
+        0.014151,
+        0.007718
+      ],
+      "cpuRenderMs": 0.33405,
+      "cpuUpdateMs": 0.294639,
+      "debug": false,
+      "frameMs": 83.33873,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        26.424947,
+        2.751145,
+        6.368333,
+        0.833281
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000642,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 674
+    },
+    {
+      "captureMs": 0.055423,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.264512,
+        0.100151,
+        0.014984,
+        0.007703
+      ],
+      "cpuRenderMs": 0.389749,
+      "cpuUpdateMs": 0.551572,
+      "debug": false,
+      "frameMs": 83.262644,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        23.042864,
+        2.766979,
+        6.872343,
+        0.837604
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.034497,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 679
+    },
+    {
+      "captureMs": 0.045285,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.239643,
+        0.064808,
+        0.013,
+        0.006962
+      ],
+      "cpuRenderMs": 0.326538,
+      "cpuUpdateMs": 0.445587,
+      "debug": false,
+      "frameMs": 83.314448,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.984947,
+        2.756093,
+        7.627552,
+        0.83927
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.0005,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 684
+    },
+    {
+      "captureMs": 0.0587,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.239685,
+        0.064452,
+        0.011993,
+        0.006822
+      ],
+      "cpuRenderMs": 0.324504,
+      "cpuUpdateMs": 0.596137,
+      "debug": false,
+      "frameMs": 83.320125,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuPassMs": [
+        26.788281,
+        2.808281,
+        5.524166,
+        0.83401
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000737,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 690
+    },
+    {
+      "captureMs": 0.04865,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.263612,
+        0.074686,
+        0.014868,
+        0.008616
+      ],
+      "cpuRenderMs": 0.363808,
+      "cpuUpdateMs": 0.452558,
+      "debug": false,
+      "frameMs": 83.365414,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        27.180052,
+        2.736875,
+        3.889635,
+        0.840468
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000634,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 695
+    },
+    {
+      "captureMs": 0.05043,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.26157,
+        0.094359,
+        0.013117,
+        0.007328
+      ],
+      "cpuRenderMs": 0.378474,
+      "cpuUpdateMs": 0.559808,
+      "debug": false,
+      "frameMs": 99.974961,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.298177,
+        2.897187,
+        7.682447,
+        0.841093
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000575,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 701
+    },
+    {
+      "captureMs": 0.041589,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.25125,
+        0.071646,
+        0.012154,
+        0.007204
+      ],
+      "cpuRenderMs": 0.344066,
+      "cpuUpdateMs": 0.590737,
+      "debug": false,
+      "frameMs": 83.355225,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        35.76677,
+        2.936302,
+        10.024739,
+        0.825572
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.152431,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 707
+    },
+    {
+      "captureMs": 0.054334,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.232257,
+        0.065597,
+        0.013178,
+        0.007054
+      ],
+      "cpuRenderMs": 0.320045,
+      "cpuUpdateMs": 0.449887,
+      "debug": false,
+      "frameMs": 99.965308,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        29.147083,
+        2.821406,
+        8.194114,
+        0.832447
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.00085,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 712
+    },
+    {
+      "captureMs": 0.057888,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.268533,
+        0.065525,
+        0.014881,
+        0.007753
+      ],
+      "cpuRenderMs": 0.35889,
+      "cpuUpdateMs": 0.577543,
+      "debug": false,
+      "frameMs": 83.3746,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        32.414479,
+        2.751822,
+        6.144635,
+        0.83427
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000857,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 717
+    },
+    {
+      "captureMs": 0.043438,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.239093,
+        0.099716,
+        0.012332,
+        0.006424
+      ],
+      "cpuRenderMs": 0.359409,
+      "cpuUpdateMs": 0.509173,
+      "debug": false,
+      "frameMs": 83.495907,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        29.154635,
+        2.794739,
+        5.392864,
+        0.840364
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.057091,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 723
+    },
+    {
+      "captureMs": 0.072124,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.352508,
+        0.078997,
+        0.02072,
+        0.010172
+      ],
+      "cpuRenderMs": 0.471047,
+      "cpuUpdateMs": 0.612077,
+      "debug": false,
+      "frameMs": 83.388273,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.564218,
+        2.81927,
+        9.139583,
+        0.83125
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000536,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 728
+    },
+    {
+      "captureMs": 0.049411,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.270354,
+        0.074009,
+        0.015615,
+        0.008674
+      ],
+      "cpuRenderMs": 0.371529,
+      "cpuUpdateMs": 0.529203,
+      "debug": false,
+      "frameMs": 83.323854,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        27.801979,
+        2.760156,
+        6.82526,
+        0.83526
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000889,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 734
+    },
+    {
+      "captureMs": 0.042843,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.238303,
+        0.065004,
+        0.01227,
+        0.007329
+      ],
+      "cpuRenderMs": 0.324836,
+      "cpuUpdateMs": 0.532863,
+      "debug": false,
+      "frameMs": 83.273394,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.141041,
+        2.750833,
+        5.665781,
+        0.836406
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.259624,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 739
+    },
+    {
+      "captureMs": 0.044395,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.250362,
+        0.064824,
+        0.012811,
+        0.007292
+      ],
+      "cpuRenderMs": 0.337971,
+      "cpuUpdateMs": 0.532272,
+      "debug": false,
+      "frameMs": 83.268152,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        26.010625,
+        2.755312,
+        8.13401,
+        0.830781
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000613,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 744
+    },
+    {
+      "captureMs": 0.053057,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.231242,
+        0.058177,
+        0.012912,
+        0.007083
+      ],
+      "cpuRenderMs": 0.31155,
+      "cpuUpdateMs": 0.554182,
+      "debug": false,
+      "frameMs": 83.524523,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuPassMs": [
+        24.081458,
+        2.78375,
+        9.134427,
+        0.833645
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000922,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 750
+    },
+    {
+      "captureMs": 0.044554,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.24493,
+        0.061779,
+        0.012713,
+        0.006964
+      ],
+      "cpuRenderMs": 0.328314,
+      "cpuUpdateMs": 0.55506,
+      "debug": false,
+      "frameMs": 83.134686,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.240677,
+        2.884114,
+        7.983177,
+        0.835729
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.996647,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 755
+    },
+    {
+      "captureMs": 0.056234,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.289307,
+        0.106666,
+        0.016411,
+        0.008458
+      ],
+      "cpuRenderMs": 0.423301,
+      "cpuUpdateMs": 0.547137,
+      "debug": false,
+      "frameMs": 83.452369,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuPassMs": [
+        25.591406,
+        2.798593,
+        6.070208,
+        0.833229
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.001227,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 760
+    },
+    {
+      "captureMs": 0.034964,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.235378,
+        0.06235,
+        0.012255,
+        0.006833
+      ],
+      "cpuRenderMs": 0.318427,
+      "cpuUpdateMs": 0.512292,
+      "debug": false,
+      "frameMs": 66.565066,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.706458,
+        2.879375,
+        8.152135,
+        0.838072
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000617,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 766
+    },
+    {
+      "captureMs": 0.051508,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.175604,
+        0.046819,
+        0.008947,
+        0.005589
+      ],
+      "cpuRenderMs": 0.238723,
+      "cpuUpdateMs": 0.582569,
+      "debug": false,
+      "frameMs": 66.611904,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.48151,
+        2.89026,
+        8.239635,
+        0.831718
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.988537,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 771
+    },
+    {
+      "captureMs": 0.049319,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.2729,
+        0.071256,
+        0.013116,
+        0.007669
+      ],
+      "cpuRenderMs": 0.367291,
+      "cpuUpdateMs": 0.540949,
+      "debug": false,
+      "frameMs": 83.412559,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.093072,
+        2.824843,
+        6.828385,
+        0.833281
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000557,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 777
+    },
+    {
+      "captureMs": 0.04662,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.260967,
+        0.067463,
+        0.012069,
+        0.007274
+      ],
+      "cpuRenderMs": 0.349478,
+      "cpuUpdateMs": 0.42958,
+      "debug": false,
+      "frameMs": 83.370437,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.533333,
+        2.794166,
+        7.3675,
+        0.84
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000835,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 781
+    },
+    {
+      "captureMs": 0.054221,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.256135,
+        0.067279,
+        0.012365,
+        0.007316
+      ],
+      "cpuRenderMs": 0.34536,
+      "cpuUpdateMs": 0.567308,
+      "debug": false,
+      "frameMs": 66.646909,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.812187,
+        2.794635,
+        7.840468,
+        0.834114
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.275074,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 787
+    },
+    {
+      "captureMs": 0.057857,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.231618,
+        0.059902,
+        0.013128,
+        0.006972
+      ],
+      "cpuRenderMs": 0.313899,
+      "cpuUpdateMs": 0.27973,
+      "debug": false,
+      "frameMs": 66.610632,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.359531,
+        2.766041,
+        4.813802,
+        0.835677
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000762,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 792
+    },
+    {
+      "captureMs": 0.055092,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.257849,
+        0.101173,
+        0.014073,
+        0.0083
+      ],
+      "cpuRenderMs": 0.383391,
+      "cpuUpdateMs": 0.583112,
+      "debug": false,
+      "frameMs": 83.334521,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.361979,
+        2.798437,
+        8.307083,
+        0.839427
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.069673,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 798
+    },
+    {
+      "captureMs": 0.054472,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.287966,
+        0.07202,
+        0.013879,
+        0.007598
+      ],
+      "cpuRenderMs": 0.383717,
+      "cpuUpdateMs": 0.595321,
+      "debug": false,
+      "frameMs": 83.318945,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.110364,
+        2.90625,
+        6.845208,
+        0.835625
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000605,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 803
+    },
+    {
+      "captureMs": 0.055951,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.233754,
+        0.068599,
+        0.012102,
+        0.007514
+      ],
+      "cpuRenderMs": 0.324059,
+      "cpuUpdateMs": 0.584084,
+      "debug": false,
+      "frameMs": 66.761073,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        26.729479,
+        2.832239,
+        5.644375,
+        0.841666
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000627,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 808
+    },
+    {
+      "captureMs": 0.111593,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.247717,
+        0.092776,
+        0.011941,
+        0.00704
+      ],
+      "cpuRenderMs": 0.361287,
+      "cpuUpdateMs": 0.671622,
+      "debug": false,
+      "frameMs": 66.526033,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        22.28375,
+        2.76526,
+        8.884739,
+        0.837604
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.428864,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 813
+    },
+    {
+      "captureMs": 0.05282,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.254136,
+        0.083236,
+        0.019584,
+        0.008843
+      ],
+      "cpuRenderMs": 0.368947,
+      "cpuUpdateMs": 0.453218,
+      "debug": false,
+      "frameMs": 83.321926,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.85052,
+        2.838958,
+        7.322708,
+        0.834114
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000709,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 819
+    },
+    {
+      "captureMs": 0.036545,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.267655,
+        0.067135,
+        0.011588,
+        0.006997
+      ],
+      "cpuRenderMs": 0.354975,
+      "cpuUpdateMs": 0.450706,
+      "debug": false,
+      "frameMs": 83.254967,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        26.835833,
+        2.804635,
+        6.945885,
+        0.847135
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000778,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 824
+    },
+    {
+      "captureMs": 0.049794,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.255185,
+        0.072297,
+        0.012281,
+        0.00778
+      ],
+      "cpuRenderMs": 0.349731,
+      "cpuUpdateMs": 0.482368,
+      "debug": false,
+      "frameMs": 66.654261,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        23.356822,
+        2.742291,
+        8.419843,
+        0.831927
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.804218,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 830
+    },
+    {
+      "captureMs": 0.134908,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.235939,
+        0.059541,
+        0.01258,
+        0.006465
+      ],
+      "cpuRenderMs": 0.316451,
+      "cpuUpdateMs": 0.699113,
+      "debug": false,
+      "frameMs": 66.658686,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.823541,
+        2.764218,
+        7.420833,
+        0.833281
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.001236,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 834
+    },
+    {
+      "captureMs": 0.058654,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.267786,
+        0.072569,
+        0.013498,
+        0.007773
+      ],
+      "cpuRenderMs": 0.363381,
+      "cpuUpdateMs": 0.550605,
+      "debug": false,
+      "frameMs": 83.38876,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.326979,
+        2.760156,
+        6.270572,
+        0.839062
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000706,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 840
+    },
+    {
+      "captureMs": 0.058704,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.229914,
+        0.058629,
+        0.015572,
+        0.007161
+      ],
+      "cpuRenderMs": 0.313453,
+      "cpuUpdateMs": 0.620208,
+      "debug": false,
+      "frameMs": 83.700832,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.283958,
+        2.876145,
+        7.597343,
+        0.838958
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.100708,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 845
+    },
+    {
+      "captureMs": 0.057012,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.231722,
+        0.087629,
+        0.013768,
+        0.007909
+      ],
+      "cpuRenderMs": 0.343229,
+      "cpuUpdateMs": 0.299165,
+      "debug": false,
+      "frameMs": 66.275552,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuPassMs": [
+        25.296614,
+        2.825677,
+        5.490364,
+        0.834062
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000804,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 851
+    },
+    {
+      "captureMs": 0.054985,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.246858,
+        0.065606,
+        0.01265,
+        0.012522
+      ],
+      "cpuRenderMs": 0.33969,
+      "cpuUpdateMs": 0.566779,
+      "debug": false,
+      "frameMs": 66.584103,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuPassMs": [
+        26.364322,
+        2.801406,
+        8.205416,
+        0.833489
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.001088,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 856
+    },
+    {
+      "captureMs": 0.039257,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.251288,
+        0.068251,
+        0.014699,
+        0.008729
+      ],
+      "cpuRenderMs": 0.346174,
+      "cpuUpdateMs": 0.547835,
+      "debug": false,
+      "frameMs": 83.358293,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuPassMs": [
+        25.88052,
+        2.843281,
+        5.806093,
+        0.838593
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.359491,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 861
+    },
+    {
+      "captureMs": 0.045126,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.235599,
+        0.089789,
+        0.013367,
+        0.006175
+      ],
+      "cpuRenderMs": 0.346761,
+      "cpuUpdateMs": 0.5716,
+      "debug": false,
+      "frameMs": 83.234144,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.073072,
+        2.740156,
+        6.690677,
+        0.839427
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000566,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 866
+    },
+    {
+      "captureMs": 0.044233,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.234742,
+        0.063731,
+        0.012536,
+        0.006357
+      ],
+      "cpuRenderMs": 0.319274,
+      "cpuUpdateMs": 0.441598,
+      "debug": false,
+      "frameMs": 66.662992,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        23.418177,
+        2.760937,
+        8.0925,
+        0.830156
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000716,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 872
+    },
+    {
+      "captureMs": 0.045874,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.219998,
+        0.063263,
+        0.012124,
+        0.006987
+      ],
+      "cpuRenderMs": 0.304213,
+      "cpuUpdateMs": 0.494808,
+      "debug": false,
+      "frameMs": 66.489522,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.215208,
+        2.764166,
+        7.330833,
+        0.829791
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.878584,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 877
+    },
+    {
+      "captureMs": 0.04321,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.26363,
+        0.071846,
+        0.013651,
+        0.008668
+      ],
+      "cpuRenderMs": 0.359615,
+      "cpuUpdateMs": 0.569828,
+      "debug": false,
+      "frameMs": 83.360622,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.806406,
+        2.786666,
+        7.423333,
+        0.832395
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000786,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 882
+    },
+    {
+      "captureMs": 0.054259,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.239471,
+        0.05645,
+        0.013181,
+        0.007197
+      ],
+      "cpuRenderMs": 0.318706,
+      "cpuUpdateMs": 0.595011,
+      "debug": false,
+      "frameMs": 66.704394,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuPassMs": [
+        25.184479,
+        2.74177,
+        5.245104,
+        0.835104
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000843,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 887
+    },
+    {
+      "captureMs": 0.080066,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.254741,
+        0.067535,
+        0.013646,
+        0.007835
+      ],
+      "cpuRenderMs": 0.345852,
+      "cpuUpdateMs": 0.672112,
+      "debug": false,
+      "frameMs": 66.816876,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        23.03125,
+        2.730156,
+        6.984062,
+        0.83177
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.367104,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 892
+    },
+    {
+      "captureMs": 0.080748,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.260975,
+        0.064737,
+        0.013367,
+        0.00797
+      ],
+      "cpuRenderMs": 0.349808,
+      "cpuUpdateMs": 0.66417,
+      "debug": false,
+      "frameMs": 83.25958,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.857656,
+        2.740625,
+        4.750416,
+        0.840364
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.002778,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 897
+    },
+    {
+      "captureMs": 0.038298,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.251187,
+        0.065727,
+        0.013784,
+        0.006741
+      ],
+      "cpuRenderMs": 0.339796,
+      "cpuUpdateMs": 0.531282,
+      "debug": false,
+      "frameMs": 66.687863,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.059218,
+        2.805156,
+        6.215104,
+        0.841458
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000767,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 902
+    },
+    {
+      "captureMs": 0.040382,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.23647,
+        0.059014,
+        0.012748,
+        0.006332
+      ],
+      "cpuRenderMs": 0.316284,
+      "cpuUpdateMs": 0.46726,
+      "debug": false,
+      "frameMs": 66.597551,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.810677,
+        2.749114,
+        4.761666,
+        0.832239
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.995169,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 908
+    },
+    {
+      "captureMs": 0.051419,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.271597,
+        0.070675,
+        0.013742,
+        0.007564
+      ],
+      "cpuRenderMs": 0.366566,
+      "cpuUpdateMs": 0.575434,
+      "debug": false,
+      "frameMs": 66.664017,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        25.716406,
+        2.751562,
+        5.613541,
+        0.837395
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.001004,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 913
+    },
+    {
+      "captureMs": 0.044002,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.228192,
+        0.085595,
+        0.01266,
+        0.0062
+      ],
+      "cpuRenderMs": 0.334758,
+      "cpuUpdateMs": 0.537793,
+      "debug": false,
+      "frameMs": 66.537451,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuPassMs": [
+        25.903489,
+        2.723802,
+        6.16276,
+        0.832604
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000693,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 918
+    },
+    {
+      "captureMs": 0.055783,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.233437,
+        0.055245,
+        0.012224,
+        0.006849
+      ],
+      "cpuRenderMs": 0.310008,
+      "cpuUpdateMs": 0.60734,
+      "debug": false,
+      "frameMs": 66.61009,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        22.088854,
+        2.722552,
+        6.938541,
+        0.833541
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000802,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 923
+    },
+    {
+      "captureMs": 0.055166,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.273425,
+        0.077809,
+        0.015486,
+        0.008579
+      ],
+      "cpuRenderMs": 0.378592,
+      "cpuUpdateMs": 0.289305,
+      "debug": false,
+      "frameMs": 66.488675,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        27.068229,
+        2.738958,
+        3.919687,
+        0.836145
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000898,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 928
+    },
+    {
+      "captureMs": 0.065329,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.25801,
+        0.110095,
+        0.013608,
+        0.007859
+      ],
+      "cpuRenderMs": 0.391554,
+      "cpuUpdateMs": 0.659463,
+      "debug": false,
+      "frameMs": 83.279257,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        24.233802,
+        2.772447,
+        5.629375,
+        0.829687
+      ],
+      "inFlight": 2,
+      "ipcMs": 1.467684,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 933
+    },
+    {
+      "captureMs": 0.047646,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.247057,
+        0.066786,
+        0.013443,
+        0.007027
+      ],
+      "cpuRenderMs": 0.336401,
+      "cpuUpdateMs": 0.57807,
+      "debug": false,
+      "frameMs": 66.573273,
+      "gpuCaptureMs": 0.0,
+      "gpuPassMs": [
+        26.059635,
+        2.721145,
+        6.539427,
+        0.835364
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.000978,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 938
+    },
+    {
+      "captureMs": 0.053074,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.268255,
+        0.080762,
+        0.01466,
+        0.007893
+      ],
+      "cpuRenderMs": 0.373926,
+      "cpuUpdateMs": 0.599068,
+      "debug": false,
+      "frameMs": 66.701775,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuPassMs": [
+        23.116614,
+        2.726562,
+        4.66151,
+        0.839062
+      ],
+      "inFlight": 2,
+      "ipcMs": 0.001153,
+      "msaaSamples": 2,
+      "quality": "intel",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 943
+    }
+  ]
+}

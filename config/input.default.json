@@ -143,5 +143,6 @@
         "Super+u"
       ]
     }
-  }
+  },
+  "show_area_markers": false
 }

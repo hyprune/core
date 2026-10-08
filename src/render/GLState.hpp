@@ -6,7 +6,7 @@ namespace hyprune::render {
 class GLState {
     GLint draw, read, program, vao, array, renderbuffer, active, unpack, pbo, pack, packPbo;
     GLint viewport[4], scissor[4], depthFunc, cullMode, frontFace, srcRGB, dstRGB, srcAlpha, dstAlpha, eqRGB, eqAlpha;
-    GLfloat clearColor[4], clearDepth, depthRange[2];
+    GLfloat clearColor[4], clearDepth, depthRange[2], lineWidth;
     std::array<GLint, 6> pixelRows;
     static constexpr std::array<GLenum, 6> rowEnums{GL_PACK_ROW_LENGTH,   GL_PACK_SKIP_ROWS,   GL_PACK_SKIP_PIXELS,
                                                     GL_UNPACK_ROW_LENGTH, GL_UNPACK_SKIP_ROWS, GL_UNPACK_SKIP_PIXELS};
@@ -57,6 +57,7 @@ class GLState {
         glGetIntegerv(GL_BLEND_DST_ALPHA, &dstAlpha);
         glGetIntegerv(GL_BLEND_EQUATION_RGB, &eqRGB);
         glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &eqAlpha);
+        glGetFloatv(GL_LINE_WIDTH, &lineWidth);
         glGetFloatv(GL_COLOR_CLEAR_VALUE, clearColor);
         glGetFloatv(GL_DEPTH_CLEAR_VALUE, &clearDepth);
         glGetFloatv(GL_DEPTH_RANGE, depthRange);
@@ -95,6 +96,7 @@ class GLState {
         glColorMask(colorMask[0], colorMask[1], colorMask[2], colorMask[3]);
         glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
         glClearDepthf(clearDepth);
+        glLineWidth(lineWidth);
         glBlendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
         glBlendEquationSeparate(eqRGB, eqAlpha);
         for (std::size_t i = 0; i < caps.size(); i++)

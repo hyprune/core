@@ -1,5 +1,6 @@
 #include "interaction/InputFile.hpp"
 #include "interaction/Tools.hpp"
+#include "render/OverlayStyle.hpp"
 #include "sim/Camera.hpp"
 #undef NDEBUG
 #include <cassert>
@@ -76,6 +77,8 @@ int main() {
         assert(length(viewForward - Vec3{0, 0, -3}) < .0001f);
         for (auto xy : {Vec3{.2f, .25f, 0}, Vec3{.8f, .75f, 0}}) {
             auto ray = c.ray(xy.x, xy.y, 16.f / 9);
+            auto projected = c.project(c.position + ray * 5, 16.f / 9);
+            assert(projected.visible && std::abs(projected.x - xy.x) < .0001f && std::abs(projected.y - xy.y) < .0001f);
             auto p = c.view().point(c.position + ray * 5);
             float tanFov = std::tan(c.fov * .01745329252f / 2);
             assert(std::abs((p.x / -p.z / tanFov / (16.f / 9) + 1) / 2 - xy.x) < .0001f);
@@ -103,6 +106,22 @@ int main() {
         assert(length(rotate(orientation(normal), Vec3{0, 0, 1}) - normal) < .0001f);
     auto positiveY = std::array<float, 4>{0, std::sin(.5235988f / 2), 0, std::cos(.5235988f / 2)};
     assert(rotate(positiveY, Vec3{1, 0, 0}).z < 0); // Surface/editor angles are right-handed.
+    auto style = render::overlayDefaults();
+    assert(render::overlayStylePatch(
+               style, {{"waypointColor", {1, 0, 0}}, {"fontFamily", "DejaVu Sans"}})["waypointColor"][0] == 1);
+    for (auto invalid : {world::Json{{"unknown", 1}}, world::Json{{"routeColor", {1, 2, 0}}},
+                         world::Json{{"fontFamily", "\n"}}, world::Json{{"iconAtlas", {{"path", "relative"}}}}}) {
+        bool rejected = false;
+        try {
+            render::overlayStylePatch(style, invalid);
+        } catch (...) {
+            rejected = true;
+        }
+        assert(rejected);
+    }
+    auto oldAreas = defaults;
+    oldAreas.erase("show_area_markers");
+    assert(validateInput(oldAreas) == defaults);
     Input multi;
     multi.event("world", "k", 0, true, 0);
     multi.event("world", "w", Shift, true, 1);

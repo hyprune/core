@@ -1,0 +1,21 @@
+Test project /home/rick/workspace/hyprune/core-round2-overlays/build
+    Start 1: render
+1/8 Test #1: render ...........................   Passed    2.99 sec
+    Start 2: ipc
+2/8 Test #2: ipc ..............................   Passed    0.05 sec
+    Start 3: control
+3/8 Test #3: control ..........................   Passed    0.11 sec
+    Start 4: core
+4/8 Test #4: core .............................   Passed    0.14 sec
+    Start 5: m2
+5/8 Test #5: m2 ...............................   Passed    0.41 sec
+    Start 6: m3a
+6/8 Test #6: m3a ..............................   Passed    0.02 sec
+    Start 7: m3b
+7/8 Test #7: m3b ..............................   Passed    0.02 sec
+    Start 8: bridge
+8/8 Test #8: bridge ...........................   Passed    0.03 sec
+
+100% tests passed out of 8
+
+Total Test time (real) =   3.76 sec

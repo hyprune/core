@@ -23,6 +23,19 @@ struct Camera {
         return normalized(f + r * ((x * 2 - 1) * tangent * aspect) + u * ((1 - y * 2) * tangent));
     }
     static float lookPitch(float dy, float sensitivity, bool inverted) { return (inverted ? dy : -dy) * sensitivity; }
+    struct ScreenPoint {
+        float x, y, depth;
+        bool visible;
+    };
+    ScreenPoint project(Vec3 point, float aspect) const {
+        auto p = view().point(point);
+        float depth = -p.z;
+        if (depth <= .01f)
+            return {0, 0, depth, false};
+        float tangent = std::tan(fov * .01745329252f / 2);
+        float x = (1 + p.x / depth / tangent / aspect) / 2, y = (1 - p.y / depth / tangent) / 2;
+        return {x, y, depth, x >= 0 && x <= 1 && y >= 0 && y <= 1};
+    }
     Mat4 view() const { return lookAt(position, forward()); }
 };
 struct Intent {

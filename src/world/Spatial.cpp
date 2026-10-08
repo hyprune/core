@@ -235,16 +235,15 @@ std::vector<Vec3> walkingRoute(const World &w, Vec3 from, Vec3 to) {
 }
 Json projectMarkers(const World &w, const sim::Camera &camera, float aspect) {
     Json result = Json::array();
-    auto view = camera.view();
-    float f = 1 / std::tan(camera.fov * .01745329252f / 2);
+
     for (const auto &p : w.places) {
         auto pos = xyz(p.at("position"));
-        auto eye = view.point(pos);
-        float depth = -eye.z;
+        auto projected = camera.project(pos, aspect);
+        float depth = projected.depth;
         if (depth < .05f || depth > 500)
             continue;
-        float x = .5f + .5f * eye.x * f / (aspect * depth), y = .5f - .5f * eye.y * f / depth;
-        if (x < 0 || x > 1 || y < 0 || y > 1)
+        float x = projected.x, y = projected.y;
+        if (!projected.visible)
             continue;
         auto ray = pos - camera.position;
         float distance = length(ray);

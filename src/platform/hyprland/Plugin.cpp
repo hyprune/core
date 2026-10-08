@@ -65,8 +65,12 @@ struct Runtime {
     std::filesystem::path editorFile;
     Json lastEditor, lastPublished, captureRequest = nullptr;
     std::deque<Json> recentIPC, recentEvents;
+    std::chrono::steady_clock::time_point nextPublish{}, nextProjection{};
+    Json legacyProjection = nullptr;
+    std::string projectionWorld, projectionOutput;
+    render::GPUTimer captureGPU;
     unsigned modifiers = 0;
-    bool debug = false, lookHeld = false;
+    bool debug = false, lookHeld = false, capturePending = false;
     std::filesystem::path captureDirectory;
     std::future<std::string> captureWrite;
     std::string relativeSurface;
@@ -633,15 +637,21 @@ void Runtime::publish() {
                              {"width", int(monitor->m_pixelSize.x)},
                              {"height", int(monitor->m_pixelSize.y)},
                              {"scale", monitor->m_scale}};
-        if (active && world)
-            spatial["projection"] = {
-                {"outputId", output},
-                {"worldId", world->id},
-                {"monotonicMs", std::chrono::duration_cast<std::chrono::milliseconds>(
-                                    std::chrono::steady_clock::now().time_since_epoch())
-                                    .count()},
-                {"markers",
-                 world::projectMarkers(*world, camera, float(monitor->m_pixelSize.x) / monitor->m_pixelSize.y)}};
+        if (active && world) {
+            auto now = std::chrono::steady_clock::now();
+            if (now >= nextProjection || projectionWorld != world->id || projectionOutput != output) {
+                nextProjection = now + std::chrono::milliseconds(100);
+                projectionWorld = world->id;
+                projectionOutput = output;
+                legacyProjection = {
+                    {"outputId", output},
+                    {"worldId", world->id},
+                    {"monotonicMs",
+                     std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()},
+                    {"markers", world::projectMarkers(*world, camera, float(monitor->m_size.x) / monitor->m_size.y)}};
+            }
+            spatial["projection"] = legacyProjection;
+        }
     }
     Json apps = Json::array();
     for (auto &window : Desktop::windowState()->windows()) {
@@ -773,6 +783,8 @@ void Runtime::finishLoad() {
             throw ipc::Error(-32006, "world load expired");
         auto spawn = pendingArea.empty() ? candidate->spawn(pendingSpawn) : world::areaSpawn(*candidate, pendingArea);
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        renderer.intelQuality = render::Renderer::intelTier(config["graphics"]["quality"],
+                                                            reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
         renderer.prepare(candidate);
         if (graphicsOverrides.contains("exposure"))
             renderer.profile["exposure"] = config["graphics"]["exposure"];
@@ -1646,6 +1658,13 @@ void Runtime::debugCapture() {
     if (captureWrite.valid())
         throw ipc::Error(-32004, "capture is still being written");
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+    if (!renderer.completed()) {
+        renderer.captureRequested = true;
+        capturePending = true;
+        return;
+    }
+    capturePending = false;
+    renderer.captureRequested = false;
     auto pixels = renderer.snapshot();
     auto now = std::chrono::system_clock::now();
     auto stamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
@@ -1689,21 +1708,23 @@ void Runtime::debugCapture() {
                        {"pitch", frameCamera.pitch},
                        {"fov", frameCamera.fov},
                        {"eyeHeight", frameCamera.eyeHeight}};
-    value["frame"] = {{"number", renderer.frames},
-                      {"width", pixels.width},
-                      {"height", pixels.height},
-                      {"readbackMs", pixels.readbackMs},
-                      {"ageMs", pixels.ageMs},
-                      {"source", "last-completed-world-frame"},
-                      {"timings", renderer.timings()}};
+    value["frame"] = {{"number", renderer.frames},     {"width", pixels.width},
+                      {"height", pixels.height},       {"readbackMs", pixels.readbackMs},
+                      {"ageMs", pixels.ageMs},         {"source", "last-completed-world-frame"},
+                      {"timings", renderer.timings()}, {"overlays", renderer.overlayDiagnostics}};
     auto image = path;
     image.replace_extension(".png");
     value["screenshot"] = image.string();
-    captureWrite = std::async(std::launch::async, [path, image, value = std::move(value), pixels = std::move(pixels)] {
-        render::writePNG(image, pixels.width, pixels.height, pixels.rgba);
-        interaction::atomicJSON(path, value, 4 * 1048576);
-        return path.string();
-    });
+    value["frame"]["worldId"] = pixels.worldId;
+    captureWrite =
+        std::async(std::launch::async, [path, image, value = std::move(value), pixels = std::move(pixels)]() mutable {
+            auto started = std::chrono::steady_clock::now();
+            render::writePNG(image, pixels.width, pixels.height, pixels.rgba);
+            value["frame"]["pngWriteMs"] =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+            interaction::atomicJSON(path, value, 4 * 1048576);
+            return path.string();
+        });
 }
 namespace {
 interaction::Transform objectTransform(const interaction::Tools &, const world::World &, const std::string &);
@@ -2317,6 +2338,14 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                     {"steals", steals(input.config)},
                     {"conflicts", interaction::inputConflicts(input.config)}};
     }
+    if (method == "overlay.style") {
+        if (renderDepth || params.size() != 2 || !params.contains("leaseId") || !params["leaseId"].is_string() ||
+            !control.ownsLease(actor, params["leaseId"]) || !params.contains("style"))
+            throw ipc::Error(-32602, "overlay style needs owning shell lease");
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        renderer.applyOverlayStyle(params["style"]);
+        return Json{{"style", renderer.overlayStyle}};
+    }
     if (method == "input.set" || method == "input.preview") {
         if (params.size() != 1 || !params.contains("config"))
             throw ipc::Error(-32602, "config required");
@@ -2625,6 +2654,11 @@ void Runtime::tick() {
     if (renderDepth != 0)
         throw std::runtime_error("deferred work inside compositor render pass");
     auto updateStarted = std::chrono::steady_clock::now();
+    if (capturePending) {
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        if (renderer.completed())
+            debugCapture();
+    }
     if (captureWrite.valid() && captureWrite.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         try {
             auto path = captureWrite.get();
@@ -2639,6 +2673,7 @@ void Runtime::tick() {
     ipc->poll();
     if (auto next = inputFile.poll())
         applyInput(*next);
+    renderer.debug = debug;
     for (auto &a : input.tick(
              std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
                  .count()))
@@ -2740,6 +2775,10 @@ void Runtime::tick() {
         lookY *= 1 - blend;
         camera.fov = std::max(3.f, baseFov / (zoomHeld ? zoom : 1.f));
         renderer.debug = debug;
+        renderer.showAreaMarkers = input.config["show_area_markers"];
+        renderer.waypoint = control.location["waypoint"];
+        renderer.route = control.location["route"];
+        renderer.useDistance = input.config["useDistance"];
         renderer.scopeVignette = zoomHeld && input.config["scopeVignette"].get<bool>();
         float moveT = config["player"]["move_inertia"];
         float mb = moveT > 0 ? 1 - std::exp(-dt / moveT) : 1;
@@ -2775,7 +2814,10 @@ void Runtime::tick() {
         handTick(dt);
         toolsTick();
         auto captureStarted = std::chrono::steady_clock::now();
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        captureGPU.begin();
         refresh();
+        captureGPU.end();
         renderer.captureMs =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - captureStarted).count();
         if (fullscreen.phase == 1 || fullscreen.phase == 3)
@@ -2825,8 +2867,12 @@ void Runtime::tick() {
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - updateStarted).count();
     cursor();
     auto ipcStarted = std::chrono::steady_clock::now();
-    publish();
+    if (ipcStarted >= nextPublish || !control.events.empty() || !layout.events.empty()) {
+        nextPublish = ipcStarted + std::chrono::milliseconds(33);
+        publish();
+    }
     ipc->poll();
+    renderer.gpuCaptureMs = captureGPU.available ? captureGPU.milliseconds : -1;
     renderer.ipcMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ipcStarted).count();
 }
 class Pass final : public IPassElement {
@@ -2840,7 +2886,7 @@ class Pass final : public IPassElement {
             if (!fb)
                 return;
             if (!runtime->layout.desktop.is_null() || runtime->fullscreen.phase == 2) {
-                runtime->renderer.drawHUD(fb->getFBID(),data.currentFB->m_size.x,data.currentFB->m_size.y);
+                runtime->renderer.drawHUD(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y);
                 return;
             }
             auto surfaces = runtime->capture.visible();
@@ -2850,6 +2896,18 @@ class Pass final : public IPassElement {
                     std::erase_if(surfaces, [&](auto &s) { return s.id == fs->surface.id; });
                     surfaces.push_back(fs->surface);
                 }
+            }
+            runtime->renderer.toolPrompt = nullptr;
+            auto prompt = [&](Vec3 point, std::string text) {
+                runtime->renderer.toolPrompt = {{"position", {point.x, point.y, point.z}}, {"text", text}};
+            };
+            if (runtime->editor.slot == 4) {
+                if (auto object = runtime->objectAim())
+                    prompt(object->second.point, "LMB SELECT / WHEEL " + runtime->editor.submode());
+            }
+            if (runtime->editor.slot == 2 && runtime->editor.windowMode == 0 && !runtime->tagged.empty()) {
+                if (auto hit = runtime->worldHit())
+                    prompt(hit->point, "LMB MOUNT HERE");
             }
             runtime->renderer.draw(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y, runtime->camera,
                                    surfaces, runtime->typing && !runtime->layerCursor);
@@ -2961,11 +3019,8 @@ int luaConfig(lua_State *L) {
         }
         if (old["graphics"]["quality"] != next["graphics"]["quality"]) {
             Render::GL::g_pHyprOpenGL->makeEGLCurrent();
-            runtime->renderer.intelQuality =
-                next["graphics"]["quality"] == "intel" ||
-                (next["graphics"]["quality"] == "auto" &&
-                 std::string(reinterpret_cast<const char *>(glGetString(GL_RENDERER))).find("Intel") !=
-                     std::string::npos);
+            runtime->renderer.intelQuality = render::Renderer::intelTier(
+                next["graphics"]["quality"], reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
             if (runtime->world)
                 runtime->renderer.prepare(runtime->world);
         }
@@ -3012,6 +3067,8 @@ int luaCamera(lua_State *state) {
         {"ownsInput", ownsInput()},
         {"layerCursor", runtime->layerCursor},
         {"debug", runtime->debug},
+        {"overlays", runtime->renderer.overlayDiagnostics},
+        {"overlayStyle", runtime->renderer.overlayStyle},
         {"timings", runtime->renderer.timings()},
         {"captureDirectory", runtime->captureDirectory.string()},
         {"instances", runtime->layout.instances},
@@ -3119,18 +3176,31 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         }
     }
     auto methods = hyprune::control::Control::methods();
-    methods.insert({{"workspace.bind", "world.control"},      {"workspace.focus", "surface.control"},
-                    {"workspace.unfocus", "surface.control"}, {"surface.pull", "surface.control"},
-                    {"surface.place", "surface.control"},     {"surface.return", "surface.control"},
-                    {"surfaces.recall", "surface.control"},   {"placements.list", "state.read"},
-                    {"placements.remove", "surface.control"}, {"data.object.bind", "data.publish"},
-                    {"atmosphere.get", "state.read"},         {"atmosphere.set", "world.control"},
-                    {"camera.fov", "movement.control"},       {"shell.bind", "shell.control"},
-                    {"workspace.activate", "world.control"},  {"world.load", "world.control"},
-                    {"surface.focus", "surface.control"},     {"input.get", "state.read"},
-                    {"input.preview", "state.read"},          {"input.set", "input.control"},
-                    {"input.capture", "input.control"},       {"input.capture.cancel", "input.control"},
-                    {"movement.set", "movement.control"},     {"runtime.exit", "runtime.control"}});
+    methods.insert({{"workspace.bind", "world.control"},
+                    {"workspace.focus", "surface.control"},
+                    {"workspace.unfocus", "surface.control"},
+                    {"surface.pull", "surface.control"},
+                    {"surface.place", "surface.control"},
+                    {"surface.return", "surface.control"},
+                    {"surfaces.recall", "surface.control"},
+                    {"placements.list", "state.read"},
+                    {"placements.remove", "surface.control"},
+                    {"data.object.bind", "data.publish"},
+                    {"atmosphere.get", "state.read"},
+                    {"atmosphere.set", "world.control"},
+                    {"overlay.style", "shell.control"},
+                    {"camera.fov", "movement.control"},
+                    {"shell.bind", "shell.control"},
+                    {"workspace.activate", "world.control"},
+                    {"world.load", "world.control"},
+                    {"surface.focus", "surface.control"},
+                    {"input.get", "state.read"},
+                    {"input.preview", "state.read"},
+                    {"input.set", "input.control"},
+                    {"input.capture", "input.control"},
+                    {"input.capture.cancel", "input.control"},
+                    {"movement.set", "movement.control"},
+                    {"runtime.exit", "runtime.control"}});
     runtime->ipc->advertise(std::move(methods));
     HyprlandAPI::addDispatcherV2(handle, "hyprune.toggle", [](std::string arg) {
         deferToggle(arg);
@@ -3551,6 +3621,7 @@ APICALL EXPORT void PLUGIN_EXIT() {
     originalMove = nullptr;
     if (Render::GL::g_pHyprOpenGL) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        runtime->captureGPU.destroy();
         runtime->renderer.destroy();
     }
     runtime.reset();

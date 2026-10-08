@@ -1,5 +1,6 @@
 #include "Renderer.hpp"
 #include "GLState.hpp"
+#include "PNG.hpp"
 #include "world/Environment.hpp"
 #include "world/Mounts.hpp"
 #include <fontconfig/fontconfig.h>
@@ -168,6 +169,7 @@ void uniform(GLuint p, const char *name, Vec3 value) {
 void Renderer::init() {
     if (scene_)
         return;
+    device = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
     scene_ = program(vertex, fragment);
     tone_ = program(screenVertex, toneFragment);
     bloom_ = program(screenVertex, bloomFragment);
@@ -203,6 +205,9 @@ void Renderer::freeWorld() {
 }
 void Renderer::prepare(std::shared_ptr<const world::World> world) {
     GLState state;
+    for (auto fence : frameFences_)
+        glDeleteSync(fence);
+    frameFences_.clear();
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
@@ -365,12 +370,13 @@ void Renderer::freeTargets() {
     width_ = height_ = 0;
 }
 void Renderer::targets(int w, int h) {
-    if (w == width_ && h == height_)
+    if (w == width_ && h == height_ && allocatedIntel_ == intelQuality)
         return;
     freeTargets();
     GLint maxSamples = 0;
     glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
     samples_ = std::min(intelQuality ? 2 : 4, maxSamples);
+    allocatedIntel_ = intelQuality;
     glGenFramebuffers(1, &msaa_);
     glBindFramebuffer(GL_FRAMEBUFFER, msaa_);
     glGenRenderbuffers(1, &color_);
@@ -417,15 +423,36 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
                     bool typing) {
     if (!world_)
         return;
+    while (!frameFences_.empty()) {
+        auto ready = glClientWaitSync(frameFences_.front(), 0, 0);
+        if (ready != GL_ALREADY_SIGNALED && ready != GL_CONDITION_SATISFIED)
+            break;
+        glDeleteSync(frameFences_.front());
+        frameFences_.pop_front();
+    }
+    if (frames && (captureRequested || frameFences_.size() >= 2)) {
+        GLState guard;
+        glDisable(GL_SCISSOR_TEST);
+        glDisable(GL_STENCIL_TEST);
+        glDisable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
+        glDisable(GL_RASTERIZER_DISCARD);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        present(target, w, h, frameTyping_);
+        ++skipped_;
+        return;
+    }
     auto started = std::chrono::steady_clock::now();
     if (lastFrame_.time_since_epoch().count())
         frameMs_ = std::chrono::duration<double, std::milli>(started - lastFrame_).count();
     lastFrame_ = started;
     frameCamera_ = camera;
+    frameWorld_ = world_->id;
     frameTyping_ = typing;
     GLState state;
     init();
     targets(w, h);
+    glLineWidth(1);
     gpu_[0].begin();
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_BLEND);
@@ -596,6 +623,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         quad(s.width + .07f, s.height + .07f, s.center - normal * .015f, true);
         quad(s.width, s.height, s.center, false);
     }
+    worldOverlays(camera, surfaces, w, h);
     // Editor primitives are plain vertices under the same GL guard. No seat or
     // compositor callbacks occur while the render pass draws handles/path strokes.
     glDisable(GL_DEPTH_TEST);
@@ -666,19 +694,24 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glViewport(0, 0, std::max(1, w / 2), std::max(1, h / 2));
     glUniform1f(glGetUniformLocation(bloom_, "threshold"), effects ? bloom["threshold"].get<float>() : 1e20f);
     float radius = bloom["radius"];
-    for (int pass = 0; pass < 3; pass++) {
-        glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[pass == 1 ? 1 : 0]);
-        glBindTexture(GL_TEXTURE_2D, pass == 0 ? resolveTexture_ : bloomTexture_[pass == 1 ? 0 : 1]);
-        uniform(bloom_, "extract", pass == 0);
-        glUniform2f(glGetUniformLocation(bloom_, "stepSize"),
-                    pass == 2   ? 0
-                    : pass == 0 ? 1.f / w
-                                : radius / w,
-                    pass == 1   ? 0
-                    : pass == 0 ? 1.f / h
-                                : radius / h);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-    }
+    if (!effects || bloom["strength"].get<float>() <= 0) {
+        glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[0]);
+        glClearColor(0, 0, 0, 0);
+        glClear(GL_COLOR_BUFFER_BIT);
+    } else
+        for (int pass = 0; pass < 3; pass++) {
+            glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[pass == 1 ? 1 : 0]);
+            glBindTexture(GL_TEXTURE_2D, pass == 0 ? resolveTexture_ : bloomTexture_[pass == 1 ? 0 : 1]);
+            uniform(bloom_, "extract", pass == 0);
+            glUniform2f(glGetUniformLocation(bloom_, "stepSize"),
+                        pass == 2   ? 0
+                        : pass == 0 ? 1.f / w
+                                    : radius / w,
+                        pass == 1   ? 0
+                        : pass == 0 ? 1.f / h
+                                    : radius / h);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
     cpu_[2] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - bloomStarted).count();
     gpu_[2].end();
     gpu_[3].begin();
@@ -688,6 +721,8 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     cpu_[3] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - outputStarted).count();
     renderMs_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
     ++frames;
+    frameFences_.push_back(glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0));
+    glFlush();
 }
 void Renderer::present(GLuint target, int w, int h, bool typing) {
     glViewport(0, 0, w, h);
@@ -710,10 +745,13 @@ void Renderer::present(GLuint target, int w, int h, bool typing) {
     glUniform2f(glGetUniformLocation(tone_, "resolution"), w, h);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, resolveTexture_);
+    glBindSampler(0, clamp_);
     glBindVertexArray(screenVao_);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     for (auto &label : labels)
         text(label.x * w, label.y * h, label.text, label.color, w, h);
+    for (auto &sprite : icons_)
+        icon(sprite, w, h);
     debugHUD(w, h);
 }
 void Renderer::debugHUD(int w, int h) {
@@ -802,7 +840,7 @@ void Renderer::textAtlas() {
         textProgram_ = program(R"(#version 300 es
 layout(location=0) in vec2 position;layout(location=1) in vec2 texcoord;out vec2 uv;void main(){gl_Position=vec4(position,0,1);uv=texcoord;})",
                                R"(#version 300 es
-precision highp float;in vec2 uv;uniform sampler2D atlas;uniform vec3 color;out vec4 result;void main(){float a=texture(atlas,uv).r;result=vec4(color,a);})");
+precision highp float;in vec2 uv;uniform sampler2D atlas;uniform int iconMode;uniform vec3 color;out vec4 result;void main(){float a=(iconMode!=0?texture(atlas,uv).a:texture(atlas,uv).r);result=vec4(color,a);})");
     if (!textTexture_)
         glGenTextures(1, &textTexture_);
     glActiveTexture(GL_TEXTURE0);
@@ -863,6 +901,7 @@ void Renderer::text(float x, float y, const std::string &value, Vec3 color, int 
     glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glUseProgram(textProgram_);
+    uniform(textProgram_, "iconMode", 0);
     uniform(textProgram_, "atlas", 0);
     uniform(textProgram_, "color", color);
     glActiveTexture(GL_TEXTURE0);
@@ -873,6 +912,156 @@ void Renderer::text(float x, float y, const std::string &value, Vec3 color, int 
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STREAM_DRAW);
     glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 4);
     glDisable(GL_BLEND);
+}
+void Renderer::applyOverlayStyle(const world::Json &patch) {
+    auto next = overlayStylePatch(overlayStyle, patch);
+    if (next == overlayStyle)
+        return;
+    bool atlasChanged = next["iconAtlas"] != overlayStyle["iconAtlas"];
+    PNG atlas;
+    if (atlasChanged && !next["iconAtlas"].is_null()) {
+        auto descriptor = next["iconAtlas"];
+        atlas = readAtlasPNG(descriptor["path"]);
+        int cell = descriptor["cellSize"], count = (atlas.width / cell) * (atlas.height / cell);
+        if (atlas.width % cell || atlas.height % cell || descriptor["waypointIndex"] >= count ||
+            descriptor["promptIndex"] >= count)
+            throw std::runtime_error("atlas cells out of image bounds");
+    }
+    GLState guard;
+    auto previousFont = font;
+    font = next["fontFamily"];
+    try {
+        textAtlas();
+    } catch (...) {
+        font = previousFont;
+        throw;
+    }
+    GLuint texture = 0;
+    if (!atlas.rgba.empty()) {
+        glGenTextures(1, &texture);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, atlas.width, atlas.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     atlas.rgba.data());
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
+    if (atlasChanged) {
+        glDeleteTextures(1, &iconTexture_);
+        iconTexture_ = texture;
+        iconWidth_ = atlas.width;
+        iconHeight_ = atlas.height;
+    }
+    overlayStyle = next;
+}
+void Renderer::icon(const Icon &sprite, int w, int h) {
+    if (!iconTexture_)
+        return;
+    int cell = overlayStyle["iconAtlas"]["cellSize"], cols = iconWidth_ / cell;
+    float u = float(sprite.index % cols * cell) / iconWidth_, v = float(sprite.index / cols * cell) / iconHeight_;
+    float x = sprite.x * w, y = sprite.y * h;
+    float vertices[24];
+    int i = 0;
+    for (auto xy : {std::pair{0.f, 0.f}, {1.f, 0.f}, {1.f, 1.f}, {0.f, 0.f}, {1.f, 1.f}, {0.f, 1.f}}) {
+        vertices[i++] = (x + (xy.first - .5f) * 24) * 2 / w - 1;
+        vertices[i++] = (y + (xy.second - .5f) * 24) * 2 / h - 1;
+        vertices[i++] = u + xy.first * cell / iconWidth_;
+        vertices[i++] = v + xy.second * cell / iconHeight_;
+    }
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(textProgram_);
+    uniform(textProgram_, "iconMode", 1);
+    uniform(textProgram_, "atlas", 0);
+    uniform(textProgram_, "color", sprite.color);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, iconTexture_);
+    glBindSampler(0, clamp_);
+    glBindVertexArray(textVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, textBuffer_);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glDisable(GL_BLEND);
+}
+void Renderer::worldOverlays(const sim::Camera &camera, std::span<const surfaces::Surface> surfaces, int w, int h) {
+    labels.clear();
+    icons_.clear();
+    float aspect = float(w) / h;
+    auto color = [&](const char *key) {
+        auto c = overlayStyle[key];
+        return Vec3{c[0], c[1], c[2]};
+    };
+    auto position = [](const world::Json &p) { return Vec3{p[0], p[1], p[2]}; };
+    auto marker = [&](Vec3 point, const std::string &label, bool waypointMarker, bool prompt) {
+        auto projected = camera.project(point, aspect);
+        if (!projected.visible)
+            return;
+        auto labelColor = color(prompt ? "promptColor" : "labelColor");
+        labels.push_back({projected.x + 14.f / w, projected.y, label.substr(0, 128), labelColor});
+        if (iconTexture_ && (waypointMarker || prompt))
+            icons_.push_back({projected.x, projected.y,
+                              overlayStyle["iconAtlas"][prompt ? "promptIndex" : "waypointIndex"],
+                              color(prompt ? "promptColor" : "waypointColor")});
+        else if (waypointMarker)
+            labels.push_back({projected.x - 5.f / w, projected.y, "+", color("waypointColor")});
+    };
+    std::vector<world::Vertex> routeVertices;
+    if (!waypoint.is_null() && !route.empty()) {
+        Vec3 previous = camera.position + Vec3{0, -camera.eyeHeight + .025f, 0};
+        for (auto &node : route) {
+            auto next = position(node["position"]);
+            next.y += -1.7f + .025f;
+            for (auto p : {previous, next}) {
+                world::Vertex v{};
+                v.position = p;
+                v.normal = {0, 1, 0};
+                routeVertices.push_back(v);
+            }
+            previous = next;
+        }
+        uniform(scene_, "hasTexture", 0);
+        auto linear = color("routeColor");
+        auto decode = [](float v) { return v <= .04045f ? v / 12.92f : std::pow((v + .055f) / 1.055f, 2.4f); };
+        linear = {decode(linear.x), decode(linear.y), decode(linear.z)};
+        uniform(scene_, "color", linear);
+        glBindVertexArray(quadVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
+        glBufferData(GL_ARRAY_BUFFER, routeVertices.size() * sizeof(world::Vertex), routeVertices.data(),
+                     GL_STREAM_DRAW);
+        glDrawArrays(GL_LINES, 0, routeVertices.size());
+    }
+    if (!waypoint.is_null())
+        marker(position(waypoint["position"]), waypoint["label"], true, false);
+    if (showAreaMarkers)
+        for (auto &place : world_->places)
+            marker(position(place["position"]), place["name"], false, false);
+    const surfaces::Surface *selected = nullptr;
+    std::optional<surfaces::Hit> closest;
+    for (auto &surface : surfaces)
+        if (auto hit = surfaces::intersect(surface, camera.position, camera.forward());
+            hit && hit->distance <= useDistance && (!closest || hit->distance < closest->distance)) {
+            selected = &surface;
+            closest = hit;
+        }
+    if (selected) {
+        auto obstruction = interaction::raycast(camera.position, camera.forward(), world_->collision);
+        if (!obstruction || obstruction->distance >= closest->distance - .08f)
+            marker(selected->center + selected->up() * (selected->height / 2 + .12f), "E USE / F FOCUS", false, true);
+    }
+    if (!toolPrompt.is_null())
+        marker(position(toolPrompt["position"]), toolPrompt["text"], false, true);
+    world::Json projected = world::Json::array();
+    for (auto &label : labels)
+        projected.push_back({{"x", label.x}, {"y", label.y}, {"text", label.text}});
+    overlayDiagnostics = {{"frame", frames + 1},   {"heading", camera.yaw},
+                          {"pitch", camera.pitch}, {"areaMarkers", showAreaMarkers},
+                          {"labels", projected},   {"routeSegments", routeVertices.size() / 2}};
 }
 void Renderer::debugGeometry(const sim::Camera &camera, std::span<const surfaces::Surface> surfaces) {
     auto line = [&](Vec3 a, Vec3 b, Vec3 color) { lines.push_back({a, b, color, .012f}); };
@@ -941,13 +1130,27 @@ world::Json Renderer::timings() const {
             {"cpuRenderMs", renderMs_},
             {"cpuUpdateMs", updateMs},
             {"captureMs", captureMs},
+            {"gpuCaptureMs", gpuCaptureMs >= 0 ? world::Json(gpuCaptureMs) : world::Json(nullptr)},
             {"ipcMs", ipcMs},
             {"cpuPassMs", cpu},
             {"gpuPassMs", gpu},
             {"debug", debug},
+            {"reusedFrames", skipped_},
+            {"inFlight", frameFences_.size()},
+            {"renderer", device},
+            {"msaaSamples", samples_},
+            {"quality", intelQuality ? "intel" : "high"},
             {"collisionTriangles", world_ ? world_->collision.size() : 0}};
 }
+bool Renderer::completed() {
+    if (frameFences_.empty())
+        return true;
+    auto result = glClientWaitSync(frameFences_.back(), 0, 0);
+    return result == GL_ALREADY_SIGNALED || result == GL_CONDITION_SATISFIED;
+}
 Renderer::Pixels Renderer::snapshot() {
+    if (!completed())
+        throw std::runtime_error("world frame still on GPU");
     if (!frames || !resolve_)
         throw std::runtime_error("no completed world frame to capture");
     auto started = std::chrono::steady_clock::now();
@@ -986,16 +1189,22 @@ Renderer::Pixels Renderer::snapshot() {
     glReadPixels(0, 0, width_, height_, GL_RGBA, GL_UNSIGNED_BYTE, pixels.rgba.data());
     glDeleteFramebuffers(1, &fbo);
     glDeleteTextures(1, &texture);
+    pixels.worldId = frameWorld_;
     pixels.ageMs = std::chrono::duration<double, std::milli>(started - lastFrame_).count();
     pixels.readbackMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
     return pixels;
 }
 void Renderer::destroy() {
     GLState state;
+    for (auto fence : frameFences_)
+        glDeleteSync(fence);
+    frameFences_.clear();
     freeWorld();
     freeTargets();
     for (auto &timer : gpu_)
         timer.destroy();
+    glDeleteTextures(1, &iconTexture_);
+    iconTexture_ = 0;
     glDeleteProgram(textProgram_);
     glDeleteTextures(1, &textTexture_);
     glDeleteVertexArrays(1, &textVao_);

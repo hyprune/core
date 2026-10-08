@@ -1,0 +1,49 @@
+test_atomic_subscribe_and_exclusive_mapping (test_client.ClientTests.test_atomic_subscribe_and_exclusive_mapping) ... ok
+test_committed_overlay_reply_may_precede_delta (test_client.ClientTests.test_committed_overlay_reply_may_precede_delta) ... ok
+test_dev_notice_never_becomes_production_transition (test_client.ClientTests.test_dev_notice_never_becomes_production_transition) ... ok
+test_disconnect_new_token_fresh_lease_no_mutation_replay (test_client.ClientTests.test_disconnect_new_token_fresh_lease_no_mutation_replay) ... ok
+test_gap_resync_drops_stale_delta (test_client.ClientTests.test_gap_resync_drops_stale_delta) ... ok
+test_lock_clears_director (test_client.ClientTests.test_lock_clears_director) ... ok
+test_response_order_is_independent_of_call_order (test_client.ClientTests.test_response_order_is_independent_of_call_order) ... ok
+test_revocation_unmaps (test_client.ClientTests.test_revocation_unmaps) ... ok
+test_second_shell_conflict_does_not_retry_or_evict (test_client.ClientTests.test_second_shell_conflict_does_not_retry_or_evict) ... ok
+test_unadvertised_action_never_sent (test_client.ClientTests.test_unadvertised_action_never_sent) ... ok
+test_unplug_releases_output_and_director (test_client.ClientTests.test_unplug_releases_output_and_director) ... ok
+test_atomic_subscribe_and_exclusive_mapping (test_client.ClientV2Tests.test_atomic_subscribe_and_exclusive_mapping) ... ok
+test_coalesced_open_close_does_not_reopen (test_client.ClientV2Tests.test_coalesced_open_close_does_not_reopen) ... ok
+test_committed_overlay_reply_may_precede_delta (test_client.ClientV2Tests.test_committed_overlay_reply_may_precede_delta) ... ok
+test_daemon_revision_reset_accepts_fresh_ui_request (test_client.ClientV2Tests.test_daemon_revision_reset_accepts_fresh_ui_request) ... ok
+test_dev_notice_never_becomes_production_transition (test_client.ClientV2Tests.test_dev_notice_never_becomes_production_transition) ... ok
+test_disconnect_new_token_fresh_lease_no_mutation_replay (test_client.ClientV2Tests.test_disconnect_new_token_fresh_lease_no_mutation_replay) ... ok
+test_gap_resync_drops_stale_delta (test_client.ClientV2Tests.test_gap_resync_drops_stale_delta) ... ok
+test_loading_hint_presents_without_patching_baseline (test_client.ClientV2Tests.test_loading_hint_presents_without_patching_baseline) ... ok
+test_lock_clears_director (test_client.ClientV2Tests.test_lock_clears_director) ... ok
+test_native_events_discard_other_session (test_client.ClientV2Tests.test_native_events_discard_other_session) ... ok
+test_native_ui_events_are_lease_scoped (test_client.ClientV2Tests.test_native_ui_events_are_lease_scoped) ... ok
+test_response_order_is_independent_of_call_order (test_client.ClientV2Tests.test_response_order_is_independent_of_call_order) ... ok
+test_revocation_unmaps (test_client.ClientV2Tests.test_revocation_unmaps) ... ok
+test_second_shell_conflict_does_not_retry_or_evict (test_client.ClientV2Tests.test_second_shell_conflict_does_not_retry_or_evict) ... ok
+test_snapshot_mid_jump_and_cancellation (test_client.ClientV2Tests.test_snapshot_mid_jump_and_cancellation) ... ok
+test_unadvertised_action_never_sent (test_client.ClientV2Tests.test_unadvertised_action_never_sent) ... ok
+test_unplug_releases_output_and_director (test_client.ClientV2Tests.test_unplug_releases_output_and_director) ... ok
+test_world_loading_is_indeterminate_and_output_scoped (test_client.ClientV2Tests.test_world_loading_is_indeterminate_and_output_scoped) ... ok
+test_malformed_reader_fails_pending_bootstrap_without_timeout (test_client.ReaderFailureTests.test_malformed_reader_fails_pending_bootstrap_without_timeout) ... ok
+test_owned_replacement_and_unrelated_peer (test_launcher.LauncherTests.test_owned_replacement_and_unrelated_peer) ... ok
+test_duplicate_nonfinite_depth_invalid_utf8 (test_protocol.CodecTests.test_duplicate_nonfinite_depth_invalid_utf8) ... ok
+test_method_matched_response (test_protocol.CodecTests.test_method_matched_response) ... ok
+test_native_transition_is_exact_02_only (test_protocol.CodecTests.test_native_transition_is_exact_02_only) ... ok
+test_no_batches_unknown_fields (test_protocol.CodecTests.test_no_batches_unknown_fields) ... ok
+test_reject_lengths_before_body (test_protocol.CodecTests.test_reject_lengths_before_body) ... ok
+test_split_multibyte_and_coalesced_frames (test_protocol.CodecTests.test_split_multibyte_and_coalesced_frames) ... ok
+test_style_is_bounded_and_protocol_06_only (test_protocol.CoreOverlayContractTests.test_style_is_bounded_and_protocol_06_only) ... ok
+test_05_modes_apps_are_isolated_and_closed (test_protocol.HandsContractTests.test_05_modes_apps_are_isolated_and_closed) ... ok
+test_06_config_bounds_and_three_variants (test_protocol.KeymapContractTests.test_06_config_bounds_and_three_variants) ... ok
+test_06_input_capture_is_closed_and_versioned (test_protocol.KeymapContractTests.test_06_input_capture_is_closed_and_versioned) ... ok
+test_06_map_intent_has_closed_panels (test_protocol.KeymapContractTests.test_06_map_intent_has_closed_panels) ... ok
+test_03_methods_do_not_widen_02 (test_protocol.SessionContractTests.test_03_methods_do_not_widen_02) ... ok
+test_04_mount_methods_do_not_widen_older_protocols (test_protocol.SessionContractTests.test_04_mount_methods_do_not_widen_older_protocols) ... ok
+
+----------------------------------------------------------------------
+Ran 44 tests in 3.671s
+
+OK

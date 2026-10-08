@@ -292,3 +292,93 @@ desktop snapshot. Plugin unload waits for any active writer to finish.
 
 Nested evidence is under `docs/evidence/live-round2/`. The nested compositor has
 only a software cursor; these checks do not validate hardware-cursor behavior.
+
+## Live retest round 2: core world overlays and profiling
+
+Core draws waypoint labels/icons, the active route and E/F prompts with the
+camera used for its current frame. `show_area_markers` defaults to false; Settings
+can opt in. Shell IPC 0.6 HUD removes its projected marker repeater while keeping
+Director/notices/compass/minimap. Projection data remains available at up to 10 Hz.
+Periodic state publication is capped at 30 Hz; explicit mutations and UI events
+publish immediately. This removes repeated per-frame marker raycasts and JSON
+publication from the 3D feedback loop. See the RFC-0005/0008 amendments and
+CHANGES-FOR-SDK-AND-SHELL.md for the lease-owned colour/font/icon-atlas style hook.
+
+Diagnostic timings distinguish CPU frame submission from asynchronous GPU elapsed
+time. CPU update includes movement and native texture refresh; capture refresh is
+also shown as its own substage. IPC and renderer CPU timings are separate. GPU
+scene/windows/resolve+bloom/output queries and deferred capture/composition queries
+never wait for unfinished results. Texture capture uses native imported leases,
+not CPU screenshot uploads. U's one-shot readback and worker PNG persistence are
+reported separately in its JSON. GPU timings share the machine with the owner's
+still-active session and can include scheduling contention; they are not an
+exclusive-GPU benchmark. Bloom was already half resolution; disabled/zero-strength
+bloom now clears its target and skips all three extraction/blur draws.
+
+### Supervised live test checklist additions
+
+- [ ] With no waypoint selected, area/place markers are absent. Select a waypoint:
+      its label and route remain locked to the world while turning rapidly.
+- [ ] Aim at a usable window or workspace: E/F prompt follows that surface without
+      IPC lag. Focus fullscreen: world-locked overlays disappear; exit restores them.
+- [ ] Settings → Show area/place markers → Save enables them; clearing disables
+      them while preserving the active waypoint. No cursor change occurs on apply.
+- [ ] Shell lease/theme changes update core colours/font/icons through deferred
+      uploads. No cursor show/hide/shape change occurs during styling.
+- [ ] U during a rapid turn records the rendered frame camera and marker positions.
+      Capture readback is deferred until input delivery and the frame finish;
+      unload cancels queued captures and joins an active PNG writer.
+
+Nested tests use `HYPRUNE_NESTED_4K=1 dev/nested/run.sh --live`, whose lifetime
+flock isolates the compositor. The harness checks actual output dimensions before
+profiling, tests a live theme update and marker option reload, and keeps earlier
+carry/capture/layer/Director/reconnect/helper-crash recovery checks.
+
+The final 80-sample Lumen Reach run used a 3840×2160 headless output on Mesa
+Intel(R) Graphics (PTL), with an active waypoint route. Times below are medians
+in milliseconds except IPC, where the mean captures scheduled publications:
+
+| Stage | Before | After |
+| --- | ---: | ---: |
+| CPU update | 0.539 | 0.561 |
+| CPU native texture refresh | 0.036 | 0.053 |
+| CPU renderer submission | 0.362 | 0.346 |
+| CPU IPC publication | 1.416 mean | 0.355 mean |
+| GPU scene | 25.640 | 25.228 |
+| GPU windows | 2.737 | 2.772 |
+| GPU resolve and bloom | 6.747 | 6.942 |
+| GPU output | 0.839 | 0.835 |
+
+Native texture refresh is part of CPU update. GPU capture upload was 0 ms in
+this world because surfaces used imported native leases. The previous 16.7 ms
+"frame" value measured CPU submissions even while GPU work queued; the bounded
+run measured an 83.2 ms median interval between new world renders and at
+most two frames in flight. The owner session shared the GPU during nested tests,
+so these numbers cannot establish exclusive 4K throughput. The scene pass is the
+largest measured cost. IPC publication work fell roughly 75% on the sampled
+mean; per-frame CPU update and render work remained below 1 ms combined.
+
+The one-shot U capture at 4K read back its own FBO in 78.7 ms and encoded/wrote
+the PNG on a worker in 627 ms; its selected world frame was 165 ms old. That
+readback can cause a single visible pause when U is pressed. The PNG worker and
+the normal world frame path do not wait for encoding. Raw before/after samples,
+the paired capture and acceptance results are in
+`docs/evidence/live-round2-overlays/`.
+
+GPU submissions are capped at two in-flight core frames using zero-timeout GL
+fence checks. When busy, presentation reuses the matching world resolve and
+frame-local labels; it does not enqueue another expensive scene. U temporarily
+holds new world submissions until the selected frame's GPU fence completes,
+then reads its own tonemap FBO after input delivery. No glFinish or blocking fence
+wait occurs in production; PNG compression/persistence stays off the event loop.
+This bounds GPU backlog and capture latency rather than masking it with a CPU
+submission FPS counter. Diagnostics count reused frames and in-flight work.
+
+The default auto quality now detects Intel on first world load. Its intended
+2-sample MSAA tier is applied without requiring an initial Lua config change.
+Changing quality at runtime reallocates same-sized targets when sample tier
+changes; high remains explicitly selectable. Nested cleanup now closes native
+clients before destroying Hyprland's monitor/workspace controllers: 0.56's
+shutdown-only fullscreen cleanup otherwise produced SIGSEGV coredumps, unrelated
+to a render-pass crash. Those backtraces were inspected from nested PID 1677404;
+no debugger or mutation targeted the owner's session.

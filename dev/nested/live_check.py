@@ -86,5 +86,10 @@ APICALL EXPORT void PLUGIN_EXIT(){}
             for restored in rec.get('restoredHUD',{}).values():
                 with __import__('contextlib').suppress(ProcessLookupError):os.kill(restored['pid'],signal.SIGTERM)
         s.ctl('plugin','unload',str(fixture))
+        # Unmap native nested clients before Hyprland destroys its monitor and
+        # workspace controllers (0.56 can crash in fullscreen cleanup otherwise).
+        for client in json.loads(s.ctl('clients','-j')):
+            s.ctl('eval','hl.dispatch(hl.dsp.window.close({window='+json.dumps('address:'+client['address'])+'}))')
+        time.sleep(.4)
     (state/'acceptance.json').write_text(json.dumps({'passed':results,'instance':identity['signature'],'nestedOnly':True},indent=2)+'\n')
     print('PASS live tooling:',len(results),'checks',flush=True)

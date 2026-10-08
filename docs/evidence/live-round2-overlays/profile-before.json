@@ -1,0 +1,1690 @@
+{
+  "resolution": [
+    3840,
+    2160
+  ],
+  "world": "Lumen Reach",
+  "debug": false,
+  "samples": [
+    {
+      "captureMs": 0.035904,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.239246,
+        0.07274,
+        0.013368,
+        0.007939
+      ],
+      "cpuRenderMs": 0.334463,
+      "cpuUpdateMs": 0.518151,
+      "debug": false,
+      "frameMs": 16.649595,
+      "gpuPassMs": [
+        36.219687,
+        2.711666,
+        6.98901,
+        0.82901
+      ],
+      "ipcMs": 1.336107
+    },
+    {
+      "captureMs": 0.046791,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.295194,
+        0.087827,
+        0.017052,
+        0.009077
+      ],
+      "cpuRenderMs": 0.411539,
+      "cpuUpdateMs": 0.5548,
+      "debug": false,
+      "frameMs": 16.732331,
+      "gpuPassMs": [
+        34.425208,
+        2.711666,
+        6.98901,
+        0.82901
+      ],
+      "ipcMs": 1.531985
+    },
+    {
+      "captureMs": 0.048327,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.219291,
+        0.0754,
+        0.013418,
+        0.007422
+      ],
+      "cpuRenderMs": 0.316982,
+      "cpuUpdateMs": 0.584093,
+      "debug": false,
+      "frameMs": 18.602671,
+      "gpuPassMs": [
+        34.425208,
+        2.756875,
+        6.98901,
+        0.82901
+      ],
+      "ipcMs": 1.386261
+    },
+    {
+      "captureMs": 0.054451,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.251955,
+        0.070237,
+        0.01402,
+        0.007382
+      ],
+      "cpuRenderMs": 0.345373,
+      "cpuUpdateMs": 0.589512,
+      "debug": false,
+      "frameMs": 16.650393,
+      "gpuPassMs": [
+        34.425208,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.561309
+    },
+    {
+      "captureMs": 0.043697,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.235868,
+        0.13442,
+        0.014056,
+        0.00795
+      ],
+      "cpuRenderMs": 0.393887,
+      "cpuUpdateMs": 0.578758,
+      "debug": false,
+      "frameMs": 16.683458,
+      "gpuPassMs": [
+        34.425208,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.373552
+    },
+    {
+      "captureMs": 0.035224,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.219576,
+        0.065,
+        0.011179,
+        0.006215
+      ],
+      "cpuRenderMs": 0.303384,
+      "cpuUpdateMs": 0.504019,
+      "debug": false,
+      "frameMs": 16.639336,
+      "gpuPassMs": [
+        34.425208,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.342522
+    },
+    {
+      "captureMs": 0.026047,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.270377,
+        0.197377,
+        0.021195,
+        0.008613
+      ],
+      "cpuRenderMs": 0.499799,
+      "cpuUpdateMs": 0.495037,
+      "debug": false,
+      "frameMs": 16.672145,
+      "gpuPassMs": [
+        34.425208,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.294887
+    },
+    {
+      "captureMs": 0.023019,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.190043,
+        0.055246,
+        0.01084,
+        0.005301
+      ],
+      "cpuRenderMs": 0.262616,
+      "cpuUpdateMs": 0.387918,
+      "debug": false,
+      "frameMs": 16.647828,
+      "gpuPassMs": [
+        34.425208,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 0.953583
+    },
+    {
+      "captureMs": 0.049272,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.229722,
+        0.149488,
+        0.013837,
+        0.007401
+      ],
+      "cpuRenderMs": 0.402048,
+      "cpuUpdateMs": 0.595737,
+      "debug": false,
+      "frameMs": 16.650119,
+      "gpuPassMs": [
+        34.425208,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.397403
+    },
+    {
+      "captureMs": 0.061524,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.267393,
+        0.086365,
+        0.012869,
+        0.008427
+      ],
+      "cpuRenderMs": 0.376575,
+      "cpuUpdateMs": 0.586191,
+      "debug": false,
+      "frameMs": 16.670046,
+      "gpuPassMs": [
+        34.425208,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.082943
+    },
+    {
+      "captureMs": 0.075865,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.266091,
+        0.110731,
+        0.015403,
+        0.009092
+      ],
+      "cpuRenderMs": 0.403305,
+      "cpuUpdateMs": 0.668352,
+      "debug": false,
+      "frameMs": 16.581046,
+      "gpuPassMs": [
+        34.425208,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.634185
+    },
+    {
+      "captureMs": 0.034641,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.263661,
+        0.07452,
+        0.014158,
+        0.008572
+      ],
+      "cpuRenderMs": 0.362999,
+      "cpuUpdateMs": 0.530785,
+      "debug": false,
+      "frameMs": 16.649334,
+      "gpuPassMs": [
+        34.425208,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.38057
+    },
+    {
+      "captureMs": 0.065267,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.31167,
+        0.088738,
+        0.017412,
+        0.008348
+      ],
+      "cpuRenderMs": 0.428517,
+      "cpuUpdateMs": 0.666513,
+      "debug": false,
+      "frameMs": 16.770732,
+      "gpuPassMs": [
+        34.425208,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.634808
+    },
+    {
+      "captureMs": 0.037257,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.213924,
+        0.060473,
+        0.012772,
+        0.006609
+      ],
+      "cpuRenderMs": 0.295251,
+      "cpuUpdateMs": 0.558769,
+      "debug": false,
+      "frameMs": 15.428498,
+      "gpuPassMs": [
+        34.425208,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.346111
+    },
+    {
+      "captureMs": 0.027355,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.184135,
+        0.056986,
+        0.009864,
+        0.005099
+      ],
+      "cpuRenderMs": 0.257202,
+      "cpuUpdateMs": 0.402315,
+      "debug": false,
+      "frameMs": 16.666282,
+      "gpuPassMs": [
+        34.425208,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.058282
+    },
+    {
+      "captureMs": 0.041366,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.273536,
+        0.078353,
+        0.013815,
+        0.008321
+      ],
+      "cpuRenderMs": 0.376333,
+      "cpuUpdateMs": 0.560212,
+      "debug": false,
+      "frameMs": 16.412601,
+      "gpuPassMs": [
+        26.102239,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.509263
+    },
+    {
+      "captureMs": 0.03098,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.250926,
+        0.066485,
+        0.012409,
+        0.008147
+      ],
+      "cpuRenderMs": 0.339485,
+      "cpuUpdateMs": 0.524606,
+      "debug": false,
+      "frameMs": 16.678546,
+      "gpuPassMs": [
+        26.102239,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.299623
+    },
+    {
+      "captureMs": 0.026021,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.263149,
+        0.431723,
+        0.077613,
+        0.014787
+      ],
+      "cpuRenderMs": 0.793792,
+      "cpuUpdateMs": 0.394386,
+      "debug": false,
+      "frameMs": 16.684819,
+      "gpuPassMs": [
+        26.102239,
+        2.756875,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 0.998702
+    },
+    {
+      "captureMs": 0.03521,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.254126,
+        0.071093,
+        0.012986,
+        0.007587
+      ],
+      "cpuRenderMs": 0.347273,
+      "cpuUpdateMs": 0.55196,
+      "debug": false,
+      "frameMs": 16.671414,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.463137
+    },
+    {
+      "captureMs": 0.0375,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.247074,
+        0.082323,
+        0.013727,
+        0.008039
+      ],
+      "cpuRenderMs": 0.352915,
+      "cpuUpdateMs": 0.539508,
+      "debug": false,
+      "frameMs": 16.674404,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.520279
+    },
+    {
+      "captureMs": 0.034928,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.274352,
+        0.075514,
+        0.014785,
+        0.009109
+      ],
+      "cpuRenderMs": 0.375623,
+      "cpuUpdateMs": 0.509397,
+      "debug": false,
+      "frameMs": 16.700379,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.375886
+    },
+    {
+      "captureMs": 0.043498,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.263016,
+        0.07472,
+        0.013872,
+        0.008005
+      ],
+      "cpuRenderMs": 0.361409,
+      "cpuUpdateMs": 0.581751,
+      "debug": false,
+      "frameMs": 16.660294,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.448363
+    },
+    {
+      "captureMs": 0.040067,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.294541,
+        0.10821,
+        0.02676,
+        0.009143
+      ],
+      "cpuRenderMs": 0.440485,
+      "cpuUpdateMs": 0.588048,
+      "debug": false,
+      "frameMs": 16.721801,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.569975
+    },
+    {
+      "captureMs": 0.041281,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.288277,
+        0.079195,
+        0.01812,
+        0.0115
+      ],
+      "cpuRenderMs": 0.398957,
+      "cpuUpdateMs": 0.575298,
+      "debug": false,
+      "frameMs": 16.697983,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.520976
+    },
+    {
+      "captureMs": 0.03047,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.229736,
+        0.07858,
+        0.012319,
+        0.023364
+      ],
+      "cpuRenderMs": 0.345369,
+      "cpuUpdateMs": 0.492799,
+      "debug": false,
+      "frameMs": 16.684739,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        5.603958,
+        0.832552
+      ],
+      "ipcMs": 1.303086
+    },
+    {
+      "captureMs": 0.032575,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.264199,
+        0.071251,
+        0.012612,
+        0.00837
+      ],
+      "cpuRenderMs": 0.357876,
+      "cpuUpdateMs": 0.520748,
+      "debug": false,
+      "frameMs": 16.687559,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.590496
+    },
+    {
+      "captureMs": 0.028986,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.247977,
+        0.064077,
+        0.013271,
+        0.007444
+      ],
+      "cpuRenderMs": 0.334381,
+      "cpuUpdateMs": 0.502172,
+      "debug": false,
+      "frameMs": 16.684695,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.29158
+    },
+    {
+      "captureMs": 0.034932,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.25285,
+        0.075881,
+        0.014011,
+        0.007899
+      ],
+      "cpuRenderMs": 0.352058,
+      "cpuUpdateMs": 0.543667,
+      "debug": false,
+      "frameMs": 16.685404,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.360552
+    },
+    {
+      "captureMs": 0.028795,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.256073,
+        0.064117,
+        0.011553,
+        0.007346
+      ],
+      "cpuRenderMs": 0.340394,
+      "cpuUpdateMs": 0.529108,
+      "debug": false,
+      "frameMs": 16.686818,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.336216
+    },
+    {
+      "captureMs": 0.028238,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.23825,
+        0.071017,
+        0.013063,
+        0.007544
+      ],
+      "cpuRenderMs": 0.331338,
+      "cpuUpdateMs": 0.531018,
+      "debug": false,
+      "frameMs": 16.692188,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.421551
+    },
+    {
+      "captureMs": 0.037693,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.245332,
+        0.066261,
+        0.013045,
+        0.007342
+      ],
+      "cpuRenderMs": 0.333501,
+      "cpuUpdateMs": 0.563146,
+      "debug": false,
+      "frameMs": 16.651418,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.415953
+    },
+    {
+      "captureMs": 0.04283,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.292091,
+        0.071356,
+        0.017386,
+        0.007235
+      ],
+      "cpuRenderMs": 0.38959,
+      "cpuUpdateMs": 0.621804,
+      "debug": false,
+      "frameMs": 16.662676,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.882625
+    },
+    {
+      "captureMs": 0.030711,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.2682,
+        0.073193,
+        0.014394,
+        0.008142
+      ],
+      "cpuRenderMs": 0.365524,
+      "cpuUpdateMs": 0.488085,
+      "debug": false,
+      "frameMs": 16.67041,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.378787
+    },
+    {
+      "captureMs": 0.032005,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.295898,
+        0.097492,
+        0.02054,
+        0.015333
+      ],
+      "cpuRenderMs": 0.431284,
+      "cpuUpdateMs": 0.507515,
+      "debug": false,
+      "frameMs": 16.621265,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.459294
+    },
+    {
+      "captureMs": 0.030821,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.243017,
+        0.069993,
+        0.013541,
+        0.007672
+      ],
+      "cpuRenderMs": 0.335805,
+      "cpuUpdateMs": 0.496748,
+      "debug": false,
+      "frameMs": 16.68676,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.41228
+    },
+    {
+      "captureMs": 0.027337,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.25032,
+        0.066021,
+        0.013421,
+        0.008455
+      ],
+      "cpuRenderMs": 0.339671,
+      "cpuUpdateMs": 0.488073,
+      "debug": false,
+      "frameMs": 16.666093,
+      "gpuPassMs": [
+        26.102239,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.450562
+    },
+    {
+      "captureMs": 0.028855,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.289219,
+        0.103569,
+        0.017519,
+        0.009247
+      ],
+      "cpuRenderMs": 0.421382,
+      "cpuUpdateMs": 0.509336,
+      "debug": false,
+      "frameMs": 16.74294,
+      "gpuPassMs": [
+        25.334583,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.400644
+    },
+    {
+      "captureMs": 0.045368,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.249197,
+        0.066591,
+        0.013238,
+        0.007175
+      ],
+      "cpuRenderMs": 0.337447,
+      "cpuUpdateMs": 0.585707,
+      "debug": false,
+      "frameMs": 16.656692,
+      "gpuPassMs": [
+        25.334583,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.68837
+    },
+    {
+      "captureMs": 0.039227,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.267019,
+        0.090095,
+        0.014578,
+        0.007834
+      ],
+      "cpuRenderMs": 0.381343,
+      "cpuUpdateMs": 0.393357,
+      "debug": false,
+      "frameMs": 16.7601,
+      "gpuPassMs": [
+        25.334583,
+        2.678385,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.039264
+    },
+    {
+      "captureMs": 0.028528,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.247973,
+        0.064899,
+        0.012003,
+        0.006692
+      ],
+      "cpuRenderMs": 0.333126,
+      "cpuUpdateMs": 0.510442,
+      "debug": false,
+      "frameMs": 16.581903,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.313412
+    },
+    {
+      "captureMs": 0.030809,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.31501,
+        0.157603,
+        0.019963,
+        0.009676
+      ],
+      "cpuRenderMs": 0.507186,
+      "cpuUpdateMs": 0.499157,
+      "debug": false,
+      "frameMs": 16.746111,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.359296
+    },
+    {
+      "captureMs": 0.03943,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.276415,
+        0.075677,
+        0.015628,
+        0.00851
+      ],
+      "cpuRenderMs": 0.377886,
+      "cpuUpdateMs": 0.575046,
+      "debug": false,
+      "frameMs": 16.690189,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.673539
+    },
+    {
+      "captureMs": 0.036985,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.282365,
+        0.097847,
+        0.025973,
+        0.008156
+      ],
+      "cpuRenderMs": 0.416333,
+      "cpuUpdateMs": 0.571521,
+      "debug": false,
+      "frameMs": 16.765782,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.448395
+    },
+    {
+      "captureMs": 0.023645,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.190293,
+        0.059025,
+        0.010361,
+        0.005802
+      ],
+      "cpuRenderMs": 0.266739,
+      "cpuUpdateMs": 0.393662,
+      "debug": false,
+      "frameMs": 16.57952,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 0.984945
+    },
+    {
+      "captureMs": 0.035907,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.278632,
+        0.162629,
+        0.015056,
+        0.009171
+      ],
+      "cpuRenderMs": 0.467509,
+      "cpuUpdateMs": 0.562996,
+      "debug": false,
+      "frameMs": 16.6747,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.676141
+    },
+    {
+      "captureMs": 0.041389,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.246678,
+        0.073551,
+        0.012656,
+        0.008503
+      ],
+      "cpuRenderMs": 0.343197,
+      "cpuUpdateMs": 0.583385,
+      "debug": false,
+      "frameMs": 16.667025,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        6.747031,
+        0.83927
+      ],
+      "ipcMs": 1.506972
+    },
+    {
+      "captureMs": 0.040599,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.269321,
+        0.168274,
+        0.017882,
+        0.007822
+      ],
+      "cpuRenderMs": 0.465671,
+      "cpuUpdateMs": 0.53449,
+      "debug": false,
+      "frameMs": 16.488283,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.474743
+    },
+    {
+      "captureMs": 0.054559,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.269588,
+        0.073819,
+        0.014621,
+        0.008445
+      ],
+      "cpuRenderMs": 0.368167,
+      "cpuUpdateMs": 0.5613,
+      "debug": false,
+      "frameMs": 16.681184,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.703196
+    },
+    {
+      "captureMs": 0.077205,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.390512,
+        0.141474,
+        0.023847,
+        0.010189
+      ],
+      "cpuRenderMs": 0.570208,
+      "cpuUpdateMs": 0.640893,
+      "debug": false,
+      "frameMs": 16.731629,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.995065
+    },
+    {
+      "captureMs": 0.054135,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.256831,
+        0.088311,
+        0.016354,
+        0.009252
+      ],
+      "cpuRenderMs": 0.372653,
+      "cpuUpdateMs": 0.593887,
+      "debug": false,
+      "frameMs": 16.733954,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.551045
+    },
+    {
+      "captureMs": 0.063655,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.31196,
+        0.096005,
+        0.020431,
+        0.012794
+      ],
+      "cpuRenderMs": 0.443816,
+      "cpuUpdateMs": 0.594717,
+      "debug": false,
+      "frameMs": 16.710472,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.664796
+    },
+    {
+      "captureMs": 0.032271,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.266452,
+        0.085145,
+        0.015904,
+        0.008367
+      ],
+      "cpuRenderMs": 0.377321,
+      "cpuUpdateMs": 0.538513,
+      "debug": false,
+      "frameMs": 16.667239,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.364216
+    },
+    {
+      "captureMs": 0.025092,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.202225,
+        0.064642,
+        0.010333,
+        0.006333
+      ],
+      "cpuRenderMs": 0.284787,
+      "cpuUpdateMs": 0.394432,
+      "debug": false,
+      "frameMs": 16.625647,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.085071
+    },
+    {
+      "captureMs": 0.037405,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.257113,
+        0.093266,
+        0.016483,
+        0.010452
+      ],
+      "cpuRenderMs": 0.379435,
+      "cpuUpdateMs": 0.526419,
+      "debug": false,
+      "frameMs": 16.696508,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.584044
+    },
+    {
+      "captureMs": 0.037238,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.281938,
+        0.078775,
+        0.015402,
+        0.007973
+      ],
+      "cpuRenderMs": 0.385619,
+      "cpuUpdateMs": 0.429715,
+      "debug": false,
+      "frameMs": 16.733403,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.118273
+    },
+    {
+      "captureMs": 0.034389,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.249446,
+        0.088426,
+        0.014873,
+        0.007783
+      ],
+      "cpuRenderMs": 0.361984,
+      "cpuUpdateMs": 0.567763,
+      "debug": false,
+      "frameMs": 16.738901,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.422589
+    },
+    {
+      "captureMs": 0.028645,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.185451,
+        0.05657,
+        0.010131,
+        0.005157
+      ],
+      "cpuRenderMs": 0.258563,
+      "cpuUpdateMs": 0.41882,
+      "debug": false,
+      "frameMs": 16.664482,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.181764
+    },
+    {
+      "captureMs": 0.03859,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.250306,
+        0.078466,
+        0.015015,
+        0.008556
+      ],
+      "cpuRenderMs": 0.354319,
+      "cpuUpdateMs": 0.506025,
+      "debug": false,
+      "frameMs": 16.715393,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.381148
+    },
+    {
+      "captureMs": 0.059554,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.257952,
+        0.076402,
+        0.016235,
+        0.009577
+      ],
+      "cpuRenderMs": 0.362424,
+      "cpuUpdateMs": 0.608025,
+      "debug": false,
+      "frameMs": 16.621687,
+      "gpuPassMs": [
+        25.334583,
+        2.737187,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.493542
+    },
+    {
+      "captureMs": 0.044955,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.256705,
+        0.08589,
+        0.017131,
+        0.008842
+      ],
+      "cpuRenderMs": 0.370636,
+      "cpuUpdateMs": 0.56412,
+      "debug": false,
+      "frameMs": 16.762344,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.231999
+    },
+    {
+      "captureMs": 0.047175,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.23181,
+        0.063377,
+        0.012769,
+        0.006381
+      ],
+      "cpuRenderMs": 0.31566,
+      "cpuUpdateMs": 0.540233,
+      "debug": false,
+      "frameMs": 16.683859,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.484257
+    },
+    {
+      "captureMs": 0.044601,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.243784,
+        0.07494,
+        0.013746,
+        0.006968
+      ],
+      "cpuRenderMs": 0.34096,
+      "cpuUpdateMs": 0.58737,
+      "debug": false,
+      "frameMs": 16.665996,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.463286
+    },
+    {
+      "captureMs": 0.026904,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.240105,
+        0.06643,
+        0.012278,
+        0.007343
+      ],
+      "cpuRenderMs": 0.327759,
+      "cpuUpdateMs": 0.505211,
+      "debug": false,
+      "frameMs": 16.672817,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.377179
+    },
+    {
+      "captureMs": 0.031979,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.241839,
+        0.081385,
+        0.012041,
+        0.007762
+      ],
+      "cpuRenderMs": 0.344598,
+      "cpuUpdateMs": 0.540408,
+      "debug": false,
+      "frameMs": 16.628903,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.375122
+    },
+    {
+      "captureMs": 0.049496,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.245701,
+        0.066333,
+        0.01386,
+        0.008402
+      ],
+      "cpuRenderMs": 0.336033,
+      "cpuUpdateMs": 0.76271,
+      "debug": false,
+      "frameMs": 16.737121,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.052301
+    },
+    {
+      "captureMs": 0.049802,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.266832,
+        0.081574,
+        0.013506,
+        0.007806
+      ],
+      "cpuRenderMs": 0.370911,
+      "cpuUpdateMs": 0.609577,
+      "debug": false,
+      "frameMs": 16.683677,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.66158
+    },
+    {
+      "captureMs": 0.032197,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.254772,
+        0.075827,
+        0.013339,
+        0.008497
+      ],
+      "cpuRenderMs": 0.353593,
+      "cpuUpdateMs": 0.500802,
+      "debug": false,
+      "frameMs": 16.653879,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.510822
+    },
+    {
+      "captureMs": 0.029827,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.263145,
+        0.082989,
+        0.013808,
+        0.007246
+      ],
+      "cpuRenderMs": 0.368779,
+      "cpuUpdateMs": 0.50434,
+      "debug": false,
+      "frameMs": 16.612997,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.499999
+    },
+    {
+      "captureMs": 0.031044,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.238335,
+        0.076883,
+        0.013068,
+        0.006886
+      ],
+      "cpuRenderMs": 0.336637,
+      "cpuUpdateMs": 0.53911,
+      "debug": false,
+      "frameMs": 16.627384,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        7.40776,
+        0.838906
+      ],
+      "ipcMs": 1.312797
+    },
+    {
+      "captureMs": 0.032747,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.23416,
+        0.251189,
+        0.017623,
+        0.009176
+      ],
+      "cpuRenderMs": 0.516285,
+      "cpuUpdateMs": 0.555526,
+      "debug": false,
+      "frameMs": 16.667771,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        6.438229,
+        0.844322
+      ],
+      "ipcMs": 1.430387
+    },
+    {
+      "captureMs": 0.034277,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.240331,
+        0.07078,
+        0.013678,
+        0.007708
+      ],
+      "cpuRenderMs": 0.33409,
+      "cpuUpdateMs": 0.528996,
+      "debug": false,
+      "frameMs": 16.668041,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        6.438229,
+        0.844322
+      ],
+      "ipcMs": 1.41413
+    },
+    {
+      "captureMs": 0.039176,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.332269,
+        0.090498,
+        0.019026,
+        0.009435
+      ],
+      "cpuRenderMs": 0.456771,
+      "cpuUpdateMs": 0.540372,
+      "debug": false,
+      "frameMs": 16.752268,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        6.438229,
+        0.844322
+      ],
+      "ipcMs": 1.481227
+    },
+    {
+      "captureMs": 0.030963,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.251959,
+        0.066866,
+        0.015349,
+        0.008351
+      ],
+      "cpuRenderMs": 0.34376,
+      "cpuUpdateMs": 0.530331,
+      "debug": false,
+      "frameMs": 16.761829,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        6.438229,
+        0.844322
+      ],
+      "ipcMs": 1.431857
+    },
+    {
+      "captureMs": 0.034906,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.266266,
+        0.069551,
+        0.014217,
+        0.007736
+      ],
+      "cpuRenderMs": 0.359251,
+      "cpuUpdateMs": 0.501172,
+      "debug": false,
+      "frameMs": 16.669511,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        6.438229,
+        0.844322
+      ],
+      "ipcMs": 1.396354
+    },
+    {
+      "captureMs": 0.037966,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.281404,
+        0.093034,
+        0.014831,
+        0.007853
+      ],
+      "cpuRenderMs": 0.398519,
+      "cpuUpdateMs": 0.521203,
+      "debug": false,
+      "frameMs": 16.643242,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        6.438229,
+        0.844322
+      ],
+      "ipcMs": 1.468983
+    },
+    {
+      "captureMs": 0.04559,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.283437,
+        0.071812,
+        0.014552,
+        0.007997
+      ],
+      "cpuRenderMs": 0.379503,
+      "cpuUpdateMs": 0.562378,
+      "debug": false,
+      "frameMs": 16.691116,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        6.438229,
+        0.844322
+      ],
+      "ipcMs": 1.663507
+    },
+    {
+      "captureMs": 0.043282,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.234679,
+        0.089326,
+        0.012804,
+        0.007021
+      ],
+      "cpuRenderMs": 0.345064,
+      "cpuUpdateMs": 0.534766,
+      "debug": false,
+      "frameMs": 16.636294,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        6.438229,
+        0.844322
+      ],
+      "ipcMs": 1.448765
+    },
+    {
+      "captureMs": 0.028339,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.254764,
+        0.067375,
+        0.013688,
+        0.007556
+      ],
+      "cpuRenderMs": 0.344657,
+      "cpuUpdateMs": 0.498501,
+      "debug": false,
+      "frameMs": 16.669461,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        6.438229,
+        0.844322
+      ],
+      "ipcMs": 1.328171
+    },
+    {
+      "captureMs": 0.029985,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.306995,
+        0.103635,
+        0.019228,
+        0.009715
+      ],
+      "cpuRenderMs": 0.441308,
+      "cpuUpdateMs": 0.488771,
+      "debug": false,
+      "frameMs": 16.745445,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        6.438229,
+        0.844322
+      ],
+      "ipcMs": 1.320442
+    },
+    {
+      "captureMs": 0.052351,
+      "collisionTriangles": 3886,
+      "cpuPassMs": [
+        0.282905,
+        0.076444,
+        0.014555,
+        0.009219
+      ],
+      "cpuRenderMs": 0.384784,
+      "cpuUpdateMs": 0.540382,
+      "debug": false,
+      "frameMs": 16.693483,
+      "gpuPassMs": [
+        25.640468,
+        2.796718,
+        6.438229,
+        0.844322
+      ],
+      "ipcMs": 1.482491
+    }
+  ]
+}

@@ -14,6 +14,8 @@ def acceptance(logs,recorded,children,check):
                 if result:return result
             except (OSError,subprocess.SubprocessError,ValueError,KeyError):pass
             time.sleep(.1)
+        try:(logs/'regression-failure-ui.json').write_text(json.dumps(status(),indent=2))
+        except Exception:pass
         (logs/'regression-failure-camera.json').write_text(json.dumps(s.camera(),indent=2))
         (logs/'regression-failure-clients.json').write_text(s.ctl('clients','-j'))
         (logs/'regression-failure-monitors.json').write_text(s.ctl('monitors','-j'))
@@ -87,6 +89,42 @@ def acceptance(logs,recorded,children,check):
     check('capture_files_private',capture_json.stat().st_mode&0o777==0o600 and png.stat().st_mode&0o777==0o600)
     (logs/'round2-capture.json').write_text(json.dumps(dump,indent=2)+'\n')
     keys('-k','y');wait(lambda:not s.camera()['debug']);check('Y_core_debug_disabled',True)
+    check('area_markers_default_off',not s.camera()['overlays']['areaMarkers'])
+    ui('select',0);ui('routeTo',0)
+    wait(lambda:s.camera()['overlays']['routeSegments']>0)
+    ui('overlayStyle');wait(lambda:s.camera()['overlayStyle']['waypointColor']==[1,0,0])
+    check('lease_owned_theme_hook_applies_live',True)
+    before=s.camera()['yaw'];pointer(25,0)
+    aligned=wait(lambda:s.camera() if abs(s.camera()['overlays']['heading']-s.camera()['yaw'])<.001 and s.camera()['yaw']>before+.04 else None)
+    check('core_markers_use_frame_camera',abs(aligned['overlays']['heading']-aligned['yaw'])<.001)
+    config['show_area_markers']=True;temp.write_text(json.dumps(config));temp.replace(input_path)
+    wait(lambda:s.camera()['overlays']['areaMarkers']);check('area_markers_option_reloads',True)
+    config['show_area_markers']=False;temp.write_text(json.dumps(config));temp.replace(input_path)
+    wait(lambda:not s.camera()['overlays']['areaMarkers'])
+    if os.environ.get('HYPRUNE_NESTED_4K')=='1':
+        output=next(m for m in json.loads(s.ctl('monitors','-j')) if m['name']=='HEADLESS-1')
+        assert (output['width'],output['height'])==(3840,2160),'4K test needs actual 4K FBO'
+        time.sleep(2);samples=[]
+        for n in range(80):
+            pointer(1 if n%2 else -1,0);samples.append(s.camera()['timings'])
+        (logs/'4k-profile.json').write_text(json.dumps({'resolution':[3840,2160],'world':'Lumen Reach','debug':False,'samples':samples},indent=2)+'\n')
+        check('4K_core_cpu_gpu_profile',all(v['cpuRenderMs']>0 for v in samples))
+        check('core_GPU_queue_is_bounded',all(v['inFlight']<=2 for v in samples))
+        check('auto_Intel_quality_applied_on_world_load',all('Intel' not in v['renderer'] or (v['quality']=='intel' and v['msaaSamples']<=2) for v in samples))
+    def capture_in(mode):
+        previous=time.time();keys('-M','logo','-P','Super_L','-k','u','-p','Super_L','-m','logo')
+        result=wait(lambda:next((p for p in capture_dir.glob('capture-*.json') if p.stat().st_mtime>=previous),None),20)
+        assert json.loads(result.read_text())['mode']==mode
+        return result
+    keys('-k','e');wait(lambda:s.camera()['mode']=='typing')
+    capture_in('interactive');check('U_works_in_window_interactive_mode',True)
+    chord();wait(lambda:s.camera()['mode']=='movement')
+    keys('-k','f');wait(lambda:s.camera()['fullscreen']==2)
+    keys('-k','F3');wait(lambda:s.camera()['debug'])
+    focused_capture=capture_in('focus');focused_dump=json.loads(focused_capture.read_text())
+    check('F3_and_U_work_in_native_focus',focused_dump['frame']['source']=='last-completed-world-frame' and focused_dump['frame']['ageMs']>=0)
+    chord();wait(lambda:s.camera()['fullscreen']==0)
+    keys('-k','F3');wait(lambda:not s.camera()['debug'])
     # A native top layer represents the owner's launcher/bar. It must receive
     # ordinary pointer input, while hidden desktop clients remain masked.
     marker=logs/'layer-clicked';marker.unlink(missing_ok=True)
@@ -127,7 +165,7 @@ ShellRoot {
             ui('tab',tab);time.sleep(.12)
             assert status()['tab']==tab and status()['director']
     check('Workspaces_and_Help_repeat_without_Qt_crash',qpid()==original_pid)
-    keys('-k','u');wait(lambda:any(p.stat().st_mtime>capture_json.stat().st_mtime for p in capture_dir.glob('capture-*.json')))
+    keys('-M','logo','-P','Super_L','-k','u','-p','Super_L','-m','logo');wait(lambda:any(p.stat().st_mtime>capture_json.stat().st_mtime for p in capture_dir.glob('capture-*.json')))
     check('U_works_in_Director_menu',True)
     ui('tab',4)
     # Exercise Quickshell's own crash supervisor: the replacement QML PID must
