@@ -119,7 +119,7 @@ def plugin_paths(s):
 def choose_bind(binds):
     # binds -j omits ignoreMods in 0.56: reserve matching keys across all
     # modifier masks/submaps instead of guessing. Include XKB and evdev codes.
-    for key, code in [('N', 57), ('F10', 76), ('F11', 95), ('F8', 74)]:
+    for key, code in [('H', 43), ('N', 57), ('F10', 76), ('F11', 95), ('F8', 74)]:
         if not any(b.get('key', '').lower() == key.lower() or b.get('keycode') in (code, code-8) or
                    b.get('key') in ('code:'+str(code), 'code:'+str(code-8)) or b.get('multiKey') or
                    '&' in b.get('key', '') or b.get('catch_all') for b in binds):
