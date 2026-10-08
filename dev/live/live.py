@@ -175,6 +175,7 @@ def preflight(args):
     print('Toggle candidate:', choose_bind(query(s, 'binds')), '(rechecked after old-plugin unload)')
     print('up will: record private recovery state; unload only hypr3d; stop only its -p .../quickshell/hypr3d HUD; copy/load core from a unique path;\n'
           'start its private helper and detached logged shell with in-memory grants; load/activate Lumen Reach; add one free runtime toggle.\n'
+          'Core switches the chosen output to its configured world workspace (default 8), floating new room clients before layout; exit restores the prior workspace.\n'
           'Core materializes default input.json in a private runtime test directory. No installed config is edited.\n'
           'Hyprland itself re-evaluates Lua on plugin load/unload; no explicit reload command is issued.\n'
           'down removes that bind, exits/shows cursor after the frame, unloads core, stops only recorded test processes, restores old plugin/HUD.')

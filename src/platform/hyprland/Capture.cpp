@@ -32,6 +32,12 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                       const sim::Camera *camera) {
     std::erase_if(entries, [&](Entry &e) {
         bool remove = !e.window || !e.window->m_isMapped || e.window->m_monitor != monitor;
+        if (!remove && e.parentId.empty() && e.window->m_workspace && e.window->m_workspace->m_id != worldWorkspace &&
+            layout) {
+            auto identity = e.instance;
+            identity.workspaceId = e.window->m_workspace->m_id;
+            remove = !layout->binding(identity.workspaceId, world) && !layout->hasPlacement(identity, world);
+        }
         if (remove && e.window && e.window->m_isMapped) {
             auto ws = e.window->m_workspace;
             e.window->setSuspended(ws && !ws->isVisible());
@@ -56,11 +62,12 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             knownWindows_.push_back(w);
         auto remembered = std::find_if(adoptedWindows_.begin(), adoptedWindows_.end(),
                                        [&](auto &v) { return v.window == w && world && v.worldId == world->id; });
-        auto existing = std::find_if(entries.begin(), entries.end(), [&](auto &e) { return e.window == w; });
         surfaces::Instance identity{"", w->m_class, w->m_title, w->m_workspace ? int(w->m_workspace->m_id) : 0};
-        if (!attached && world && !world->areas.empty() && existing == entries.end() && !newlyMapped && layout &&
-            !layout->binding(identity.workspaceId, world) && !layout->hasPlacement(identity, world) &&
-            remembered == adoptedWindows_.end())
+        // Only the dedicated room is adopted implicitly. Authored workspace
+        // walls/mounts remain available without changing their native layout.
+        const bool inRoom = identity.workspaceId == worldWorkspace;
+        if (!attached && !inRoom &&
+            (!layout || (!layout->binding(identity.workspaceId, world) && !layout->hasPlacement(identity, world))))
             continue;
         auto surface = w->resource();
         auto texture = surface->m_current.texture;
@@ -91,9 +98,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 e.surface.center = {-3.8f, 2, -2};
             if (i == 2)
                 e.surface.center = {3.8f, 2, -2};
-            if (!attached && camera && world &&
-                ((spawnNew && newlyMapped) ||
-                 (remembered != adoptedWindows_.end() && layout && !layout->freePoses.contains(e.surface.id)))) {
+            if (!attached && inRoom && camera && world && (!layout || !layout->freePoses.contains(e.surface.id))) {
                 e.surface.yaw = -camera->yaw;
                 e.surface.center = camera->position + camera->forward() * spawnDistance;
                 if (auto wall = interaction::raycast(camera->position, camera->forward(), world->collision,

@@ -1,0 +1,16 @@
+{
+  "protocol": "0.8",
+  "hold": {
+    "first": 0.09726015670137328,
+    "second": 0.26430453767740725,
+    "cancelled": true,
+    "fired": true
+  },
+  "graphics": {
+    "persisted": {
+      "bloom": "off",
+      "quality": "ultra"
+    },
+    "via": "Settings ComboBox real nested keyboard events"
+  }
+}

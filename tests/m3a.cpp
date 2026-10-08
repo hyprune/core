@@ -11,6 +11,17 @@ int main() {
     assert(interaction::limitSpawnDistance(interaction::limitSpawnDistance(5, 4), 1) == near);
 
     auto c = interaction::defaultConfig();
+    assert(c["windows"]["world_workspace"] == 8);
+    assert(interaction::configPatch(c, {{"windows", {{"world_workspace", 18}}}})["windows"]["world_workspace"] == 18);
+    for (auto value : {world::Json(0), world::Json(-1), world::Json(8.5), world::Json(1000000), world::Json("8")}) {
+        bool rejected = false;
+        try {
+            interaction::configPatch(c, {{"windows", {{"world_workspace", value}}}});
+        } catch (...) {
+            rejected = true;
+        }
+        assert(rejected);
+    }
     assert(interaction::configPatch(c, {{"player", {{"walk_speed", 4.0}}}})["player"]["walk_speed"] == 4);
     for (auto patch :
          {world::Json{{"player", {{"walk_speed", -1}}}}, world::Json{{"player", {{"wat", 2}}}},

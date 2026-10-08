@@ -1,0 +1,136 @@
+{
+  "baseline_tiled": true,
+  "default_room_8_on_selected_output": true,
+  "launch_is_floating_on_room": {
+    "address": "0x55f2bb018400",
+    "mapped": true,
+    "hidden": false,
+    "visible": true,
+    "acceptsInput": true,
+    "at": [
+      1600,
+      0
+    ],
+    "size": [
+      1920,
+      1080
+    ],
+    "workspace": {
+      "id": 8,
+      "name": "8"
+    },
+    "floating": true,
+    "monitor": 1,
+    "class": "room-regression",
+    "title": "Room-keybind",
+    "initialClass": "room-regression",
+    "initialTitle": "Room-keybind",
+    "pid": 2024008,
+    "xwayland": false,
+    "pinned": false,
+    "pinFullscreened": false,
+    "fullscreen": 0,
+    "fullscreenClient": 0,
+    "fullscreenHandler": "default",
+    "allowedOverFullscreen": true,
+    "grouped": [],
+    "tags": [],
+    "swallowing": "0x0",
+    "focusHistoryID": 0,
+    "inhibitingIdle": false,
+    "xdgTag": "",
+    "xdgDescription": "",
+    "contentType": "none",
+    "tearingHint": false,
+    "stableId": "18000004"
+  },
+  "floating_at_initial_map_before_capture": true,
+  "launch_adopted_clear_of_geometry": {
+    "collision": false,
+    "commits": 1,
+    "floating": true,
+    "id": "surface-1",
+    "parentId": "",
+    "pixels": [
+      1920,
+      1080
+    ],
+    "position": [
+      -8.0,
+      1.7000000476837158,
+      7.0
+    ],
+    "rotation": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "size": [
+      3.8400001525878906,
+      2.1600000858306885
+    ],
+    "title": "Room-keybind",
+    "visible": true
+  },
+  "other_workspace_geometry_unchanged": true,
+  "other_workspace_not_adopted": true,
+  "other_workspace_launch_stays_tiled": true,
+  "other_workspace_launch_not_adopted": true,
+  "explicit_workspace_rule_stays_tiled": {
+    "address": "0x55f2bbab2300",
+    "mapped": true,
+    "hidden": false,
+    "visible": true,
+    "acceptsInput": true,
+    "at": [
+      2567,
+      12
+    ],
+    "size": [
+      941,
+      1056
+    ],
+    "workspace": {
+      "id": 12,
+      "name": "12"
+    },
+    "floating": false,
+    "monitor": 1,
+    "class": "room-regression",
+    "title": "Redirected-room",
+    "initialClass": "room-regression",
+    "initialTitle": "Redirected-room",
+    "pid": 2024104,
+    "xwayland": false,
+    "pinned": false,
+    "pinFullscreened": false,
+    "fullscreen": 0,
+    "fullscreenClient": 0,
+    "fullscreenHandler": "default",
+    "allowedOverFullscreen": true,
+    "grouped": [],
+    "tags": [],
+    "swallowing": "0x0",
+    "focusHistoryID": 4,
+    "inhibitingIdle": false,
+    "xdgTag": "",
+    "xdgDescription": "",
+    "contentType": "none",
+    "tearingHint": false,
+    "stableId": "18000006"
+  },
+  "exit_returns_previous_workspace": true,
+  "reenter_returns_room": true,
+  "adopted_identity_survives_toggle": true,
+  "scoped_float_policy_survives_reload": true,
+  "float_policy_disabled_on_exit": true,
+  "configured_room": true,
+  "configured_room_floats": true,
+  "workspace_focus_exit_returns_room": true,
+  "toggle_from_focus_exits_and_restores": true,
+  "active_workspace_config_is_deferred": true,
+  "configured_room_return": true,
+  "next_activation_uses_changed_room": true,
+  "unload_restores_workspace_and_removes_listener": true
+}

@@ -47,7 +47,8 @@ def acceptance(logs,recorded,children,check):
     s.ctl('eval','hl.bind("SUPER + Return",hl.dsp.exec_cmd("kitty --start-as normal --class hyprune-live-regression --title Live-launch-regression"))')
     keys('-M','logo','-P','Super_L','-s','40','-k','Return','-s','150','-p','Super_L','-m','logo')
     window=wait(lambda:next((v for v in s.camera()['captures'] if v['title']=='Live-launch-regression' and v['visible']),None))
-    check('terminal_keybind_adopted_on_unbound_workspace',window['visible'] and not window['collision'])
+    native=next(w for w in json.loads(s.ctl('clients','-j')) if w['title']=='Live-launch-regression')
+    check('terminal_keybind_floating_on_world_workspace',window['visible'] and not window['collision'] and native['floating'] and native['workspace']['id']==s.camera()['worldWorkspace'])
     camera=s.camera();delta=[window['position'][i]-camera['position'][i] for i in range(3)]
     forward=[math.sin(camera['yaw'])*math.cos(camera['pitch']),math.sin(camera['pitch']),-math.cos(camera['yaw'])*math.cos(camera['pitch'])]
     depth=sum(delta[i]*forward[i] for i in range(3))

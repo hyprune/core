@@ -1,0 +1,37 @@
+{
+  "protocol": "0.8",
+  "exclusiveOverlays": [
+    {
+      "exclusiveInput": true,
+      "outputId": "output-1",
+      "visible": true
+    }
+  ],
+  "placement": {
+    "worldId": "com.hyprune.lumen-reach",
+    "areaId": "sun-court",
+    "anchorId": "",
+    "rule": {
+      "appClass": "protocol-pose-fixture",
+      "title": "Saved user mount"
+    },
+    "pose": {
+      "position": [
+        0,
+        2,
+        1
+      ],
+      "rotation": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "size": [
+      1.4,
+      0.8
+    ]
+  },
+  "shellAcceptance": "HoldRing progress/cancel/fire, Settings real dropdowns"
+}

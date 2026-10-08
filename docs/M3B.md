@@ -163,11 +163,27 @@ pair into gallery/videos. The gallery autocommit watcher is never signalled.
 
 ## Supervised live follow-up (2026-10-08)
 
-The world adopts newly mapped toplevels on its output while active. Their native
-workspace stays unchanged; there is no owned room workspace or monitor switch.
-Adopted clients keep their identity/pose across toggles while they remain mapped.
-Existing desktop windows are baselined at activation rather than silently
-imported. New windows receive an ephemeral free pose, the nearest/current home
+The world uses dedicated workspace **8** on its output (configurable through
+`hl.plugin.hyprune.config({windows={world_workspace=8}})`, integer 1–999999).
+Activation remembers the output's prior workspace and enters the room; exit
+restores the prior workspace. Workspace switches run outside rendering in the
+existing deferred input/tick path. Direct plugin unload completes restoration
+synchronously outside the render pass so no callback points into an unloaded
+library. An open special workspace is hidden for entry and restored on exit.
+Changing the room setting while active takes effect at the next activation.
+
+The core's `window.openEarly` listener checks the final workspace after native
+rules/launch tokens resolve, then sets the initial floating flag before Hyprland
+inserts the client into a layout. It runs only while active, survives config
+reload, and is removed on unload. A static workspace float rule was rejected:
+Hyprland matches it before workspace redirects, leaking float state to other
+workspaces (reproduced in nested). No runtime rule or installed config is written. Other workspaces
+remain tiled and are not implicitly adopted; authored workspace walls and mounts
+still capture their explicitly associated clients. E/F exit returns native focus
+to the room; the world toggle exits fully even from workspace focus.
+
+Room clients keep their identity/pose across toggles while they remain mapped.
+New windows receive an ephemeral free pose, the nearest/current home
 (or their explicit workspace home), full-rectangle free-zone clearance and M2
 OBB recovery. If no home zone can fit the window safely in the current view (including arrival
 outside a home), it falls back to safe
@@ -489,8 +505,8 @@ Supervised live checklist additions (not exercised against the owner's session):
   selected preset, per-pass costs, new/reused frame counts and native-size PNG.
 
 
-Live shell graphics handoff: launch IPC 0.7 with shell 36cb85f. IPC 0.8 adds
-hold timing without cursor changes. Supervised checklist: E enters virtual
+Live shell handoff: the supervised launcher now uses IPC 0.8 with shell 98b677a
+or later, including graphics controls and animated hold timing. Supervised checklist: E enters virtual
 cursor typing; Super+Tab exits to reticle; TAB hold enters Director cursor;
 release before threshold stays reticle. Timing publication itself never moves,
 shows, hides or changes the shape of a cursor.
@@ -508,3 +524,35 @@ Supervised live test checklist — review audit additions:
 
 All automated cursor checks use a nested software cursor. Hardware behavior
 still requires the owner's supervised test; no live session was changed.
+
+
+Supervised live test checklist — dedicated workspace and IPC 0.8:
+
+- [ ] Enter from the usual desktop: only the world output switches to workspace
+  8 (or the configured ID); desktop cursor becomes the world reticle after the
+  frame. The previous desktop's tiled clients retain their layout.
+- [ ] Super+Enter opens a floating terminal on workspace 8, visible in front of
+  the player and clear of geometry. Launching on another workspace stays tiled.
+- [ ] E/F into a workspace wall: native focus/cursor handover as before;
+  Super+Tab/Back restores workspace 8 and the world reticle after the frame.
+- [ ] TAB hold animates the ring and opens the Director with exclusive input;
+  Escape closes it and restores the world reticle. Graphics Settings persists.
+- [ ] Toggle off from the world or workspace fullscreen: restore the remembered
+  workspace (and previous special workspace), focus and desktop cursor; toggle
+  back in returns to the room. `down` disables the floating policy and removes the listener on unload.
+
+Nested regression: `flock /tmp/worldshell-nested.lock python3 dev/nested/world_workspace.py`
+tests keybind launches, unchanged tiled geometry,
+room identity/placement round-trips, configurable room IDs, focus exit, floating policy
+survival after reload, and cleanup on deactivation/direct unload. The separate
+`protocol_acceptance.py` runs the current shell's hold/graphics checks plus
+exclusive Director input and persisted placement-pose projection. No new custom
+cursor operations were added; workspace-triggered native operations use the
+existing deferred lifecycle. Hardware cursor verification remains supervised.
+
+Validation for the dedicated-room change: 9/9 CTests, 10 live-tool unit tests,
+23 nested workspace assertions, 26 nested live-tool/recovery assertions, and
+shell 98b677a IPC 0.8 hold/Director/graphics acceptance all pass. The live-tool
+run includes helper SIGKILL and idempotent TTY cleanup. Raw evidence is under
+`docs/evidence/protocol-workspace/`. All nested lifetimes held the shared flock;
+no owner-session mutation or gallery watcher control occurred.

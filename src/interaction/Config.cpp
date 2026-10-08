@@ -5,37 +5,41 @@
 namespace hyprune::interaction {
 using Json = world::Json;
 Json defaultConfig() {
-    return {
-        {"input",
-         {{"typing_button", 275},
-          {"carry_button", 272},
-          {"resize_button", 273},
-          {"roll_button", 274},
-          {"typing_cursor", true},
-          {"bindings",
-           {{"forward", "w"},
-            {"back", "s"},
-            {"left", "a"},
-            {"right", "d"},
-            {"jump", "space"},
-            {"down", "Control_L"},
-            {"focus", "f"},
-            {"noclip", "v"},
-            {"fly", "F4"},
-            {"zoom", "c"}}}}},
-        {"player",
-         {{"walk_speed", 3.5},
-          {"fly_speed", 5.0},
-          {"run_multiplier", 1.8},
-          {"jump_speed", 5.0},
-          {"look_sensitivity", .0025},
-          {"look_inertia", .03},
-          {"move_inertia", .05},
-          {"step_height", .35},
-          {"respawn_below", 30.0}}},
-        {"windows", {{"spawn_distance", 5.0}, {"scale", .002}, {"wheel_factor", 1.06}, {"transition_seconds", .35}}},
-        {"tools", {{"enabled", true}, {"slots", Json::array({"pointer", "mount", "path", "path", "path"})}}},
-        {"graphics", render::graphicsDefaults()}};
+    return {{"input",
+             {{"typing_button", 275},
+              {"carry_button", 272},
+              {"resize_button", 273},
+              {"roll_button", 274},
+              {"typing_cursor", true},
+              {"bindings",
+               {{"forward", "w"},
+                {"back", "s"},
+                {"left", "a"},
+                {"right", "d"},
+                {"jump", "space"},
+                {"down", "Control_L"},
+                {"focus", "f"},
+                {"noclip", "v"},
+                {"fly", "F4"},
+                {"zoom", "c"}}}}},
+            {"player",
+             {{"walk_speed", 3.5},
+              {"fly_speed", 5.0},
+              {"run_multiplier", 1.8},
+              {"jump_speed", 5.0},
+              {"look_sensitivity", .0025},
+              {"look_inertia", .03},
+              {"move_inertia", .05},
+              {"step_height", .35},
+              {"respawn_below", 30.0}}},
+            {"windows",
+             {{"world_workspace", 8},
+              {"spawn_distance", 5.0},
+              {"scale", .002},
+              {"wheel_factor", 1.06},
+              {"transition_seconds", .35}}},
+            {"tools", {{"enabled", true}, {"slots", Json::array({"pointer", "mount", "path", "path", "path"})}}},
+            {"graphics", render::graphicsDefaults()}};
 }
 Json configPatch(const Json &current, const Json &patch) {
     if (!patch.is_object())
@@ -90,6 +94,12 @@ Json configPatch(const Json &current, const Json &patch) {
                     max = 767;
                     if (!v.is_number_integer())
                         throw std::runtime_error("typing_button must be an evdev integer");
+                }
+                if (key == "world_workspace") {
+                    min = 1;
+                    max = 999999;
+                    if (!v.is_number_integer())
+                        throw std::runtime_error("world_workspace must be a positive integer");
                 }
                 if (key == "target_fps") {
                     min = 30;

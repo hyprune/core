@@ -429,3 +429,23 @@ Validation: 9/9 CTests. Under the nested flock,
 HoldRing progress/cancel/fire, Director exclusive input, real Settings dropdowns
 and persisted graphics, and native `placements.list` retaining a saved pose.
 No cursor implementation changes; existing deferred Director transitions apply.
+
+
+## Dedicated room workspace (supersedes monitor-wide adoption)
+
+The world now enters native workspace 8 on its selected output, remembering and
+restoring the prior workspace on deactivation. `windows.world_workspace` in the
+Lua config selects another positive ID (1–999999), effective on next activation.
+An active-only `window.openEarly` listener sets the initial floating flag after
+native workspace redirects resolve, before insertion into a layout. There is no
+runtime rule to leak to redirected clients or leave behind; unloading removes the
+listener. No compositor config edits are needed.
+Only room clients are implicitly adopted and spawned; other workspaces retain
+their layouts. Explicit workspace-wall/mount clients remain supported. Exiting
+E/F restores the room; toggling off from focus restores the pre-world workspace.
+The Director's existing native workspace/app inventory naturally includes the
+room. No new wire fields, SDK types or schema version are introduced: room
+selection is compositor setup, not an input or graphics setting. Existing
+`workspace.bind` still assigns real workspaces to authored area walls; it does
+not choose the room. Do not bind a room as a workspace wall merely to adopt apps.
+See M3B's updated lifecycle and supervised cursor checklist.

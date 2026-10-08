@@ -79,6 +79,7 @@ core-owned controls. Keys in `input.bindings` are XKB symbol names.
 | player.move_inertia | 0.05 | 0–1 seconds exponential movement easing; 0 immediate |
 | player.step_height | 0.35 | 0–0.5 metres; 0 disables discrete step-up |
 | player.respawn_below | 30 | 0–100 metres below spawn eye; 0 disables |
+| windows.world_workspace | 8 | Integer 1–999999; dedicated native room, applies on next activation |
 | windows.spawn_distance | 5 | 0.2–50 metres in front of player, geometry-clamped |
 | windows.scale | 0.002 | 0.0001–0.02 metres/logical pixel for new free windows |
 | windows.wheel_factor | 1.06 | 1.001–1.5 multiplicative distance/zoom step |

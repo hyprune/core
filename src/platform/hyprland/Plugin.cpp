@@ -182,6 +182,10 @@ struct Runtime {
     std::unique_ptr<ipc::Bridge> ipc;
     PHLMONITORREF monitor;
     PHLWINDOWREF savedFocus;
+    // Hold the return workspace alive even when it becomes empty/hidden.
+    PHLWORKSPACE previousWorkspace, previousSpecialWorkspace;
+    int worldWorkspace = 0;
+    void returnToWorldWorkspace();
     bool active = false, typing = false, loading = false, loadCancelled = false;
     int renderDepth = 0;
     std::future<std::shared_ptr<world::World>> pendingWorld;
@@ -499,6 +503,7 @@ void Runtime::refresh() {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         capture.spawnDistance = config["windows"]["spawn_distance"];
         capture.windowScale = config["windows"]["scale"];
+        capture.worldWorkspace = worldWorkspace;
         capture.refresh(monitor.lock(), world.get(), &layout, &camera);
         // Configure after the capture iteration completes: native layout changes
         // may reorder the compositor's window list or invoke other plugin hooks.
@@ -513,9 +518,8 @@ void Runtime::refresh() {
                 for (const auto &entry : runtime->capture.entries)
                     if (entry.window == w && !entry.parentId.empty())
                         return;
-                auto floated = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_ENABLE, w);
-                if (!floated)
-                    throw std::runtime_error("spawn float rejected: " + floated.error().message);
+                if (!w->m_workspace || w->m_workspace->m_id != runtime->worldWorkspace || !w->m_isFloating)
+                    return; // Never resize/float clients on other workspaces.
                 auto resized = Config::Actions::resize(logical, false, w);
                 if (!resized)
                     throw std::runtime_error("spawn resize rejected: " + resized.error().message);
@@ -563,6 +567,7 @@ void Runtime::unfocus() {
         handover.phase = 2;
     }
     layout.desktop = nullptr;
+    returnToWorldWorkspace();
     typing = false;
     keys.clear();
     smoothIntent = {};
@@ -901,12 +906,27 @@ void Runtime::finishLoad() {
     }
 }
 
+void Runtime::returnToWorldWorkspace() {
+    if (renderDepth)
+        throw std::runtime_error("workspace switch inside render pass");
+    if (!active || !monitor || !worldWorkspace)
+        return;
+    auto room = State::workspaceState()->query().id(worldWorkspace).run();
+    if (!room)
+        room = State::workspaceState()->create(worldWorkspace, monitor->m_id);
+    if (room->m_monitor != monitor) {
+        auto result = Config::Actions::moveToMonitor(room, monitor.lock());
+        if (!result)
+            throw std::runtime_error("cannot place world workspace: " + result.error().message);
+    }
+    Desktop::focusState()->rawMonitorFocus(monitor.lock());
+    monitor->changeWorkspace(room, false, true);
+}
+
 void Runtime::toggle(const std::string &output) {
+    if (renderDepth)
+        throw std::runtime_error("world toggle inside render pass");
     if (active) {
-        if (!layout.desktop.is_null()) {
-            unfocus();
-            return;
-        }
         exit();
         return;
     }
@@ -932,7 +952,21 @@ void Runtime::toggle(const std::string &output) {
     monitor = chosen;
     control.outputId = "output-" + std::to_string(chosen->m_id);
     savedFocus = Desktop::focusState()->window();
+    previousWorkspace = chosen->m_activeWorkspace;
+    previousSpecialWorkspace = chosen->m_activeSpecialWorkspace;
+    worldWorkspace = config["windows"]["world_workspace"];
     active = true;
+    try {
+        if (chosen->m_activeSpecialWorkspace)
+            chosen->setSpecialWorkspace(nullptr);
+        returnToWorldWorkspace();
+    } catch (...) {
+        active = false;
+        worldWorkspace = 0;
+        previousWorkspace.reset();
+        previousSpecialWorkspace.reset();
+        throw;
+    }
     savedCursorHidden = !g_pHyprRenderer->shouldRenderCursor();
     cursorHidden = savedCursorHidden;
     capture.spawnNew = false;
@@ -948,6 +982,8 @@ void Runtime::toggle(const std::string &output) {
     publish();
 }
 void Runtime::exit() {
+    if (renderDepth)
+        throw std::runtime_error("world exit inside render pass");
     if (loading)
         loadCancelled = true;
     if (!active)
@@ -975,6 +1011,17 @@ void Runtime::exit() {
     keys.clear();
     cancelGrab();
     capture.release();
+    // Normal exits run in doLater. Unload runs outside any render pass and must
+    // finish synchronously: no callback into an unloaded .so may survive it.
+    if (monitor && previousWorkspace) {
+        Desktop::focusState()->rawMonitorFocus(monitor.lock());
+        monitor->changeWorkspace(previousWorkspace, false, true);
+        if (previousSpecialWorkspace)
+            monitor->setSpecialWorkspace(previousSpecialWorkspace);
+    }
+    previousWorkspace.reset();
+    previousSpecialWorkspace.reset();
+    worldWorkspace = 0;
     if (savedFocus && savedFocus->m_isMapped)
         Desktop::focusState()->rawWindowFocus(savedFocus.lock(), Desktop::FOCUS_REASON_OTHER);
     if (monitor)
@@ -1028,6 +1075,8 @@ void Runtime::focus(const std::string &id, bool keyboard, bool enterUse) {
     auto w = entry->window.lock();
     if (keyboard && focused != id)
         cancelGrab();
+    if (keyboard && w->m_workspace && !w->m_workspace->isVisible() && w->m_workspace->m_id == worldWorkspace)
+        returnToWorldWorkspace();
     if (keyboard && w->m_workspace && !w->m_workspace->isVisible()) {
         auto b = layout.binding(entry->instance.workspaceId, world.get());
         if (!b || !world || world->areas.empty() || !layout.pulled(entry->instance, world.get()))
@@ -1510,6 +1559,7 @@ void Runtime::transitionTick(float dt) {
                 restoreFullscreenWindows();
                 fullscreen = {};
                 typing = false;
+                returnToWorldWorkspace();
             }
         }
     }
@@ -1729,6 +1779,7 @@ void Runtime::leaveInteraction() {
     g_pSeatManager->setPointerFocus(nullptr, {});
     g_pSeatManager->setKeyboardFocus(nullptr);
     pointerX = pointerY = .5f;
+    returnToWorldWorkspace();
     cursor();
     publish();
 }
@@ -3201,7 +3252,9 @@ int luaCamera(lua_State *state) {
                               : false},
         {"pressedButtons", runtime->buttons.size()},
         {"error", runtime->lastError},
-        {"active", runtime->active}};
+        {"active", runtime->active},
+        {"worldWorkspace", runtime->worldWorkspace},
+        {"previousWorkspace", runtime->previousWorkspace ? runtime->previousWorkspace->m_id : 0}};
     j["childSurfaces"] = Json::array();
     for (auto &child : runtime->capture.children)
         j["childSurfaces"].push_back(
@@ -3374,6 +3427,16 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         throw std::runtime_error("input source hooks unavailable");
     if (!originalKeyboardInput)
         throw std::runtime_error("Hyprune: event keyboard hook unavailable");
+    runtime->listeners.push_back(Event::bus()->m_events.window.openEarly.listen([](PHLWINDOW window) {
+        // This event follows static rules/launch-token workspace routing and
+        // precedes newTarget(). Change only the initial layout flag: no render,
+        // configure, focus or cursor call is allowed in this synchronous hook.
+        // A static float rule sees the initial workspace and leaks to clients
+        // redirected elsewhere. Test the final workspace and output instead.
+        if (runtime->active && window->m_monitor == runtime->monitor && window->m_workspace &&
+            window->m_workspace->m_id == runtime->worldWorkspace)
+            window->m_isFloating = true;
+    }));
     runtime->listeners.push_back(Event::bus()->m_events.render.stage.listen([](eRenderStage stage) {
         safe([&] {
             if (stage == RENDER_PRE)

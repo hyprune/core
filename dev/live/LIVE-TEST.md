@@ -71,3 +71,14 @@ tick, time, output, chord and preflight ABI output.
 Nested proof: `./dev/nested/run.sh --live`, under lifetime
 `flock /tmp/worldshell-nested.lock`, uses explicit overrides and inert old-plugin/
 isolated HUD fixtures; checks healthy down, helper SIGKILL, TTY and repeated down.
+
+
+Workspace/IPC retry additions: `up` now uses IPC 0.8 (shell 98b677a or later).
+World entry switches the selected output to dedicated workspace 8 and enables
+the scoped pre-layout floating policy. No Hyprland config edit is required. Check that
+Super+Enter opens a floating terminal there, and toggle out restores the previous
+workspace without changing its tiled layout. TAB hold should animate and open the
+exclusive Director; test Graphics Settings and Escape. `down` disables that policy
+and restores the workspace before unloading. To choose a different room manually,
+use `hl.plugin.hyprune.config({windows={world_workspace=18}})`; the change applies
+on the next activation. Follow the cursor checks in `docs/M3B.md`.
