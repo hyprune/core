@@ -241,6 +241,17 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
             if (p.base_color_texture.texture)
                 out.baseTexture = p.base_color_texture.texture - raw->textures;
         }
+        // Legacy glTF diffuse inputs remain meaningful even when no metallic-
+        // roughness block exists. Preserve transforms/UV sets through slot().
+        if (m.has_pbr_specular_glossiness && !m.has_pbr_metallic_roughness) {
+            auto &p = m.pbr_specular_glossiness;
+            out.color = {p.diffuse_factor[0], p.diffuse_factor[1], p.diffuse_factor[2]};
+            out.alpha = p.diffuse_factor[3];
+            out.slots[0] = slot(p.diffuse_texture);
+            out.baseTexture = out.slots[0].texture;
+            out.metallic = 0;
+            out.roughness = 1 - p.glossiness_factor;
+        }
         out.emissive = {m.emissive_factor[0], m.emissive_factor[1], m.emissive_factor[2]};
         out.unlit = m.unlit;
         out.alphaMode = m.alpha_mode == cgltf_alpha_mode_blend ? 2 : m.alpha_mode == cgltf_alpha_mode_mask ? 1 : 0;
@@ -401,8 +412,9 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     result->environmentLow = prefilterEnvironment(*result, std::min(64, resolution));
     result->collisionIndex.rebuild(result->collision);
     for (const auto &mesh : result->meshes)
-        for (size_t i=0;i+2<mesh.vertices.size();i+=3)
-            result->visualTriangles.push_back({mesh.vertices[i].position,mesh.vertices[i+1].position,mesh.vertices[i+2].position});
+        for (size_t i = 0; i + 2 < mesh.vertices.size(); i += 3)
+            result->visualTriangles.push_back(
+                {mesh.vertices[i].position, mesh.vertices[i + 1].position, mesh.vertices[i + 2].position});
     result->visualIndex.rebuild(result->visualTriangles);
     return result;
 }

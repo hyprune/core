@@ -1,5 +1,6 @@
 #include "interaction/Config.hpp"
 #include "interaction/InputFile.hpp"
+#include "interaction/Resize.hpp"
 #include "interaction/Tools.hpp"
 #include "render/Graphics.hpp"
 #include "render/OverlayStyle.hpp"
@@ -12,6 +13,11 @@
 using namespace hyprune;
 using namespace interaction;
 int main() {
+    assert(resizeExtent(800, 160, 640) == 640 && resizeExtent(600, 100, 480) == 480);
+    assert(resizeExtent(80, 160, 640) == 160 && resizeExtent(40, 100, 480) == 100);
+    assert(resizeExtent(200, 160, 80) == 80 && resizeExtent(150, 100, 60) == 60);
+    assert(resizeExtent(200, 160, 0) == 1);
+
     auto context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     xkb_rule_names names{};
     names.layout = "us";
@@ -31,8 +37,8 @@ int main() {
     assert(tabHold.tick(1200).empty());
     assert(tabHold.holds().empty());
     tabHold.event("world", "Tab", 0, true, 2000);
-    assert(tabHold.holds() == Json::array({{{"action", "menu"}, {"binding", "Tab[L]"},
-                                           {"startedAtMs", 2000}, {"durationMs", 1000}}}));
+    assert(tabHold.holds() ==
+           Json::array({{{"action", "menu"}, {"binding", "Tab[L]"}, {"startedAtMs", 2000}, {"durationMs", 1000}}}));
     assert(tabHold.tick(2999).empty() && tabHold.holds().size() == 1);
     assert(tabHold.tick(3000).size() == 1 && tabHold.holds().empty());
     tabHold.clear();

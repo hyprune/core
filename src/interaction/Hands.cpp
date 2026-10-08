@@ -1,4 +1,5 @@
 #include "Hands.hpp"
+#include "Resize.hpp"
 namespace hyprune::interaction {
 std::optional<WorldHit> raycast(Vec3 o, Vec3 d, std::span<const Triangle> mesh, const sim::TriangleIndex *index) {
     std::optional<WorldHit> best;
@@ -133,16 +134,17 @@ bool Hands::update(const sim::Camera &camera, Vec3 ray, float dt, std::span<cons
                     start.center - start.right() * (sx * start.width * .5f) - start.up() * (sy * start.height * .5f);
                 auto drag = camera.position + ray * h->distance + reference;
                 next.width =
-                    std::clamp(sx * dot(drag - opposite, start.right()), start.width * 160 / start.pixelWidth, 12.f);
+                    resizeExtent(sx * dot(drag - opposite, start.right()), start.width * 160 / start.pixelWidth, 12.f);
                 next.height =
-                    std::clamp(sy * dot(drag - opposite, start.up()), start.height * 100 / start.pixelHeight, 8.f);
+                    resizeExtent(sy * dot(drag - opposite, start.up()), start.height * 100 / start.pixelHeight, 8.f);
                 next.center =
                     opposite + start.right() * (sx * next.width * .5f) + start.up() * (sy * next.height * .5f);
             } else {
                 // Independent edges, as in the prototype: client aspect follows the actual configure.
                 next.width =
-                    std::clamp(2 * std::abs(dot(v, start.right())), start.width * 160 / start.pixelWidth, 12.f);
-                next.height = std::clamp(2 * std::abs(dot(v, start.up())), start.height * 100 / start.pixelHeight, 8.f);
+                    resizeExtent(2 * std::abs(dot(v, start.right())), start.width * 160 / start.pixelWidth, 12.f);
+                next.height =
+                    resizeExtent(2 * std::abs(dot(v, start.up())), start.height * 100 / start.pixelHeight, 8.f);
             }
         }
     }

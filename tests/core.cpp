@@ -77,6 +77,18 @@ int main(int argc, char **argv) {
             std::ifstream f(temp / "scene.gltf");
             f >> gltf;
         }
+        auto specGloss = gltf;
+        specGloss["materials"][0].erase("pbrMetallicRoughness");
+        specGloss["materials"][0]["extensions"]["KHR_materials_pbrSpecularGlossiness"] = {
+            {"diffuseFactor", {.2, .4, .6, .5}}, {"diffuseTexture", {{"index", 0}}}, {"glossinessFactor", .7}};
+        {
+            std::ofstream f(temp / "scene.gltf");
+            f << specGloss;
+        }
+        auto legacyMaterial = world::load(temp)->materials[0];
+        check(std::abs(legacyMaterial.color.x - .2f) < 1e-6f && std::abs(legacyMaterial.alpha - .5f) < 1e-6f &&
+                  legacyMaterial.slots[0].texture == 0,
+              "specular-glossiness diffuse colour/texture lost");
         gltf["meshes"][0]["primitives"][0]["attributes"].erase("TEXCOORD_1");
         {
             std::ofstream f(temp / "scene.gltf");

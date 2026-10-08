@@ -1,0 +1,1 @@
+specular-glossiness diffuse colour/texture lost

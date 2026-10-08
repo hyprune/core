@@ -42,6 +42,7 @@ extern "C" {
 #include <lua.h>
 }
 #include "Capture.hpp"
+#include "interaction/Resize.hpp"
 #include "ipc/Bridge.hpp"
 #include "render/PNG.hpp"
 #include "render/Renderer.hpp"
@@ -1141,9 +1142,9 @@ void Runtime::handTick(float dt) {
             e->window->m_target) {
             auto w = e->window.lock();
             auto box = w->m_target->position();
-            double width = std::clamp(double(hands.pose.width / hands.start.width * hands.start.pixelWidth), 160.,
+            double width = interaction::resizeExtent(double(hands.pose.width / hands.start.width * hands.start.pixelWidth), 160.,
                                       monitor->m_size.x);
-            double height = std::clamp(double(hands.pose.height / hands.start.height * hands.start.pixelHeight), 100.,
+            double height = interaction::resizeExtent(double(hands.pose.height / hands.start.height * hands.start.pixelHeight), 100.,
                                        monitor->m_size.y);
             if (std::abs(box.w - width) >= 1 || std::abs(box.h - height) >= 1) {
                 auto floated = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_ENABLE, w);
