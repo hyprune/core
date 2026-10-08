@@ -5,6 +5,8 @@ using world::Json;
 // Null means inherit the selected preset; explicit values survive preset changes.
 inline Json graphicsDefaults() {
     return {{"quality", "auto"},
+            {"offload", "off"}, {"offload_power_cap_w", 80},
+            {"scale_min", .375}, {"scale_max", 1.0},
             {"msaa", nullptr},
             {"bloom", nullptr},
             {"fog", nullptr},
@@ -72,6 +74,7 @@ inline Json graphicsPresets() {
 }
 inline Json graphicsOptions() {
     return {{"quality", {"auto", "low", "medium", "high", "ultra"}},
+            {"offload", {"off", "auto", "on"}},
             {"msaa", {1, 2, 4}},
             {"bloom", {"off", "low", "high"}},
             {"fog", {"off", "linear", "height"}},

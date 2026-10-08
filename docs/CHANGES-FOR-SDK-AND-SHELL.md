@@ -563,6 +563,61 @@ and identity must come from core authority, never the manifest's arbitrary path.
 Keeping the current launcher-authorised package fallback during M4 integration;
 no unvalidated filesystem discovery field will be slipped into frozen 0.9.
 
+### Performance 0.10: implementation and draft canonical schema ready for review
+
+The current core build negotiates 0.10. `graphics.get/set` preserve their existing
+fields and add `performance`; canonical schema is in `schema/v0.10/ipc.schema.json`
+(under validation before commit/pinning). Old 0.7–0.9 peers still receive their
+original config shape; new fields are rejected on writes from those versions.
+
+New graphics keys: `offload: off|auto|on` (default off),
+`offload_power_cap_w` (default 80, range 20–100; effective profile cap may be lower),
+`scale_min` (0.375), `scale_max` (1.0), bounds 0.375–1, min ≤ max. Existing keys
+cover all other controls on the owner's unified Performance page.
+`performance` includes `mode/activeRenderer/status/reason/profile/powerW/capW/targetFPS`,
+`preset` (`custom` when an explicit non-quality setting is overridden),
+`requested/effective`, `controls`, `costsMs`, `workerTimings`, `pid/generation`.
+Each control carries `requested/effective/gpuMs/sharedPass/passGpuMs`; null cost
+means unavailable or not individually isolatable. Never label a shared world
+shading pass as the exclusive cost of fog, normals, AO or reflections. MSAA's
+resolve cost also excludes its shared scene shading cost. Poll graphics at up
+to 4 Hz while the page is open; state-changing calls need no compositor reload.
+
+Offload warms asynchronously with Intel still drawing. Only a complete, current
+frame can replace opaque colour; native windows, glass, markers and prompts stay
+local with reconstructed world depth. Turn-off/crash/lease expiry returns to
+prepared Intel. Native nested on/off/move/carry/worker-crash tests passed the
+first capped hardware run (41.13 W peak); smoothing transport polling and longer
+stability samples are being checked before declaring M4 complete.
+
+For the 0.9 shell recheck: core correction is committed as `8ce4f75`, current
+`build/hyprune-core.so` includes it. The offload hardware regression is queued
+on the shared flock; it will only use its own nested compositor, not the shell
+agent's session. Performance 0.10's canonical get/set results share one schema,
+including all explicit/effective controls and nullable costs; validation is green.
+
+Performance contract is now committed: schema `011743a`, SDK `ab36efc` (55 pass,
+2 intentional skips). Core hot-switch tests at 1080p and 4K observed 100% offload
+through each steady interval, including movement/carry, with fallback after a
+worker SIGKILL and explicit retry. 4K run peak: 32.12 W, USB-C profile 50 W /45 FPS.
+The live launcher now pins **0.10** and preflight requires `hyprune-renderer`;
+shell's 0.10 Performance integration must be present before the owner's retry.
+Core's hardware runs are still bounded by the independent 50 W/75 °C watchdog.
+
+Final native-resolution (scale 1.0) 4K result: 44.96–45.03 worker FPS,
+96.7–100% active samples during repeated switches/carry, 32.78 W peak. Tests keep
+50 ms freshness and fall back instead of presenting expired frames. Simultaneous
+software recording of full 4K adds substantial load; its transient local fallback
+is documented. The 1080p recording passed all intervals at 100%, peak 29.27 W.
+
+Actual shell `0a0b770`/`cab82a9` menu regression passed under the power watchdog:
+Performance's Offload dropdown, using real nested keyboard selection, switched
+on/off with the same active world and no reload. Screenshot/evidence:
+`docs/evidence/offload/menu-performance.png`, `menu.json`. `performance.targetFPS`
+is the worker's admitted FPS (45 on USB-C), distinct from requested target and
+native frame FPS; please show it alongside the power profile/cap. Costs can be
+null for the first few warmup frames, then populate as timer results arrive.
+
 
 ### Shell integration ready: HUD concepts, Performance and package skins
 

@@ -117,3 +117,38 @@ colours and opacity; zero-alpha corners/shadows do not erase the background.
 The native intermediate is now entirely display-encoded (alpha reserved zero),
 so the offload spike should export HDR opaque colour + depth and reconstruct/
 tone-map before this native composition stage. Its branch was not edited.
+
+## Runtime offload / Performance (IPC 0.10)
+
+Additional sparse graphics keys:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `offload` | `"off"` | `off`, `auto`, `on`; runtime handover, never a world/Hyprland reload |
+| `offload_power_cap_w` | `80` | 20–100 W requested software budget, clamped to profile ceiling (50 W limited / 80 W qualified AC) |
+| `scale_min` | `0.375` | Automatic resolution floor, 0.375–1 |
+| `scale_max` | `1.0` | Automatic resolution ceiling, 0.375–1; cannot be below floor |
+
+A fixed `render_scale` remains independent of the automatic bounds. `auto`
+quality retains its device preset; the Performance UI displays `Custom` whenever
+an explicit non-quality override is present. All fields, including current
+requested/effective values and nullable measured costs, are available through
+`graphics.get().performance.controls`. Shared-pass costs are labelled explicitly;
+null is not zero. The active renderer and its power/profile/cap are reported
+separately from the requested offload mode. The F3 panel shows worker pass costs,
+transfer cost and local native-depth cost when offload is active.
+
+USB-C, battery and limited AC keep automatic offload off. Explicit on uses the
+50 W / 45 FPS profile. Full AC needs an advertised capacity of at least 150 W
+and no battery discharge to admit 80 W / 60 FPS. Unknown supplies fail closed.
+These are monitored software limits, not privileged hardware power-limit writes.
+The worker's renewable 500 ms lease, 75 °C ceiling and fresh NVML samples are
+mandatory. A fault stays on Intel until explicit off/on. Off stops the child and
+releases its monitoring handle, permitting normal driver power management.
+
+Offload is optional and defaults off. It needs the `hyprune-renderer` binary
+(built with Vulkan/GBM development packages), compatible NVIDIA GLES/Vulkan
+LINEAR DMA-BUF interop, and Linux x86-64 Landlock ABI 3 or newer. Unsupported
+systems continue using the prepared in-process renderer. Edited world-node
+transforms also select local rendering in phase 1. No cursor/focus/workspace
+transition belongs to the renderer switch.

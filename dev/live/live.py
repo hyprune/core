@@ -6,7 +6,7 @@ HERE = ROOT / 'dev/live'
 BUILD = ROOT / 'build/live'
 SHELL = pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR', ROOT.parent / 'shell'))
 WORLD_ID = 'com.hyprune.lumen-reach'
-PROTOCOL = '0.8'
+PROTOCOL = '0.10'
 GRANTS = ['state.read', 'world.control', 'surface.control', 'movement.control', 'shell.control', 'runtime.control', 'input.control']
 
 
@@ -145,7 +145,7 @@ def abi(s):
 
 
 def verify(s):
-    for file in [BUILD/'hyprune-core.so', BUILD/'hypruned', BUILD/'hyprune-live-abi', SHELL/'bridge/launch.py', SHELL/'qml/shell.qml']:
+    for file in [BUILD/'hyprune-core.so', BUILD/'hypruned', BUILD/'hyprune-renderer', BUILD/'hyprune-live-abi', SHELL/'bridge/launch.py', SHELL/'qml/shell.qml']:
         if not file.is_file(): raise RuntimeError('Missing '+str(file)+'; run preflight')
     if not shutil.which('qs'): raise RuntimeError('qs is missing')
     package = world(); version = abi(s)

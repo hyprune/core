@@ -101,6 +101,8 @@ Json configPatch(const Json &current, const Json &patch) {
                     if (!v.is_number_integer())
                         throw std::runtime_error("world_workspace must be a positive integer");
                 }
+                if (key == "offload_power_cap_w") { min = 20; max = 100; }
+                if (key == "scale_min" || key == "scale_max") { min = .375; max = 1; }
                 if (key == "target_fps") {
                     min = 30;
                     max = 240;
@@ -178,6 +180,8 @@ Json configPatch(const Json &current, const Json &patch) {
         if (value && !buttons.insert(value).second)
             throw std::runtime_error("duplicate mouse button");
     }
+    if (result["graphics"]["scale_min"] > result["graphics"]["scale_max"])
+        throw std::runtime_error("scale_min must not exceed scale_max");
     return result;
 }
 } // namespace hyprune::interaction

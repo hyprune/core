@@ -1,4 +1,5 @@
 #include "Bridge.hpp"
+#include "offload/Packet.hpp"
 #include <fcntl.h>
 #include <signal.h>
 #include <spawn.h>
@@ -106,19 +107,22 @@ bool Bridge::healthy() const {
 }
 void Bridge::poll() {
     for (int i = 0; i < 16; i++) {
-        char buffer[196609];
-        auto n = recv(fd_, buffer, sizeof buffer, 0);
-        if (n == 0) {
-            close(fd_);
-            fd_ = -1;
-            return;
-        }
-        if (n < 0)
-            break;
-        auto j = Json::parse(buffer, buffer + n);
+        std::optional<offload::Packet> packet;
+        try { packet = offload::receivePacket(fd_); }
+        catch (...) { close(fd_); fd_ = -1; return; }
+        if (!packet) break;
+        auto &j = packet->body;
         if (j.at("epoch") != epoch_)
             throw std::runtime_error("private epoch mismatch");
         heartbeat_ = std::chrono::steady_clock::now();
+        if (j.at("type") == "renderer.channel") {
+            int received = packet->take();
+            auto params = j; params["fd"] = received;
+            try { handler_("_renderer.channel", params); } catch (...) {close(received);throw;}
+            continue;
+        }
+        if (!packet->fds.empty()) throw std::runtime_error("unexpected private descriptor");
+        if (j.at("type") == "renderer.state") {handler_("_renderer.state", j.at("state"));continue;}
         if (j.at("type") == "layout") {
             handler_("_layout.restore", j.at("layout"));
             send({{"type", "layout.ready"}});

@@ -609,6 +609,28 @@ int main(int argc, char **argv) {
             check(std::abs(int(pixel[0]) - 128) <= 1, "native surface incorrectly hidden by scaled world depth");
             surface.center.z = -.2f;
         }
+        // A fully prepared worker frame replaces opaque colour only. Local
+        // reconstruction must still occlude clients, and preserve native colour.
+        GLuint remoteTex, remoteFbo;
+        glGenTextures(1,&remoteTex);glBindTexture(GL_TEXTURE_2D,remoteTex);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,320,180,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+        glGenFramebuffers(1,&remoteFbo);glBindFramebuffer(GL_FRAMEBUFFER,remoteFbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,remoteTex,0);
+        renderer.renderScale=1;renderer.worldOnly=true;
+        renderer.draw(remoteFbo,320,180,camera,{},false);glFinish();
+        renderer.worldOnly=false;renderer.externalWorldFbo=remoteFbo;
+        glBindFramebuffer(GL_FRAMEBUFFER,fbo);
+        surface.center.z=-.2f;
+        renderer.draw(fbo,320,180,camera,std::span(&surface,1),false);glFinish();
+        glReadPixels(150,48,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
+        check(pixel[0]>150 && pixel[1]<20 && pixel[2]>150,"offload world depth lost client occlusion");
+        surface.center.z=.2f;
+        renderer.draw(fbo,320,180,camera,std::span(&surface,1),false);glFinish();
+        glReadPixels(150,48,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
+        check(std::abs(int(pixel[0])-128)<=1,"offload native client colour changed");
+        check(glGetError()==GL_NO_ERROR,"offload native reconstruction GL error");
+        renderer.externalWorldFbo=0;
+        glDeleteFramebuffers(1,&remoteFbo);glDeleteTextures(1,&remoteTex);
         renderer.destroy();
         glDeleteTextures(1, &app);
         glDeleteTextures(1, &texture);

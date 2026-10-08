@@ -46,6 +46,7 @@ extern "C" {
 #include "ipc/Bridge.hpp"
 #include "ipc/Protocol.hpp"
 #include "hud/Telemetry.hpp"
+#include "offload/Client.hpp"
 #include "render/PNG.hpp"
 #include "render/Renderer.hpp"
 #include <fcntl.h>
@@ -59,6 +60,17 @@ namespace {
 HANDLE handle = nullptr;
 struct Runtime {
     render::Renderer renderer;
+    offload::Client offload;
+    Json offloadRequest, offloadPolicy = Json::object();
+    uint64_t offloadGeneration = 0;
+    bool renderedOffload = false;
+    sim::Camera displayedCamera;
+    const sim::Camera &pointerCamera() const { return renderedOffload ? displayedCamera : camera; }
+    void offloadTick();
+    void offloadPump();
+    SP<CEventLoopTimer> offloadTimer;
+    uint64_t offloadDeferred = 0;
+    Json performance() const;
     Capture capture;
     surfaces::Layout layout;
     interaction::Hands hands;
@@ -414,17 +426,17 @@ void motion(void *self, const Vector2D &delta) {
 Vec3 pointerRay() {
     float aspect = runtime->monitor ? runtime->monitor->m_size.x / float(runtime->monitor->m_size.y) : 1;
     bool pointer = runtime->typing || runtime->editor.activeHandle >= 0;
-    return runtime->camera.ray(pointer ? runtime->pointerX : .5f, pointer ? runtime->pointerY : .5f, aspect);
+    return runtime->pointerCamera().ray(pointer ? runtime->pointerX : .5f, pointer ? runtime->pointerY : .5f, aspect);
 }
 std::optional<std::pair<std::string, surfaces::Hit>> aim() {
     std::optional<std::pair<std::string, surfaces::Hit>> best;
     for (auto &surface : runtime->capture.visible())
-        if (auto h = surfaces::intersect(surface, runtime->camera.position, pointerRay());
+        if (auto h = surfaces::intersect(surface, runtime->pointerCamera().position, pointerRay());
             h && (!best || h->distance < best->second.distance))
             best = {{surface.id, *h}};
     if (best && runtime->world) {
         auto &world = *runtime->world;
-        auto hit = interaction::raycast(runtime->camera.position, pointerRay(), world.collision, &world.collisionIndex);
+        auto hit = interaction::raycast(runtime->pointerCamera().position, pointerRay(), world.collision, &world.collisionIndex);
         if (hit && hit->distance < best->second.distance - .01f)
             return std::nullopt;
     }
@@ -624,6 +636,85 @@ void Runtime::workspaceLocation() {
             }
             return;
         }
+}
+Json Runtime::performance() const {
+    Json state = {{"profile", "unknown"}, {"powerW", nullptr}, {"capW", 0}, {"targetFPS", 0},
+                  {"reason", "off"}, {"pid", nullptr}, {"generation", offloadGeneration}};
+    state.update(offloadPolicy);
+    state["mode"] = config["graphics"]["offload"];
+    state["activeRenderer"] = renderedOffload ? "offload" : "in-process";
+    state["status"] = renderedOffload ? "active" : offload.connected() ? "warming" : "local";
+    if (renderedOffload) state["reason"] = "ready";
+    if (!offload.error.empty()) state["reason"] = offload.error;
+    if (!renderer.transforms.empty() && config["graphics"]["offload"] != "off")
+        state["reason"] = "edited world transforms use local renderer";
+    bool custom = false;
+    for (auto &[key, value] : graphicsFile.current.items())
+        if (key != "quality" && !value.is_null()) custom = true;
+    state["preset"] = custom ? Json("custom") : config["graphics"]["quality"];
+    state["requested"] = config["graphics"];
+    state["effective"] = renderer.graphics;
+    state["costsMs"] = renderer.timings()["gpuEffectsMs"];
+    if (renderedOffload && offload.timings.is_object() && offload.timings.contains("gpuEffectsMs")) {
+        auto worker = offload.timings.at("gpuEffectsMs");
+        state["costsMs"]["depth_reconstruction"] = state["costsMs"]["upscale_sharpen"];
+        for (auto key : {"world_shading_shared", "sky", "msaa_resolve", "bloom", "upscale_sharpen"})
+            state["costsMs"][key] = worker.at(key);
+        state["costsMs"]["transfer"] = offload.timings.value("transferGpuMs", Json(nullptr));
+        state["effective"]["target_fps"] = offloadPolicy.value("targetFPS", 45);
+        state["effective"]["offload_power_cap_w"] = offloadPolicy.value("capW", 50.);
+    }
+    state["effective"]["offload"] = renderedOffload ? "on" : "off";
+    state["workerTimings"] = offload.timings;
+    state["controls"] = Json::object();
+    for (auto &[key, value] : config["graphics"].items()) {
+        std::string group = key == "bloom" || key == "bloom_strength" ? "bloom" :
+                            key == "sky" ? "sky" : key == "msaa" ? "msaa_resolve" :
+                            key == "sharpen" ? "upscale_sharpen" : key == "alpha_haze" ? "native_surfaces_geometry" :
+                            key == "fog" || key == "normal_maps" || key == "specular" || key == "reflections" ||
+                            key == "ambient_occlusion" || key == "anisotropy" ? "world_shading_shared" : "";
+        auto cost = group.empty() ? Json(nullptr) : state["costsMs"].value(group, Json(nullptr));
+        state["controls"][key] = {{"requested", value}, {"effective", state["effective"].at(key)},
+                                 {"gpuMs", group == "bloom" || group == "sky" ? cost : Json(nullptr)},
+                                 {"sharedPass", group.empty() ? Json(nullptr) : Json(group)}, {"passGpuMs", cost}};
+    }
+    return state;
+}
+void Runtime::offloadTick() {
+    if (renderDepth) throw std::runtime_error("offload lifecycle inside frame");
+    auto g = config["graphics"];
+    bool enabled = active && world && monitor && !loading && !locked() &&
+                   g["offload"] != "off" && renderer.transforms.empty();
+    Json request = {{"enabled", enabled}, {"graphics", g},
+                    {"worldPath", world ? (installed / world->id).string() : ""},
+                    {"width", monitor ? int(monitor->m_pixelSize.x) : 0},
+                    {"height", monitor ? int(monitor->m_pixelSize.y) : 0}};
+    if (request != offloadRequest) {
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        offload.stop(); renderedOffload = false;
+        offload.error.clear();
+        offloadRequest = request;
+        request["generation"] = ++offloadGeneration;
+        ipc->renderer(request);
+    }
+    offloadPump();
+    renderer.offloadState = {{"activeRenderer", renderedOffload ? "offload" : "in-process"},
+                            {"powerW", offloadPolicy.value("powerW", Json(nullptr))},
+                            {"profile", offloadPolicy.value("profile", "unknown")},
+                            {"targetFPS", offloadPolicy.value("targetFPS", 0)},
+                            {"capW", offloadPolicy.value("capW", 0.)},
+                            {"worker", offload.timings}};
+}
+void Runtime::offloadPump() {
+    if (renderDepth) throw std::runtime_error("offload polling inside frame");
+    if (offload.connected()) {
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        offload.tick(camera, renderer.graphics, renderer.profile, offloadPolicy.value("targetFPS", 30));
+        if (!offload.connected()) {
+            auto stop = offloadRequest; stop["enabled"] = false; stop["generation"] = offloadGeneration;
+            ipc->renderer(stop);
+        }
+    }
 }
 void Runtime::publishHUD() {
     auto now = std::chrono::steady_clock::now();
@@ -1030,6 +1121,7 @@ void Runtime::exit() {
     if (!active)
         return;
     active = false;
+    offloadTick();
     input.clear();
     relativeSurface.clear();
     captureRequest = nullptr;
@@ -1302,7 +1394,7 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
             auto held = capture.find(id);
             std::optional<std::pair<int, float>> wall;
             for (auto &f : capture.workspaces)
-                if (auto h = surfaces::intersect(f.surface, camera.position, pointerRay());
+                if (auto h = surfaces::intersect(f.surface, pointerCamera().position, pointerRay());
                     h && h->distance < 12 && (!wall || h->distance < wall->second))
                     wall = {{f.workspaceId, h->distance}};
             if (held && wall) {
@@ -1341,7 +1433,7 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
     auto hit = aim();
     if (!grabbed.empty())
         if (auto plane = capture.plane(grabbed))
-            if (auto h = surfaces::intersect(*plane, camera.position, pointerRay(), false))
+            if (auto h = surfaces::intersect(*plane, pointerCamera().position, pointerRay(), false))
                 hit = {{grabbed, *h}};
     if (down && super &&
         (event.button == config["input"]["carry_button"].get<uint32_t>() ||
@@ -1374,7 +1466,7 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
                                        wall->surface.height +
                                    wall->surface.normal() * .06f;
                         e->surface = s;
-                        auto h = surfaces::intersect(s, camera.position, pointerRay());
+                        auto h = surfaces::intersect(s, pointerCamera().position, pointerRay());
                         if (h)
                             hit = {{s.id, *h}};
                         break;
@@ -1711,10 +1803,10 @@ void Runtime::useAim(bool zoom) {
         // The tolerance margin must keep the same occlusion policy as aim().
         // Otherwise a rejected ray can re-enter a window through solid geometry.
         if (auto obstacle =
-                interaction::raycast(camera.position, pointerRay(), world->collision, &world->collisionIndex))
+                interaction::raycast(pointerCamera().position, pointerRay(), world->collision, &world->collisionIndex))
             best = std::min(best, obstacle->distance + .01f);
         for (auto &s : capture.visible())
-            if (auto h = surfaces::intersect(s, camera.position, pointerRay(), false)) {
+            if (auto h = surfaces::intersect(s, pointerCamera().position, pointerRay(), false)) {
                 float margin = input.config["useTolerance"];
                 if (h->u >= -margin / s.width && h->u <= 1 + margin / s.width && h->v >= -margin / s.height &&
                     h->v <= 1 + margin / s.height && h->distance < best) {
@@ -2193,7 +2285,7 @@ std::optional<std::pair<std::string, interaction::WorldHit>> Runtime::objectAim(
         for (size_t i = 0; i + 2 < m.vertices.size(); i += 3) {
             Triangle t{model.point(m.vertices[i].position), model.point(m.vertices[i + 1].position),
                        model.point(m.vertices[i + 2].position)};
-            auto h = interaction::raycast(camera.position, pointerRay(), std::span<const Triangle>(&t, 1));
+            auto h = interaction::raycast(pointerCamera().position, pointerRay(), std::span<const Triangle>(&t, 1));
             if (!h || h->distance >= nearest)
                 continue;
             nearest = h->distance;
@@ -2212,7 +2304,7 @@ std::optional<interaction::WorldHit> Runtime::worldHit() {
     if (!world)
         return {};
     auto mesh = objectAim();
-    auto collision = interaction::raycast(camera.position, pointerRay(), world->collision, &world->collisionIndex);
+    auto collision = interaction::raycast(pointerCamera().position, pointerRay(), world->collision, &world->collisionIndex);
     if (mesh && (!collision || mesh->second.distance < collision->distance))
         return mesh->second;
     return collision;
@@ -2265,7 +2357,7 @@ void Runtime::toolClick(bool secondary) {
         }
     if (!editor.selected.empty()) {
         auto handles = interaction::gizmo(selectedTransform.position, editor.submode());
-        if (auto picked = interaction::pickHandle(handles, camera.position, pointerRay())) {
+        if (auto picked = interaction::pickHandle(handles, pointerCamera().position, pointerRay())) {
             if (editor.kind == "window")
                 if (auto e = capture.find(editor.selected))
                     if (editor.locked(world->id, e->instance))
@@ -2282,10 +2374,10 @@ void Runtime::toolClick(bool secondary) {
             dragNormal = h.axis < 3 ? axes[h.axis] : camera.forward();
             if (editor.positionMode == 1)
                 dragPoint =
-                    planePoint(camera.position, pointerRay(), selectedTransform.position, dragNormal).value_or(h.end) -
+                    planePoint(pointerCamera().position, pointerRay(), selectedTransform.position, dragNormal).value_or(h.end) -
                     selectedTransform.position;
             else
-                dragPoint = {axisPoint(camera.position, pointerRay(), selectedTransform.position, dragNormal), .5f,
+                dragPoint = {axisPoint(pointerCamera().position, pointerRay(), selectedTransform.position, dragNormal), .5f,
                              .5f};
             pointerX = pointerY = .5f;
             keys.clear();
@@ -2328,7 +2420,7 @@ void Runtime::toolsTick() {
         }
         auto h = handles[editor.activeHandle];
         selectedTransform = dragStart;
-        float delta = axisPoint(camera.position, pointerRay(), dragStart.position, dragNormal) - dragPoint.x;
+        float delta = axisPoint(pointerCamera().position, pointerRay(), dragStart.position, dragNormal) - dragPoint.x;
         if (std::abs(dot(dragNormal, camera.forward())) > .95f)
             delta = (pointerX - .5f) * length(dragStart.position - camera.position) * 2;
         if (keys.contains(KEY_LEFTSHIFT))
@@ -2336,7 +2428,7 @@ void Runtime::toolsTick() {
         if (editor.positionMode == 0)
             selectedTransform.position += dragNormal * delta;
         else if (editor.positionMode == 1) {
-            auto p = planePoint(camera.position, pointerRay(), dragStart.position, dragNormal);
+            auto p = planePoint(pointerCamera().position, pointerRay(), dragStart.position, dragNormal);
             float angle = p ? std::atan2(dot(cross(dragPoint, *p - dragStart.position), dragNormal),
                                          dot(dragPoint, *p - dragStart.position))
                             : (pointerX - .5f) * 6.283185f;
@@ -2523,12 +2615,26 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     auto protocol = params.value("_protocol", "0.1");
     params.erase("_pid");
     params.erase("_protocol");
+    if (method == "_renderer.channel") {
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        if (params.at("generation") != offloadGeneration || !offloadRequest.value("enabled", false))
+            close(params.at("fd").get<int>());
+        else offload.attach(params.at("fd"), offloadRequest.at("width"), offloadRequest.at("height"), offloadGeneration);
+        return Json::object();
+    }
+    if (method == "_renderer.state") {
+        if (params.at("generation") == offloadGeneration) offloadPolicy = params;
+        return Json::object();
+    }
     if (method == "graphics.get" || method == "graphics.set") {
         if (renderDepth)
             throw ipc::Error(-32004, "graphics update during render");
         if (method == "graphics.set") {
             if (params.size() != 1 || !params.contains("patch") || !params["patch"].is_object())
                 throw ipc::Error(-32602, "graphics patch required");
+            if (!ipc::protocol::atLeast(protocol, "0.10"))
+                for (auto key : {"offload", "offload_power_cap_w", "scale_min", "scale_max"})
+                    if (params["patch"].contains(key)) throw ipc::Error(-32602, "setting requires IPC 0.10");
             auto merged = graphicsFile.current;
             merged.update(params["patch"]);
             try {
@@ -2540,12 +2646,16 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             applyGraphics(merged);
         } else if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
-        return Json{
+        Json response{
             {"config", config["graphics"]},         {"effective", renderer.graphics},
             {"overrides", graphicsFile.current},    {"path", graphicsFile.path.string()},
             {"error", graphicsFile.error},          {"presets", render::graphicsPresets()},
             {"options", render::graphicsOptions()}, {"unsupported", {"ssr", "runtime_shadows", "contact_shadows"}},
             {"timings", renderer.timings()}};
+        if (ipc::protocol::atLeast(protocol, "0.10")) response["performance"] = performance();
+        else for (auto section : {"config", "effective", "overrides", "options"})
+            for (auto key : {"offload", "offload_power_cap_w", "scale_min", "scale_max"}) response[section].erase(key);
+        return response;
     }
     if (method == "input.get") {
         if (!params.empty())
@@ -3074,7 +3184,7 @@ void Runtime::tick() {
         if (!grabbed.empty()) {
             pointerHit.reset();
             if (auto plane = capture.plane(grabbed))
-                if (auto h = surfaces::intersect(*plane, camera.position, pointerRay()))
+                if (auto h = surfaces::intersect(*plane, pointerCamera().position, pointerRay()))
                     pointerHit = {{grabbed, *h}};
         }
         if (ownsInput() && !layerCursor && hands.gesture == interaction::Gesture::None && editor.activeHandle < 0 &&
@@ -3098,6 +3208,7 @@ void Runtime::tick() {
         nextPublish = ipcStarted + std::chrono::milliseconds(33);
         publish();
     }
+    offloadTick();
     publishHUD();
     ipc->poll();
     renderer.gpuCaptureMs = captureGPU.available ? captureGPU.milliseconds : -1;
@@ -3137,8 +3248,17 @@ class Pass final : public IPassElement {
                 if (auto hit = runtime->worldHit())
                     prompt(hit->point, "LMB MOUNT HERE");
             }
-            runtime->renderer.draw(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y, runtime->camera,
-                                   surfaces, runtime->typing && !runtime->layerCursor);
+            auto &r = runtime->renderer;
+            r.externalWorldFbo = runtime->offload.fbo();
+            auto view = r.externalWorldFbo ? runtime->offload.camera() : runtime->camera;
+            auto frames = r.frames;
+            r.draw(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y, view,
+                   surfaces, runtime->typing && !runtime->layerCursor);
+            if (r.frames != frames) {
+                runtime->displayedCamera = view;
+                runtime->renderedOffload = r.externalWorldFbo != 0;
+            }
+            r.externalWorldFbo = 0;
         });
         return {};
     }
@@ -3515,7 +3635,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     runtime->deferInput([] {
                         Desktop::focusState()->rawMonitorFocus(runtime->monitor.lock());
                         if (auto plane = runtime->capture.plane(runtime->relativeSurface))
-                            if (auto hit = surfaces::intersect(*plane, runtime->camera.position, pointerRay(), false)) {
+                            if (auto hit = surfaces::intersect(*plane, runtime->pointerCamera().position, pointerRay(), false)) {
                                 runtime->localX = hit->u;
                                 runtime->localY = hit->v;
                             }
@@ -3821,6 +3941,17 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         },
         nullptr);
     g_pEventLoopManager->addTimer(runtime->timer);
+    runtime->offloadTimer = makeShared<CEventLoopTimer>(std::chrono::milliseconds(100),
+        [](SP<CEventLoopTimer> self, void *) {
+            if (runtime->offload.connected() && !runtime->offloadDeferred)
+                runtime->offloadDeferred = g_pEventLoopManager->doLater([] {
+                    if (!runtime) return;
+                    runtime->offloadDeferred = 0;
+                    safe([] { runtime->offloadPump(); });
+                });
+            self->updateTimeout(std::chrono::milliseconds(runtime->offload.connected() ? 4 : 100));
+        }, nullptr);
+    g_pEventLoopManager->addTimer(runtime->offloadTimer);
     runtime->publish();
     return {"hyprune-core", "World-driven desktop runtime", "Hyprune contributors", "0.3.0"};
 }
@@ -3831,6 +3962,8 @@ APICALL EXPORT void PLUGIN_EXIT() {
         g_pEventLoopManager->removeDoLater(runtime->deferred);
     if (runtime->tickDeferred)
         g_pEventLoopManager->removeDoLater(runtime->tickDeferred);
+    if (runtime->offloadDeferred) g_pEventLoopManager->removeDoLater(runtime->offloadDeferred);
+    if (runtime->offloadTimer) g_pEventLoopManager->removeTimer(runtime->offloadTimer);
     for (auto id : runtime->inputDeferred)
         g_pEventLoopManager->removeDoLater(id);
     runtime->inputDeferred.clear();
@@ -3859,6 +3992,7 @@ APICALL EXPORT void PLUGIN_EXIT() {
     if (Render::GL::g_pHyprOpenGL) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         runtime->captureGPU.destroy();
+        runtime->offload.stop();
         runtime->renderer.destroy();
     }
     runtime.reset();

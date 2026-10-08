@@ -1,0 +1,216 @@
+#pragma once
+#include "Common.hpp"
+#include "render/GLState.hpp"
+#include "sim/Camera.hpp"
+#include <drm_fourcc.h>
+#include <poll.h>
+namespace hyprune::offload {
+class Client {
+    struct Slot {
+        GLuint tex = 0, fbo = 0;
+        EGLImageKHR image = nullptr;
+        int phase = 0, acquire = -1, target = -1;
+        GLsync copied = nullptr;
+        Json request, reply;
+    } slots_[2];
+    struct Target {
+        GLuint tex = 0, fbo = 0;
+        bool busy = false;
+    } targets_[3];
+    int fd_ = -1, w_ = 0, h_ = 0, front_ = -1;
+    uint64_t generation_ = 0, sequence_ = 0, frontSequence_ = 0;
+    double started_ = 0, nextSend_ = 0;
+    bool ready_ = false;
+    Json frontReply_;
+
+  public:
+    std::string error;
+    Json capabilities, timings;
+    bool connected() const { return fd_ >= 0; }
+    bool available() const { return fd_ >= 0 && front_ >= 0 && now() - frontReply_.at("sent").get<double>() <= 50; }
+    GLuint fbo() const { return available() ? targets_[front_].fbo : 0; }
+    sim::Camera camera() const {
+        auto p = frontReply_.at("pose");
+        sim::Camera c;
+        c.position = {p[0], p[1], p[2]};
+        c.yaw = p[3];
+        c.pitch = p[4];
+        c.fov = p[5];
+        return c;
+    }
+    void attach(int fd, int w, int h, uint64_t generation) {
+        stop();
+        fd_ = fd;
+        w_ = w;
+        h_ = h;
+        generation_ = generation;
+        started_ = now();
+        error.clear();
+    }
+    void tick(const sim::Camera &camera, const Json &graphics, const Json &profile, int fps) {
+        if (fd_ < 0)
+            return;
+        render::GLState guard;
+        try {
+            for (auto &b : slots_)
+                if (b.phase == 3) {
+                    auto status = glClientWaitSync(b.copied, 0, 0);
+                    check(status != GL_WAIT_FAILED, "copy fence");
+                    if (status != GL_ALREADY_SIGNALED && status != GL_CONDITION_SATISFIED)
+                        continue;
+                    glDeleteSync(b.copied);
+                    b.copied = nullptr;
+                    if (b.reply.at("sequence").get<uint64_t>() > frontSequence_) {
+                        if (front_ >= 0)
+                            targets_[front_].busy = false;
+                        front_ = b.target;
+                        frontSequence_ = b.reply.at("sequence");
+                        frontReply_ = b.reply;
+                        timings = b.reply;
+                    } else
+                        targets_[b.target].busy = false;
+                    b.phase = 0;
+                    b.target = -1;
+                }
+            for (int n = 0; n < 8; ++n) {
+                auto packet = receivePacket(fd_);
+                if (!packet)
+                    break;
+                auto &p = packet->body;
+                auto type = p.at("type");
+                if (type == "buffer") {
+                    int i = p.at("slot");
+                    check(i >= 0 && i < 2 && !slots_[i].tex && packet->fds.size() == 1, "buffer slot");
+                    check(p.at("width") == w_ && p.at("height") == h_ && p.at("format") == DRM_FORMAT_ABGR8888 &&
+                              p.at("modifier") == 0,
+                          "buffer geometry/format");
+                    auto stride = p.at("stride").get<uint64_t>(), offset = p.at("offset").get<uint64_t>();
+                    check(stride >= uint64_t(w_) * 4 && stride <= uint64_t(w_) * 4 + 65536 && offset <= 65536 &&
+                              stride * h_ + offset <= 256 * 1024 * 1024,
+                          "buffer bounds");
+                    auto &b = slots_[i];
+                    glActiveTexture(GL_TEXTURE0);
+                    b.image =
+                        import(eglGetCurrentDisplay(), packet->fds[0], w_, h_, stride, offset, DRM_FORMAT_ABGR8888, 0);
+                    b.tex = imageTexture(b.image);
+                    b.fbo = framebuffer(b.tex);
+                } else if (type == "frame") {
+                    int i = p.at("slot");
+                    check(i >= 0 && i < 2 && packet->fds.size() == 1, "frame slot");
+                    auto &b = slots_[i];
+                    check(b.phase == 1 && p.at("sequence") == b.request.at("sequence") &&
+                              p.at("generation") == generation_ && p.at("pose") == b.request.at("pose") &&
+                              p.at("sent") == b.request.at("sent"),
+                          "frame identity");
+                    b.reply = p;
+                    b.acquire = packet->take();
+                    b.phase = 2;
+                } else {
+                    check(packet->fds.empty(), "unexpected descriptors");
+                    if (type == "caps")
+                        capabilities = p;
+                    else if (type == "ready") {
+                        check(slots_[0].tex && slots_[1].tex, "ready before buffers");
+                        ready_ = true;
+                    } else
+                        throw std::runtime_error("unknown worker message");
+                }
+            }
+            for (auto &b : slots_)
+                if (b.phase == 2) {
+                    pollfd fence{b.acquire, POLLIN, 0};
+                    int n = poll(&fence, 1, 0);
+                    check(n >= 0, "acquire poll");
+                    if (!n)
+                        continue;
+                    check(fence.revents & POLLIN, "acquire failed");
+                    int target = -1;
+                    for (int i = 0; i < 3; ++i)
+                        if (!targets_[i].busy) {
+                            target = i;
+                            break;
+                        }
+                    if (target < 0)
+                        continue;
+                    auto &out = targets_[target];
+                    out.busy = true;
+                    b.target = target;
+                    close(b.acquire);
+                    b.acquire = -1;
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+                    if (!out.tex) {
+                        out.tex = texture(w_, h_);
+                        out.fbo = framebuffer(out.tex);
+                    }
+                    glDisable(GL_SCISSOR_TEST);
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, b.fbo);
+                    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, out.fbo);
+                    glBlitFramebuffer(0, 0, w_, h_, 0, 0, w_, h_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                    b.copied = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+                    glFlush();
+                    b.phase = 3;
+                    check(glGetError() == GL_NO_ERROR, "offload import/copy");
+                }
+            if (ready_ && now() >= nextSend_) {
+                for (int i = 0; i < 2; ++i)
+                    if (slots_[i].phase == 0) {
+                        auto &b = slots_[i];
+                        auto sent = now();
+                        b.request = {{"type", "pose"},
+                                     {"version", 1},
+                                     {"slot", i},
+                                     {"generation", generation_},
+                                     {"sequence", ++sequence_},
+                                     {"sent", sent},
+                                     {"graphics", graphics},
+                                     {"profile", profile},
+                                     {"pose",
+                                      {camera.position.x, camera.position.y, camera.position.z, camera.yaw,
+                                       camera.pitch, camera.fov}}};
+                        if (sendPacket(fd_, b.request)) {
+                            b.phase = 1;
+                            auto period = 1000. / std::clamp(fps, 1, 60);
+                            nextSend_ = sent - nextSend_ > period ? sent + period : nextSend_ + period;
+                        }
+                        break;
+                    }
+            }
+            check(ready_ || now() - started_ < 30000, "worker warmup deadline");
+            for (auto &b : slots_)
+                if (b.phase)
+                    check(now() - b.request.at("sent").get<double>() < 500, "worker frame deadline");
+        } catch (const std::exception &e) {
+            error = e.what();
+            stop();
+        }
+    }
+    void stop() {
+        render::GLState guard;
+        if (fd_ >= 0) {
+            close(fd_);
+            fd_ = -1;
+        }
+        for (auto &b : slots_) {
+            if (b.acquire >= 0)
+                close(b.acquire);
+            if (b.copied)
+                glDeleteSync(b.copied);
+            glDeleteFramebuffers(1, &b.fbo);
+            glDeleteTextures(1, &b.tex);
+            if (b.image)
+                proc<PFNEGLDESTROYIMAGEKHRPROC>("eglDestroyImageKHR")(eglGetCurrentDisplay(), b.image);
+            b = {};
+        }
+        for (auto &t : targets_) {
+            glDeleteFramebuffers(1, &t.fbo);
+            glDeleteTextures(1, &t.tex);
+            t = {};
+        }
+        ready_ = false;
+        front_ = -1;
+        frontSequence_ = sequence_ = 0;
+        nextSend_ = 0;
+    }
+};
+} // namespace hyprune::offload

@@ -566,3 +566,17 @@ no owner-session mutation or gallery watcher control occurred.
   not change cursor visibility, shape, focus, or workspace (no new cursor transitions).
 - [ ] Radar/compass track movement; zone title changes Sun Court → Array Hall;
   telemetry subscription/unsubscription changes no input authority.
+
+### M4 renderer switch — supervised live checklist additions
+
+- [ ] Start with offload off; F3 identifies in-process rendering and native windows remain readable.
+- [ ] Change offload in Performance: Intel continues during warmup; the world,
+  camera, current carry and input focus remain intact when the first ready frame arrives.
+- [ ] Switch off/on during movement and a carry; inspect translucent windows,
+  wall occlusion and world prompts. No cursor hide/show/shape/focus/workspace
+  transitions are introduced by these switches. Existing E/F/Super+Tab transitions
+  retain their deferred paths and must still be checked on the physical cursor.
+- [ ] Check the displayed power profile and software cap before enabling offload.
+  USB-C uses 50 W /45 FPS; auto stays off. Do not use a live run to stress the ceiling.
+- [ ] On a fallback notice/state, keep using the local renderer; U captures current
+  output and diagnostics. Retry only through off/on after inspecting the cause.

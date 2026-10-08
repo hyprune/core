@@ -54,6 +54,13 @@ uniform mat4 vp,model;
 out vec3 n;out vec3 worldPosition;out vec2 uv;out vec2 lightUV;
 void main(){vec4 pos=model*vec4(position,1);gl_Position=vp*pos;n=mat3(transpose(inverse(model)))*normal;uv=uv0;lightUV=uv1;worldPosition=pos.xyz;}
 )";
+const char *depthFragment = R"(#version 300 es
+precision highp float;in vec2 uv;in vec2 lightUV;
+uniform sampler2D albedo;uniform mat3 uvMatrix[5];uniform int uvSet[5],present[5];
+uniform float alpha,alphaCutoff;uniform int alphaMode;out vec4 result;
+void main(){if(alphaMode==1){vec2 st=(uvMatrix[0]*vec3(uvSet[0]==0?uv:lightUV,1)).xy;
+float a=alpha*(present[0]!=0?texture(albedo,st).a:1.);if(a<alphaCutoff)discard;}result=vec4(0);}
+)";
 const char *fragment = R"(#version 300 es
 precision highp float;
 in vec3 n;in vec3 worldPosition;in vec2 uv;in vec2 lightUV;
@@ -206,6 +213,8 @@ void Renderer::init() {
     if (quadVao_)
         return;
     device = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
+    if (!depthProgram_)
+        depthProgram_ = program(vertex, depthFragment);
     if (!scene_)
         scene_ = program(vertex, fragment);
     if (!native_)
@@ -747,6 +756,9 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         // that its remaining GPU budget was insufficient; leave extra headroom.
         resolution_.sample(queuePressure_ ? std::max(ms, 1000. / targetFPS) : ms, frameMs_ / 1000.);
     }
+    resolution_.minimum = graphics["scale_min"];
+    resolution_.maximum = graphics["scale_max"];
+    if (!renderScale) resolution_.scale = std::clamp(resolution_.scale, resolution_.minimum, resolution_.maximum);
     targets(w, h);
     glLineWidth(1);
     gpu_[6].begin();
@@ -790,7 +802,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glUniform1f(glGetUniformLocation(sky_, "aspect"), float(w) / h);
     glUniform1f(glGetUniformLocation(sky_, "rotation"), rotation);
     glBindVertexArray(screenVao_);
-    if (graphics["sky"] != "off")
+    if (!externalWorldFbo && graphics["sky"] != "off")
         glDrawArrays(GL_TRIANGLES, 0, 3);
     gpu_[6].end();
     gpu_[0].begin();
@@ -836,15 +848,21 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             return !ta;
         return ta && length(batches_[a].center - camera.position) > length(batches_[b].center - camera.position);
     });
+    bool depthOnly = false;
     auto drawBatch = [&](size_t index, bool nativeOutput) {
-        glUseProgram(scene_);
-        uniform(scene_, "surface", 0);
-        uniform(scene_, "nativeOutput", nativeOutput);
-        uniform(scene_, "nativeTone",
+        auto shader = depthOnly ? depthProgram_ : scene_;
+        glUseProgram(shader);
+        if (depthOnly) {
+            glUniformMatrix4fv(glGetUniformLocation(shader,"vp"),1,GL_FALSE,vp.v.data());
+            uniform(shader,"albedo",0);
+        }
+        uniform(shader, "surface", 0);
+        uniform(shader, "nativeOutput", nativeOutput);
+        uniform(shader, "nativeTone",
                 profile["toneMapping"] == "aces"       ? 0
                 : profile["toneMapping"] == "reinhard" ? 1
                                                        : 2);
-        glUniform1f(glGetUniformLocation(scene_, "nativeExposure"), profile["exposure"].get<float>());
+        glUniform1f(glGetUniformLocation(shader, "nativeExposure"), profile["exposure"].get<float>());
         auto b = batches_[index];
         const auto &m = world_->materials[b.material];
         if (m.alphaMode == 2 && !graphics["alpha_haze"].get<bool>())
@@ -863,20 +881,20 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             glDisable(GL_CULL_FACE);
         else
             glEnable(GL_CULL_FACE);
-        glUniform1f(glGetUniformLocation(scene_, "alpha"), m.alpha);
-        glUniform1f(glGetUniformLocation(scene_, "alphaCutoff"), m.alphaCutoff);
-        uniform(scene_, "alphaMode", m.alphaMode);
-        uniform(scene_, "color", m.color);
-        uniform(scene_, "emission", m.emissive);
-        uniform(scene_, "hasTexture", m.baseTexture >= 0);
-        uniform(scene_, "baked", m.lightmap >= 0);
-        uniform(scene_, "lightSrgb", m.lightmapSrgb);
-        uniform(scene_, "unlit", m.unlit);
-        glUniform1f(glGetUniformLocation(scene_, "intensity"), m.intensity);
-        glUniform1f(glGetUniformLocation(scene_, "metallic"), m.metallic);
-        glUniform1f(glGetUniformLocation(scene_, "roughness"), m.roughness);
-        glUniform1f(glGetUniformLocation(scene_, "normalScale"), m.normalScale);
-        glUniform1f(glGetUniformLocation(scene_, "occlusionStrength"), m.occlusionStrength);
+        glUniform1f(glGetUniformLocation(shader, "alpha"), m.alpha);
+        glUniform1f(glGetUniformLocation(shader, "alphaCutoff"), m.alphaCutoff);
+        uniform(shader, "alphaMode", m.alphaMode);
+        uniform(shader, "color", m.color);
+        uniform(shader, "emission", m.emissive);
+        uniform(shader, "hasTexture", m.baseTexture >= 0);
+        uniform(shader, "baked", m.lightmap >= 0);
+        uniform(shader, "lightSrgb", m.lightmapSrgb);
+        uniform(shader, "unlit", m.unlit);
+        glUniform1f(glGetUniformLocation(shader, "intensity"), m.intensity);
+        glUniform1f(glGetUniformLocation(shader, "metallic"), m.metallic);
+        glUniform1f(glGetUniformLocation(shader, "roughness"), m.roughness);
+        glUniform1f(glGetUniformLocation(shader, "normalScale"), m.normalScale);
+        glUniform1f(glGetUniformLocation(shader, "occlusionStrength"), m.occlusionStrength);
         float matrices[45];
         GLint sets[5], present[5];
         for (int i = 0; i < 5; ++i) {
@@ -893,18 +911,18 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
                           present[i] ? (i == 0 || i == 4 ? colorTextures_ : textures_)[slot.texture] : 0);
             glBindSampler(unit, present[i] ? samplers_[slot.texture] : repeat_);
         }
-        glUniformMatrix3fv(glGetUniformLocation(scene_, "uvMatrix"), 5, GL_FALSE, matrices);
-        glUniform1iv(glGetUniformLocation(scene_, "uvSet"), 5, sets);
-        glUniform1iv(glGetUniformLocation(scene_, "present"), 5, present);
+        glUniformMatrix3fv(glGetUniformLocation(shader, "uvMatrix"), depthOnly ? 1 : 5, GL_FALSE, matrices);
+        glUniform1iv(glGetUniformLocation(shader, "uvSet"), depthOnly ? 1 : 5, sets);
+        glUniform1iv(glGetUniformLocation(shader, "present"), depthOnly ? 1 : 5, present);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m.lightmap >= 0 ? textures_[m.lightmap] : 0);
         auto model = transforms.contains(b.node) ? transforms.at(b.node) : Mat4::identity();
-        glUniformMatrix4fv(glGetUniformLocation(scene_, "model"), 1, GL_FALSE, model.v.data());
+        glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, model.v.data());
         glBindVertexArray(b.vao);
         glDrawArrays(GL_TRIANGLES, 0, b.count);
     };
     for (auto index : order)
-        if (world_->materials[batches_[index].material].alphaMode != 2)
+        if (!externalWorldFbo && world_->materials[batches_[index].material].alphaMode != 2)
             drawBatch(index, false);
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
@@ -924,7 +942,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         int w = scaledWidth_, h = scaledHeight_;
         glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa_);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolve_);
-        if (samples_ > 1)
+        if (!externalWorldFbo && samples_ > 1)
             glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
         gpu_[2].end();
         gpu_[4].begin();
@@ -938,7 +956,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glViewport(0, 0, std::max(1, w / 2), std::max(1, h / 2));
         glUniform1f(glGetUniformLocation(bloom_, "threshold"), effects ? bloom["threshold"].get<float>() : 1e20f);
         float radius = bloom["radius"];
-        if (!effects || graphics["bloom"] == "off" || bloom["strength"].get<float>() <= 0) {
+        if (externalWorldFbo || !effects || graphics["bloom"] == "off" || bloom["strength"].get<float>() <= 0) {
             glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[0]);
             glClearColor(0, 0, 0, 0);
             glClear(GL_COLOR_BUFFER_BIT);
@@ -964,6 +982,19 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_ALWAYS);
     glDepthMask(GL_TRUE);
+    if (externalWorldFbo) {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, externalWorldFbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, nativeFbo_);
+        glBlitFramebuffer(0,0,w,h,0,0,w,h,GL_COLOR_BUFFER_BIT,GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, nativeFbo_);
+        glClearDepthf(1); glClear(GL_DEPTH_BUFFER_BIT);
+        glDepthFunc(GL_LESS); glColorMask(GL_FALSE,GL_FALSE,GL_FALSE,GL_FALSE);
+        depthOnly = true;
+        for (auto i : order)
+            if (world_->materials[batches_[i].material].alphaMode != 2) drawBatch(i, false);
+        depthOnly = false;
+        glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
+    } else {
     glUseProgram(upscale_);
     uniform(upscale_, "image", 0);
     uniform(upscale_, "depthImage", 1);
@@ -988,6 +1019,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glBindSampler(1, 0);
     glBindVertexArray(screenVao_);
     glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
     glDepthFunc(GL_LESS);
     glUseProgram(native_);
     glUniformMatrix4fv(glGetUniformLocation(native_, "vp"), 1, GL_FALSE, vp.v.data());
@@ -1006,7 +1038,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     std::vector<TransparentDraw> transparent;
     for (size_t i = 0; i < surfaces.size(); ++i)
         transparent.push_back({dot(surfaces[i].center - camera.position, camera.forward()), i, true});
-    if (graphics["alpha_haze"].get<bool>())
+    if (!worldOnly && graphics["alpha_haze"].get<bool>())
         for (size_t i = 0; i < batches_.size(); ++i)
             if (world_->materials[batches_[i].material].alphaMode == 2) {
                 auto &b = batches_[i];
@@ -1070,7 +1102,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
-    worldOverlays(camera, surfaces, w, h);
+    if (!worldOnly) worldOverlays(camera, surfaces, w, h);
     // Editor primitives are plain vertices under the same GL guard. No seat or
     // compositor callbacks occur while the render pass draws handles/path strokes.
     glDisable(GL_DEPTH_TEST);
@@ -1138,6 +1170,12 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glFlush();
 }
 void Renderer::present(GLuint target, int w, int h, bool typing) {
+    if (worldOnly) {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, nativeFbo_);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, target);
+        glBlitFramebuffer(0,0,w,h,0,0,w,h,GL_COLOR_BUFFER_BIT,GL_NEAREST);
+        return;
+    }
     glViewport(0, 0, w, h);
     glBindFramebuffer(GL_FRAMEBUFFER, target);
     glDisable(GL_DEPTH_TEST);
@@ -1202,7 +1240,14 @@ void Renderer::debugHUD(int w, int h) {
     auto gpu = [&](int index) {
         std::ostringstream out;
         out << std::fixed << std::setprecision(2);
-        if (gpu_[index].available)
+        const std::map<int, std::string> workerPass{{0,"world_shading_shared"},{2,"msaa_resolve"},
+                                                   {4,"bloom"},{5,"upscale_sharpen"},{6,"sky"}};
+        auto worker = offloadState.value("worker", world::Json(nullptr));
+        if (offloadState.value("activeRenderer", "") == "offload" && worker.is_object() && workerPass.contains(index)) {
+            auto cost = worker.value("gpuEffectsMs", world::Json::object()).value(workerPass.at(index), world::Json(nullptr));
+            if (cost.is_number()) out << cost.get<double>() << " ms (worker)";
+            else out << "N/A (worker)";
+        } else if (gpu_[index].available)
             out << gpu_[index].milliseconds << " ms";
         else
             out << "N/A";
@@ -1221,10 +1266,21 @@ void Renderer::debugHUD(int w, int h) {
             << enabled("ambient_occlusion") << " | fog " << graphics["fog"].get<std::string>() << "\n  anisotropy " << graphics["anisotropy"] << "x / baked shadows retained"
             << "\nMSAA " << samples_ << "x resolve                 " << gpu(2) << "\nBloom "
             << graphics["bloom"].get<std::string>() << "                       " << gpu(4)
+            << "\nRenderer " << offloadState.value("activeRenderer", "in-process") << "  " << offloadState.value("powerW", world::Json(nullptr)).dump() << " W"
             << "\nUpscale + sharpen               " << gpu(5) << "\nNative windows / haze " << enabled("alpha_haze") << "   " << gpu(1)
             << "\nOutput + markers                " << gpu(3) << "\nSSR / runtime shadows: unsupported"
             << "\nRendered " << frames << " / reused " << skipped_;
-    panel(14 * scale, 14 * scale, std::min(float(w) - 28 * scale, 740 * scale), 352 * scale);
+    if (offloadState.value("activeRenderer", "") == "offload") {
+        auto worker = offloadState.value("worker", world::Json::object());
+        message << "\n" << offloadState.value("profile", "unknown") << " / " << offloadState.value("capW", 0.)
+                << " W cap / " << offloadState.value("targetFPS", 0) << " FPS worker"
+                << "\nTransfer " << worker.value("transferGpuMs", world::Json(nullptr)).dump()
+                << " ms / local depth " << gpu_[5].milliseconds << " ms";
+    }
+    auto content = message.str();
+    float rows = std::count(content.begin(), content.end(), '\n') + 1;
+    scale = std::min(scale, std::max(.5f, (h - 48.f) / (rows * 22.f + 24.f)));
+    panel(14 * scale, 14 * scale, std::min(float(w) - 28 * scale, 740 * scale), (rows * 22 + 24) * scale);
     text(26 * scale, 24 * scale, message.str(), {.79f, .9f, .96f}, w, h, scale);
 }
 
@@ -1621,6 +1677,7 @@ world::Json Renderer::timings() const {
             {"reusedFrames", skipped_},
             {"inFlight", frameFences_.size()},
             {"renderer", device},
+            {"offload", offloadState},
             {"msaaSamples", samples_},
             {"quality", intelQuality ? "intel" : "high"},
             {"collisionTriangles", world_ ? world_->collision.size() : 0}};
@@ -1700,6 +1757,7 @@ void Renderer::destroy() {
     collisionVao_ = collisionVbo_ = 0;
     collisionCount_ = 0;
     glDeleteProgram(scene_);
+    glDeleteProgram(depthProgram_); depthProgram_ = 0;
     glDeleteProgram(native_);
     glDeleteProgram(tone_);
     glDeleteProgram(upscale_);

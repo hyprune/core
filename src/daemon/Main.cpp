@@ -1,4 +1,5 @@
 #include "LayoutStore.hpp"
+#include "offload/Supervisor.hpp"
 #include "ipc/Server.hpp"
 #include <csignal>
 #include <cstdio>
@@ -63,7 +64,13 @@ int main() {
             if (::send(fd, bytes.data(), bytes.size(), MSG_NOSIGNAL) != (ssize_t)bytes.size())
                 throw std::runtime_error("bridge write failed");
         };
+        hyprune::offload::Supervisor renderer(HYPRUNE_RENDERER_PATH, [&](Json j, int channel) {
+            j["epoch"] = epoch;
+            if (!hyprune::offload::sendPacket(fd, j, channel >= 0 ? std::vector<int>{channel} : std::vector<int>{}))
+                throw std::runtime_error("renderer bridge backpressure");
+        });
         auto apply = [&](const Json &j) {
+            if (j.at("type") == "renderer.request") renderer.request(j.at("request"));
             if (j.at("type") == "layout.ready")
                 persistReady = true;
             if (j.at("type") == "hello" && !layoutSent) {
@@ -93,6 +100,7 @@ int main() {
             while (running && std::chrono::steady_clock::now() < deadline) {
                 pollfd p{fd, POLLIN, 0};
                 ::poll(&p, 1, 50);
+                renderer.tick();
                 send({{"type", "heartbeat"}});
                 if (!cancelled && method != "_connection.closed" && params.contains("_actor") &&
                     !server->connected(params.at("_actor"))) {
@@ -137,6 +145,7 @@ int main() {
                 send({{"type", "heartbeat"}});
                 heartbeat = std::chrono::steady_clock::now();
             }
+            renderer.tick();
             endpoint.poll();
         }
         std::fprintf(stderr, "hypruned: stopping\n");

@@ -5,6 +5,7 @@ namespace hyprune::render {
 // GPU budget leaves headroom for the compositor. Slow reductions and slower
 // increases prevent oscillation; invalid/disjoint timer samples never steer it.
 struct Resolution {
+    float minimum = .375f, maximum = 1.f;
     float scale = 1, requested = 0; // zero = auto
     double average = 0, elapsed = 0;
     int targetFPS = 60;
@@ -12,6 +13,8 @@ struct Resolution {
         requested = request;
         targetFPS = fps;
         scale = request > 0 ? request : intel && pixels > 2560 * 1440 ? .5f : 1.f;
+        if (request <= 0)
+            scale = std::clamp(scale, minimum, maximum);
         average = elapsed = 0;
     }
     bool sample(double gpuMs, double dt) {
@@ -22,9 +25,9 @@ struct Resolution {
         double budget = 600. / targetFPS;
         float next = scale;
         if (average > budget * 1.08 && elapsed >= .6)
-            next = std::max(.375f, scale - .0625f);
+            next = std::max(minimum, scale - .0625f);
         else if (average < budget * .60 && elapsed >= 6.)
-            next = std::min(1.f, scale + .0625f);
+            next = std::min(maximum, scale + .0625f);
         if (next == scale)
             return false;
         scale = next;

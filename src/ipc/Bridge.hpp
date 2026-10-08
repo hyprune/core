@@ -15,6 +15,7 @@ class Bridge {
     void notify(const std::string &event, Json params, const std::string &actor = "") {
         send({{"type", "event"}, {"event", event}, {"params", std::move(params)}, {"actor", actor}});
     }
+    void renderer(Json request) { send({{"type", "renderer.request"}, {"request", std::move(request)}}); }
     void poll();
     void complete(Json result);
     void fail(int code, const std::string &message);

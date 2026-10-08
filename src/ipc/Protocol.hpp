@@ -37,7 +37,7 @@ inline bool exactly(std::string_view value, std::string_view expected) {
 }
 // This is the only supported-version inventory. Capability gates use floors,
 // not this list: adding a negotiated version inherits existing functionality.
-inline constexpr std::array Supported{"0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9"};
+inline constexpr std::array Supported{"0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "0.10"};
 inline constexpr std::string_view Latest = Supported.back();
 template <class Offers> std::optional<std::string_view> negotiate(const Offers &offers) {
     std::optional<std::string_view> selected;
