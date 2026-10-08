@@ -58,6 +58,13 @@ int main() {
         legacy["modes"][mode].erase("capture");
     }
     assert(validateInput(legacy) == defaults);
+    for (auto mode : {"interactive", "focus", "menu"}) {
+        Input typing;
+        assert(typing.event(mode, "u", 0, true, 100).empty());
+        assert(typing.event(mode, "y", 0, true, 100).empty());
+        auto captured = typing.event(mode, "u", Super, true, 100);
+        assert(captured.size() == 1 && captured[0].name == "capture");
+    }
     assert(sim::Camera::lookPitch(-10, .0025f, false) > 0);
     assert(sim::Camera::lookPitch(-10, .0025f, true) < 0);
     for (float yaw : {-.5235988f, 0.f, .5235988f}) {

@@ -80,8 +80,7 @@ Json validateInput(const Json &raw) {
             if (j["modes"].contains(mode) && j["modes"][mode].is_object())
                 for (auto action : {"debug", "capture"})
                     if (!j["modes"][mode].contains(action))
-                        j["modes"][mode][action] =
-                            j["modes"]["world"].value(action, defaults["modes"]["world"][action]);
+                        j["modes"][mode][action] = defaults["modes"][mode][action];
     if (!j.is_object() || j.size() != defaults.size())
         throw std::runtime_error("input config requires all version 2 fields");
     for (auto it = j.begin(); it != j.end(); ++it)

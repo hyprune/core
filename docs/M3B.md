@@ -248,9 +248,10 @@ the logical top), matching input rays and projection.
 
 `invert_y` is an optional boolean in input.json, defaults to false, and has a
 Settings checkbox. Older keymaps are normalized without overwriting the file.
-Missing debug/capture actions in interactive/focus/menu inherit their world
-bindings; explicit empty arrays disable them. F3/Y and U are scoped bindings in
-those modes, so their Hyprland collisions are intercepted only while active.
+Missing debug/capture actions in interactive/focus/menu use their mode defaults;
+explicit empty arrays disable them. World uses F3/Y and U. Interactive, focus
+and menu use F3 and Super+U so ordinary U and Y remain typeable in clients.
+Their Hyprland collisions are intercepted only while the mode is active.
 
 F3/Y draws core's same-frame diagnostic HUD: FPS/frame interval, CPU update,
 render, capture refresh and IPC, asynchronous disjoint-aware GPU query timings,
@@ -282,12 +283,12 @@ desktop snapshot. Plugin unload waits for any active writer to finish.
       and collision recovery still prevents geometry penetration.
 - [ ] F3 then Y toggles core diagnostics; verify CPU/GPU labels and all collision
       wires. No cursor state change occurs for either action.
-- [ ] U in world, E-interactive, F-focus and Director: JSON and PNG appear,
+- [ ] U in world and Super+U in E-interactive, F-focus and Director: JSON and PNG appear,
       the notice names their path, and PNG orientation matches the world output.
       Native focus captures clearly report last-world-frame age. U never changes
       the cursor or triggers a compositor snapshot inside the frame.
 - [ ] Interactive/focus → Super+Tab: existing deferred cursor hide/show and focus
-      exit remain balanced after diagnostics. F3/Y/U stealing ends on deactivate.
+      exit remain balanced after diagnostics. F3/Super+U stealing ends on deactivate.
 
 Nested evidence is under `docs/evidence/live-round2/`. The nested compositor has
 only a software cursor; these checks do not validate hardware-cursor behavior.

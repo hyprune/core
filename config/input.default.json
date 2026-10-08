@@ -114,11 +114,10 @@
         "Back"
       ],
       "debug": [
-        "F3",
-        "y"
+        "F3"
       ],
       "capture": [
-        "u"
+        "Super+u"
       ]
     },
     "focus": {
@@ -127,11 +126,10 @@
         "Back"
       ],
       "debug": [
-        "F3",
-        "y"
+        "F3"
       ],
       "capture": [
-        "u"
+        "Super+u"
       ]
     },
     "menu": {
@@ -139,11 +137,10 @@
         "Escape"
       ],
       "debug": [
-        "F3",
-        "y"
+        "F3"
       ],
       "capture": [
-        "u"
+        "Super+u"
       ]
     }
   }
