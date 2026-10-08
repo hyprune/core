@@ -126,7 +126,19 @@ int main(int argc, char **argv) {
         check(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "test framebuffer");
         checkSurfaceSampler(fbo);
         render::Renderer renderer;
-        renderer.prepare(world::load(argv[1]));
+        auto loaded = world::load(argv[1]);
+        renderer.prepare(loaded);
+        renderer.beginPrepare(loaded);
+        check(!renderer.continuePrepare(.1, 256 * 1024), "world upload did not yield");
+        renderer.cancelPrepare();
+        renderer.cancelPrepare();
+        renderer.beginPrepare(loaded);
+        int uploadSteps = 0;
+        while (!renderer.continuePrepare(.5, 256 * 1024)) {
+            ++uploadSteps;
+            check(uploadSteps < 100000, "world upload failed to complete");
+        }
+        check(uploadSteps > 1, "world upload was not incremental");
         unsigned char gray[] = {128, 128, 128, 255};
         GLuint app;
         glGenTextures(1, &app);
@@ -180,6 +192,27 @@ int main(int argc, char **argv) {
         check(std::abs(int(pixel[0]) - 128) <= 1, "app pixels were tone mapped or gamma decoded twice");
         check(glGetError() == GL_NO_ERROR, "GL error");
         glFinish();
+        std::array<unsigned char, 4> behind{};
+        renderer.draw(fbo, 320, 180, camera, {}, false);
+        glFinish();
+        glReadPixels(180, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, behind.data());
+        unsigned char transparent[] = {0, 0, 0, 0};
+        glBindTexture(GL_TEXTURE_2D, app);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, transparent);
+        renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
+        glFinish();
+        glReadPixels(180, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+        check(std::abs(int(pixel[0]) - behind[0]) <= 1, "transparent client texel discarded world background");
+        unsigned char halfAlpha[] = {64, 64, 64, 128};
+        glBindTexture(GL_TEXTURE_2D, app);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, halfAlpha);
+        renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
+        glFinish();
+        glReadPixels(180, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+        check(std::abs(int(pixel[0]) - (64 + behind[0] * 127. / 255)) <= 2,
+              "client premultiplied alpha composed incorrectly");
+        glBindTexture(GL_TEXTURE_2D, app);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, gray);
         renderer.renderScale = .5f;
         renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
         glFinish();
@@ -332,6 +365,21 @@ int main(int argc, char **argv) {
         materialWorld->meshes = {far, front, back};
         auto blendB = pixels();
         check(blendA == blendB, "transparent primitives not depth sorted");
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, app);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, gray);
+        auto foregroundClient = surface;
+        foregroundClient.center.z = 0;
+        renderer.draw(fbo, 320, 180, camera, std::span(&foregroundClient, 1), false);
+        glFinish();
+        glReadPixels(180, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+        check(std::abs(int(pixel[0]) - 128) <= 1, "world glass behind client covered it");
+        foregroundClient.center.z = -1.5f;
+        renderer.draw(fbo, 320, 180, camera, std::span(&foregroundClient, 1), false);
+        glFinish();
+        glReadPixels(180, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+        check(std::abs(int(pixel[0]) - 128) > 3 || std::abs(int(pixel[1]) - 128) > 3,
+              "world glass in front of client did not blend over it");
         materialWorld->materials[1].alphaMode = 1;
         materialWorld->materials[1].alphaCutoff = .5f;
         auto masked = pixels();
@@ -514,9 +562,11 @@ int main(int argc, char **argv) {
             scale.sample(100, .016);
         check(scale.scale == .375f, "resolution lower bound");
         scale.reset(0, 60, true, 3840 * 2160);
-        for (int i = 0; i < 50; ++i) scale.sample(1, .1);
+        for (int i = 0; i < 50; ++i)
+            scale.sample(1, .1);
         check(scale.scale == .5f, "resolution increased before stable headroom");
-        for (int i = 0; i < 15; ++i) scale.sample(1, .1);
+        for (int i = 0; i < 15; ++i)
+            scale.sample(1, .1);
         check(scale.scale > .5f, "resolution never recovers under sustained headroom");
         scale.reset(.75f, 60, true, 3840 * 2160);
         for (int i = 0; i < 1000; ++i)

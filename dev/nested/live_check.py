@@ -58,7 +58,10 @@ APICALL EXPORT void PLUGIN_EXIT(){}
         check('world_active',s.camera()['active'])
         check('isolated_default_input',json.loads((pathlib.Path(recorded['runroot'])/'input.json').read_text())==json.loads((s.ROOT/'config/input.default.json').read_text()))
         output=command('status');(state/'status.log').write_text(output);check('status_logs_and_reports','last 20 lines' in output and 'New crash reports' in output)
-        from live_regressions import acceptance as regressions
+        if os.environ.get('HYPRUNE_GRAPHICS_PROFILE')=='1':
+            from graphics_profile import acceptance as regressions
+        else:
+            from live_regressions import acceptance as regressions
         regressions(state, recorded, children, check)
         # Toggle via the installed runtime callback, then recover from helper death.
         s.ctl('eval','hl.plugin.hyprune.toggle()');time.sleep(.3);check('toggle_deactivates',not s.camera()['active'])

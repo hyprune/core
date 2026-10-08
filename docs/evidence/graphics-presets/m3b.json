@@ -211,7 +211,7 @@
       "captures": [
         {
           "collision": false,
-          "commits": 174,
+          "commits": 168,
           "floating": true,
           "id": "surface-1",
           "parentId": "",
@@ -313,7 +313,7 @@
       "debug": false,
       "error": "",
       "eyeHeight": 1.7000000476837158,
-      "frames": 476,
+      "frames": 480,
       "fullscreen": 0,
       "fullscreenId": "",
       "gesture": 0,
@@ -361,7 +361,7 @@
       },
       "overlays": {
         "areaMarkers": false,
-        "frame": 476,
+        "frame": 480,
         "heading": 0.0,
         "labels": [],
         "pitch": 0.0,
@@ -389,34 +389,34 @@
       ],
       "superHeld": false,
       "timings": {
-        "captureMs": 0.110427,
+        "captureMs": 0.079655,
         "collisionTriangles": 547,
         "cpuPassMs": [
-          0.070577,
-          0.036859,
-          0.010146,
-          0.006202
+          0.065853,
+          0.035278,
+          0.009473,
+          0.004485
         ],
-        "cpuRenderMs": 0.12474,
-        "cpuUpdateMs": 0.196268,
+        "cpuRenderMs": 0.11588,
+        "cpuUpdateMs": 0.155326,
         "debug": false,
-        "deliveredFPS": 59.97617098745732,
-        "frameMs": 16.669855,
-        "gpuCaptureMs": 0.018958,
+        "deliveredFPS": 59.99824529131821,
+        "frameMs": 16.545918,
+        "gpuCaptureMs": 0.018802,
         "gpuEffectsMs": {
-          "bloom": 0.005781,
+          "bloom": 0.20026,
           "msaa_resolve": 0.0,
-          "native_surfaces_geometry": 0.199479,
-          "output_markers": 0.217239,
-          "sky": 0.192239,
-          "upscale_sharpen": 0.27875,
-          "world_shading_shared": 0.703333
+          "native_surfaces_geometry": 0.008489,
+          "output_markers": 0.119843,
+          "sky": 0.184531,
+          "upscale_sharpen": 0.375937,
+          "world_shading_shared": 0.860989
         },
         "gpuPassMs": [
-          0.895572,
-          0.199479,
-          0.284531,
-          0.217239
+          1.04552,
+          0.008489,
+          0.5761970000000001,
+          0.119843
         ],
         "graphics": {
           "alpha_haze": false,
@@ -444,7 +444,7 @@
           1920,
           1080
         ],
-        "ipcMs": 0.000654,
+        "ipcMs": 0.317528,
         "msaaSamples": 1,
         "nativeSize": [
           1920,
@@ -452,10 +452,21 @@
         ],
         "quality": "intel",
         "renderScale": 1.0,
-        "renderedFrames": 476,
+        "renderedFrames": 480,
         "renderer": "Mesa Intel(R) Graphics (PTL)",
         "reusedFrames": 0,
-        "targetFPS": 60
+        "targetFPS": 60,
+        "upload": {
+          "bytes": 6775968,
+          "completedJobs": 0,
+          "cpuMs": 64.333887,
+          "jobs": 0,
+          "maxJobMs": 34.97335,
+          "maxStepMs": 34.977138,
+          "pending": false,
+          "slowestJob": "shader scene_ #0",
+          "steps": 12
+        }
       },
       "tool": 1,
       "yaw": 0.0
@@ -466,7 +477,7 @@
     "evidence": {
       "surface": {
         "collision": false,
-        "commits": 174,
+        "commits": 168,
         "floating": true,
         "id": "surface-1",
         "parentId": "",
@@ -500,7 +511,7 @@
         "captures": [
           {
             "collision": false,
-            "commits": 177,
+            "commits": 172,
             "floating": true,
             "id": "surface-1",
             "parentId": "",
@@ -602,7 +613,7 @@
         "debug": false,
         "error": "",
         "eyeHeight": 1.7000000476837158,
-        "frames": 526,
+        "frames": 530,
         "fullscreen": 0,
         "fullscreenId": "",
         "gesture": 0,
@@ -650,7 +661,7 @@
         },
         "overlays": {
           "areaMarkers": false,
-          "frame": 526,
+          "frame": 530,
           "heading": 0.0,
           "labels": [],
           "pitch": 0.0,
@@ -678,34 +689,34 @@
         ],
         "superHeld": false,
         "timings": {
-          "captureMs": 0.147991,
+          "captureMs": 0.115167,
           "collisionTriangles": 547,
           "cpuPassMs": [
-            0.0835,
-            0.0218,
-            0.01051,
-            0.006168
+            0.096481,
+            0.025902,
+            0.018225,
+            0.006401
           ],
-          "cpuRenderMs": 0.123087,
-          "cpuUpdateMs": 0.444632,
+          "cpuRenderMs": 0.148455,
+          "cpuUpdateMs": 0.311638,
           "debug": false,
-          "deliveredFPS": 60.02902860147132,
-          "frameMs": 16.680811,
-          "gpuCaptureMs": 0.019531,
+          "deliveredFPS": 59.99410092758227,
+          "frameMs": 16.709145,
+          "gpuCaptureMs": 0.018125,
           "gpuEffectsMs": {
-            "bloom": 0.00651,
-            "msaa_resolve": 5.2e-05,
-            "native_surfaces_geometry": 0.284791,
-            "output_markers": 0.218906,
-            "sky": 0.211927,
-            "upscale_sharpen": 0.305468,
-            "world_shading_shared": 0.455
+            "bloom": 0.00552,
+            "msaa_resolve": 0.0,
+            "native_surfaces_geometry": 0.301927,
+            "output_markers": 0.129635,
+            "sky": 0.185312,
+            "upscale_sharpen": 0.344322,
+            "world_shading_shared": 0.492708
           },
           "gpuPassMs": [
-            0.666927,
-            0.284791,
-            0.31203000000000003,
-            0.218906
+            0.67802,
+            0.301927,
+            0.34984200000000004,
+            0.129635
           ],
           "graphics": {
             "alpha_haze": false,
@@ -733,7 +744,7 @@
             1920,
             1080
           ],
-          "ipcMs": 0.000916,
+          "ipcMs": 0.001127,
           "msaaSamples": 1,
           "nativeSize": [
             1920,
@@ -741,10 +752,21 @@
           ],
           "quality": "intel",
           "renderScale": 1.0,
-          "renderedFrames": 526,
+          "renderedFrames": 530,
           "renderer": "Mesa Intel(R) Graphics (PTL)",
           "reusedFrames": 0,
-          "targetFPS": 60
+          "targetFPS": 60,
+          "upload": {
+            "bytes": 6775968,
+            "completedJobs": 0,
+            "cpuMs": 64.333887,
+            "jobs": 0,
+            "maxJobMs": 34.97335,
+            "maxStepMs": 34.977138,
+            "pending": false,
+            "slowestJob": "shader scene_ #0",
+            "steps": 12
+          }
         },
         "tool": 1,
         "yaw": 0.0
@@ -759,7 +781,7 @@
     "passed": true,
     "evidence": {
       "collision": false,
-      "commits": 2,
+      "commits": 1,
       "floating": true,
       "id": "surface-2",
       "parentId": "",
@@ -788,7 +810,7 @@
   },
   "plain_drag_release_1": {
     "passed": true,
-    "evidence": "fixture button 1 at 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 431.1 250.0\nfixture drag 449.3 250.0\nfixture drag 460.0 250.0\nfixture drag 466.2 250.0\nfixture drag 469.9 250.0\nfixture release 1 at 469.9 250.0\n"
+    "evidence": "fixture button 1 at 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 431.0 250.0\nfixture drag 449.3 250.0\nfixture drag 460.0 250.0\nfixture drag 466.2 250.0\nfixture drag 469.9 250.0\nfixture release 1 at 469.9 250.0\n"
   },
   "plain_click_stays_world_1": {
     "passed": true,
@@ -796,7 +818,7 @@
   },
   "off_window_release_balanced_1": {
     "passed": true,
-    "evidence": "fixture button 1 at 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 431.1 250.0\nfixture drag 449.3 250.0\nfixture drag 460.0 250.0\nfixture drag 466.2 250.0\nfixture drag 469.9 250.0\nfixture release 1 at 469.9 250.0\nfixture button 1 at 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture release 1 at 400.0 250.0\n"
+    "evidence": "fixture button 1 at 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 431.0 250.0\nfixture drag 449.3 250.0\nfixture drag 460.0 250.0\nfixture drag 466.2 250.0\nfixture drag 469.9 250.0\nfixture release 1 at 469.9 250.0\nfixture button 1 at 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture drag 400.0 250.0\nfixture release 1 at 400.0 250.0\n"
   },
   "logical_scale_2": {
     "passed": true,
@@ -811,13 +833,13 @@
         500
       ],
       "position": [
-        3.7366172656039254e-11,
+        3.665191067314666e-11,
         2.299999952316284,
         2.1999998092651367
       ],
       "rotation": [
         0.0,
-        -2.425935241365665e-18,
+        -1.4011147106941175e-18,
         0.0,
         1.0
       ],
@@ -845,7 +867,7 @@
     "passed": true,
     "evidence": {
       "before": [
-        1.3384213737310802e-08,
+        2.2297420798622625e-08,
         2.299999952316284,
         4.599999904632568
       ],
@@ -857,7 +879,7 @@
         "captures": [
           {
             "collision": false,
-            "commits": 204,
+            "commits": 199,
             "floating": true,
             "id": "surface-1",
             "parentId": "",
@@ -866,13 +888,13 @@
               560
             ],
             "position": [
-              1.3384319430542746e-08,
+              2.2297593105236047e-08,
               2.299999952316284,
-              -1.3041081428527832
+              -1.2547606229782104
             ],
             "rotation": [
               0.0,
-              -2.1945605529756322e-14,
+              -3.599725023812651e-14,
               0.0,
               1.0
             ],
@@ -959,7 +981,7 @@
         "debug": false,
         "error": "",
         "eyeHeight": 1.7000000476837158,
-        "frames": 1141,
+        "frames": 1131,
         "fullscreen": 0,
         "fullscreenId": "",
         "gesture": 1,
@@ -1007,8 +1029,8 @@
         },
         "overlays": {
           "areaMarkers": false,
-          "frame": 1141,
-          "heading": 4.3891211059512644e-14,
+          "frame": 1131,
+          "heading": 7.199450047625303e-14,
           "labels": [
             {
               "text": "E USE / F FOCUS",
@@ -1026,9 +1048,9 @@
           0.5
         ],
         "position": [
-          1.3384213737310802e-08,
+          2.2297420798622625e-08,
           2.299999952316284,
-          1.0958919525146484
+          1.1452394723892212
         ],
         "positionMode": 0,
         "pressedButtons": 0,
@@ -1041,34 +1063,34 @@
         ],
         "superHeld": true,
         "timings": {
-          "captureMs": 0.043277,
+          "captureMs": 0.027449,
           "collisionTriangles": 547,
           "cpuPassMs": [
-            0.078759,
-            0.028266,
-            0.010176,
-            0.034761
+            0.066012,
+            0.021604,
+            0.007534,
+            0.009214
           ],
-          "cpuRenderMs": 0.153344,
-          "cpuUpdateMs": 0.14733,
+          "cpuRenderMs": 0.105641,
+          "cpuUpdateMs": 0.185035,
           "debug": false,
-          "deliveredFPS": 60.001820396212636,
-          "frameMs": 16.678849,
-          "gpuCaptureMs": 0.01927,
+          "deliveredFPS": 60.014170565630735,
+          "frameMs": 16.848288,
+          "gpuCaptureMs": 0.018697,
           "gpuEffectsMs": {
-            "bloom": 0.006562,
+            "bloom": 0.005989,
             "msaa_resolve": 5.2e-05,
-            "native_surfaces_geometry": 0.038489,
-            "output_markers": 2.516197,
-            "sky": 0.205364,
-            "upscale_sharpen": 0.284166,
-            "world_shading_shared": 0.420416
+            "native_surfaces_geometry": 0.279895,
+            "output_markers": 0.135156,
+            "sky": 0.190208,
+            "upscale_sharpen": 0.333177,
+            "world_shading_shared": 0.481614
           },
           "gpuPassMs": [
-            0.62578,
-            0.038489,
-            0.29078,
-            2.516197
+            0.6718219999999999,
+            0.279895,
+            0.339218,
+            0.135156
           ],
           "graphics": {
             "alpha_haze": false,
@@ -1096,7 +1118,7 @@
             1920,
             1080
           ],
-          "ipcMs": 0.000641,
+          "ipcMs": 0.000505,
           "msaaSamples": 1,
           "nativeSize": [
             1920,
@@ -1104,13 +1126,24 @@
           ],
           "quality": "intel",
           "renderScale": 1.0,
-          "renderedFrames": 1141,
+          "renderedFrames": 1131,
           "renderer": "Mesa Intel(R) Graphics (PTL)",
           "reusedFrames": 0,
-          "targetFPS": 60
+          "targetFPS": 60,
+          "upload": {
+            "bytes": 6775968,
+            "completedJobs": 0,
+            "cpuMs": 64.333887,
+            "jobs": 0,
+            "maxJobMs": 34.97335,
+            "maxStepMs": 34.977138,
+            "pending": false,
+            "slowestJob": "shader scene_ #0",
+            "steps": 12
+          }
         },
         "tool": 1,
-        "yaw": 4.3891211059512644e-14
+        "yaw": 7.199450047625303e-14
       },
       "stolen": false
     }
@@ -1119,7 +1152,7 @@
     "passed": true,
     "evidence": {
       "collision": false,
-      "commits": 206,
+      "commits": 201,
       "floating": true,
       "id": "surface-1",
       "parentId": "",
@@ -1128,13 +1161,13 @@
         560
       ],
       "position": [
-        1.3384316766007487e-08,
+        2.2297589552522368e-08,
         2.8354544639587402,
-        -1.2437525987625122
+        -1.195562720298767
       ],
       "rotation": [
         0.0,
-        -2.1945605529756322e-14,
+        -3.599725023812651e-14,
         0.0,
         1.0
       ],
@@ -1297,8 +1330,8 @@
   "Shift_boost": {
     "passed": true,
     "evidence": [
-      1.2416374683380127,
-      2.0819212198257446
+      1.2934062480926514,
+      2.218610644340515
     ]
   },
   "V_noclip": {
@@ -1332,7 +1365,7 @@
         "captures": [
           {
             "collision": false,
-            "commits": 557,
+            "commits": 561,
             "floating": true,
             "id": "surface-1",
             "parentId": "",
@@ -1341,13 +1374,13 @@
               560
             ],
             "position": [
-              1.3384316766007487e-08,
+              2.2297589552522368e-08,
               2.8354544639587402,
-              -1.2437525987625122
+              -1.195562720298767
             ],
             "rotation": [
               0.0,
-              -2.1945605529756322e-14,
+              -3.599725023812651e-14,
               0.0,
               1.0
             ],
@@ -1360,7 +1393,7 @@
           },
           {
             "collision": false,
-            "commits": 2,
+            "commits": 3,
             "floating": false,
             "id": "surface-4",
             "parentId": "",
@@ -1462,7 +1495,7 @@
         "debug": false,
         "error": "",
         "eyeHeight": 1.7000000476837158,
-        "frames": 2079,
+        "frames": 2088,
         "fullscreen": 0,
         "fullscreenId": "",
         "gesture": 0,
@@ -1502,7 +1535,7 @@
         },
         "overlays": {
           "areaMarkers": false,
-          "frame": 2079,
+          "frame": 2088,
           "heading": 0.0,
           "labels": [],
           "pitch": 0.0,
@@ -1515,9 +1548,9 @@
           0.5
         ],
         "position": [
-          6.947517647987178e-12,
-          2.1692445278167725,
-          1.3831521272659302
+          3.811494522776293e-12,
+          2.194697856903076,
+          1.2033437490463257
         ],
         "positionMode": 0,
         "pressedButtons": 0,
@@ -1530,34 +1563,34 @@
         ],
         "superHeld": false,
         "timings": {
-          "captureMs": 0.067106,
+          "captureMs": 0.06404,
           "collisionTriangles": 547,
           "cpuPassMs": [
-            0.09269,
-            0.016763,
-            0.01207,
-            0.007291
+            0.100158,
+            0.017699,
+            0.011748,
+            0.00658
           ],
-          "cpuRenderMs": 0.129812,
-          "cpuUpdateMs": 0.138821,
+          "cpuRenderMs": 0.137447,
+          "cpuUpdateMs": 0.122093,
           "debug": false,
-          "deliveredFPS": 60.003620205303505,
-          "frameMs": 16.735925,
-          "gpuCaptureMs": 0.138072,
+          "deliveredFPS": 59.99976657139996,
+          "frameMs": 16.656163,
+          "gpuCaptureMs": 0.1425,
           "gpuEffectsMs": {
-            "bloom": 0.007968,
+            "bloom": 0.00677,
             "msaa_resolve": 5.2e-05,
-            "native_surfaces_geometry": 0.026822,
-            "output_markers": 0.23927,
-            "sky": 0.213541,
-            "upscale_sharpen": 0.326666,
-            "world_shading_shared": 0.429218
+            "native_surfaces_geometry": 0.654427,
+            "output_markers": 0.154791,
+            "sky": 0.224843,
+            "upscale_sharpen": 0.394843,
+            "world_shading_shared": 0.636041
           },
           "gpuPassMs": [
-            0.642759,
-            0.026822,
-            0.33468600000000004,
-            0.23927
+            0.860884,
+            0.654427,
+            0.401665,
+            0.154791
           ],
           "graphics": {
             "alpha_haze": false,
@@ -1585,7 +1618,7 @@
             1920,
             1080
           ],
-          "ipcMs": 0.577649,
+          "ipcMs": 0.0008,
           "msaaSamples": 1,
           "nativeSize": [
             1920,
@@ -1593,10 +1626,21 @@
           ],
           "quality": "intel",
           "renderScale": 1.0,
-          "renderedFrames": 2079,
+          "renderedFrames": 2088,
           "renderer": "Mesa Intel(R) Graphics (PTL)",
           "reusedFrames": 0,
-          "targetFPS": 60
+          "targetFPS": 60,
+          "upload": {
+            "bytes": 6775968,
+            "completedJobs": 0,
+            "cpuMs": 64.333887,
+            "jobs": 0,
+            "maxJobMs": 34.97335,
+            "maxStepMs": 34.977138,
+            "pending": false,
+            "slowestJob": "shader scene_ #0",
+            "steps": 12
+          }
         },
         "tool": 1,
         "yaw": 0.0
@@ -1621,7 +1665,7 @@
         ],
         "transition": {
           "id": "transition-2",
-          "monotonicMs": 127154893,
+          "monotonicMs": 128979296,
           "outputId": "output-1",
           "phase": "arrived",
           "progress": 1.0,
@@ -1669,7 +1713,7 @@
       "captures": [
         {
           "collision": false,
-          "commits": 557,
+          "commits": 561,
           "floating": true,
           "id": "surface-1",
           "parentId": "",
@@ -1678,13 +1722,13 @@
             560
           ],
           "position": [
-            1.3384316766007487e-08,
+            2.2297589552522368e-08,
             2.8354544639587402,
-            -1.2437525987625122
+            -1.195562720298767
           ],
           "rotation": [
             0.0,
-            -2.1945605529756322e-14,
+            -3.599725023812651e-14,
             0.0,
             1.0
           ],
@@ -1697,7 +1741,7 @@
         },
         {
           "collision": false,
-          "commits": 2,
+          "commits": 3,
           "floating": false,
           "id": "surface-4",
           "parentId": "",
@@ -1799,7 +1843,7 @@
       "debug": false,
       "error": "",
       "eyeHeight": 1.0,
-      "frames": 2105,
+      "frames": 2113,
       "fullscreen": 0,
       "fullscreenId": "",
       "gesture": 0,
@@ -1839,7 +1883,7 @@
       },
       "overlays": {
         "areaMarkers": false,
-        "frame": 2105,
+        "frame": 2113,
         "heading": 0.0,
         "labels": [],
         "pitch": 0.0,
@@ -1867,34 +1911,34 @@
       ],
       "superHeld": false,
       "timings": {
-        "captureMs": 0.061411,
+        "captureMs": 0.081464,
         "collisionTriangles": 547,
         "cpuPassMs": [
-          0.081956,
-          0.015313,
-          0.010898,
-          0.006676
+          0.122887,
+          0.026278,
+          0.014748,
+          0.007804
         ],
-        "cpuRenderMs": 0.115969,
-        "cpuUpdateMs": 0.259646,
+        "cpuRenderMs": 0.173426,
+        "cpuUpdateMs": 0.271432,
         "debug": false,
-        "deliveredFPS": 59.99650068934406,
-        "frameMs": 16.687248,
-        "gpuCaptureMs": 0.128906,
+        "deliveredFPS": 59.99976657139996,
+        "frameMs": 16.68967,
+        "gpuCaptureMs": 0.110989,
         "gpuEffectsMs": {
-          "bloom": 0.00552,
+          "bloom": 0.006562,
           "msaa_resolve": 0.0,
-          "native_surfaces_geometry": 0.209583,
-          "output_markers": 0.201145,
-          "sky": 0.184947,
-          "upscale_sharpen": 0.269479,
-          "world_shading_shared": 0.426354
+          "native_surfaces_geometry": 0.270468,
+          "output_markers": 0.152395,
+          "sky": 0.226197,
+          "upscale_sharpen": 0.410833,
+          "world_shading_shared": 0.705364
         },
         "gpuPassMs": [
-          0.611301,
-          0.209583,
-          0.27499900000000005,
-          0.201145
+          0.931561,
+          0.270468,
+          0.417395,
+          0.152395
         ],
         "graphics": {
           "alpha_haze": false,
@@ -1922,7 +1966,7 @@
           1920,
           1080
         ],
-        "ipcMs": 0.457184,
+        "ipcMs": 0.656919,
         "msaaSamples": 1,
         "nativeSize": [
           1920,
@@ -1930,10 +1974,21 @@
         ],
         "quality": "intel",
         "renderScale": 1.0,
-        "renderedFrames": 2105,
+        "renderedFrames": 2113,
         "renderer": "Mesa Intel(R) Graphics (PTL)",
         "reusedFrames": 0,
-        "targetFPS": 60
+        "targetFPS": 60,
+        "upload": {
+          "bytes": 6775968,
+          "completedJobs": 0,
+          "cpuMs": 64.333887,
+          "jobs": 0,
+          "maxJobMs": 34.97335,
+          "maxStepMs": 34.977138,
+          "pending": false,
+          "slowestJob": "shader scene_ #0",
+          "steps": 12
+        }
       },
       "tool": 1,
       "yaw": 0.0
@@ -1952,7 +2007,7 @@
     "evidence": [
       -4.0,
       2.450000047683716,
-      -0.6079344749450684
+      -0.621564507484436
     ]
   },
   "fall_respawn": {
@@ -1978,7 +2033,7 @@
         "action": "menu",
         "binding": "Tab[L]",
         "durationMs": 1000,
-        "startedAtMs": 127192871
+        "startedAtMs": 129017405
       }
     ]
   },
@@ -2001,9 +2056,9 @@
       "status": "live",
       "protocol": "0.6",
       "screen": "HEADLESS-1",
-      "lease": "lease-eb74c5badfd2fe39",
+      "lease": "lease-d0e16627b04650e0",
       "director": true,
-      "revision": 651,
+      "revision": 658,
       "tab": 0,
       "warp": false,
       "phase": "idle",
@@ -2101,7 +2156,7 @@
     "passed": true,
     "evidence": {
       "collision": false,
-      "commits": 680,
+      "commits": 685,
       "floating": true,
       "id": "surface-1",
       "parentId": "",
@@ -2110,8 +2165,8 @@
         476
       ],
       "position": [
-        -3.003962993621826,
-        1.5657835006713867,
+        -3.0039620399475098,
+        1.565783977508545,
         -1.0499999523162842
       ],
       "rotation": [
@@ -2144,7 +2199,7 @@
     "passed": true,
     "evidence": {
       "collision": false,
-      "commits": 680,
+      "commits": 685,
       "floating": true,
       "id": "surface-1",
       "parentId": "",
@@ -2196,7 +2251,7 @@
     "evidence": {
       "before": {
         "collision": false,
-        "commits": 680,
+        "commits": 685,
         "floating": true,
         "id": "surface-1",
         "parentId": "",
@@ -2224,7 +2279,7 @@
       },
       "after": {
         "collision": false,
-        "commits": 680,
+        "commits": 685,
         "floating": true,
         "id": "surface-1",
         "parentId": "",
@@ -2239,7 +2294,7 @@
         ],
         "rotation": [
           0.0,
-          -0.08738831430673599,
+          -0.0873883068561554,
           0.0,
           0.9961743354797363
         ],
@@ -2269,7 +2324,7 @@
     "passed": true,
     "evidence": {
       "collision": false,
-      "commits": 680,
+      "commits": 685,
       "floating": true,
       "id": "surface-1",
       "parentId": "",
@@ -2306,7 +2361,7 @@
       "captures": [
         {
           "collision": false,
-          "commits": 680,
+          "commits": 685,
           "floating": true,
           "id": "surface-1",
           "parentId": "",
@@ -2334,7 +2389,7 @@
         },
         {
           "collision": false,
-          "commits": 26,
+          "commits": 29,
           "floating": false,
           "id": "surface-4",
           "parentId": "",
@@ -2436,7 +2491,7 @@
       "debug": false,
       "error": "",
       "eyeHeight": 1.7000000476837158,
-      "frames": 3235,
+      "frames": 3238,
       "fullscreen": 0,
       "fullscreenId": "",
       "gesture": 0,
@@ -2484,8 +2539,8 @@
       },
       "overlays": {
         "areaMarkers": false,
-        "frame": 3235,
-        "heading": 1.6535321879032841e-43,
+        "frame": 3238,
+        "heading": 1.7796490496925177e-43,
         "labels": [
           {
             "text": "E USE / F FOCUS",
@@ -2498,11 +2553,11 @@
             "y": 0.5
           }
         ],
-        "pitch": 3.363116314379561e-44,
+        "pitch": 3.6433760072445244e-44,
         "routeSegments": 0
       },
       "ownsInput": true,
-      "pitch": 3.363116314379561e-44,
+      "pitch": 3.6433760072445244e-44,
       "pointer": [
         0.5,
         0.5
@@ -2523,34 +2578,34 @@
       ],
       "superHeld": false,
       "timings": {
-        "captureMs": 0.027541,
+        "captureMs": 0.050873,
         "collisionTriangles": 547,
         "cpuPassMs": [
-          0.081319,
-          0.265804,
-          0.009882,
-          0.017365
+          0.185677,
+          0.141926,
+          0.014986,
+          0.018481
         ],
-        "cpuRenderMs": 0.375558,
-        "cpuUpdateMs": 0.391023,
+        "cpuRenderMs": 0.362831,
+        "cpuUpdateMs": 0.38089,
         "debug": false,
-        "deliveredFPS": 59.435767992871924,
-        "frameMs": 17.250616,
-        "gpuCaptureMs": 0.104895,
+        "deliveredFPS": 59.537867784709505,
+        "frameMs": 16.939956,
+        "gpuCaptureMs": 0.10375,
         "gpuEffectsMs": {
-          "bloom": 0.005989,
+          "bloom": 1.335052,
           "msaa_resolve": 0.0,
-          "native_surfaces_geometry": 0.026875,
-          "output_markers": 0.202239,
-          "sky": 0.18552,
-          "upscale_sharpen": 0.263229,
-          "world_shading_shared": 0.405885
+          "native_surfaces_geometry": 0.044895,
+          "output_markers": 0.130156,
+          "sky": 0.185364,
+          "upscale_sharpen": 0.37651,
+          "world_shading_shared": 0.529687
         },
         "gpuPassMs": [
-          0.591405,
-          0.026875,
-          0.269218,
-          0.202239
+          0.715051,
+          0.044895,
+          1.7115619999999998,
+          0.130156
         ],
         "graphics": {
           "alpha_haze": false,
@@ -2578,7 +2633,7 @@
           1920,
           1080
         ],
-        "ipcMs": 0.435588,
+        "ipcMs": 0.556714,
         "msaaSamples": 1,
         "nativeSize": [
           1920,
@@ -2586,20 +2641,31 @@
         ],
         "quality": "intel",
         "renderScale": 1.0,
-        "renderedFrames": 3235,
+        "renderedFrames": 3238,
         "renderer": "Mesa Intel(R) Graphics (PTL)",
         "reusedFrames": 0,
-        "targetFPS": 60
+        "targetFPS": 60,
+        "upload": {
+          "bytes": 6775968,
+          "completedJobs": 0,
+          "cpuMs": 64.333887,
+          "jobs": 0,
+          "maxJobMs": 34.97335,
+          "maxStepMs": 34.977138,
+          "pending": false,
+          "slowestJob": "shader scene_ #0",
+          "steps": 12
+        }
       },
       "tool": 4,
-      "yaw": 1.6535321879032841e-43
+      "yaw": 1.7796490496925177e-43
     }
   },
   "gizmo_uniform_client_scale": {
     "passed": true,
     "evidence": {
       "collision": false,
-      "commits": 699,
+      "commits": 702,
       "floating": true,
       "id": "surface-1",
       "parentId": "",

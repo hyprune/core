@@ -1,0 +1,47 @@
+{
+  "world": "Lumen Reach",
+  "resolution": [
+    3840,
+    2160
+  ],
+  "renderer": "Mesa Intel(R) Graphics (PTL)",
+  "elapsedSeconds": 22.917908647999866,
+  "deliveredFPS": 59.560408454596434,
+  "reusedFrames": 10,
+  "cpuMedianMs": {
+    "cpuUpdateMs": 0.22929850000000002,
+    "cpuRenderMs": 0.35737949999999996,
+    "captureMs": 0.030304499999999998,
+    "ipcMs": 0.000725
+  },
+  "gpuMedianMs": {
+    "bloom": 0.005052,
+    "msaa_resolve": 0.0,
+    "native_surfaces_geometry": 2.1711975,
+    "output_markers": 0.6374215000000001,
+    "sky": 0.114114,
+    "upscale_sharpen": 1.5028380000000001,
+    "world_shading_shared": 2.4219524999999997
+  },
+  "settings": {
+    "alpha_haze": false,
+    "ambient_occlusion": true,
+    "anisotropy": 1,
+    "bloom": "off",
+    "bloom_strength": 0.12,
+    "dynamic_resolution": true,
+    "exposure": 1,
+    "fog": "linear",
+    "fov": 60.0,
+    "msaa": 1,
+    "normal_maps": false,
+    "quality": "low",
+    "reduced_motion": false,
+    "reflections": false,
+    "render_scale": "auto",
+    "sharpen": 0.35,
+    "sky": "gradient",
+    "specular": false,
+    "target_fps": 60
+  }
+}

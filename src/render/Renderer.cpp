@@ -6,6 +6,7 @@
 #include <fontconfig/fontconfig.h>
 #include <ft2build.h>
 #include <numeric>
+#include <thread>
 #include FT_FREETYPE_H
 #include <iomanip>
 #include <sstream>
@@ -59,7 +60,8 @@ in vec3 n;in vec3 worldPosition;in vec2 uv;in vec2 lightUV;
 uniform sampler2D albedo,lightmap,normalMap,mrMap,aoMap,emissiveMap;
 uniform mat3 uvMatrix[5];uniform int uvSet[5];uniform int present[5];
 uniform vec3 color,emission,eye;
-uniform int hasTexture,baked,lightSrgb,unlit,surface,details;
+uniform int hasTexture,baked,lightSrgb,unlit,surface,details,nativeOutput,nativeTone;
+uniform float nativeExposure;
 uniform float intensity,metallic,roughness,normalScale,occlusionStrength;
 uniform samplerCube environmentMap;
 uniform float cubeLevels,envRotation,envIntensity,alpha,alphaCutoff;
@@ -122,7 +124,11 @@ void main(){
  fog=1.-exp(-length(worldPosition-eye)*density);
  }
  if(unlit!=0&&excludeUnlit!=0)fog=0.;lit=mix(lit,fogColor,clamp(fog,0.,1.));
- result=vec4(lit,alphaMode==2?coverage:1.);
+ if(nativeOutput!=0){vec3 x=lit*nativeExposure;
+ vec3 mapped=nativeTone==0?clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.):nativeTone==1?x/(1.+x):clamp(x,0.,1.);
+ vec3 encoded=mix(12.92*mapped,1.055*pow(max(mapped,vec3(0)),vec3(1./2.4))-.055,step(vec3(.0031308),mapped));
+ result=vec4(encoded*coverage,coverage);}
+ else result=vec4(lit,alphaMode==2?coverage:1.);
 }
 )";
 // Native app pixels stay in their encoded colour space. This avoids a decode /
@@ -131,7 +137,7 @@ const char *nativeFragment = R"(#version 300 es
 precision highp float;
 in vec2 uv;uniform sampler2D albedo;uniform int hasTexture;uniform vec3 color;out vec4 result;
 vec3 encode(vec3 x){return mix(12.92*x,1.055*pow(max(x,vec3(0)),vec3(1./2.4))-.055,step(vec3(.0031308),x));}
-void main(){result=vec4(hasTexture!=0?texture(albedo,uv).rgb:encode(color),0);}
+void main(){result=hasTexture!=0?texture(albedo,uv):vec4(encode(color),1);if(result.a<=0.)discard;}
 )";
 const char *screenVertex = R"(#version 300 es
 precision highp float;
@@ -142,13 +148,16 @@ void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));uv=p;gl_
 // (never interpolated across a wall edge), preserving native window occlusion.
 const char *upscaleFragment = R"(#version 300 es
 precision highp float;
-in vec2 uv;uniform sampler2D image,depthImage;uniform float sharpness;out vec4 result;
+in vec2 uv;uniform sampler2D image,depthImage,bloomMap;uniform float sharpness,exposure,bloomStrength;uniform int toneMapping;out vec4 result;
 void main(){vec2 st=uv,d=1./vec2(textureSize(image,0));
  vec4 c=texture(image,st);result=c;
  if(sharpness>0.){vec3 a=texture(image,st+vec2(d.x,0)).rgb,b=texture(image,st-vec2(d.x,0)).rgb;
  vec3 e=texture(image,st+vec2(0,d.y)).rgb,f=texture(image,st-vec2(0,d.y)).rgb;
  vec3 lo=min(c.rgb,min(min(a,b),min(e,f))),hi=max(c.rgb,max(max(a,b),max(e,f)));
  result=vec4(clamp(c.rgb+sharpness*(c.rgb-(a+b+e+f)*.25),lo,hi),c.a);}
+ vec3 x=(result.rgb+texture(bloomMap,st).rgb*bloomStrength)*exposure;
+ vec3 mapped=toneMapping==0?clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.):toneMapping==1?x/(1.+x):clamp(x,0.,1.);
+ result=vec4(mix(12.92*mapped,1.055*pow(max(mapped,vec3(0)),vec3(1./2.4))-.055,step(vec3(.0031308),mapped)),0);
  ivec2 size=textureSize(depthImage,0);gl_FragDepth=texelFetch(depthImage,clamp(ivec2(st*vec2(size)),ivec2(0),size-1),0).r;}
 )";
 const char *toneFragment = R"(#version 300 es
@@ -156,11 +165,6 @@ precision highp float;
 in vec2 uv;uniform sampler2D frame,bloomMap;uniform vec2 resolution,pointer;uniform int typing,toneMapping,scope;uniform float exposure,bloomStrength;out vec4 result;
 vec3 encode(vec3 x){return mix(12.92*x,1.055*pow(max(x,vec3(0)),vec3(1./2.4))-.055,step(vec3(.0031308),x));}
 void main(){vec2 st=vec2(uv.x,1.-uv.y);vec4 sampleColor=texture(frame,st);vec3 c=sampleColor.rgb;
- if(sampleColor.a>.5){vec3 x=sampleColor.rgb;
- if(bloomStrength>0.)x+=texture(bloomMap,st).rgb*bloomStrength;
- x*=exposure;
- vec3 mapped=toneMapping==0?clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.):toneMapping==1?x/(1.+x):clamp(x,0.,1.);
- c=encode(mapped); }
  vec2 p=abs(gl_FragCoord.xy-resolution*pointer);if((p.x<1.&&p.y<7.)||(p.y<1.&&p.x<7.))c=typing!=0?vec3(.5,1.,.65):vec3(.9);
  if(scope!=0){vec2 q=(gl_FragCoord.xy/resolution-.5)*vec2(resolution.x/resolution.y,1.);c*=1.-.86*smoothstep(.24,.48,length(q));float ring=abs(length(q)-.28);if(ring<.001)c=mix(c,vec3(.5,.8,.65),.4);}
  result=vec4(c,1);}
@@ -199,15 +203,21 @@ void uniform(GLuint p, const char *name, Vec3 value) {
 }
 } // namespace
 void Renderer::init() {
-    if (scene_)
+    if (quadVao_)
         return;
     device = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
-    scene_ = program(vertex, fragment);
-    native_ = program(vertex, nativeFragment);
-    tone_ = program(screenVertex, toneFragment);
-    upscale_ = program(screenVertex, upscaleFragment);
-    bloom_ = program(screenVertex, bloomFragment);
-    sky_ = program(screenVertex, skyFragment);
+    if (!scene_)
+        scene_ = program(vertex, fragment);
+    if (!native_)
+        native_ = program(vertex, nativeFragment);
+    if (!tone_)
+        tone_ = program(screenVertex, toneFragment);
+    if (!upscale_)
+        upscale_ = program(screenVertex, upscaleFragment);
+    if (!bloom_)
+        bloom_ = program(screenVertex, bloomFragment);
+    if (!sky_)
+        sky_ = program(screenVertex, skyFragment);
     // Device selection belongs to applyGraphics; explicit presets must win.
     layout(quadVao_, quadVbo_);
     glGenVertexArrays(1, &screenVao_);
@@ -236,17 +246,10 @@ void Renderer::freeWorld() {
     environment_ = 0;
     world_.reset();
 }
-void Renderer::prepare(std::shared_ptr<const world::World> world) {
+void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
     GLState state;
-    for (auto fence : frameFences_)
-        glDeleteSync(fence);
-    frameFences_.clear();
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
-    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
-    init();
-    textAtlas();
+    cancelPrepare();
+    // CPU decode and environment prefiltering already happen on the loader worker.
     size_t gpuBytes = 0;
     for (const auto &mesh : world->meshes)
         gpuBytes += mesh.vertices.size() * sizeof(world::Vertex);
@@ -255,121 +258,288 @@ void Renderer::prepare(std::shared_ptr<const world::World> world) {
         for (const auto &m : world->materials)
             color |= m.slots[0].texture == int(i) || m.slots[4].texture == int(i);
         int w = world->images[i].width, h = world->images[i].height;
-        do {
+        for (;;) {
             gpuBytes += size_t(w) * h * 4 * (color ? 2 : 1);
             if (w == 1 && h == 1)
                 break;
             w = std::max(1, w / 2);
             h = std::max(1, h / 2);
-        } while (true);
+        }
     }
     if (gpuBytes > 512 * 1024 * 1024)
         throw std::runtime_error("world GPU budget exceeded including material mip chains");
-    std::vector<Batch> batches;
-    std::vector<GLuint> textures, colors, samplers;
-    GLuint cube = 0;
-    auto newProfile = world->atmosphere.is_object() ? world->atmosphere : world::defaultAtmosphere();
-    int resolution = intelQuality ? 64 : 128;
-    if (newProfile.contains("environment"))
-        resolution = std::min(resolution, newProfile["environment"]["maxResolution"].get<int>());
-    const auto &cached = intelQuality ? world->environmentLow : world->environmentHigh;
-    auto levels = cached.empty() ? world::prefilterEnvironment(*world, resolution) : cached;
-    for (auto &level : levels)
+    pending_ = std::make_unique<PendingUpload>();
+    auto p = pending_.get();
+    p->world = std::move(world);
+    p->profile = p->world->atmosphere.is_object() ? p->world->atmosphere : world::defaultAtmosphere();
+    p->levels = intelQuality ? p->world->environmentLow : p->world->environmentHigh;
+    if (p->levels.empty())
+        p->levels = world::prefilterEnvironment(*p->world, intelQuality ? 64 : 128);
+    for (auto &level : p->levels)
         gpuBytes += size_t(level.size) * level.size * 6 * 8;
-    if (gpuBytes > 512 * 1024 * 1024)
+    if (gpuBytes > 512 * 1024 * 1024) {
+        cancelPrepare();
         throw std::runtime_error("environment exceeds world GPU budget");
-    try {
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glActiveTexture(GL_TEXTURE0);
-        bool anisotropy = false;
-        GLint extensions = 0;
-        glGetIntegerv(GL_NUM_EXTENSIONS, &extensions);
-        for (int i = 0; i < extensions; ++i) {
-            std::string_view e(reinterpret_cast<const char *>(glGetStringi(GL_EXTENSIONS, i)));
-            anisotropy |= e == "GL_EXT_texture_filter_anisotropic" || e == "GL_ARB_texture_filter_anisotropic";
+    }
+    auto add = [&](size_t bytes, std::function<void()> run, std::string kind = "resource upload") {
+        p->jobs.push_back({bytes, std::move(run), std::move(kind)});
+    };
+    add(
+        0,
+        [this] {
+            if (!scene_)
+                scene_ = program(vertex, fragment);
+        },
+        "shader scene_");
+    add(
+        0,
+        [this] {
+            if (!native_)
+                native_ = program(vertex, nativeFragment);
+        },
+        "shader native_");
+    add(
+        0,
+        [this] {
+            if (!tone_)
+                tone_ = program(screenVertex, toneFragment);
+        },
+        "shader tone_");
+    add(
+        0,
+        [this] {
+            if (!upscale_)
+                upscale_ = program(screenVertex, upscaleFragment);
+        },
+        "shader upscale_");
+    add(
+        0,
+        [this] {
+            if (!bloom_)
+                bloom_ = program(screenVertex, bloomFragment);
+        },
+        "shader bloom_");
+    add(
+        0,
+        [this] {
+            if (!sky_)
+                sky_ = program(screenVertex, skyFragment);
+        },
+        "shader sky_");
+    add(
+        0,
+        [this] {
+            init();
+            textAtlas();
+        },
+        "font/setup");
+    p->textures.resize(p->world->images.size());
+    p->colors.resize(p->textures.size());
+    p->samplers.resize(p->textures.size());
+    constexpr size_t chunk = 256 * 1024;
+    for (size_t i = 0; i < p->textures.size(); ++i) {
+        const auto &image = p->world->images[i];
+        bool color = false;
+        for (const auto &m : p->world->materials)
+            color |= m.slots[0].texture == int(i) || m.slots[4].texture == int(i);
+        for (int pass = 0; pass < (color ? 2 : 1); ++pass) {
+            auto texture = [p, i, pass] { return pass ? p->colors[i] : p->textures[i]; };
+            add(0, [p, i, pass] {
+                const auto &im = p->world->images[i];
+                auto &id = pass ? p->colors[i] : p->textures[i];
+                glGenTextures(1, &id);
+                glBindTexture(GL_TEXTURE_2D, id);
+                int levels = 1;
+                for (int dim = std::max(im.width, im.height); dim > 1; dim /= 2)
+                    ++levels;
+                glTexStorage2D(GL_TEXTURE_2D, levels, pass ? GL_SRGB8_ALPHA8 : GL_RGBA8, im.width, im.height);
+            });
+            int rows = std::max(size_t(1), chunk / (size_t(image.width) * 4));
+            for (int y = 0; y < image.height; y += rows) {
+                int count = std::min(rows, image.height - y);
+                add(size_t(image.width) * count * 4, [p, i, y, count, texture] {
+                    const auto &im = p->world->images[i];
+                    glBindTexture(GL_TEXTURE_2D, texture());
+                    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, y, im.width, count, GL_RGBA, GL_UNSIGNED_BYTE,
+                                    im.rgba.data() + size_t(y) * im.width * 4);
+                });
+            }
+            add(
+                0,
+                [texture] {
+                    glBindTexture(GL_TEXTURE_2D, texture());
+                    glGenerateMipmap(GL_TEXTURE_2D);
+                },
+                "mipmap");
         }
-        float maximum = 1;
-        if (anisotropy)
-            glGetFloatv(0x84FF, &maximum);
-        for (size_t i = 0; i < world->images.size(); ++i) {
-            const auto &image = world->images[i];
-            bool color = false;
-            for (const auto &m : world->materials)
-                color |= m.slots[0].texture == int(i) || m.slots[4].texture == int(i);
-            auto upload = [&](GLint format) {
-                GLuint tex;
-                glGenTextures(1, &tex);
-                glBindTexture(GL_TEXTURE_2D, tex);
-                glTexImage2D(GL_TEXTURE_2D, 0, format, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                             image.rgba.data());
-                glGenerateMipmap(GL_TEXTURE_2D);
-                return tex;
-            };
-            textures.push_back(upload(GL_RGBA8));
-            colors.push_back(color ? upload(GL_SRGB8_ALPHA8) : 0);
-            GLuint sampler;
-            glGenSamplers(1, &sampler);
-            samplers.push_back(sampler);
-            auto settings = i < world->samplers.size() ? world->samplers[i] : world::Sampler{};
-            glSamplerParameteri(sampler, GL_TEXTURE_MIN_FILTER, settings.minFilter);
-            glSamplerParameteri(sampler, GL_TEXTURE_MAG_FILTER, settings.magFilter);
-            glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, settings.wrapS);
-            glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, settings.wrapT);
-            // Preserve explicit nearest filtering; anisotropy is a runtime quality choice.
-            if (anisotropy && settings.magFilter == GL_LINEAR && settings.minFilter == GL_LINEAR_MIPMAP_LINEAR)
-                glSamplerParameterf(sampler, 0x84FE, std::min(graphics["anisotropy"].get<float>(), maximum));
-        }
-        glGenTextures(1, &cube);
-        glActiveTexture(GL_TEXTURE6);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, cube);
-        glBindSampler(6, 0);
-        for (size_t mip = 0; mip < levels.size(); mip++)
-            for (int face = 0; face < 6; face++)
-                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, mip, GL_RGBA16F, levels[mip].size, levels[mip].size,
-                             0, GL_RGBA, GL_FLOAT, levels[mip].faces[face].data());
+        add(0, [this, p, i] {
+            auto s = i < p->world->samplers.size() ? p->world->samplers[i] : world::Sampler{};
+            auto &id = p->samplers[i];
+            glGenSamplers(1, &id);
+            glSamplerParameteri(id, GL_TEXTURE_MIN_FILTER, s.minFilter);
+            glSamplerParameteri(id, GL_TEXTURE_MAG_FILTER, s.magFilter);
+            glSamplerParameteri(id, GL_TEXTURE_WRAP_S, s.wrapS);
+            glSamplerParameteri(id, GL_TEXTURE_WRAP_T, s.wrapT);
+            GLint count = 0;
+            glGetIntegerv(GL_NUM_EXTENSIONS, &count);
+            bool anisotropy = false;
+            for (int n = 0; n < count; ++n) {
+                std::string_view ext(reinterpret_cast<const char *>(glGetStringi(GL_EXTENSIONS, n)));
+                anisotropy |= ext == "GL_EXT_texture_filter_anisotropic" || ext == "GL_ARB_texture_filter_anisotropic";
+            }
+            if (anisotropy && s.magFilter == GL_LINEAR && s.minFilter == GL_LINEAR_MIPMAP_LINEAR) {
+                float max = 1;
+                glGetFloatv(0x84FF, &max);
+                glSamplerParameterf(id, 0x84FE, std::min(graphics["anisotropy"].get<float>(), max));
+            }
+        });
+    }
+    add(0, [p] {
+        glGenTextures(1, &p->cube);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, p->cube);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-        for (auto &mesh : world->meshes) {
-            Batch b;
+    });
+    for (size_t mip = 0; mip < p->levels.size(); ++mip)
+        for (int face = 0; face < 6; ++face)
+            add(size_t(p->levels[mip].size) * p->levels[mip].size * 16, [p, mip, face] {
+                auto &l = p->levels[mip];
+                glBindTexture(GL_TEXTURE_CUBE_MAP, p->cube);
+                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, mip, GL_RGBA16F, l.size, l.size, 0, GL_RGBA,
+                             GL_FLOAT, l.faces[face].data());
+            });
+    p->batches.resize(p->world->meshes.size());
+    for (size_t i = 0; i < p->batches.size(); ++i) {
+        auto &mesh = p->world->meshes[i];
+        auto &b = p->batches[i];
+        b.count = mesh.vertices.size();
+        b.material = mesh.material;
+        b.node = mesh.node;
+        for (auto &v : mesh.vertices)
+            b.center += v.position;
+        if (b.count)
+            b.center = b.center / float(b.count);
+        size_t bytes = mesh.vertices.size() * sizeof(world::Vertex);
+        add(0, [p, i, bytes] {
+            auto &b = p->batches[i];
             layout(b.vao, b.vbo);
-            b.count = mesh.vertices.size();
-            b.material = mesh.material;
-            b.node = mesh.node;
-            for (auto &v : mesh.vertices)
-                b.center += v.position;
-            if (!mesh.vertices.empty())
-                b.center = b.center / float(mesh.vertices.size());
-            batches.push_back(b);
-            glBufferData(GL_ARRAY_BUFFER, mesh.vertices.size() * sizeof(world::Vertex), mesh.vertices.data(),
-                         GL_STATIC_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, bytes, nullptr, GL_STATIC_DRAW);
+        });
+        for (size_t offset = 0; offset < bytes; offset += chunk) {
+            auto count = std::min(chunk, bytes - offset);
+            add(count, [p, i, offset, count] {
+                glBindBuffer(GL_ARRAY_BUFFER, p->batches[i].vbo);
+                glBufferSubData(GL_ARRAY_BUFFER, offset, count,
+                                reinterpret_cast<const char *>(p->world->meshes[i].vertices.data()) + offset);
+            });
         }
-        if (glGetError() != GL_NO_ERROR)
-            throw std::runtime_error("world GPU upload failed");
+    }
+    uploadMs_ = uploadMaxMs_ = uploadMaxJobMs_ = 0;
+    uploadSlowestJob_.clear();
+    uploadBytes_ = uploadSteps_ = 0;
+}
+bool Renderer::continuePrepare(double milliseconds, size_t byteBudget) {
+    if (!pending_)
+        return true;
+    GLState state;
+    auto p = pending_.get();
+    if (p->fence) {
+        auto result = glClientWaitSync(p->fence, 0, 0);
+        if (result == GL_TIMEOUT_EXPIRED)
+            return false;
+        if (result == GL_WAIT_FAILED) {
+            cancelPrepare();
+            throw std::runtime_error("world upload fence failed");
+        }
+        glDeleteSync(p->fence);
+        p->fence = nullptr;
+    }
+    auto start = std::chrono::steady_clock::now();
+    size_t bytes = 0;
+    unsigned jobs = 0;
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    glActiveTexture(GL_TEXTURE0);
+    try {
+        while (p->next < p->jobs.size()) {
+            auto &job = p->jobs[p->next];
+            if (jobs && bytes + job.bytes > byteBudget)
+                break;
+            // Shader setup or another job may change the active texture unit.
+            glActiveTexture(GL_TEXTURE0);
+            auto jobStart = std::chrono::steady_clock::now();
+            job.run();
+            double jobMs =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - jobStart).count();
+            if (jobMs > uploadMaxJobMs_) {
+                uploadMaxJobMs_ = jobMs;
+                uploadSlowestJob_ = job.kind + " #" + std::to_string(p->next);
+            }
+            bytes += job.bytes;
+            ++p->next;
+            ++jobs;
+            if (glGetError() != GL_NO_ERROR)
+                throw std::runtime_error("world GPU upload failed");
+            if (std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() >=
+                milliseconds)
+                break;
+        }
+        double elapsed = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        uploadMs_ += elapsed;
+        uploadMaxMs_ = std::max(uploadMaxMs_, elapsed);
+        uploadBytes_ += bytes;
+        ++uploadSteps_;
+        if (jobs) {
+            p->fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+            glFlush();
+            return false;
+        }
+        freeWorld();
+        world_ = p->world;
+        batches_ = std::move(p->batches);
+        textures_ = std::move(p->textures);
+        colorTextures_ = std::move(p->colors);
+        samplers_ = std::move(p->samplers);
+        environment_ = p->cube;
+        p->cube = 0;
+        cubeLevels_ = p->levels.size();
+        profile = p->profile;
+        pending_.reset();
+        collisionChanged();
+        return true;
     } catch (...) {
-        for (auto b : batches) {
-            glDeleteBuffers(1, &b.vbo);
-            glDeleteVertexArrays(1, &b.vao);
-        }
-        glDeleteTextures(1, &cube);
-        glDeleteTextures(textures.size(), textures.data());
-        glDeleteTextures(colors.size(), colors.data());
-        glDeleteSamplers(samplers.size(), samplers.data());
+        cancelPrepare();
         throw;
     }
-    freeWorld();
-    world_ = std::move(world);
-    batches_ = std::move(batches);
-    textures_ = std::move(textures);
-    colorTextures_ = std::move(colors);
-    samplers_ = std::move(samplers);
-    environment_ = cube;
-    cubeLevels_ = levels.size();
-    profile = newProfile;
-    collisionChanged();
+}
+void Renderer::cancelPrepare() {
+    if (!pending_)
+        return;
+    GLState state;
+    auto p = pending_.get();
+    if (p->fence)
+        glDeleteSync(p->fence);
+    for (auto b : p->batches) {
+        glDeleteBuffers(1, &b.vbo);
+        glDeleteVertexArrays(1, &b.vao);
+    }
+    glDeleteTextures(1, &p->cube);
+    glDeleteTextures(p->textures.size(), p->textures.data());
+    glDeleteTextures(p->colors.size(), p->colors.data());
+    glDeleteSamplers(p->samplers.size(), p->samplers.data());
+    pending_.reset();
+}
+void Renderer::prepare(std::shared_ptr<const world::World> world) {
+    beginPrepare(std::move(world));
+    // Offline callers only. Runtime uses one bounded continuePrepare per tick.
+    while (!continuePrepare())
+        std::this_thread::yield();
 }
 void Renderer::collisionChanged() {
     GLState state;
@@ -487,7 +657,8 @@ void Renderer::targets(int w, int h) {
     glBindFramebuffer(GL_FRAMEBUFFER, nativeFbo_);
     glGenTextures(1, &nativeTexture_);
     glBindTexture(GL_TEXTURE_2D, nativeTexture_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_HALF_FLOAT, nullptr);
+    // Tone mapping precedes native composition; encoded pixels need no HDR bandwidth.
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, nativeTexture_, 0);
@@ -665,15 +836,23 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             return !ta;
         return ta && length(batches_[a].center - camera.position) > length(batches_[b].center - camera.position);
     });
-    for (auto index : order) {
+    auto drawBatch = [&](size_t index, bool nativeOutput) {
+        glUseProgram(scene_);
+        uniform(scene_, "surface", 0);
+        uniform(scene_, "nativeOutput", nativeOutput);
+        uniform(scene_, "nativeTone",
+                profile["toneMapping"] == "aces"       ? 0
+                : profile["toneMapping"] == "reinhard" ? 1
+                                                       : 2);
+        glUniform1f(glGetUniformLocation(scene_, "nativeExposure"), profile["exposure"].get<float>());
         auto b = batches_[index];
         const auto &m = world_->materials[b.material];
         if (m.alphaMode == 2 && !graphics["alpha_haze"].get<bool>())
-            continue;
+            return;
         if (m.alphaMode == 2) {
             glEnable(GL_BLEND);
             glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
-            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+            glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
             glDepthMask(GL_FALSE);
         } else {
             glDisable(GL_BLEND);
@@ -723,7 +902,10 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glUniformMatrix4fv(glGetUniformLocation(scene_, "model"), 1, GL_FALSE, model.v.data());
         glBindVertexArray(b.vao);
         glDrawArrays(GL_TRIANGLES, 0, b.count);
-    }
+    };
+    for (auto index : order)
+        if (world_->materials[batches_[index].material].alphaMode != 2)
+            drawBatch(index, false);
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
@@ -746,7 +928,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
         gpu_[2].end();
         gpu_[4].begin();
-        // Application pixels carry alpha zero and never contribute to world bloom.
+        // Only opaque world colour feeds bloom; client buffers are sampled later.
         glDisable(GL_DEPTH_TEST);
         glUseProgram(bloom_);
         uniform(bloom_, "image", 0);
@@ -785,6 +967,17 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glUseProgram(upscale_);
     uniform(upscale_, "image", 0);
     uniform(upscale_, "depthImage", 1);
+    uniform(upscale_, "bloomMap", 2);
+    uniform(upscale_, "toneMapping",
+            profile["toneMapping"] == "aces"       ? 0
+            : profile["toneMapping"] == "reinhard" ? 1
+                                                   : 2);
+    glUniform1f(glGetUniformLocation(upscale_, "exposure"), profile["exposure"].get<float>());
+    glUniform1f(glGetUniformLocation(upscale_, "bloomStrength"),
+                effects && graphics["bloom"] != "off" ? profile["bloom"]["strength"].get<float>() : 0);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, bloomTexture_[0]);
+    glBindSampler(2, clamp_);
     glUniform1f(glGetUniformLocation(upscale_, "sharpness"),
                 resolution_.scale < 1 ? graphics["sharpen"].get<float>() : 0.f);
     glActiveTexture(GL_TEXTURE0);
@@ -805,7 +998,39 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     gpu_[5].end();
     gpu_[1].begin();
     auto surfacesStarted = std::chrono::steady_clock::now();
-    for (const auto &s : surfaces) {
+    struct TransparentDraw {
+        float depth;
+        size_t index;
+        bool window;
+    };
+    std::vector<TransparentDraw> transparent;
+    for (size_t i = 0; i < surfaces.size(); ++i)
+        transparent.push_back({dot(surfaces[i].center - camera.position, camera.forward()), i, true});
+    if (graphics["alpha_haze"].get<bool>())
+        for (size_t i = 0; i < batches_.size(); ++i)
+            if (world_->materials[batches_[i].material].alphaMode == 2) {
+                auto &b = batches_[i];
+                auto center = transforms.contains(b.node) ? transforms.at(b.node).point(b.center) : b.center;
+                transparent.push_back({dot(center - camera.position, camera.forward()), i, false});
+            }
+    std::stable_sort(transparent.begin(), transparent.end(),
+                     [](const auto &a, const auto &b) { return a.depth > b.depth; });
+    // Native target is display-encoded after reconstruction. Blend client buffers
+    // premultiplied, in depth order with world glass/haze, against opaque depth.
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
+    for (const auto &item : transparent) {
+        if (!item.window) {
+            drawBatch(item.index, true);
+            continue;
+        }
+        const auto &s = surfaces[item.index];
+        glUseProgram(native_);
+        glDisable(GL_CULL_FACE);
+        glEnable(GL_BLEND);
+        glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+        glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+        glDepthMask(GL_TRUE); // Discarded transparent holes leave world depth intact.
+        glBindSampler(0, clamp_);
         Vec3 right = s.right(), up = s.up(), normal = s.normal();
         auto quad = [&](float width, float height, Vec3 center, bool border) {
             std::vector<world::Vertex> vertices;
@@ -841,6 +1066,10 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         quad(s.width + .07f, s.height + .07f, s.center - normal * .015f, true);
         quad(s.width, s.height, s.center, false);
     }
+    glUseProgram(native_);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE);
     worldOverlays(camera, surfaces, w, h);
     // Editor primitives are plain vertices under the same GL guard. No seat or
     // compositor callbacks occur while the render pass draws handles/path strokes.
@@ -899,6 +1128,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     gpu_[1].end();
     gpu_[3].begin();
     auto outputStarted = std::chrono::steady_clock::now();
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     present(target, w, h, typing);
     gpu_[3].end();
     cpu_[3] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - outputStarted).count();
@@ -1373,6 +1603,16 @@ world::Json Renderer::timings() const {
             {"frameMs", frameMs_},
             {"cpuRenderMs", renderMs_},
             {"cpuUpdateMs", updateMs},
+            {"upload",
+             {{"pending", bool(pending_)},
+              {"steps", uploadSteps_},
+              {"bytes", uploadBytes_},
+              {"cpuMs", uploadMs_},
+              {"maxStepMs", uploadMaxMs_},
+              {"maxJobMs", uploadMaxJobMs_},
+              {"slowestJob", uploadSlowestJob_},
+              {"completedJobs", pending_ ? pending_->next : 0},
+              {"jobs", pending_ ? pending_->jobs.size() : 0}}},
             {"captureMs", captureMs},
             {"gpuCaptureMs", gpuCaptureMs >= 0 ? world::Json(gpuCaptureMs) : world::Json(nullptr)},
             {"ipcMs", ipcMs},
@@ -1439,6 +1679,7 @@ Renderer::Pixels Renderer::snapshot() {
     return pixels;
 }
 void Renderer::destroy() {
+    cancelPrepare();
     GLState state;
     for (auto fence : frameFences_)
         glDeleteSync(fence);

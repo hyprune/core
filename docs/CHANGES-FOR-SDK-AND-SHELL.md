@@ -390,3 +390,20 @@ The old first-session smoke used the removed Lua camera setter, a 500 ms TAB
 hold and click-to-type semantics. Current smoke uses camera.set, 1150 ms TAB,
 E to use and explicit Super key events for exit; exact terminal contents remain
 asserted. This does not reintroduce click-to-type into world mode.
+
+### Rendering diagnostics / offload interface follow-up
+
+`graphics.get.timings.upload` reports `pending`, `steps`, `bytes`, `cpuMs`,
+`maxStepMs`, `maxJobMs`, `slowestJob`, `completedJobs`, `jobs`. This is within the
+existing extensible 0.7 diagnostics object. Core keeps the established loading
+transition active while upload jobs/fences advance; shells need no new event.
+Budgets are 2 ms / 2 MiB per deferred tick, 256 KiB transfer chunks; individual
+GL driver calls remain non-preemptible. The settings' effect timing groups stay
+honest: material switches share a shading pass and are not independent timings.
+
+Native composition now tone-maps the reconstructed opaque world before blending
+premultiplied client pixels and depth-sorted world glass/haze. The native target
+is entirely display-encoded; offload should provide HDR opaque colour and depth
+before that boundary. Public target ownership is unchanged. New world-loading
+entry points: `beginPrepare`, `continuePrepare`, `cancelPrepare`; synchronous
+`prepare` remains for offline tests. No edits to the offload spike were made.

@@ -9,11 +9,16 @@
 #include <GLES3/gl3.h>
 #include <chrono>
 #include <deque>
+#include <functional>
 namespace hyprune::render {
 class Renderer {
   public:
-    ~Renderer() = default; // Owner explicitly destroys with its EGL context current.
-    void prepare(std::shared_ptr<const world::World>);
+    ~Renderer() = default;                             // Owner explicitly destroys with its EGL context current.
+    void prepare(std::shared_ptr<const world::World>); // Offline synchronous convenience.
+    void beginPrepare(std::shared_ptr<const world::World>);
+    bool continuePrepare(double milliseconds = 2, size_t byteBudget = 2 * 1024 * 1024);
+    void cancelPrepare(); // All upload methods require owner GL context, outside frame.
+
     void draw(GLuint target, int width, int height, const sim::Camera &, std::span<const surfaces::Surface>,
               bool typing);
     void destroy();
@@ -70,6 +75,26 @@ class Renderer {
         unsigned material = 0, node = 0;
         Vec3 center;
     };
+    struct PendingUpload {
+        struct Job {
+            size_t bytes;
+            std::function<void()> run;
+            std::string kind;
+        };
+        std::shared_ptr<const world::World> world;
+        world::Json profile;
+        decltype(world::World::environmentHigh) levels;
+        std::vector<Batch> batches;
+        std::vector<GLuint> textures, colors, samplers;
+        GLuint cube = 0;
+        GLsync fence = nullptr;
+        std::vector<Job> jobs;
+        size_t next = 0;
+    };
+    std::unique_ptr<PendingUpload> pending_;
+    double uploadMs_ = 0, uploadMaxMs_ = 0, uploadMaxJobMs_ = 0;
+    std::string uploadSlowestJob_;
+    size_t uploadBytes_ = 0, uploadSteps_ = 0;
     std::shared_ptr<const world::World> world_;
     std::vector<Batch> batches_;
     std::vector<GLuint> textures_, colorTextures_, samplers_;

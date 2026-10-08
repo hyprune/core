@@ -1,0 +1,7849 @@
+{
+  "world": "Lumen Reach",
+  "resolution": [
+    3840,
+    2160
+  ],
+  "renderer": "Mesa Intel(R) Graphics (PTL)",
+  "elapsedSeconds": 22.92661199599388,
+  "deliveredFPS": 60.01759004952139,
+  "reusedFrames": 0,
+  "cpuMedianMs": {
+    "cpuUpdateMs": 0.22916750000000002,
+    "cpuRenderMs": 0.326135,
+    "captureMs": 0.031862,
+    "ipcMs": 0.000712
+  },
+  "gpuMedianMs": {
+    "bloom": 0.006406,
+    "msaa_resolve": 0.0,
+    "native_surfaces_geometry": 1.969635,
+    "output_markers": 0.5401819999999999,
+    "sky": 0.185833,
+    "upscale_sharpen": 1.405416,
+    "world_shading_shared": 2.6374215
+  },
+  "settings": {
+    "alpha_haze": false,
+    "ambient_occlusion": true,
+    "anisotropy": 1,
+    "bloom": "off",
+    "bloom_strength": 0.12,
+    "dynamic_resolution": true,
+    "exposure": 1,
+    "fog": "linear",
+    "fov": 60.0,
+    "msaa": 1,
+    "normal_maps": false,
+    "quality": "low",
+    "reduced_motion": false,
+    "reflections": false,
+    "render_scale": "auto",
+    "sharpen": 0.35,
+    "sky": "gradient",
+    "specular": false,
+    "target_fps": 60
+  },
+  "samples": [
+    {
+      "captureMs": 0.030476,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.231413,
+        0.048519,
+        0.009786,
+        0.011806
+      ],
+      "cpuRenderMs": 0.302804,
+      "cpuUpdateMs": 0.216547,
+      "debug": false,
+      "deliveredFPS": 60.00905493353728,
+      "frameMs": 16.685895,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006354,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.308697,
+        "output_markers": 0.539375,
+        "sky": 0.185833,
+        "upscale_sharpen": 1.396197,
+        "world_shading_shared": 2.6975
+      },
+      "gpuPassMs": [
+        2.883333,
+        3.308697,
+        1.4025509999999999,
+        0.539375
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 1.30568,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 439,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.019174,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.195446,
+        0.032338,
+        0.007986,
+        0.005123
+      ],
+      "cpuRenderMs": 0.242014,
+      "cpuUpdateMs": 0.235078,
+      "debug": false,
+      "deliveredFPS": 60.00905493353728,
+      "frameMs": 16.697654,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.00625,
+        "msaa_resolve": 5.2e-05,
+        "native_surfaces_geometry": 2.957864,
+        "output_markers": 0.538281,
+        "sky": 0.185416,
+        "upscale_sharpen": 1.389791,
+        "world_shading_shared": 2.48026
+      },
+      "gpuPassMs": [
+        2.665676,
+        2.957864,
+        1.396093,
+        0.538281
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.637414,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 453,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.049868,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.283333,
+        0.04714,
+        0.012691,
+        0.009527
+      ],
+      "cpuRenderMs": 0.354505,
+      "cpuUpdateMs": 0.112252,
+      "debug": false,
+      "deliveredFPS": 60.00905493353728,
+      "frameMs": 16.731646,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006302,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.29651,
+        "output_markers": 0.53875,
+        "sky": 0.185833,
+        "upscale_sharpen": 1.395989,
+        "world_shading_shared": 2.740989
+      },
+      "gpuPassMs": [
+        2.926822,
+        3.29651,
+        1.402291,
+        0.53875
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000824,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 467,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.027934,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.234234,
+        0.065671,
+        0.01021,
+        0.010278
+      ],
+      "cpuRenderMs": 0.321783,
+      "cpuUpdateMs": 0.232901,
+      "debug": false,
+      "deliveredFPS": 59.99662740958343,
+      "frameMs": 16.722051,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006406,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.710364,
+        "output_markers": 0.541614,
+        "sky": 0.187968,
+        "upscale_sharpen": 1.407447,
+        "world_shading_shared": 2.708958
+      },
+      "gpuPassMs": [
+        2.896926,
+        3.710364,
+        1.4138529999999998,
+        0.541614
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000741,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 480,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.034842,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.229899,
+        0.044802,
+        0.009996,
+        0.006195
+      ],
+      "cpuRenderMs": 0.292621,
+      "cpuUpdateMs": 0.216623,
+      "debug": false,
+      "deliveredFPS": 59.99662740958343,
+      "frameMs": 16.561481,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006302,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.51927,
+        "output_markers": 0.540156,
+        "sky": 0.185208,
+        "upscale_sharpen": 1.39401,
+        "world_shading_shared": 2.457291
+      },
+      "gpuPassMs": [
+        2.642499,
+        3.51927,
+        1.400312,
+        0.540156
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000549,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 494,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.022698,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.209071,
+        0.0356,
+        0.006954,
+        0.005034
+      ],
+      "cpuRenderMs": 0.257558,
+      "cpuUpdateMs": 0.163831,
+      "debug": false,
+      "deliveredFPS": 59.99662740958343,
+      "frameMs": 16.752726,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006458,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.314427,
+        "output_markers": 0.540052,
+        "sky": 0.185937,
+        "upscale_sharpen": 1.403125,
+        "world_shading_shared": 2.716093
+      },
+      "gpuPassMs": [
+        2.90203,
+        3.314427,
+        1.409583,
+        0.540052
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 1.008329,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 508,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.098097,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.179803,
+        0.026391,
+        0.005745,
+        0.003842
+      ],
+      "cpuRenderMs": 0.21678,
+      "cpuUpdateMs": 0.191285,
+      "debug": false,
+      "deliveredFPS": 59.99662740958343,
+      "frameMs": 16.771686,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.00625,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.676666,
+        "output_markers": 0.539218,
+        "sky": 0.186562,
+        "upscale_sharpen": 4.142031,
+        "world_shading_shared": 3.109322
+      },
+      "gpuPassMs": [
+        3.295884,
+        1.676666,
+        4.148281,
+        0.539218
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.663574,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 521,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.043028,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.302789,
+        0.057836,
+        0.014489,
+        0.008914
+      ],
+      "cpuRenderMs": 0.386433,
+      "cpuUpdateMs": 0.238849,
+      "debug": false,
+      "deliveredFPS": 59.99662740958343,
+      "frameMs": 16.671108,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006145,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.492864,
+        "output_markers": 0.540208,
+        "sky": 0.185312,
+        "upscale_sharpen": 1.397968,
+        "world_shading_shared": 2.685937
+      },
+      "gpuPassMs": [
+        2.871249,
+        1.492864,
+        1.4041130000000002,
+        0.540208
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000627,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 535,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.029414,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.242463,
+        0.043844,
+        0.009536,
+        0.006815
+      ],
+      "cpuRenderMs": 0.30406,
+      "cpuUpdateMs": 0.293435,
+      "debug": false,
+      "deliveredFPS": 59.9965769887372,
+      "frameMs": 16.715259,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.00651,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.505156,
+        "output_markers": 0.538958,
+        "sky": 0.186302,
+        "upscale_sharpen": 1.396354,
+        "world_shading_shared": 2.689739
+      },
+      "gpuPassMs": [
+        2.876041,
+        1.505156,
+        1.402864,
+        0.538958
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000688,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 549,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.033764,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.256139,
+        0.058903,
+        0.010962,
+        0.008763
+      ],
+      "cpuRenderMs": 0.336262,
+      "cpuUpdateMs": 0.245314,
+      "debug": false,
+      "deliveredFPS": 59.9965769887372,
+      "frameMs": 16.656836,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006354,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.944635,
+        "output_markers": 0.540625,
+        "sky": 0.185052,
+        "upscale_sharpen": 1.406666,
+        "world_shading_shared": 1.761927
+      },
+      "gpuPassMs": [
+        1.946979,
+        1.944635,
+        1.41302,
+        0.540625
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000588,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 563,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.044508,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.282015,
+        0.065158,
+        0.012812,
+        0.009329
+      ],
+      "cpuRenderMs": 0.370825,
+      "cpuUpdateMs": 0.290831,
+      "debug": false,
+      "deliveredFPS": 59.9965769887372,
+      "frameMs": 16.709321,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.00651,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.907187,
+        "output_markers": 0.54,
+        "sky": 0.185416,
+        "upscale_sharpen": 1.405572,
+        "world_shading_shared": 2.707708
+      },
+      "gpuPassMs": [
+        2.893124,
+        1.907187,
+        1.412082,
+        0.54
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 1.039412,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 576,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.048332,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.282414,
+        0.051463,
+        0.013313,
+        0.009235
+      ],
+      "cpuRenderMs": 0.358248,
+      "cpuUpdateMs": 0.239955,
+      "debug": false,
+      "deliveredFPS": 59.9965769887372,
+      "frameMs": 16.79014,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006406,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.487916,
+        "output_markers": 0.542604,
+        "sky": 0.186822,
+        "upscale_sharpen": 1.400625,
+        "world_shading_shared": 2.705
+      },
+      "gpuPassMs": [
+        2.891822,
+        1.487916,
+        1.407031,
+        0.542604
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000908,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 590,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.045204,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.275504,
+        0.050742,
+        0.011824,
+        0.009214
+      ],
+      "cpuRenderMs": 0.348367,
+      "cpuUpdateMs": 0.243578,
+      "debug": false,
+      "deliveredFPS": 59.994793474788445,
+      "frameMs": 16.674966,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006406,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 0.585572,
+        "output_markers": 2.412135,
+        "sky": 0.184375,
+        "upscale_sharpen": 2.33927,
+        "world_shading_shared": 3.35276
+      },
+      "gpuPassMs": [
+        3.537135,
+        0.585572,
+        2.345676,
+        2.412135
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.00049,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 604,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.047357,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.270274,
+        0.064868,
+        0.012283,
+        0.007965
+      ],
+      "cpuRenderMs": 0.357061,
+      "cpuUpdateMs": 0.236532,
+      "debug": false,
+      "deliveredFPS": 59.994793474788445,
+      "frameMs": 16.611505,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006302,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.326041,
+        "output_markers": 0.541302,
+        "sky": 0.185937,
+        "upscale_sharpen": 1.407239,
+        "world_shading_shared": 2.704635
+      },
+      "gpuPassMs": [
+        2.890572,
+        1.326041,
+        1.413541,
+        0.541302
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000598,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 618,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.045734,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.358632,
+        0.059351,
+        0.014856,
+        0.010474
+      ],
+      "cpuRenderMs": 0.445741,
+      "cpuUpdateMs": 0.113666,
+      "debug": false,
+      "deliveredFPS": 59.994793474788445,
+      "frameMs": 16.610075,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006354,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.490104,
+        "output_markers": 0.537708,
+        "sky": 0.185885,
+        "upscale_sharpen": 1.392604,
+        "world_shading_shared": 2.687083
+      },
+      "gpuPassMs": [
+        2.8729679999999997,
+        1.490104,
+        1.398958,
+        0.537708
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000459,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 631,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.022237,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.244178,
+        0.047279,
+        0.010429,
+        0.006809
+      ],
+      "cpuRenderMs": 0.310247,
+      "cpuUpdateMs": 0.178867,
+      "debug": false,
+      "deliveredFPS": 59.994793474788445,
+      "frameMs": 16.655157,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006614,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.488489,
+        "output_markers": 0.539531,
+        "sky": 0.185468,
+        "upscale_sharpen": 1.402083,
+        "world_shading_shared": 2.682656
+      },
+      "gpuPassMs": [
+        2.8681240000000003,
+        1.488489,
+        1.4086969999999999,
+        0.539531
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 1.244096,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 645,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.03536,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.257044,
+        0.04251,
+        0.011065,
+        0.007643
+      ],
+      "cpuRenderMs": 0.319728,
+      "cpuUpdateMs": 0.227893,
+      "debug": false,
+      "deliveredFPS": 59.994793474788445,
+      "frameMs": 16.64019,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006354,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.491927,
+        "output_markers": 0.539375,
+        "sky": 0.184791,
+        "upscale_sharpen": 2.818697,
+        "world_shading_shared": 1.707708
+      },
+      "gpuPassMs": [
+        1.892499,
+        1.491927,
+        2.8250509999999998,
+        0.539375
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000817,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 659,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.038381,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.299432,
+        0.054122,
+        0.013353,
+        0.01092
+      ],
+      "cpuRenderMs": 0.379817,
+      "cpuUpdateMs": 0.253272,
+      "debug": false,
+      "deliveredFPS": 60.011467463424296,
+      "frameMs": 16.690114,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006562,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.531041,
+        "output_markers": 0.554062,
+        "sky": 0.185833,
+        "upscale_sharpen": 1.4025,
+        "world_shading_shared": 2.686614
+      },
+      "gpuPassMs": [
+        2.872447,
+        1.531041,
+        1.409062,
+        0.554062
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000919,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 673,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.028917,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.23781,
+        0.04179,
+        0.010847,
+        0.007289
+      ],
+      "cpuRenderMs": 0.299129,
+      "cpuUpdateMs": 0.211114,
+      "debug": false,
+      "deliveredFPS": 60.011467463424296,
+      "frameMs": 16.650741,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.006197,
+        "msaa_resolve": 5.2e-05,
+        "native_surfaces_geometry": 1.495312,
+        "output_markers": 0.537916,
+        "sky": 0.185416,
+        "upscale_sharpen": 1.393645,
+        "world_shading_shared": 2.685156
+      },
+      "gpuPassMs": [
+        2.870572,
+        1.495312,
+        1.399894,
+        0.537916
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000585,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 686,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.021019,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.238124,
+        0.048553,
+        0.01024,
+        0.007264
+      ],
+      "cpuRenderMs": 0.305519,
+      "cpuUpdateMs": 0.194274,
+      "debug": false,
+      "deliveredFPS": 60.011467463424296,
+      "frameMs": 16.64233,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 1.37552,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.493385,
+        "output_markers": 0.538697,
+        "sky": 0.185781,
+        "upscale_sharpen": 1.412916,
+        "world_shading_shared": 2.585989
+      },
+      "gpuPassMs": [
+        2.77177,
+        1.493385,
+        2.788436,
+        0.538697
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.905065,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 700,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.026665,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.259403,
+        0.070722,
+        0.011369,
+        0.008163
+      ],
+      "cpuRenderMs": 0.351364,
+      "cpuUpdateMs": 0.195416,
+      "debug": false,
+      "deliveredFPS": 60.011467463424296,
+      "frameMs": 16.706118,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006666,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.85302,
+        "output_markers": 0.539791,
+        "sky": 0.185416,
+        "upscale_sharpen": 1.405312,
+        "world_shading_shared": 2.454114
+      },
+      "gpuPassMs": [
+        2.63953,
+        1.85302,
+        1.411978,
+        0.539791
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 1.268897,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 714,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.030446,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.261709,
+        0.050553,
+        0.012397,
+        0.008423
+      ],
+      "cpuRenderMs": 0.334832,
+      "cpuUpdateMs": 0.229661,
+      "debug": false,
+      "deliveredFPS": 60.00262933489045,
+      "frameMs": 16.668965,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006145,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.718906,
+        "output_markers": 0.539635,
+        "sky": 0.185989,
+        "upscale_sharpen": 1.405156,
+        "world_shading_shared": 1.553645
+      },
+      "gpuPassMs": [
+        1.739634,
+        1.718906,
+        1.4113010000000001,
+        0.539635
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000645,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 728,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.037678,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.225195,
+        0.037074,
+        0.008998,
+        0.006533
+      ],
+      "cpuRenderMs": 0.279356,
+      "cpuUpdateMs": 0.228947,
+      "debug": false,
+      "deliveredFPS": 60.00262933489045,
+      "frameMs": 16.671947,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007343,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.72927,
+        "output_markers": 0.539218,
+        "sky": 0.228697,
+        "upscale_sharpen": 1.437864,
+        "world_shading_shared": 1.846041
+      },
+      "gpuPassMs": [
+        2.074738,
+        1.72927,
+        1.4452070000000001,
+        0.539218
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000433,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 741,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.023152,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.267678,
+        0.053154,
+        0.01165,
+        0.007844
+      ],
+      "cpuRenderMs": 0.342379,
+      "cpuUpdateMs": 0.213822,
+      "debug": false,
+      "deliveredFPS": 60.00262933489045,
+      "frameMs": 16.84848,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.007864,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.495364,
+        "output_markers": 0.538645,
+        "sky": 0.230989,
+        "upscale_sharpen": 1.429947,
+        "world_shading_shared": 3.370937
+      },
+      "gpuPassMs": [
+        3.601926,
+        1.495364,
+        1.4378110000000002,
+        0.538645
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000541,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 755,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.017165,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.240944,
+        0.042163,
+        0.016565,
+        0.006599
+      ],
+      "cpuRenderMs": 0.307948,
+      "cpuUpdateMs": 0.179408,
+      "debug": false,
+      "deliveredFPS": 60.00262933489045,
+      "frameMs": 16.685506,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007395,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.732187,
+        "output_markers": 0.54125,
+        "sky": 0.232395,
+        "upscale_sharpen": 1.439322,
+        "world_shading_shared": 2.735885
+      },
+      "gpuPassMs": [
+        2.96828,
+        1.732187,
+        1.446717,
+        0.54125
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.871746,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 769,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.040967,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.291851,
+        0.046661,
+        0.011102,
+        0.007224
+      ],
+      "cpuRenderMs": 0.35843,
+      "cpuUpdateMs": 0.229398,
+      "debug": false,
+      "deliveredFPS": 60.00262933489045,
+      "frameMs": 16.623039,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007708,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 0.912968,
+        "output_markers": 0.539739,
+        "sky": 0.232239,
+        "upscale_sharpen": 1.437291,
+        "world_shading_shared": 3.024114
+      },
+      "gpuPassMs": [
+        3.256353,
+        0.912968,
+        1.4449990000000001,
+        0.539739
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000643,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 783,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.020797,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.257959,
+        0.071404,
+        0.025521,
+        0.011309
+      ],
+      "cpuRenderMs": 0.367894,
+      "cpuUpdateMs": 0.198535,
+      "debug": false,
+      "deliveredFPS": 59.993557111921085,
+      "frameMs": 16.688927,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007656,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.491979,
+        "output_markers": 0.540625,
+        "sky": 0.231666,
+        "upscale_sharpen": 1.437343,
+        "world_shading_shared": 3.70401
+      },
+      "gpuPassMs": [
+        3.935676,
+        1.491979,
+        1.4449990000000001,
+        0.540625
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.830051,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 796,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.023401,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.242148,
+        0.066658,
+        0.010867,
+        0.009883
+      ],
+      "cpuRenderMs": 0.331363,
+      "cpuUpdateMs": 0.200249,
+      "debug": false,
+      "deliveredFPS": 59.993557111921085,
+      "frameMs": 16.754501,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.008072,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.965833,
+        "output_markers": 0.540677,
+        "sky": 0.230104,
+        "upscale_sharpen": 1.44401,
+        "world_shading_shared": 3.756302
+      },
+      "gpuPassMs": [
+        3.9864059999999997,
+        1.965833,
+        1.452082,
+        0.540677
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000528,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 810,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.031696,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.249075,
+        0.045289,
+        0.010807,
+        0.007662
+      ],
+      "cpuRenderMs": 0.314287,
+      "cpuUpdateMs": 0.202428,
+      "debug": false,
+      "deliveredFPS": 59.993557111921085,
+      "frameMs": 16.700725,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007656,
+        "msaa_resolve": 5.2e-05,
+        "native_surfaces_geometry": 1.508697,
+        "output_markers": 0.54026,
+        "sky": 0.231197,
+        "upscale_sharpen": 1.438281,
+        "world_shading_shared": 4.3775
+      },
+      "gpuPassMs": [
+        4.608697,
+        1.508697,
+        1.445989,
+        0.54026
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000654,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 824,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.026836,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.29708,
+        0.052633,
+        0.01289,
+        0.008824
+      ],
+      "cpuRenderMs": 0.37354,
+      "cpuUpdateMs": 0.215016,
+      "debug": false,
+      "deliveredFPS": 59.993557111921085,
+      "frameMs": 16.738574,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007656,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.501197,
+        "output_markers": 0.550572,
+        "sky": 0.231562,
+        "upscale_sharpen": 1.441979,
+        "world_shading_shared": 4.73276
+      },
+      "gpuPassMs": [
+        4.964322,
+        1.501197,
+        1.449635,
+        0.550572
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000508,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 838,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.029084,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.195472,
+        0.034873,
+        0.007348,
+        0.005348
+      ],
+      "cpuRenderMs": 0.243819,
+      "cpuUpdateMs": 0.229388,
+      "debug": false,
+      "deliveredFPS": 59.99643027239522,
+      "frameMs": 16.799651,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 1.5925,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.135572,
+        "output_markers": 0.541458,
+        "sky": 0.226979,
+        "upscale_sharpen": 1.44927,
+        "world_shading_shared": 3.996093
+      },
+      "gpuPassMs": [
+        4.223072,
+        2.135572,
+        3.04177,
+        0.541458
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000294,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 851,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.033197,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.248649,
+        0.054426,
+        0.010888,
+        0.0068
+      ],
+      "cpuRenderMs": 0.322543,
+      "cpuUpdateMs": 0.20506,
+      "debug": false,
+      "deliveredFPS": 59.99643027239522,
+      "frameMs": 16.684228,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007291,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.528906,
+        "output_markers": 0.54677,
+        "sky": 0.229322,
+        "upscale_sharpen": 1.444583,
+        "world_shading_shared": 4.743229
+      },
+      "gpuPassMs": [
+        4.972551,
+        1.528906,
+        1.4518739999999999,
+        0.54677
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000571,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 865,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.027118,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.282077,
+        0.044996,
+        0.011938,
+        0.010635
+      ],
+      "cpuRenderMs": 0.351302,
+      "cpuUpdateMs": 0.202727,
+      "debug": false,
+      "deliveredFPS": 59.99643027239522,
+      "frameMs": 16.709914,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007604,
+        "msaa_resolve": 5.2e-05,
+        "native_surfaces_geometry": 0.590104,
+        "output_markers": 0.541875,
+        "sky": 0.232604,
+        "upscale_sharpen": 1.446979,
+        "world_shading_shared": 5.657812
+      },
+      "gpuPassMs": [
+        5.890416,
+        0.590104,
+        1.4546350000000001,
+        0.541875
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.859568,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 879,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.056096,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.31335,
+        0.057744,
+        0.015321,
+        0.035219
+      ],
+      "cpuRenderMs": 0.449254,
+      "cpuUpdateMs": 0.26826,
+      "debug": false,
+      "deliveredFPS": 59.99643027239522,
+      "frameMs": 16.796253,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007708,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.137552,
+        "output_markers": 0.540937,
+        "sky": 0.227812,
+        "upscale_sharpen": 1.433541,
+        "world_shading_shared": 5.570572
+      },
+      "gpuPassMs": [
+        5.798384,
+        2.137552,
+        1.441249,
+        0.540937
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000713,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 893,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.03039,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.315276,
+        0.065352,
+        0.015645,
+        0.008533
+      ],
+      "cpuRenderMs": 0.406669,
+      "cpuUpdateMs": 0.206101,
+      "debug": false,
+      "deliveredFPS": 60.00643009230629,
+      "frameMs": 16.69011,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007604,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.652083,
+        "output_markers": 0.540625,
+        "sky": 0.22901,
+        "upscale_sharpen": 1.442864,
+        "world_shading_shared": 5.655625
+      },
+      "gpuPassMs": [
+        5.884634999999999,
+        2.652083,
+        1.4504679999999999,
+        0.540625
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.840298,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 906,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.038905,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.256039,
+        0.044939,
+        0.009405,
+        0.00808
+      ],
+      "cpuRenderMs": 0.319748,
+      "cpuUpdateMs": 0.281986,
+      "debug": false,
+      "deliveredFPS": 60.00643009230629,
+      "frameMs": 16.61378,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007343,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.561458,
+        "output_markers": 0.542239,
+        "sky": 0.231666,
+        "upscale_sharpen": 1.431197,
+        "world_shading_shared": 5.085156
+      },
+      "gpuPassMs": [
+        5.316821999999999,
+        2.561458,
+        1.4385400000000002,
+        0.542239
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.768676,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 920,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.046429,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.2783,
+        0.05173,
+        0.013633,
+        0.010267
+      ],
+      "cpuRenderMs": 0.355808,
+      "cpuUpdateMs": 0.262307,
+      "debug": false,
+      "deliveredFPS": 60.00643009230629,
+      "frameMs": 16.653098,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007552,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.579791,
+        "output_markers": 0.541562,
+        "sky": 0.230052,
+        "upscale_sharpen": 1.433489,
+        "world_shading_shared": 5.109166
+      },
+      "gpuPassMs": [
+        5.339218,
+        2.579791,
+        1.441041,
+        0.541562
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 1.604977,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 934,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.056371,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.328217,
+        0.075791,
+        0.015836,
+        0.012061
+      ],
+      "cpuRenderMs": 0.433822,
+      "cpuUpdateMs": 0.268574,
+      "debug": false,
+      "deliveredFPS": 60.00643009230629,
+      "frameMs": 16.692887,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007656,
+        "msaa_resolve": 5.2e-05,
+        "native_surfaces_geometry": 2.432239,
+        "output_markers": 0.545989,
+        "sky": 0.231614,
+        "upscale_sharpen": 1.432968,
+        "world_shading_shared": 5.111875
+      },
+      "gpuPassMs": [
+        5.343489,
+        2.432239,
+        1.440676,
+        0.545989
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.00091,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 948,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.058751,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.361352,
+        0.056503,
+        0.024831,
+        0.011902
+      ],
+      "cpuRenderMs": 0.460917,
+      "cpuUpdateMs": 0.262443,
+      "debug": false,
+      "deliveredFPS": 60.00643009230629,
+      "frameMs": 16.716639,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 1.980833,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.683645,
+        "output_markers": 0.54177,
+        "sky": 0.227656,
+        "upscale_sharpen": 1.45052,
+        "world_shading_shared": 3.981718
+      },
+      "gpuPassMs": [
+        4.2093739999999995,
+        1.683645,
+        3.431353,
+        0.54177
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000757,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 962,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.033515,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.188931,
+        0.027571,
+        0.005796,
+        0.004248
+      ],
+      "cpuRenderMs": 0.227374,
+      "cpuUpdateMs": 0.304076,
+      "debug": false,
+      "deliveredFPS": 59.99657415627367,
+      "frameMs": 16.89965,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007604,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.691927,
+        "output_markers": 0.541979,
+        "sky": 0.229947,
+        "upscale_sharpen": 1.430156,
+        "world_shading_shared": 5.975989
+      },
+      "gpuPassMs": [
+        6.205936,
+        1.691927,
+        1.43776,
+        0.541979
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000573,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 975,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.049474,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.340673,
+        0.062109,
+        0.016592,
+        0.00997
+      ],
+      "cpuRenderMs": 0.431326,
+      "cpuUpdateMs": 0.26413,
+      "debug": false,
+      "deliveredFPS": 59.99657415627367,
+      "frameMs": 16.792867,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.007552,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.69052,
+        "output_markers": 0.542552,
+        "sky": 0.228437,
+        "upscale_sharpen": 1.438072,
+        "world_shading_shared": 6.4025
+      },
+      "gpuPassMs": [
+        6.630936999999999,
+        1.69052,
+        1.445624,
+        0.542552
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.910872,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 989,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.022088,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.279508,
+        0.05452,
+        0.011089,
+        0.008876
+      ],
+      "cpuRenderMs": 0.35545,
+      "cpuUpdateMs": 0.210269,
+      "debug": false,
+      "deliveredFPS": 59.99657415627367,
+      "frameMs": 16.716924,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 2.427812,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.571614,
+        "output_markers": 0.543541,
+        "sky": 0.230989,
+        "upscale_sharpen": 1.447916,
+        "world_shading_shared": 3.394635
+      },
+      "gpuPassMs": [
+        3.625624,
+        2.571614,
+        3.8757279999999996,
+        0.543541
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 1.41393,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 1003,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.038201,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.295973,
+        0.048626,
+        0.012704,
+        0.008946
+      ],
+      "cpuRenderMs": 0.367779,
+      "cpuUpdateMs": 0.227216,
+      "debug": false,
+      "deliveredFPS": 59.99657415627367,
+      "frameMs": 16.479811,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007395,
+        "msaa_resolve": 5.2e-05,
+        "native_surfaces_geometry": 3.029843,
+        "output_markers": 0.545937,
+        "sky": 0.231302,
+        "upscale_sharpen": 1.439687,
+        "world_shading_shared": 9.270416
+      },
+      "gpuPassMs": [
+        9.501718,
+        3.029843,
+        1.447134,
+        0.545937
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 2,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000715,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 1017,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.030521,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.258107,
+        0.077929,
+        0.011095,
+        0.010426
+      ],
+      "cpuRenderMs": 0.359492,
+      "cpuUpdateMs": 0.215414,
+      "debug": false,
+      "deliveredFPS": 59.99964275622542,
+      "frameMs": 16.638035,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006041,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 4.807031,
+        "output_markers": 0.538177,
+        "sky": 0.183958,
+        "upscale_sharpen": 1.403281,
+        "world_shading_shared": 2.381718
+      },
+      "gpuPassMs": [
+        2.565676,
+        4.807031,
+        1.409322,
+        0.538177
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000542,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1030,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.02164,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.266069,
+        0.05463,
+        0.012599,
+        0.009786
+      ],
+      "cpuRenderMs": 0.344323,
+      "cpuUpdateMs": 0.205036,
+      "debug": false,
+      "deliveredFPS": 59.99964275622542,
+      "frameMs": 16.665511,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.247812,
+        "msaa_resolve": 5.2e-05,
+        "native_surfaces_geometry": 1.720416,
+        "output_markers": 0.538333,
+        "sky": 0.180156,
+        "upscale_sharpen": 1.414583,
+        "world_shading_shared": 1.322864
+      },
+      "gpuPassMs": [
+        1.50302,
+        1.720416,
+        1.662447,
+        0.538333
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000678,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1044,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.032571,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.27071,
+        0.052853,
+        0.011805,
+        0.009279
+      ],
+      "cpuRenderMs": 0.346195,
+      "cpuUpdateMs": 0.221545,
+      "debug": false,
+      "deliveredFPS": 59.99964275622542,
+      "frameMs": 16.671791,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006197,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.726406,
+        "output_markers": 0.537031,
+        "sky": 0.18427,
+        "upscale_sharpen": 1.396093,
+        "world_shading_shared": 1.583437
+      },
+      "gpuPassMs": [
+        1.767707,
+        1.726406,
+        1.40229,
+        0.537031
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.846131,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1058,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.053496,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.274862,
+        0.069237,
+        0.012556,
+        0.009368
+      ],
+      "cpuRenderMs": 0.367787,
+      "cpuUpdateMs": 0.256077,
+      "debug": false,
+      "deliveredFPS": 59.99964275622542,
+      "frameMs": 16.545106,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.005885,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.724375,
+        "output_markers": 0.537395,
+        "sky": 0.180885,
+        "upscale_sharpen": 1.406354,
+        "world_shading_shared": 1.580781
+      },
+      "gpuPassMs": [
+        1.761666,
+        1.724375,
+        1.412239,
+        0.537395
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.912132,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1072,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.037698,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.273192,
+        0.04907,
+        0.01254,
+        0.008287
+      ],
+      "cpuRenderMs": 0.345006,
+      "cpuUpdateMs": 0.301451,
+      "debug": false,
+      "deliveredFPS": 59.99964275622542,
+      "frameMs": 16.704489,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006302,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.140677,
+        "output_markers": 0.540156,
+        "sky": 0.18552,
+        "upscale_sharpen": 1.40776,
+        "world_shading_shared": 1.573958
+      },
+      "gpuPassMs": [
+        1.7594779999999999,
+        2.140677,
+        1.414062,
+        0.540156
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000508,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1085,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.024251,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.246641,
+        0.049958,
+        0.010393,
+        0.007867
+      ],
+      "cpuRenderMs": 0.316431,
+      "cpuUpdateMs": 0.295061,
+      "debug": false,
+      "deliveredFPS": 60.001372260892474,
+      "frameMs": 16.545046,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006093,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.726458,
+        "output_markers": 0.537239,
+        "sky": 0.183437,
+        "upscale_sharpen": 1.399218,
+        "world_shading_shared": 1.606145
+      },
+      "gpuPassMs": [
+        1.789582,
+        1.726458,
+        1.405311,
+        0.537239
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000404,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1099,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.037544,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.25425,
+        0.047364,
+        0.010961,
+        0.007769
+      ],
+      "cpuRenderMs": 0.321828,
+      "cpuUpdateMs": 0.090089,
+      "debug": false,
+      "deliveredFPS": 60.001372260892474,
+      "frameMs": 16.636049,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006041,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.707343,
+        "output_markers": 0.537083,
+        "sky": 0.18151,
+        "upscale_sharpen": 1.390104,
+        "world_shading_shared": 1.598072
+      },
+      "gpuPassMs": [
+        1.779582,
+        1.707343,
+        1.396145,
+        0.537083
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000603,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1113,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.040937,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.299879,
+        0.052191,
+        0.014192,
+        0.011182
+      ],
+      "cpuRenderMs": 0.379837,
+      "cpuUpdateMs": 0.279933,
+      "debug": false,
+      "deliveredFPS": 60.001372260892474,
+      "frameMs": 16.71047,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.005937,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.143697,
+        "output_markers": 0.537656,
+        "sky": 0.180052,
+        "upscale_sharpen": 1.387083,
+        "world_shading_shared": 1.584687
+      },
+      "gpuPassMs": [
+        1.764739,
+        2.143697,
+        1.3930200000000001,
+        0.537656
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.003635,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1127,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.060698,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.31704,
+        0.056922,
+        0.01493,
+        0.011286
+      ],
+      "cpuRenderMs": 0.402786,
+      "cpuUpdateMs": 0.330063,
+      "debug": false,
+      "deliveredFPS": 60.001372260892474,
+      "frameMs": 16.836489,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006145,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.726614,
+        "output_markers": 0.537135,
+        "sky": 0.179687,
+        "upscale_sharpen": 1.406041,
+        "world_shading_shared": 1.600312
+      },
+      "gpuPassMs": [
+        1.7799989999999999,
+        1.726614,
+        1.4121860000000002,
+        0.537135
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000591,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1141,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.037753,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.302554,
+        0.052298,
+        0.013206,
+        0.008872
+      ],
+      "cpuRenderMs": 0.378282,
+      "cpuUpdateMs": 0.239629,
+      "debug": false,
+      "deliveredFPS": 59.999566143137216,
+      "frameMs": 16.666002,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.275104,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.719218,
+        "output_markers": 0.537552,
+        "sky": 0.182239,
+        "upscale_sharpen": 1.408697,
+        "world_shading_shared": 1.321614
+      },
+      "gpuPassMs": [
+        1.503853,
+        1.719218,
+        1.683801,
+        0.537552
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.00066,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1155,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.082697,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.253546,
+        0.064847,
+        0.011188,
+        0.008031
+      ],
+      "cpuRenderMs": 0.339029,
+      "cpuUpdateMs": 0.317105,
+      "debug": false,
+      "deliveredFPS": 59.999566143137216,
+      "frameMs": 17.395617,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006197,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.94802,
+        "output_markers": 0.549322,
+        "sky": 0.184843,
+        "upscale_sharpen": 1.399687,
+        "world_shading_shared": 1.408906
+      },
+      "gpuPassMs": [
+        1.593749,
+        1.94802,
+        1.405884,
+        0.549322
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.001337,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1168,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.053214,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.279179,
+        0.081855,
+        0.011518,
+        0.026179
+      ],
+      "cpuRenderMs": 0.405836,
+      "cpuUpdateMs": 0.251498,
+      "debug": false,
+      "deliveredFPS": 59.999566143137216,
+      "frameMs": 16.753071,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.00625,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.732604,
+        "output_markers": 0.537864,
+        "sky": 0.18625,
+        "upscale_sharpen": 1.395781,
+        "world_shading_shared": 1.57125
+      },
+      "gpuPassMs": [
+        1.7575,
+        1.732604,
+        1.402031,
+        0.537864
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.889205,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1182,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.012937,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.188742,
+        0.038105,
+        0.007915,
+        0.005864
+      ],
+      "cpuRenderMs": 0.24178,
+      "cpuUpdateMs": 0.138586,
+      "debug": false,
+      "deliveredFPS": 59.999566143137216,
+      "frameMs": 16.414292,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006354,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.735208,
+        "output_markers": 0.542656,
+        "sky": 0.185833,
+        "upscale_sharpen": 1.3975,
+        "world_shading_shared": 1.572031
+      },
+      "gpuPassMs": [
+        1.7578639999999999,
+        1.735208,
+        1.403854,
+        0.542656
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000253,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1196,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.018885,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.213368,
+        0.056155,
+        0.008559,
+        0.006152
+      ],
+      "cpuRenderMs": 0.285492,
+      "cpuUpdateMs": 0.346502,
+      "debug": false,
+      "deliveredFPS": 59.99632596269453,
+      "frameMs": 16.572134,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006406,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.550572,
+        "output_markers": 0.538958,
+        "sky": 0.185,
+        "upscale_sharpen": 2.791354,
+        "world_shading_shared": 1.758697
+      },
+      "gpuPassMs": [
+        1.943697,
+        2.550572,
+        2.7977600000000002,
+        0.538958
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.978552,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1210,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.039371,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.266936,
+        0.04477,
+        0.011557,
+        0.007402
+      ],
+      "cpuRenderMs": 0.332377,
+      "cpuUpdateMs": 0.239709,
+      "debug": false,
+      "deliveredFPS": 59.99632596269453,
+      "frameMs": 16.640018,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.005833,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.288125,
+        "output_markers": 0.538072,
+        "sky": 0.182968,
+        "upscale_sharpen": 1.3925,
+        "world_shading_shared": 1.316927
+      },
+      "gpuPassMs": [
+        1.499895,
+        2.288125,
+        1.398333,
+        0.538072
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.9151,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1223,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.05378,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.432061,
+        0.059965,
+        0.015226,
+        0.013238
+      ],
+      "cpuRenderMs": 0.522816,
+      "cpuUpdateMs": 0.265606,
+      "debug": false,
+      "deliveredFPS": 59.99632596269453,
+      "frameMs": 16.706372,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006145,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.724583,
+        "output_markers": 0.536822,
+        "sky": 0.186458,
+        "upscale_sharpen": 1.402291,
+        "world_shading_shared": 1.596562
+      },
+      "gpuPassMs": [
+        1.78302,
+        1.724583,
+        1.408436,
+        0.536822
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.954256,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1237,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.023903,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.253687,
+        0.044263,
+        0.010167,
+        0.007182
+      ],
+      "cpuRenderMs": 0.316422,
+      "cpuUpdateMs": 0.196429,
+      "debug": false,
+      "deliveredFPS": 59.99632596269453,
+      "frameMs": 16.681831,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006302,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.720781,
+        "output_markers": 0.538177,
+        "sky": 0.184479,
+        "upscale_sharpen": 1.394218,
+        "world_shading_shared": 1.577135
+      },
+      "gpuPassMs": [
+        1.761614,
+        1.720781,
+        1.40052,
+        0.538177
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000619,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1251,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.048974,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.287457,
+        0.051153,
+        0.013866,
+        0.008216
+      ],
+      "cpuRenderMs": 0.362535,
+      "cpuUpdateMs": 0.246774,
+      "debug": false,
+      "deliveredFPS": 59.99632596269453,
+      "frameMs": 16.622841,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.00625,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.068229,
+        "output_markers": 0.549166,
+        "sky": 0.185104,
+        "upscale_sharpen": 1.399843,
+        "world_shading_shared": 1.578072
+      },
+      "gpuPassMs": [
+        1.7631759999999999,
+        2.068229,
+        1.406093,
+        0.549166
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000711,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1265,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.032464,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.201506,
+        0.030244,
+        0.008226,
+        0.005265
+      ],
+      "cpuRenderMs": 0.24624,
+      "cpuUpdateMs": 0.200586,
+      "debug": false,
+      "deliveredFPS": 60.00719553167693,
+      "frameMs": 16.657405,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006093,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.729739,
+        "output_markers": 0.536718,
+        "sky": 0.186614,
+        "upscale_sharpen": 1.392708,
+        "world_shading_shared": 1.581093
+      },
+      "gpuPassMs": [
+        1.7677070000000001,
+        1.729739,
+        1.398801,
+        0.536718
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.848707,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1278,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.032028,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.216137,
+        0.042182,
+        0.009463,
+        0.005811
+      ],
+      "cpuRenderMs": 0.274254,
+      "cpuUpdateMs": 0.278191,
+      "debug": false,
+      "deliveredFPS": 60.00719553167693,
+      "frameMs": 16.887778,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.006562,
+        "msaa_resolve": 5.2e-05,
+        "native_surfaces_geometry": 1.734531,
+        "output_markers": 0.537395,
+        "sky": 0.184583,
+        "upscale_sharpen": 1.39625,
+        "world_shading_shared": 1.606197
+      },
+      "gpuPassMs": [
+        1.79078,
+        1.734531,
+        1.4028639999999999,
+        0.537395
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000467,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1292,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.015653,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.259274,
+        0.05127,
+        0.013052,
+        0.005327
+      ],
+      "cpuRenderMs": 0.330223,
+      "cpuUpdateMs": 0.139324,
+      "debug": false,
+      "deliveredFPS": 60.00719553167693,
+      "frameMs": 16.528786,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.00625,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.484947,
+        "output_markers": 0.542916,
+        "sky": 0.186041,
+        "upscale_sharpen": 2.776614,
+        "world_shading_shared": 1.796927
+      },
+      "gpuPassMs": [
+        1.982968,
+        1.484947,
+        2.782864,
+        0.542916
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.62479,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1306,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.024696,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.166227,
+        0.030742,
+        0.007068,
+        0.005278
+      ],
+      "cpuRenderMs": 0.210179,
+      "cpuUpdateMs": 0.30248,
+      "debug": false,
+      "deliveredFPS": 60.00719553167693,
+      "frameMs": 16.701265,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006197,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.973437,
+        "output_markers": 0.537343,
+        "sky": 0.184895,
+        "upscale_sharpen": 1.397239,
+        "world_shading_shared": 2.094114
+      },
+      "gpuPassMs": [
+        2.279009,
+        1.973437,
+        1.403436,
+        0.537343
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000375,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1320,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.028569,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.254724,
+        0.056253,
+        0.017865,
+        0.008393
+      ],
+      "cpuRenderMs": 0.339113,
+      "cpuUpdateMs": 0.224953,
+      "debug": false,
+      "deliveredFPS": 59.997913752543,
+      "frameMs": 16.631919,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006562,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.503333,
+        "output_markers": 0.543906,
+        "sky": 0.186197,
+        "upscale_sharpen": 2.797031,
+        "world_shading_shared": 2.150729
+      },
+      "gpuPassMs": [
+        2.336926,
+        1.503333,
+        2.8035930000000002,
+        0.543906
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 2,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000768,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1333,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.032723,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.266207,
+        0.06169,
+        0.012881,
+        0.008791
+      ],
+      "cpuRenderMs": 0.351368,
+      "cpuUpdateMs": 0.204394,
+      "debug": false,
+      "deliveredFPS": 59.997913752543,
+      "frameMs": 16.741065,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.00651,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.021666,
+        "output_markers": 0.539062,
+        "sky": 0.185625,
+        "upscale_sharpen": 1.395416,
+        "world_shading_shared": 2.420625
+      },
+      "gpuPassMs": [
+        2.6062499999999997,
+        2.021666,
+        1.401926,
+        0.539062
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000598,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1347,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.035514,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.264769,
+        0.048556,
+        0.013442,
+        0.008954
+      ],
+      "cpuRenderMs": 0.337591,
+      "cpuUpdateMs": 0.233236,
+      "debug": false,
+      "deliveredFPS": 59.997913752543,
+      "frameMs": 16.637116,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 2.021979,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.917812,
+        "output_markers": 0.545572,
+        "sky": 0.189687,
+        "upscale_sharpen": 1.409635,
+        "world_shading_shared": 2.437291
+      },
+      "gpuPassMs": [
+        2.6269780000000003,
+        2.917812,
+        3.4316139999999997,
+        0.545572
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000551,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1361,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.029354,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.24125,
+        0.052002,
+        0.009662,
+        0.00764
+      ],
+      "cpuRenderMs": 0.311996,
+      "cpuUpdateMs": 0.209669,
+      "debug": false,
+      "deliveredFPS": 59.997913752543,
+      "frameMs": 16.6612,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006458,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.382916,
+        "output_markers": 0.542031,
+        "sky": 0.186041,
+        "upscale_sharpen": 1.391718,
+        "world_shading_shared": 2.664895
+      },
+      "gpuPassMs": [
+        2.850936,
+        2.382916,
+        1.398176,
+        0.542031
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000561,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1375,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.02283,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.249315,
+        0.043675,
+        0.010817,
+        0.007909
+      ],
+      "cpuRenderMs": 0.313438,
+      "cpuUpdateMs": 0.227729,
+      "debug": false,
+      "deliveredFPS": 59.997913752543,
+      "frameMs": 16.655932,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.006406,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.379531,
+        "output_markers": 0.536927,
+        "sky": 0.184479,
+        "upscale_sharpen": 1.401979,
+        "world_shading_shared": 2.660208
+      },
+      "gpuPassMs": [
+        2.844687,
+        2.379531,
+        1.408385,
+        0.536927
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.868017,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1388,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.03339,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.215001,
+        0.039174,
+        0.008707,
+        0.005894
+      ],
+      "cpuRenderMs": 0.27021,
+      "cpuUpdateMs": 0.20791,
+      "debug": false,
+      "deliveredFPS": 60.00351313683767,
+      "frameMs": 16.826749,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006666,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.161458,
+        "output_markers": 0.539427,
+        "sky": 0.183072,
+        "upscale_sharpen": 1.401093,
+        "world_shading_shared": 2.767395
+      },
+      "gpuPassMs": [
+        2.950467,
+        3.161458,
+        1.407759,
+        0.539427
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 1.029005,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1402,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.020945,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.183868,
+        0.032153,
+        0.007393,
+        0.005168
+      ],
+      "cpuRenderMs": 0.229437,
+      "cpuUpdateMs": 0.152001,
+      "debug": false,
+      "deliveredFPS": 60.00351313683767,
+      "frameMs": 16.760588,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.00651,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.095104,
+        "output_markers": 0.550729,
+        "sky": 0.185416,
+        "upscale_sharpen": 1.395989,
+        "world_shading_shared": 2.960625
+      },
+      "gpuPassMs": [
+        3.146041,
+        3.095104,
+        1.402499,
+        0.550729
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.652567,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1416,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.026133,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.201063,
+        0.03272,
+        0.007752,
+        0.005684
+      ],
+      "cpuRenderMs": 0.248167,
+      "cpuUpdateMs": 0.327792,
+      "debug": false,
+      "deliveredFPS": 60.00351313683767,
+      "frameMs": 16.853985,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006354,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.831041,
+        "output_markers": 0.537864,
+        "sky": 0.184947,
+        "upscale_sharpen": 1.399166,
+        "world_shading_shared": 3.208906
+      },
+      "gpuPassMs": [
+        3.393853,
+        2.831041,
+        1.4055199999999999,
+        0.537864
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000334,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1430,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.022228,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.234138,
+        0.056637,
+        0.010994,
+        0.006343
+      ],
+      "cpuRenderMs": 0.309302,
+      "cpuUpdateMs": 0.177046,
+      "debug": false,
+      "deliveredFPS": 60.00351313683767,
+      "frameMs": 16.869055,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006458,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.045729,
+        "output_markers": 0.545989,
+        "sky": 0.184895,
+        "upscale_sharpen": 1.41927,
+        "world_shading_shared": 2.407916
+      },
+      "gpuPassMs": [
+        2.592811,
+        3.045729,
+        1.425728,
+        0.545989
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000396,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1443,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.022538,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.216194,
+        0.039793,
+        0.009586,
+        0.005031
+      ],
+      "cpuRenderMs": 0.272079,
+      "cpuUpdateMs": 0.183746,
+      "debug": false,
+      "deliveredFPS": 59.93795794460649,
+      "frameMs": 16.746786,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.006354,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.149895,
+        "output_markers": 0.539427,
+        "sky": 0.184843,
+        "upscale_sharpen": 1.402135,
+        "world_shading_shared": 2.401822
+      },
+      "gpuPassMs": [
+        2.586665,
+        3.149895,
+        1.4084889999999999,
+        0.539427
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000403,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1457,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.038934,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.216402,
+        0.036668,
+        0.009251,
+        0.005956
+      ],
+      "cpuRenderMs": 0.26952,
+      "cpuUpdateMs": 0.338738,
+      "debug": false,
+      "deliveredFPS": 59.93795794460649,
+      "frameMs": 16.747391,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.006197,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.798645,
+        "output_markers": 0.537812,
+        "sky": 0.185104,
+        "upscale_sharpen": 1.390677,
+        "world_shading_shared": 2.642447
+      },
+      "gpuPassMs": [
+        2.827551,
+        2.798645,
+        1.396874,
+        0.537812
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000644,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1471,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.026665,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.174895,
+        0.044538,
+        0.007433,
+        0.004815
+      ],
+      "cpuRenderMs": 0.232684,
+      "cpuUpdateMs": 0.127566,
+      "debug": false,
+      "deliveredFPS": 59.93795794460649,
+      "frameMs": 16.653751,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006406,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.963333,
+        "output_markers": 0.53677,
+        "sky": 0.185468,
+        "upscale_sharpen": 1.40177,
+        "world_shading_shared": 2.642343
+      },
+      "gpuPassMs": [
+        2.827811,
+        2.963333,
+        1.4081759999999999,
+        0.53677
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000431,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1485,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.01637,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.19736,
+        0.031417,
+        0.006915,
+        0.0059
+      ],
+      "cpuRenderMs": 0.242771,
+      "cpuUpdateMs": 0.36315,
+      "debug": false,
+      "deliveredFPS": 59.93795794460649,
+      "frameMs": 16.673356,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.006197,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.799947,
+        "output_markers": 0.5425,
+        "sky": 0.186145,
+        "upscale_sharpen": 1.407135,
+        "world_shading_shared": 3.052916
+      },
+      "gpuPassMs": [
+        3.2390610000000004,
+        2.799947,
+        1.413332,
+        0.5425
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.60571,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1498,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.031396,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.251671,
+        0.046461,
+        0.011491,
+        0.009033
+      ],
+      "cpuRenderMs": 0.320324,
+      "cpuUpdateMs": 0.207121,
+      "debug": false,
+      "deliveredFPS": 59.93795794460649,
+      "frameMs": 16.70994,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.00625,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.812187,
+        "output_markers": 0.542552,
+        "sky": 0.184479,
+        "upscale_sharpen": 1.399739,
+        "world_shading_shared": 2.6325
+      },
+      "gpuPassMs": [
+        2.816979,
+        2.812187,
+        1.4059890000000002,
+        0.542552
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000579,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1512,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.022681,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.182418,
+        0.02953,
+        0.007438,
+        0.004581
+      ],
+      "cpuRenderMs": 0.224971,
+      "cpuUpdateMs": 0.200983,
+      "debug": false,
+      "deliveredFPS": 60.061598959277035,
+      "frameMs": 16.546153,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006458,
+        "msaa_resolve": 5.2e-05,
+        "native_surfaces_geometry": 3.023385,
+        "output_markers": 0.538072,
+        "sky": 0.185468,
+        "upscale_sharpen": 1.415052,
+        "world_shading_shared": 3.137447
+      },
+      "gpuPassMs": [
+        3.322915,
+        3.023385,
+        1.421562,
+        0.538072
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000425,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1526,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.020841,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.258659,
+        0.051153,
+        0.011934,
+        0.007513
+      ],
+      "cpuRenderMs": 0.331062,
+      "cpuUpdateMs": 0.201305,
+      "debug": false,
+      "deliveredFPS": 60.061598959277035,
+      "frameMs": 16.621782,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006406,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 4.45401,
+        "output_markers": 0.55052,
+        "sky": 0.185833,
+        "upscale_sharpen": 1.39802,
+        "world_shading_shared": 4.192291
+      },
+      "gpuPassMs": [
+        4.378124,
+        4.45401,
+        1.404426,
+        0.55052
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.860822,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1540,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.055566,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.302966,
+        0.059661,
+        0.015109,
+        0.008578
+      ],
+      "cpuRenderMs": 0.388263,
+      "cpuUpdateMs": 0.255837,
+      "debug": false,
+      "deliveredFPS": 60.061598959277035,
+      "frameMs": 16.657845,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.006406,
+        "msaa_resolve": 5.2e-05,
+        "native_surfaces_geometry": 3.44,
+        "output_markers": 0.539375,
+        "sky": 0.185156,
+        "upscale_sharpen": 1.40552,
+        "world_shading_shared": 3.151666
+      },
+      "gpuPassMs": [
+        3.336822,
+        3.44,
+        1.4119780000000002,
+        0.539375
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000886,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1553,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.040352,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.336846,
+        0.06397,
+        0.018063,
+        0.011132
+      ],
+      "cpuRenderMs": 0.432122,
+      "cpuUpdateMs": 0.242073,
+      "debug": false,
+      "deliveredFPS": 60.061598959277035,
+      "frameMs": 16.750099,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.006302,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.013281,
+        "output_markers": 0.539114,
+        "sky": 0.184062,
+        "upscale_sharpen": 1.4025,
+        "world_shading_shared": 3.15375
+      },
+      "gpuPassMs": [
+        3.337812,
+        3.013281,
+        1.408802,
+        0.539114
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 1.058015,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1567,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.018891,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.275923,
+        0.067164,
+        0.011577,
+        0.008262
+      ],
+      "cpuRenderMs": 0.364429,
+      "cpuUpdateMs": 0.192597,
+      "debug": false,
+      "deliveredFPS": 59.995956332539144,
+      "frameMs": 16.765844,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.006354,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.00651,
+        "output_markers": 0.537395,
+        "sky": 0.184791,
+        "upscale_sharpen": 1.402447,
+        "world_shading_shared": 3.174375
+      },
+      "gpuPassMs": [
+        3.359166,
+        3.00651,
+        1.408801,
+        0.537395
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000569,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1581,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.056111,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.327059,
+        0.052816,
+        0.023299,
+        0.009693
+      ],
+      "cpuRenderMs": 0.417509,
+      "cpuUpdateMs": 0.132536,
+      "debug": false,
+      "deliveredFPS": 59.995956332539144,
+      "frameMs": 16.76309,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006302,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.204635,
+        "output_markers": 0.545052,
+        "sky": 0.183385,
+        "upscale_sharpen": 1.401666,
+        "world_shading_shared": 3.384166
+      },
+      "gpuPassMs": [
+        3.567551,
+        3.204635,
+        1.407968,
+        0.545052
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000606,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1595,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.025752,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.236785,
+        0.049332,
+        0.009489,
+        0.007377
+      ],
+      "cpuRenderMs": 0.304644,
+      "cpuUpdateMs": 0.203227,
+      "debug": false,
+      "deliveredFPS": 59.995956332539144,
+      "frameMs": 16.678039,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006354,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.791927,
+        "output_markers": 0.538593,
+        "sky": 0.184791,
+        "upscale_sharpen": 1.415989,
+        "world_shading_shared": 3.379375
+      },
+      "gpuPassMs": [
+        3.564166,
+        2.791927,
+        1.422343,
+        0.538593
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 1.222168,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1609,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.054211,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.250016,
+        0.044688,
+        0.010595,
+        0.007878
+      ],
+      "cpuRenderMs": 0.314714,
+      "cpuUpdateMs": 0.292682,
+      "debug": false,
+      "deliveredFPS": 59.995956332539144,
+      "frameMs": 16.686577,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006562,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.537916,
+        "output_markers": 0.547239,
+        "sky": 0.187395,
+        "upscale_sharpen": 1.415,
+        "world_shading_shared": 1.586197
+      },
+      "gpuPassMs": [
+        1.773592,
+        3.537916,
+        1.421562,
+        0.547239
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.853553,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1622,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.0772,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.239353,
+        0.039697,
+        0.010006,
+        0.006031
+      ],
+      "cpuRenderMs": 0.296371,
+      "cpuUpdateMs": 0.320656,
+      "debug": false,
+      "deliveredFPS": 60.00488097408202,
+      "frameMs": 16.924336,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.00625,
+        "msaa_resolve": 5.2e-05,
+        "native_surfaces_geometry": 3.961197,
+        "output_markers": 0.53776,
+        "sky": 0.184843,
+        "upscale_sharpen": 1.402291,
+        "world_shading_shared": 1.612031
+      },
+      "gpuPassMs": [
+        1.796874,
+        3.961197,
+        1.408593,
+        0.53776
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.00065,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1636,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.02685,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.198993,
+        0.030206,
+        0.006481,
+        0.004867
+      ],
+      "cpuRenderMs": 0.241611,
+      "cpuUpdateMs": 0.329696,
+      "debug": false,
+      "deliveredFPS": 60.00488097408202,
+      "frameMs": 16.8187,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.006354,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.5425,
+        "output_markers": 0.546458,
+        "sky": 0.184947,
+        "upscale_sharpen": 1.393385,
+        "world_shading_shared": 1.608489
+      },
+      "gpuPassMs": [
+        1.793436,
+        3.5425,
+        1.399739,
+        0.546458
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000554,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1650,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.020665,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.18831,
+        0.028617,
+        0.00587,
+        0.00448
+      ],
+      "cpuRenderMs": 0.22803,
+      "cpuUpdateMs": 0.340927,
+      "debug": false,
+      "deliveredFPS": 60.00488097408202,
+      "frameMs": 16.722512,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006354,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.557656,
+        "output_markers": 0.545052,
+        "sky": 0.186197,
+        "upscale_sharpen": 1.392968,
+        "world_shading_shared": 1.608802
+      },
+      "gpuPassMs": [
+        1.794999,
+        3.557656,
+        1.399322,
+        0.545052
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.609356,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1664,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.040636,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.185743,
+        0.04113,
+        0.006452,
+        0.005445
+      ],
+      "cpuRenderMs": 0.239869,
+      "cpuUpdateMs": 0.366671,
+      "debug": false,
+      "deliveredFPS": 60.00488097408202,
+      "frameMs": 16.787845,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.00651,
+        "msaa_resolve": 5.2e-05,
+        "native_surfaces_geometry": 3.546666,
+        "output_markers": 0.543697,
+        "sky": 0.183385,
+        "upscale_sharpen": 1.397031,
+        "world_shading_shared": 1.610416
+      },
+      "gpuPassMs": [
+        1.793801,
+        3.546666,
+        1.4035929999999999,
+        0.543697
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000465,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1677,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.02201,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.274251,
+        0.049893,
+        0.010055,
+        0.007937
+      ],
+      "cpuRenderMs": 0.343635,
+      "cpuUpdateMs": 0.281056,
+      "debug": false,
+      "deliveredFPS": 60.00488097408202,
+      "frameMs": 16.556173,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006406,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.819687,
+        "output_markers": 0.542187,
+        "sky": 0.184375,
+        "upscale_sharpen": 1.400572,
+        "world_shading_shared": 1.989895
+      },
+      "gpuPassMs": [
+        2.17427,
+        3.819687,
+        1.4069779999999998,
+        0.542187
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.000402,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1691,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.028707,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.181621,
+        0.027777,
+        0.006884,
+        0.004152
+      ],
+      "cpuRenderMs": 0.221358,
+      "cpuUpdateMs": 0.352066,
+      "debug": false,
+      "deliveredFPS": 59.998933698950296,
+      "frameMs": 16.632465,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.00651,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 3.572135,
+        "output_markers": 0.547916,
+        "sky": 0.185937,
+        "upscale_sharpen": 1.414166,
+        "world_shading_shared": 1.609479
+      },
+      "gpuPassMs": [
+        1.7954160000000001,
+        3.572135,
+        1.420676,
+        0.547916
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.00045,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1705,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.022131,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.208529,
+        0.048758,
+        0.008448,
+        0.005314
+      ],
+      "cpuRenderMs": 0.272093,
+      "cpuUpdateMs": 0.273539,
+      "debug": false,
+      "deliveredFPS": 59.998933698950296,
+      "frameMs": 16.753679,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.006354,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.72375,
+        "output_markers": 0.543281,
+        "sky": 0.186979,
+        "upscale_sharpen": 1.395208,
+        "world_shading_shared": 1.613281
+      },
+      "gpuPassMs": [
+        1.80026,
+        1.72375,
+        1.401562,
+        0.543281
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        1920,
+        1080
+      ],
+      "ipcMs": 0.991064,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5,
+      "renderedFrames": 1719,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.021011,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.196719,
+        0.028866,
+        0.005873,
+        0.004958
+      ],
+      "cpuRenderMs": 0.237279,
+      "cpuUpdateMs": 0.145349,
+      "debug": false,
+      "deliveredFPS": 59.998933698950296,
+      "frameMs": 16.698253,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.006354,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.143437,
+        "output_markers": 0.550052,
+        "sky": 0.183645,
+        "upscale_sharpen": 1.404114,
+        "world_shading_shared": 1.630416
+      },
+      "gpuPassMs": [
+        1.8140610000000001,
+        2.143437,
+        1.410468,
+        0.550052
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.564558,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 1732,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.018374,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.202197,
+        0.032792,
+        0.0071,
+        0.005054
+      ],
+      "cpuRenderMs": 0.248449,
+      "cpuUpdateMs": 0.371259,
+      "debug": false,
+      "deliveredFPS": 59.998933698950296,
+      "frameMs": 16.860777,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007604,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.740729,
+        "output_markers": 0.542864,
+        "sky": 0.232187,
+        "upscale_sharpen": 1.441822,
+        "world_shading_shared": 1.876927
+      },
+      "gpuPassMs": [
+        2.109114,
+        1.740729,
+        1.4494259999999999,
+        0.542864
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000366,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 1746,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.033936,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.234565,
+        0.044353,
+        0.010301,
+        0.008254
+      ],
+      "cpuRenderMs": 0.298773,
+      "cpuUpdateMs": 0.216414,
+      "debug": false,
+      "deliveredFPS": 59.9904440621749,
+      "frameMs": 16.798419,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007447,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.75151,
+        "output_markers": 0.542708,
+        "sky": 0.233125,
+        "upscale_sharpen": 1.453906,
+        "world_shading_shared": 1.863906
+      },
+      "gpuPassMs": [
+        2.097031,
+        1.75151,
+        1.461353,
+        0.542708
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 1.238459,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 1760,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.025454,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.246577,
+        0.055629,
+        0.010431,
+        0.008673
+      ],
+      "cpuRenderMs": 0.322743,
+      "cpuUpdateMs": 0.205902,
+      "debug": false,
+      "deliveredFPS": 59.9904440621749,
+      "frameMs": 16.646156,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.0075,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 2.146093,
+        "output_markers": 0.538072,
+        "sky": 0.233177,
+        "upscale_sharpen": 1.443333,
+        "world_shading_shared": 1.849843
+      },
+      "gpuPassMs": [
+        2.08302,
+        2.146093,
+        1.450833,
+        0.538072
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.00058,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 1774,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.035044,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.260229,
+        0.04757,
+        0.011794,
+        0.008479
+      ],
+      "cpuRenderMs": 0.329527,
+      "cpuUpdateMs": 0.21526,
+      "debug": false,
+      "deliveredFPS": 59.9904440621749,
+      "frameMs": 16.695846,
+      "gpuCaptureMs": 0.0,
+      "gpuEffectsMs": {
+        "bloom": 0.007395,
+        "msaa_resolve": 0.0,
+        "native_surfaces_geometry": 1.746614,
+        "output_markers": 0.545677,
+        "sky": 0.23151,
+        "upscale_sharpen": 1.447812,
+        "world_shading_shared": 1.851614
+      },
+      "gpuPassMs": [
+        2.083124,
+        1.746614,
+        1.4552070000000001,
+        0.545677
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.000452,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 1787,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    },
+    {
+      "captureMs": 0.052965,
+      "collisionTriangles": 3910,
+      "cpuPassMs": [
+        0.288042,
+        0.054326,
+        0.012657,
+        0.008697
+      ],
+      "cpuRenderMs": 0.365773,
+      "cpuUpdateMs": 0.303275,
+      "debug": false,
+      "deliveredFPS": 59.9904440621749,
+      "frameMs": 16.585496,
+      "gpuCaptureMs": 5.2e-05,
+      "gpuEffectsMs": {
+        "bloom": 0.007291,
+        "msaa_resolve": 5.2e-05,
+        "native_surfaces_geometry": 1.738437,
+        "output_markers": 0.545052,
+        "sky": 0.234947,
+        "upscale_sharpen": 1.448229,
+        "world_shading_shared": 1.856406
+      },
+      "gpuPassMs": [
+        2.091353,
+        1.738437,
+        1.455572,
+        0.545052
+      ],
+      "graphics": {
+        "alpha_haze": false,
+        "ambient_occlusion": true,
+        "anisotropy": 1,
+        "bloom": "off",
+        "bloom_strength": 0.12,
+        "dynamic_resolution": true,
+        "exposure": 1,
+        "fog": "linear",
+        "fov": 60.0,
+        "msaa": 1,
+        "normal_maps": false,
+        "quality": "low",
+        "reduced_motion": false,
+        "reflections": false,
+        "render_scale": "auto",
+        "sharpen": 0.35,
+        "sky": "gradient",
+        "specular": false,
+        "target_fps": 60
+      },
+      "inFlight": 1,
+      "internalSize": [
+        2160,
+        1215
+      ],
+      "ipcMs": 0.003537,
+      "msaaSamples": 1,
+      "nativeSize": [
+        3840,
+        2160
+      ],
+      "quality": "intel",
+      "renderScale": 0.5625,
+      "renderedFrames": 1801,
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "reusedFrames": 0,
+      "targetFPS": 60,
+      "upload": {
+        "bytes": 231151016,
+        "completedJobs": 0,
+        "cpuMs": 96.72884700000003,
+        "jobs": 0,
+        "maxStepMs": 57.316222,
+        "pending": false,
+        "steps": 119
+      }
+    }
+  ]
+}

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <thread>
 using namespace hyprune;
 int main(int argc, char **argv) {
     try {
@@ -43,7 +44,24 @@ int main(int argc, char **argv) {
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
         render::Renderer renderer;
         auto scene = world::load(argv[1]);
+        auto uploadStart = std::chrono::steady_clock::now();
         renderer.prepare(scene);
+        double uploadMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - uploadStart).count();
+        if (getenv("HYPRUNE_BENCH_UPLOAD")) {
+            std::cout << nlohmann::json{{"renderer", reinterpret_cast<const char *>(glGetString(GL_RENDERER))},
+                                        {"uploadMs", uploadMs},
+                                        {"images", scene->images.size()},
+                                        {"meshes", scene->meshes.size()}}
+                             .dump(2)
+                      << '\n';
+            renderer.beginPrepare(scene);
+            while (!renderer.continuePrepare())
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            std::cout << renderer.timings()["upload"].dump(2) << '\n';
+            renderer.destroy();
+            return 0;
+        }
 #ifdef HYPRUNE_BENCH_LEGACY
         legacy::Renderer legacy;
         legacy.prepare(scene);

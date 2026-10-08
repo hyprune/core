@@ -1,0 +1,11 @@
+{
+  "bytes": 231151016,
+  "completedJobs": 0,
+  "cpuMs": 103.24225400000003,
+  "jobs": 0,
+  "maxJobMs": 35.230667,
+  "maxStepMs": 35.235283,
+  "pending": false,
+  "slowestJob": "shader scene_ #0",
+  "steps": 125
+}

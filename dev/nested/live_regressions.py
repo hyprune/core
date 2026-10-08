@@ -41,7 +41,7 @@ def acceptance(logs,recorded,children,check):
         return subprocess.check_output(['qs','ipc','--pid',str(qpid()),'call','preview',*map(str,args)],env=env,text=True,stderr=subprocess.DEVNULL,timeout=3).strip()
     def status():return json.loads(ui('status'))
     wait(lambda:status().get('lease'))
-    initial=status();check('live_like_IPC06_grant',initial['protocol']=='0.6' and bool(initial['lease']))
+    initial=status();check('live_like_IPC07_grant',initial['protocol']=='0.7' and bool(initial['lease']))
     check('native_workspace_inventory_without_home_bindings',len(initial['workspaces'])>0)
     s.ctl('eval','hl.unbind("SUPER + RETURN")')
     s.ctl('eval','hl.bind("SUPER + Return",hl.dsp.exec_cmd("kitty --start-as normal --class hyprune-live-regression --title Live-launch-regression"))')

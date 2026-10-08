@@ -102,9 +102,10 @@ struct Runtime {
     std::set<std::string> graphicsOverrides;
     Json graphicsBaseProfile = nullptr;
     interaction::InputFile graphicsFile{"graphics", Json::object(), [](const Json &patch) {
-        interaction::configPatch(interaction::defaultConfig(), {{"graphics", patch}});
-        return patch;
-    }};
+                                            interaction::configPatch(interaction::defaultConfig(),
+                                                                     {{"graphics", patch}});
+                                            return patch;
+                                        }};
     void applyGraphics(const Json &patch) {
         auto next = interaction::configPatch(configured, {{"graphics", patch}});
         config["graphics"] = next["graphics"];
@@ -112,14 +113,18 @@ struct Runtime {
         renderer.applyGraphics(config["graphics"]);
         if (!renderer.profile.is_null() && !graphicsBaseProfile.is_null()) {
             renderer.profile["exposure"] = patch.contains("exposure") || graphicsOverrides.contains("exposure")
-                ? next["graphics"]["exposure"] : graphicsBaseProfile["exposure"];
-            renderer.profile["bloom"]["strength"] = patch.contains("bloom_strength") || graphicsOverrides.contains("bloom_strength")
-                ? next["graphics"]["bloom_strength"] : graphicsBaseProfile["bloom"]["strength"];
+                                               ? next["graphics"]["exposure"]
+                                               : graphicsBaseProfile["exposure"];
+            renderer.profile["bloom"]["strength"] =
+                patch.contains("bloom_strength") || graphicsOverrides.contains("bloom_strength")
+                    ? next["graphics"]["bloom_strength"]
+                    : graphicsBaseProfile["bloom"]["strength"];
             renderer.graphics["exposure"] = renderer.profile["exposure"];
             renderer.graphics["bloom_strength"] = renderer.profile["bloom"]["strength"];
         }
         baseFov = next["graphics"]["fov"];
-        if (!zoomHeld) camera.fov = baseFov;
+        if (!zoomHeld)
+            camera.fov = baseFov;
     }
     bool superHeld = false, altHeld = false, noclip = false, freeCursor = false, layerCursor = false, zoomHeld = false,
          cursorWarpPending = false;
@@ -179,6 +184,7 @@ struct Runtime {
     bool active = false, typing = false, loading = false, loadCancelled = false;
     int renderDepth = 0;
     std::future<std::shared_ptr<world::World>> pendingWorld;
+    std::shared_ptr<world::World> uploadingWorld;
     std::string pendingSpawn, pendingToggle, resolvedLocation;
     bool toggleAfterLoad = false;
     std::chrono::steady_clock::time_point loadDeadline;
@@ -407,9 +413,10 @@ std::optional<std::pair<std::string, surfaces::Hit>> aim() {
             h && (!best || h->distance < best->second.distance))
             best = {{surface.id, *h}};
     if (best && runtime->world) {
-        auto &world=*runtime->world;
-        auto hit=interaction::raycast(runtime->camera.position,pointerRay(),world.collision,&world.collisionIndex);
-        if(hit && hit->distance<best->second.distance-.01f)return std::nullopt;
+        auto &world = *runtime->world;
+        auto hit = interaction::raycast(runtime->camera.position, pointerRay(), world.collision, &world.collisionIndex);
+        if (hit && hit->distance < best->second.distance - .01f)
+            return std::nullopt;
     }
     return best;
 }
@@ -802,11 +809,14 @@ void Runtime::load(const std::string &id, const std::string &spawnId) {
     });
 }
 void Runtime::finishLoad() {
-    if (!loading || pendingWorld.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+    if (!loading || (!uploadingWorld && (!pendingWorld.valid() ||
+                                         pendingWorld.wait_for(std::chrono::seconds(0)) != std::future_status::ready)))
         return;
-    loading = false;
     try {
-        auto candidate = pendingWorld.get();
+        bool start = !uploadingWorld;
+        if (start)
+            uploadingWorld = pendingWorld.get();
+        auto candidate = uploadingWorld;
         if (loadCancelled || locked())
             throw ipc::Error(-32004, "world load cancelled");
         if (!ipc->healthy() || std::chrono::steady_clock::now() > loadDeadline)
@@ -814,7 +824,12 @@ void Runtime::finishLoad() {
         auto spawn = pendingArea.empty() ? candidate->spawn(pendingSpawn) : world::areaSpawn(*candidate, pendingArea);
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         applyGraphics(graphicsFile.current);
-        renderer.prepare(candidate);
+        if (start)
+            renderer.beginPrepare(candidate);
+        if (!renderer.continuePrepare())
+            return;
+        uploadingWorld.reset();
+        loading = false;
         graphicsBaseProfile = renderer.profile;
         applyGraphics(graphicsFile.current);
         world = std::move(candidate);
@@ -861,6 +876,10 @@ void Runtime::finishLoad() {
             toggle(pendingToggle);
         }
     } catch (const ipc::Error &e) {
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        renderer.cancelPrepare();
+        uploadingWorld.reset();
+        loading = false;
         control.endLoad(false, loadCancelled || locked());
         publish();
         ipc->fail(e.code, e.what());
@@ -868,6 +887,10 @@ void Runtime::finishLoad() {
         toggleAfterLoad = false;
         pendingArea.clear();
     } catch (const std::exception &e) {
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        renderer.cancelPrepare();
+        uploadingWorld.reset();
+        loading = false;
         control.endLoad(false, loadCancelled || locked());
         publish();
         ipc->fail(-32602, e.what());
@@ -1148,10 +1171,10 @@ void Runtime::handTick(float dt) {
             e->window->m_target) {
             auto w = e->window.lock();
             auto box = w->m_target->position();
-            double width = interaction::resizeExtent(double(hands.pose.width / hands.start.width * hands.start.pixelWidth), 160.,
-                                      monitor->m_size.x);
-            double height = interaction::resizeExtent(double(hands.pose.height / hands.start.height * hands.start.pixelHeight), 100.,
-                                       monitor->m_size.y);
+            double width = interaction::resizeExtent(
+                double(hands.pose.width / hands.start.width * hands.start.pixelWidth), 160., monitor->m_size.x);
+            double height = interaction::resizeExtent(
+                double(hands.pose.height / hands.start.height * hands.start.pixelHeight), 100., monitor->m_size.y);
             if (std::abs(box.w - width) >= 1 || std::abs(box.h - height) >= 1) {
                 auto floated = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_ENABLE, w);
                 if (!floated)
@@ -1595,7 +1618,8 @@ void Runtime::useAim(bool zoom) {
             best = std::min(best, hit->second.distance);
         // The tolerance margin must keep the same occlusion policy as aim().
         // Otherwise a rejected ray can re-enter a window through solid geometry.
-        if (auto obstacle = interaction::raycast(camera.position, pointerRay(), world->collision, &world->collisionIndex))
+        if (auto obstacle =
+                interaction::raycast(camera.position, pointerRay(), world->collision, &world->collisionIndex))
             best = std::min(best, obstacle->distance + .01f);
         for (auto &s : capture.visible())
             if (auto h = surfaces::intersect(s, camera.position, pointerRay(), false)) {
@@ -2315,12 +2339,13 @@ void Runtime::toolsTick() {
         layout.invalidateCollision();
         world->collisionIndex.rebuild(world->collision);
         world->visualTriangles.clear();
-        for(const auto &mesh : world->meshes) {
-            auto it=renderer.transforms.find(mesh.node);
-            auto matrix=it==renderer.transforms.end()?Mat4::identity():it->second;
-            for(size_t i=0;i+2<mesh.vertices.size();i+=3)
+        for (const auto &mesh : world->meshes) {
+            auto it = renderer.transforms.find(mesh.node);
+            auto matrix = it == renderer.transforms.end() ? Mat4::identity() : it->second;
+            for (size_t i = 0; i + 2 < mesh.vertices.size(); i += 3)
                 world->visualTriangles.push_back({matrix.point(mesh.vertices[i].position),
-                    matrix.point(mesh.vertices[i+1].position),matrix.point(mesh.vertices[i+2].position)});
+                                                  matrix.point(mesh.vertices[i + 1].position),
+                                                  matrix.point(mesh.vertices[i + 2].position)});
         }
         world->visualIndex.rebuild(world->visualTriangles);
         renderer.collisionChanged();
@@ -2397,7 +2422,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     params.erase("_pid");
     params.erase("_protocol");
     if (method == "graphics.get" || method == "graphics.set") {
-        if (renderDepth) throw ipc::Error(-32004, "graphics update during render");
+        if (renderDepth)
+            throw ipc::Error(-32004, "graphics update during render");
         if (method == "graphics.set") {
             if (params.size() != 1 || !params.contains("patch") || !params["patch"].is_object())
                 throw ipc::Error(-32602, "graphics patch required");
@@ -2405,16 +2431,19 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             merged.update(params["patch"]);
             try {
                 interaction::configPatch(configured, {{"graphics", merged}});
-            } catch (const std::exception &e) { throw ipc::Error(-32602, e.what()); }
+            } catch (const std::exception &e) {
+                throw ipc::Error(-32602, e.what());
+            }
             graphicsFile.save(merged);
             applyGraphics(merged);
-        } else if (!params.empty()) throw ipc::Error(-32602, "unexpected params");
-        return Json{{"config", config["graphics"]}, {"effective", renderer.graphics},
-                    {"overrides", graphicsFile.current}, {"path", graphicsFile.path.string()},
-                    {"error", graphicsFile.error}, {"presets", render::graphicsPresets()},
-                    {"options", render::graphicsOptions()},
-                    {"unsupported", {"ssr", "runtime_shadows", "contact_shadows"}},
-                    {"timings", renderer.timings()}};
+        } else if (!params.empty())
+            throw ipc::Error(-32602, "unexpected params");
+        return Json{
+            {"config", config["graphics"]},         {"effective", renderer.graphics},
+            {"overrides", graphicsFile.current},    {"path", graphicsFile.path.string()},
+            {"error", graphicsFile.error},          {"presets", render::graphicsPresets()},
+            {"options", render::graphicsOptions()}, {"unsupported", {"ssr", "runtime_shadows", "contact_shadows"}},
+            {"timings", renderer.timings()}};
     }
     if (method == "input.get") {
         if (!params.empty())
@@ -2943,8 +2972,8 @@ void Runtime::tick() {
                 if (auto h = surfaces::intersect(*plane, camera.position, pointerRay()))
                     pointerHit = {{grabbed, *h}};
         }
-        if (ownsInput() && !layerCursor && hands.gesture == interaction::Gesture::None &&
-            editor.activeHandle < 0 && (typing || editor.slot == 1)) {
+        if (ownsInput() && !layerCursor && hands.gesture == interaction::Gesture::None && editor.activeHandle < 0 &&
+            (typing || editor.slot == 1)) {
             auto time = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
             if (pointerHit)
                 routePointer(pointerHit->first, pointerHit->second, time);
@@ -3453,11 +3482,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
                                std::chrono::steady_clock::now().time_since_epoch())
                                .count();
-                bool gestureMovement = runtime->hands.gesture != interaction::Gesture::None ||
-                                       runtime->objectCarry || runtime->input.gestureHeld() ||
+                bool gestureMovement = runtime->hands.gesture != interaction::Gesture::None || runtime->objectCarry ||
+                                       runtime->input.gestureHeld() ||
                                        (runtime->editor.activeHandle >= 0 && runtime->superHeld);
-                auto actions = runtime->input.event(runtime->inputMode(), key, runtime->modifiers, down, now, 0,
-                                                    gestureMovement);
+                auto actions =
+                    runtime->input.event(runtime->inputMode(), key, runtime->modifiers, down, now, 0, gestureMovement);
                 if (!actions.empty()) {
                     info.cancelled = true;
                     if (down)

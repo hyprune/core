@@ -66,8 +66,8 @@ shading the full client rectangle twice. Cached placement recovery is invalidate
 on pose/size changes, world replacement and editor collision edits.
 
 For the GPU-offload spike, the target/texture ownership interfaces are unchanged.
-The native HDR intermediate now uses alpha 1 for linear world pixels and alpha 0
-for already encoded native-client pixels. `present()` tone-maps only the former.
+The native intermediate contains display-encoded pixels after reconstruction/
+tone mapping; `present()` adds screen UI without tone-mapping those pixels again.
 When MSAA is off, the world draws directly to the resolve colour/depth textures;
 an offload backend must not read the unused multisample target in that mode.
 
@@ -79,3 +79,41 @@ in the same process on this machine. Dense 10,002-triangle fixture: 323× ray,
 5.54× walk. These are query benchmarks, not whole-frame FPS claims. Randomized
 indexed/reference equivalence covers ray hits and capsule results; nine unit
 suites pass. Raw measurements are under `evidence/review-audit/`.
+
+Final October 8 nested measurement: native 3840×2160, Mesa Intel PTL, Lumen
+Reach, automatic Low/iGPU, live terminal, 22.95 seconds: **60.01 newly rendered
+frames/s, zero reused frames**. Internal scale ranged 0.375–0.5. CPU medians
+update/render/capture/IPC: 0.219/0.366/0.027/0.0007 ms. GPU world/sky/native/
+upscale/output: 1.868/0.149/1.543/1.536/0.473 ms; bloom 0.006 ms; MSAA resolve
+zero. Encoded native composition now uses RGBA8, halving its colour bandwidth
+from the former HDR target. The preceding HDR-native alpha run measured 59.56
+FPS / 10 reused frames; both results are retained in evidence.
+
+This is one static nested scene, not a guarantee for every camera, effect
+preset, client or live-output arrangement. Reproduce:
+`HYPRUNE_GRAPHICS_PROFILE=1 HYPRUNE_NESTED_4K=1 dev/nested/run.sh --live`.
+The wrapper owns the nested lock for the whole run.
+
+GPU uploads use `beginPrepare`, one `continuePrepare(2 ms, 2 MiB)` per deferred
+tick, and `cancelPrepare`. The old world remains available until the final
+upload fence signals. CPU loading/prefiltering remains on the loader worker;
+loading UI stays active until publication. Texture rows and vertex data use
+256 KiB chunks. GL allocation, mip generation and shader compilation are driver
+calls that cannot be preempted: the time budget is soft, checked between jobs.
+`timings.upload` records steps/bytes/CPU/max-step. Final nested cold load used
+125 steps, 103.2 ms total CPU. The largest single job was 35.23 ms compiling
+`scene_`; setup programs are separate jobs (the earlier combined setup took
+57.3 ms). This remaining cold compile hitch is explicitly measured, not hidden. This removes the whole-world synchronous
+upload; it does not promise that every driver operation fits 2 ms. Cancellation
+releases partial resources; old-world rendering and all GL state are preserved.
+
+Native transparency update: world tone mapping/bloom is applied during upscale,
+then client buffers blend premultiplied at native resolution. World BLEND
+materials join the native depth-sorted transparent list with windows; Low's
+haze/glass switch skips those world materials. Intersecting transparent meshes
+still have the usual per-batch sorting limit. Transparent materials do not feed
+the opaque-world bloom extraction. Window buffers keep their original encoded
+colours and opacity; zero-alpha corners/shadows do not erase the background.
+The native intermediate is now entirely display-encoded (alpha reserved zero),
+so the offload spike should export HDR opaque colour + depth and reconstruct/
+tone-map before this native composition stage. Its branch was not edited.

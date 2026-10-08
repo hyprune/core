@@ -1,0 +1,1 @@
+transparent client texel discarded world background
