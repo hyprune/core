@@ -38,6 +38,7 @@ struct Material {
 struct Mesh {
     std::vector<Vertex> vertices;
     unsigned material = 0;
+    unsigned node = 0;
 };
 struct Spawn {
     std::string id;
@@ -56,6 +57,9 @@ struct World {
     std::vector<Material> materials;
     std::vector<Image> images;
     std::vector<Sampler> samplers;
+    std::vector<unsigned> collisionNodes;
+    std::vector<int> nodeParents;
+    std::map<std::string, unsigned> objectNodes;
     Json manifest, map = nullptr, places = Json::array();
     Json walkingNodes = Json::array(), walkingEdges = Json::array();
     Json areas = Json::array(), anchors = Json::array(), objects = Json::array(), placementZones = Json::array(),

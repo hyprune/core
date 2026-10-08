@@ -28,6 +28,8 @@ class Control {
     void retainOutputs(const Json &);
     bool driving() const;
     bool uiVisible() const;
+    float holdSeconds = 1;
+    void openMenu();
     void hold(bool pressed); // Owner owns hold-to-open timing, never the shell.
     static std::map<std::string, std::string> methods();
 

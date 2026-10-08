@@ -57,7 +57,7 @@ void resolveCapsule(Camera &c, std::span<const Triangle> mesh) {
     c.grounded = false;
     for (int iteration = 0; iteration < 4; iteration++)
         for (const auto &t : mesh) {
-            Vec3 a = c.position + Vec3{0, -1.7f + r, 0}, b = c.position + Vec3{0, .1f - r, 0};
+            Vec3 a = c.position + Vec3{0, -c.eyeHeight + r, 0}, b = c.position + Vec3{0, .1f - r, 0};
             Vec3 low{std::min({t.a.x, t.b.x, t.c.x}) - r, std::min({t.a.y, t.b.y, t.c.y}) - r,
                      std::min({t.a.z, t.b.z, t.c.z}) - r};
             Vec3 high{std::max({t.a.x, t.b.x, t.c.x}) + r, std::max({t.a.y, t.b.y, t.c.y}) + r,
@@ -79,7 +79,22 @@ void resolveCapsule(Camera &c, std::span<const Triangle> mesh) {
                 c.verticalSpeed = std::min(0.f, c.verticalSpeed);
         }
 }
+bool setCrouch(Camera &c, bool crouch, std::span<const Triangle> mesh) {
+    float height = crouch ? 1.0f : 1.7f;
+    if (c.eyeHeight == height)
+        return true;
+    auto candidate = c;
+    candidate.position.y += height - c.eyeHeight;
+    candidate.eyeHeight = height;
+    auto expected = candidate.position;
+    resolveCapsule(candidate, mesh);
+    if (!crouch && length(candidate.position - expected) > .004f)
+        return false;
+    c = candidate;
+    return true;
+}
 void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) const {
+    setCrouch(c, i.crouch, mesh);
     dt = std::clamp(dt, 0.f, .05f);
     Vec3 d{std::sin(c.yaw) * i.forward + std::cos(c.yaw) * i.right, 0,
            -std::cos(c.yaw) * i.forward + std::sin(c.yaw) * i.right};
@@ -103,9 +118,9 @@ void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) c
             // Probe the forward footprint for a discrete top, then sweep the entire capsule
             // up and forward. A tall wall or a low ceiling must never become a step.
             auto probe = desired + d * .3f;
-            probe.y = before.position.y - 1.7f + i.stepHeight + .01f;
+            probe.y = before.position.y - before.eyeHeight + i.stepHeight + .01f;
             auto hit = interaction::raycast(probe, {0, -1, 0}, mesh);
-            float rise = hit ? hit->point.y - (before.position.y - 1.7f) : 0;
+            float rise = hit ? hit->point.y - (before.position.y - before.eyeHeight) : 0;
             if (hit && hit->normal.y > .65f && rise > .002f && rise <= i.stepHeight + .001f) {
                 bool clear = true;
                 auto candidate = before;
@@ -120,7 +135,7 @@ void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) c
                     }
                 }
                 candidate.position = desired;
-                candidate.position.y = hit->point.y + 1.7f + .002f;
+                candidate.position.y = hit->point.y + candidate.eyeHeight + .002f;
                 auto expected = candidate.position;
                 resolveCapsule(candidate, mesh);
                 if (clear && length(candidate.position - expected) < .004f) {

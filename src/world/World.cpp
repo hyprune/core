@@ -316,6 +316,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
             }
             require(pos, "missing positions");
             Mesh mesh;
+            mesh.node = ni;
             mesh.material = p.material ? p.material - raw->materials : raw->materials_count;
             require(result->materials[mesh.material].lightmap < 0 || uv1, "declared lightmap needs TEXCOORD_1");
             for (const auto &slot : result->materials[mesh.material].slots)
@@ -354,8 +355,10 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
                 if (!normal)
                     for (int k = 0; k < 3; k++)
                         mesh.vertices[i + k].normal = n;
-                if (collisionNodes.contains(ni) && length(n) > .1f)
+                if (collisionNodes.contains(ni) && length(n) > .1f) {
                     result->collision.push_back(t);
+                    result->collisionNodes.push_back(ni);
+                }
             }
             if (visible.contains(&node))
                 result->meshes.push_back(std::move(mesh));
@@ -372,6 +375,10 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     }
     require(!result->meshes.empty(), "empty scene");
     loadSpatial(*result, root);
+    result->nodeParents.resize(raw->nodes_count, -1);
+    for (size_t i = 0; i < raw->nodes_count; i++)
+        if (raw->nodes[i].parent)
+            result->nodeParents[i] = raw->nodes[i].parent - raw->nodes;
     loadMounts(*result, raw->nodes_count);
     result->atmosphere = j.value("atmosphere", defaultAtmosphere());
     validateAtmosphere(result->atmosphere);

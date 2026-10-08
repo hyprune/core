@@ -1,0 +1,128 @@
+{
+  "version": 2,
+  "longHoldMs": 1000,
+  "scopeVignette": true,
+  "useDistance": 6,
+  "useTolerance": 0.12,
+  "captureInputLimit": 256,
+  "modes": {
+    "world": {
+      "look": [
+        "MouseMove"
+      ],
+      "forward": [
+        "k",
+        "w",
+        "Up"
+      ],
+      "back": [
+        "j",
+        "s",
+        "Down"
+      ],
+      "left": [
+        "h",
+        "a",
+        "Left"
+      ],
+      "right": [
+        "l",
+        "d",
+        "Right"
+      ],
+      "menu": [
+        "Tab[L]"
+      ],
+      "sprint": [
+        "Shift_L"
+      ],
+      "up": [
+        "space"
+      ],
+      "down": [
+        "Control_L"
+      ],
+      "use": [
+        "e"
+      ],
+      "focus": [
+        "f"
+      ],
+      "noclip": [
+        "v"
+      ],
+      "scope": [
+        "q"
+      ],
+      "debug": [
+        "F3",
+        "y"
+      ],
+      "capture": [
+        "u"
+      ],
+      "carry": [
+        "Super+LMB"
+      ],
+      "resize": [
+        "Super+RMB"
+      ],
+      "distance": [
+        "Super+Wheel"
+      ],
+      "rotate": [
+        "Super+Shift+Wheel"
+      ],
+      "tool1": [
+        "1"
+      ],
+      "tool2": [
+        "2"
+      ],
+      "tool3": [
+        "3"
+      ],
+      "tool4": [
+        "4"
+      ],
+      "tool5": [
+        "5"
+      ],
+      "transport": [
+        "z"
+      ],
+      "autopilot": [
+        "x"
+      ],
+      "primary": [
+        "LMB"
+      ],
+      "secondary": [
+        "RMB"
+      ],
+      "wheel": [
+        "Wheel"
+      ],
+      "fly": [
+        "F4"
+      ]
+    },
+    "interactive": {
+      "exit": [
+        "Super+Tab",
+        "Back"
+      ]
+    },
+    "focus": {
+      "exit": [
+        "Super+Tab",
+        "Back"
+      ]
+    },
+    "menu": {
+      "exit": [
+        "Escape"
+      ]
+    }
+  }
+}

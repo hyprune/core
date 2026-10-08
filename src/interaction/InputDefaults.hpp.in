@@ -1,0 +1,2 @@
+#pragma once
+namespace hyprune::interaction { inline const char *defaultInputJSON=R"hyprune(@HYPRUNE_INPUT_DEFAULTS@)hyprune"; }

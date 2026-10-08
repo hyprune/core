@@ -107,9 +107,23 @@ bool Hands::update(const sim::Camera &camera, Vec3 ray, float dt, std::span<cons
             next.rotation = {q[0] * cs + q[1] * sn, q[1] * cs - q[0] * sn, q[2] * cs + q[3] * sn,
                              q[3] * cs - q[2] * sn};
         } else {
-            // Independent edges, as in the prototype: client aspect follows the actual configure.
-            next.width = std::clamp(2 * std::abs(dot(v, start.right())), start.width * 160 / start.pixelWidth, 12.f);
-            next.height = std::clamp(2 * std::abs(dot(v, start.up())), start.height * 100 / start.pixelHeight, 8.f);
+            if (gesture == Gesture::CornerResize) {
+                float sx = dot(offset, start.right()) >= 0 ? 1 : -1, sy = dot(offset, start.up()) >= 0 ? 1 : -1;
+                auto opposite =
+                    start.center - start.right() * (sx * start.width * .5f) - start.up() * (sy * start.height * .5f);
+                auto drag = camera.position + ray * h->distance;
+                next.width =
+                    std::clamp(sx * dot(drag - opposite, start.right()), start.width * 160 / start.pixelWidth, 12.f);
+                next.height =
+                    std::clamp(sy * dot(drag - opposite, start.up()), start.height * 100 / start.pixelHeight, 8.f);
+                next.center =
+                    opposite + start.right() * (sx * next.width * .5f) + start.up() * (sy * next.height * .5f);
+            } else {
+                // Independent edges, as in the prototype: client aspect follows the actual configure.
+                next.width =
+                    std::clamp(2 * std::abs(dot(v, start.right())), start.width * 160 / start.pixelWidth, 12.f);
+                next.height = std::clamp(2 * std::abs(dot(v, start.up())), start.height * 100 / start.pixelHeight, 8.f);
+            }
         }
     }
     if (!sweepSafe(pose, next, mesh))

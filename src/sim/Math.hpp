@@ -29,6 +29,7 @@ inline Vec3 rotate(const std::array<float, 4> &q, Vec3 v) {
     return v + cross(u, v) * (2 * q[3]) + cross(u, cross(u, v)) * 2;
 }
 struct Mat4 {
+    bool operator==(const Mat4 &) const = default;
     std::array<float, 16> v{};
     static Mat4 identity() {
         Mat4 m;

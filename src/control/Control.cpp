@@ -434,6 +434,14 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
         throw ipc::Error(-32601, "unknown method");
     return Json::object();
 }
+void Control::openMenu() {
+    opened = true;
+    for (auto &l : leases)
+        for (auto &o : l["overlays"]) {
+            o["visible"] = true;
+            events.emplace_back("ui.opened", Json{{"leaseId", l["id"]}, {"outputId", o["outputId"]}, {"panel", "map"}});
+        }
+}
 void Control::tick(float dt, sim::Camera &camera, const world::World *w) {
     dt = std::clamp(dt, 0.f, .1f);
     auto now = Clock::now();
@@ -448,7 +456,7 @@ void Control::tick(float dt, sim::Camera &camera, const world::World *w) {
     });
     if (holding && !opened) {
         held += dt;
-        if (held >= .35f) {
+        if (held >= holdSeconds) {
             opened = true;
             for (auto &l : leases)
                 for (auto &o : l["overlays"]) {

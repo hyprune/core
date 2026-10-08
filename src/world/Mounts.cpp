@@ -96,6 +96,8 @@ void loadMounts(World &w, size_t nodes) {
             need(o.at("node").get<size_t>() < nodes, "unknown data object node");
         if (o.at("mount").contains("frameNode"))
             need(o.at("mount").at("frameNode").get<size_t>() < nodes, "unknown object frame node");
+        if (o.contains("node"))
+            w.objectNodes[o.at("id")] = o.at("node");
         w.objects.push_back({{"id", o.at("id")},
                              {"areaId", o.at("areaId")},
                              {"pose", o.at("pose")},
@@ -149,6 +151,8 @@ void loadMounts(World &w, size_t nodes) {
                 std::find_if(w.areas.begin(), w.areas.end(), [&](auto &a) { return a.at("id") == o.at("areaId"); });
             need(area != w.areas.end() && area->at("workspaceSlot") == o.at("workspaceSlot"),
                  "object slot/area mismatch");
+            if (o.contains("node"))
+                w.objectNodes[o.at("id")] = o.at("node");
             w.objects.push_back({{"id", o.at("id")},
                                  {"areaId", o.at("areaId")},
                                  {"pose", o.at("pose")},
@@ -225,6 +229,8 @@ void loadMounts(World &w, size_t nodes) {
             wire.erase("screenType");
             wire.erase("node");
             w.anchors.push_back(wire);
+            if (role == "data-object" && a.contains("node"))
+                w.objectNodes[id] = a.at("node");
             if (role == "data-object")
                 w.objects.push_back({{"id", id},
                                      {"areaId", a["areaId"]},

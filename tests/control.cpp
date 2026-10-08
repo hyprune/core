@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 3; i++)
             control.tick(.1f, camera, world.get());
         check(!control.uiVisible(), "hold opened too early");
-        control.tick(.06f, camera, world.get());
+        for(int i=0;i<7;i++) control.tick(.1f, camera, world.get());
         check(control.uiVisible(), "hold deadline");
         control.hold(false);
         call("data.publish",

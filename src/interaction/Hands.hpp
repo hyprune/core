@@ -1,7 +1,7 @@
 #pragma once
 #include "surfaces/Layout.hpp"
 namespace hyprune::interaction {
-enum class Gesture { None, Carry, Roll, Resize };
+enum class Gesture { None, Carry, Roll, Resize, CornerResize };
 // Seat-independent gesture authority. The adapter owns physical button balancing.
 class Hands {
   public:

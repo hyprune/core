@@ -1,0 +1,191 @@
+#include "Input.hpp"
+#include "InputDefaults.hpp"
+#include <set>
+#include <xkbcommon/xkbcommon.h>
+namespace hyprune::interaction {
+Trigger parseBinding(const std::string &s) {
+    if (s.empty() || s.size() > 96)
+        throw std::runtime_error("binding must be 1–96 bytes");
+    Trigger t;
+    std::string text = s;
+    if (text.ends_with("[L]")) {
+        t.hold = true;
+        text.resize(text.size() - 3);
+    }
+    size_t start = 0;
+    for (;;) {
+        auto end = text.find('+', start);
+        auto part = text.substr(start, end - start);
+        if (end == std::string::npos) {
+            t.key = part;
+            break;
+        }
+        unsigned m = part == "Super"   ? Super
+                     : part == "Shift" ? Shift
+                     : part == "Ctrl"  ? Ctrl
+                     : part == "Alt"   ? Alt
+                                       : 0;
+        if (!m || (t.mods & m))
+            throw std::runtime_error("invalid or duplicate modifier");
+        t.mods |= m;
+        start = end + 1;
+    }
+    static const std::set<std::string> mouse{"LMB",   "RMB",     "MMB",       "Back",     "Forward",
+                                             "Wheel", "WheelUp", "WheelDown", "MouseMove"};
+    if (!mouse.contains(t.key) && !t.key.starts_with("Button")) {
+        auto sym = xkb_keysym_from_name(t.key.c_str(), XKB_KEYSYM_CASE_INSENSITIVE);
+        if (sym == XKB_KEY_NoSymbol)
+            throw std::runtime_error("unknown key: " + t.key);
+        char name[128];
+        xkb_keysym_get_name(sym, name, sizeof name);
+        t.key = name;
+    }
+    if (t.key.starts_with("Button")) {
+        auto n = t.key.substr(6);
+        if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos || std::stoi(n) < 1 ||
+            std::stoi(n) > 767)
+            throw std::runtime_error("invalid mouse button");
+    }
+    if (t.hold && (t.key.starts_with("Wheel") || t.key == "MouseMove"))
+        throw std::runtime_error("wheel/motion cannot be long-held");
+    return t;
+}
+std::string bindingName(const Trigger &t) {
+    std::string s;
+    for (auto [m, name] :
+         {std::pair<unsigned, const char *>{Super, "Super"}, {Shift, "Shift"}, {Ctrl, "Ctrl"}, {Alt, "Alt"}})
+        if (t.mods & m)
+            s += std::string(name) + "+";
+    return s + t.key + (t.hold ? "[L]" : "");
+}
+Json inputDefaults() {
+    return Json::parse(defaultInputJSON);
+}
+Json validateInput(const Json &j) {
+    auto defaults = inputDefaults();
+    if (!j.is_object() || j.size() != defaults.size())
+        throw std::runtime_error("input config requires all version 2 fields");
+    for (auto it = j.begin(); it != j.end(); ++it)
+        if (!defaults.contains(it.key()))
+            throw std::runtime_error("unknown input option");
+    auto integer = [&](const char *k, int lo, int hi) {
+        if (!j.at(k).is_number_integer() || j.at(k) < lo || j.at(k) > hi)
+            throw std::runtime_error(std::string(k) + " out of range");
+    };
+    integer("version", 2, 2);
+    integer("longHoldMs", 100, 5000);
+    integer("captureInputLimit", 16, 1024);
+    if (!j.at("scopeVignette").is_boolean())
+        throw std::runtime_error("scopeVignette must be boolean");
+    for (auto [key, lo, hi] : {std::tuple{"useDistance", .2, 30.}, std::tuple{"useTolerance", 0., .5}}) {
+        if (!j.at(key).is_number() || !std::isfinite(j.at(key).get<double>()) || j.at(key) < lo || j.at(key) > hi)
+            throw std::runtime_error(std::string(key) + " out of range");
+    }
+    auto out = j;
+    if (!out["modes"].is_object() || out["modes"].size() != defaults["modes"].size())
+        throw std::runtime_error("unknown input mode");
+    for (auto &[mode, actions] : defaults["modes"].items()) {
+        if (!out["modes"].contains(mode) || !out["modes"][mode].is_object() ||
+            out["modes"][mode].size() != actions.size())
+            throw std::runtime_error("unknown/missing action in " + mode);
+        for (auto &[action, b] : out["modes"][mode].items()) {
+            if (!actions.contains(action) || !b.is_array() || b.size() > 3)
+                throw std::runtime_error("action accepts at most three bindings");
+            std::set<std::string> seen;
+            for (auto &v : b) {
+                if (!v.is_string())
+                    throw std::runtime_error("binding must be string");
+                auto t = parseBinding(v.get<std::string>());
+                if (t.key == "F12")
+                    throw std::runtime_error("F12 is the emergency exit");
+                if (t.key == "MouseMove" && action != "look")
+                    throw std::runtime_error("MouseMove is only a look binding");
+                auto name = bindingName(t);
+                if (!seen.insert(name).second)
+                    throw std::runtime_error("duplicate binding variant");
+                v = name;
+            }
+        }
+    }
+    return out;
+}
+Json inputConflicts(const Json &j) {
+    Json result = Json::array();
+    for (auto &[mode, actions] : j["modes"].items()) {
+        std::map<std::string, std::string> seen;
+        for (auto &[action, bindings] : actions.items())
+            for (auto &v : bindings) {
+                auto t = parseBinding(v);
+                t.hold = false;
+                auto k = bindingName(t);
+                if (seen.contains(k))
+                    result.push_back({{"mode", mode}, {"binding", v}, {"actions", {seen[k], action}}});
+                else
+                    seen[k] = action;
+            }
+    }
+    return result;
+}
+std::vector<Action> Input::event(const std::string &mode, const std::string &key, unsigned mods, bool down,
+                                 uint64_t now, float value) {
+    std::string identity = key;
+    recent.push_back(
+        {{"timeMs", now}, {"mode", mode}, {"key", key}, {"mods", mods}, {"pressed", down}, {"value", value}});
+    while (recent.size() > config["captureInputLimit"].get<size_t>())
+        recent.pop_front();
+    if (!down) {
+        auto it = held.find(identity);
+        if (it == held.end())
+            return {};
+        auto p = it->second;
+        held.erase(it);
+        bool still = false;
+        for (auto &[k, h] : held)
+            if (h.action == p.action)
+                still = true;
+        return {{p.action, still, value, false}};
+    }
+    if (held.contains(identity))
+        return {{held.at(identity).action, !held.at(identity).hold || held.at(identity).fired, value, false}};
+    if (!config["modes"].contains(mode))
+        return {};
+    // Exact modifiers for chords; unmodified held movement actions accept Shift/Ctrl
+    // so sprint and crouch can be combined with every movement variant.
+    for (auto &[action, bindings] : config["modes"][mode].items())
+        for (auto &binding : bindings) {
+            auto t = parseBinding(binding);
+            bool move = action == "forward" || action == "back" || action == "left" || action == "right" ||
+                        action == "up" || action == "down" || action == "sprint";
+            unsigned own = t.key == "Shift_L" || t.key == "Shift_R"       ? Shift
+                           : t.key == "Control_L" || t.key == "Control_R" ? Ctrl
+                                                                          : 0;
+            if ((t.key != key && !(t.key == "Wheel" && key.starts_with("Wheel"))) ||
+                ((mods & ~own) != t.mods && !(move && t.mods == 0 && (mods & ~(Shift | Ctrl)) == 0)))
+                continue;
+            if (!key.starts_with("Wheel") && key != "MouseMove")
+                held[identity] = {action, now, t.hold, false};
+            return {{action, t.hold ? false : true, value}};
+        }
+    return {};
+}
+std::vector<Action> Input::tick(uint64_t now) {
+    std::vector<Action> out;
+    for (auto &[key, p] : held)
+        if (p.hold && !p.fired && now - p.started >= config["longHoldMs"].get<uint64_t>()) {
+            p.fired = true;
+            out.push_back({p.action, true});
+        }
+    return out;
+}
+void Input::apply(const Json &j) {
+    auto next = validateInput(j);
+    if (config != next) {
+        if (config["modes"] != next["modes"])
+            clear();
+        config = std::move(next);
+    }
+}
+void Input::clear() {
+    held.clear();
+}
+} // namespace hyprune::interaction
