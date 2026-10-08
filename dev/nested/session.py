@@ -9,7 +9,8 @@ class Client:
     def __init__(self,path,token=None,protocol="0.1"):
         self.socket=socket.socket(socket.AF_UNIX);self.socket.settimeout(5);self.socket.connect(path);self.count=0;self.events=[];self.transcript=[]
         params={'protocols':[protocol],'client':{'id':'org.hyprune.nested','name':'Nested test'},'capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}
-        if protocol in ['0.2','0.3','0.4','0.5']:params['capabilities']+=['shell.control','data.publish']
+        if protocol in ['0.2','0.3','0.4','0.5','0.6']:params['capabilities']+=['shell.control','data.publish']
+        if protocol == '0.6':params['capabilities']+=['input.control']
         if token:params['token']=token
         self.hello=self.call('session.hello',params)
     def receive(self):
@@ -53,17 +54,25 @@ def run(args):
         # First-session integration starts from its authored Switchyard locations.
         (STATE/'layout.json').unlink(missing_ok=True)
         os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
-    if args.m3a:
+    if args.m3b:
+        STATE=HERE/'.m3b-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+    elif args.m3a:
         STATE=HERE/'.m3a-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     elif args.m2:
         STATE=HERE/'.m2-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     STATE.mkdir(exist_ok=True);os.chmod(STATE,0o700)
+    if args.m3b:
+        (STATE/'input.json').unlink(missing_ok=True);(STATE/'editor.json').unlink(missing_ok=True)
+        for name in ['acceptance.json','transcript.json','notifications.json']:
+            (STATE/name).unlink(missing_ok=True)
+        if args.record:
+            (STATE/'video-temp.json').unlink(missing_ok=True)
     subprocess.run([sys.executable,str(ROOT/'tests/fixtures/generate.py')],check=True,stdout=subprocess.DEVNULL)
     installed=STATE/'worlds';installed.mkdir(exist_ok=True)
     package=installed/'org.hyprune.atrium'
     if package.exists():shutil.rmtree(package)
     shutil.copytree(ROOT/'tests/fixtures/atrium',package)
-    if args.m2 or args.m3a:
+    if args.m2 or args.m3a or args.m3b:
         subprocess.run([sys.executable,str(ROOT/'tests/fixtures/m2.py')],check=True,stdout=subprocess.DEVNULL)
         shutil.copytree(ROOT/'tests/fixtures/m2',installed/'org.hyprune.m2',dirs_exist_ok=True)
         # A second world exercises the warp lifecycle and persisted cross-world bindings.
@@ -84,22 +93,32 @@ def run(args):
         manifest=json.loads((quiet/'world.json').read_text());manifest['id']='org.hyprune.quiet';manifest['name']='Quiet observatory';(quiet/'world.json').write_text(json.dumps(manifest,indent=2)+'\n')
         mappings=[{'id':10,'label':'Switchyard','worldId':'com.hyprune.switchyard','spawnId':'arrival'}, {'id':11,'label':'Quiet observatory','worldId':'org.hyprune.quiet','spawnId':manifest['defaultSpawn']}]
         (STATE/'locations.json').write_text(json.dumps(mappings))
-    if args.m3a:
+    if args.m3a or args.m3b:
         subprocess.run([sys.executable,str(ROOT/'tests/fixtures/m3a.py')],check=True)
         shutil.copytree(ROOT/'tests/fixtures/m3a',installed/'org.hyprune.m3a',dirs_exist_ok=True)
+        if args.m3b:
+            subprocess.run([sys.executable,str(ROOT/'tests/fixtures/m3b.py')],check=True)
+            shutil.copytree(ROOT/'tests/fixtures/m3b',installed/'org.hyprune.m3b',dirs_exist_ok=True)
         for worldid in ['com.hyprune.lumen-reach','com.hyprune.switchyard']:
             source=ROOT.parent/'worlds/dist'/worldid
             if not (source/'world.json').is_file():raise RuntimeError('Build '+worldid+' before M3A acceptance')
             shutil.copytree(source,installed/worldid,dirs_exist_ok=True)
     token=secrets.token_hex(32)
     grants=[{'token':token,'client':'org.hyprune.nested','capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}]
-    if args.m1 or args.integration or args.m2 or args.m3a:grants[0]['capabilities']+=['shell.control','data.publish']
+    if args.m1 or args.integration or args.m2 or args.m3a or args.m3b:grants[0]['capabilities']+=['shell.control','data.publish']
     shell_token=secrets.token_hex(32)
-    if args.integration or args.m2 or args.m3a: grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control']})
+    if args.integration or args.m2 or args.m3a or args.m3b: grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control']})
+    if args.m3b:
+        for grant in grants:grant['capabilities'].append('input.control')
     read,write=os.pipe();os.write(write,json.dumps(grants).encode());os.close(write)
-    environment=os.environ.copy();environment.update(AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read),HYPRUNE_LAYOUT_FILE=str(STATE/"layout.json"))
+    environment=os.environ.copy();environment.update(AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read),HYPRUNE_LAYOUT_FILE=str(STATE/"layout.json"),HYPRUNE_INPUT_FILE=str(STATE/"input.json"),HYPRUNE_EDITOR_FILE=str(STATE/"editor.json"),XDG_STATE_HOME=str(STATE/"statehome"))
     if args.integration: environment['HYPRUNE_WORKSPACE_LOCATIONS']=str(STATE/'locations.json')
-    config=str(HERE/'hyprland.lua');log=open(STATE/'hyprland.log','w')
+    config=str(HERE/'hyprland.lua')
+    if args.m3b:
+        config=str(STATE/'hyprland.lua')
+        Path=pathlib.Path
+        Path(config).write_text((HERE/'hyprland.lua').read_text().replace('general = {','input = { resolve_binds_by_sym = true },\n    general = {')+ '\nhl.bind("SUPER + TAB", hl.dsp.exec_cmd("touch '+str(STATE/'native-super-tab')+'"))\nhl.bind("SUPER + F9", hl.dsp.exec_cmd("touch '+str(STATE/'native-unrelated')+'"))\n')
+    log=open(STATE/'hyprland.log','w')
     process=subprocess.Popen(['Hyprland','-c',config],env=environment,pass_fds=(read,),stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True);os.close(read)
     children=[];client=None
     try:
@@ -124,8 +143,12 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,"0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.6" if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
+        if args.m3b:
+            from m3b import acceptance
+            acceptance(client,children,args,shell_token,socketpath)
+            (STATE/"transcript.json").write_text(json.dumps(client.transcript));(STATE/"notifications.json").write_text(json.dumps(client.events));return
         if args.m3a:
             from m3a import acceptance
             acceptance(client,children,args,shell_token,socketpath)
@@ -347,6 +370,6 @@ def m1(client):
     print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--serve',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--serve',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
     try:run(args)
     except KeyboardInterrupt:print("Nested session stopped.",flush=True)
