@@ -100,6 +100,14 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                                             w->m_workspace ? int(w->m_workspace->m_id) : 0};
                 if (layout && !layout->hasPlacement(instance, world)) {
                     layout->spawn(instance, world, *camera, e.surface, float(monitor->m_size.x) / monitor->m_size.y);
+                    // Placement may shrink to fit a safe home volume. Configure the
+                    // client to that logical size instead of stretching its texture.
+                    // This runs in the deferred refresh, never the render pass.
+                    const auto &placed = layout->freePoses.at(e.surface.id);
+                    Vector2D logical{std::max(160.f, std::floor(placed.width / windowScale)),
+                                     std::max(100.f, std::floor(placed.height / windowScale))};
+                    if (logical.x < surface->m_current.size.x - 1 || logical.y < surface->m_current.size.y - 1)
+                        configureRequests.push_back({w, logical});
                     if (remembered == adoptedWindows_.end())
                         adoptedWindows_.push_back({w, e.surface.id, world->id});
                 }
@@ -170,6 +178,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         compose(monitor, world, *layout);
 }
 void Capture::release() {
+    configureRequests.clear();
     for (auto &e : entries)
         if (e.window && e.window->m_isMapped) {
             auto workspace = e.window->m_workspace;

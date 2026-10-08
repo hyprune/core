@@ -22,6 +22,7 @@ class Capture {
         CHyprSignalListener commitListener;
     };
     std::vector<Entry> entries;
+    std::vector<std::pair<PHLWINDOWREF, Vector2D>> configureRequests;
     struct Child {
         WP<CWLSurfaceResource> resource;
         SP<Render::ITexture> texture;

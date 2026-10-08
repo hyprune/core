@@ -432,3 +432,9 @@ client press/moving drag/off-window release at GDK_SCALE=1 and 2, carry with a
 colliding native Super+W, pitch preservation, and native chord restoration.
 Nested also loaded Lumen Reach and Switchyard. Evidence:
 `docs/evidence/live-round3/acceptance.json` and `unit.txt`.
+
+4K spawn follow-up: a safe placement smaller than the initial desktop-sized
+client now queues a matching logical client configure. Floating/configure actions
+run on a later event-loop turn, after capture iteration, so layout callbacks
+cannot invalidate the compositor window list being traversed. The 4K live-like
+harness verified the arriving terminal is visible, collision-free and in view.

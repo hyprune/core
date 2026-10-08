@@ -485,6 +485,22 @@ void Runtime::refresh() {
         capture.spawnDistance = config["windows"]["spawn_distance"];
         capture.windowScale = config["windows"]["scale"];
         capture.refresh(monitor.lock(), world.get(), &layout, &camera);
+        // Configure after the capture iteration completes: native layout changes
+        // may reorder the compositor's window list or invoke other plugin hooks.
+        for (auto [window, logical] : std::exchange(capture.configureRequests, {}))
+            deferInput([window, logical] {
+                if (!runtime->active || !window || !window->m_isMapped || !window->m_target)
+                    return;
+                auto w = window.lock();
+                auto floated = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_ENABLE, w);
+                if (!floated)
+                    throw std::runtime_error("spawn float rejected: " + floated.error().message);
+                auto resized = Config::Actions::resize(logical, false, w);
+                if (!resized)
+                    throw std::runtime_error("spawn resize rejected: " + resized.error().message);
+                w->m_target->rememberFloatingSize(logical);
+                w->sendWindowSize(true);
+            });
     }
 }
 void Runtime::home(const Json &binding, bool travel) {
