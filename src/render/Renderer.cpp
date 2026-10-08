@@ -1,6 +1,7 @@
 #include "Renderer.hpp"
 #include "GLState.hpp"
 #include "PNG.hpp"
+#include "ProgramCache.hpp"
 #include "world/Environment.hpp"
 #include "world/Mounts.hpp"
 #include <fontconfig/fontconfig.h>
@@ -28,7 +29,11 @@ GLuint shader(GLenum type, const char *source) {
     return s;
 }
 GLuint program(const char *vertex, const char *fragment) {
+    auto cache = ProgramCache::path(vertex, fragment);
+    if (auto p = ProgramCache::load(cache)) return p;
+    auto started = std::chrono::steady_clock::now();
     GLuint v = shader(GL_VERTEX_SHADER, vertex), f = shader(GL_FRAGMENT_SHADER, fragment), p = glCreateProgram();
+    glProgramParameteri(p, GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE);
     glAttachShader(p, v);
     glAttachShader(p, f);
     glLinkProgram(p);
@@ -42,6 +47,8 @@ GLuint program(const char *vertex, const char *fragment) {
         glDeleteProgram(p);
         throw std::runtime_error(log);
     }
+    ProgramCache::compileMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now()-started).count();
+    ProgramCache::save(p, cache);
     return p;
 }
 const char *vertex = R"(#version 300 es
@@ -258,6 +265,7 @@ void Renderer::freeWorld() {
 void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
     GLState state;
     cancelPrepare();
+    warmStep_ = -1;
     // CPU decode and environment prefiltering already happen on the loader worker.
     size_t gpuBytes = 0;
     for (const auto &mesh : world->meshes)
@@ -335,6 +343,7 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
                 sky_ = program(screenVertex, skyFragment);
         },
         "shader sky_");
+    add(0, [this] { if (!depthProgram_) depthProgram_ = program(vertex, depthFragment); }, "shader depth");
     add(
         0,
         [this] {
@@ -452,7 +461,7 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
 }
 bool Renderer::continuePrepare(double milliseconds, size_t byteBudget) {
     if (!pending_)
-        return true;
+        return continueWarmup();
     GLState state;
     auto p = pending_.get();
     if (p->fence) {
@@ -521,13 +530,67 @@ bool Renderer::continuePrepare(double milliseconds, size_t byteBudget) {
         profile = p->profile;
         pending_.reset();
         collisionChanged();
-        return true;
+        warmStep_ = warmShaders ? 0 : -1; warmMs_ = warmMaxMs_ = 0;
+        return false;
     } catch (...) {
         cancelPrepare();
         throw;
     }
 }
+// All programs are uniform-driven GLES3 programs, not lazily compiled permutations.
+// Exercise driver state variants (MSAA, blending, native/depth, all effects and text)
+// in a private tiny target, one fenced submission per loading tick.
+bool Renderer::continueWarmup() {
+    if (warmStep_ < 0) return true;
+    GLState guard;
+    if (warmFence_) {
+        auto status = glClientWaitSync(warmFence_,0,0);
+        if (status == GL_TIMEOUT_EXPIRED) return false;
+        if (status == GL_WAIT_FAILED) throw std::runtime_error("shader warmup fence failed");
+        glDeleteSync(warmFence_); warmFence_ = nullptr;
+    }
+    if (warmStep_ >= 12) {
+        while (!frameFences_.empty()) { glDeleteSync(frameFences_.front()); frameFences_.pop_front(); }
+        warmStep_ = -1;
+        freeTargets(); // Actual output size is allocated by the normal renderer.
+        lastFrame_ = fpsSince_ = {}; fpsFrames_ = frames; deliveredFPS_ = 0;
+        return true;
+    }
+    if (!warmFbo_) {
+        glGenTextures(1,&warmTexture_); glBindTexture(GL_TEXTURE_2D,warmTexture_);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,32,32,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        glGenFramebuffers(1,&warmFbo_); glBindFramebuffer(GL_FRAMEBUFFER,warmFbo_);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,warmTexture_,0);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE) throw std::runtime_error("warm target");
+    }
+    auto saved = graphics; auto savedProfile = profile;
+    bool oldDebug = debug, oldWorld = worldOnly, oldCapture = captureRequested;
+    auto oldExternal = externalWorldFbo;
+    auto settings = graphicsDefaults();
+    settings["quality"] = warmStep_ % 2 ? "ultra" : "low";
+    settings["msaa"] = std::array{1,2,4,1}[warmStep_%4];
+    settings["fog"] = std::array{"off","linear","height"}[warmStep_%3];
+    settings["bloom"] = std::array{"off","low","high"}[warmStep_%3];
+    settings["render_scale"] = 1.; settings["dynamic_resolution"] = false;
+    applyGraphics(settings);
+    debug = true; worldOnly = false; captureRequested = false;
+    externalWorldFbo = warmStep_ == 11 ? warmFbo_ : 0;
+    sim::Camera view; if (!world_->spawns.empty()) view.position = world_->spawn().position + Vec3{0,1.7f,0};
+    surfaces::Surface client; client.center = view.position + view.forward()*3; client.texture=warmTexture_;
+    auto start = std::chrono::steady_clock::now();
+    try { draw(warmFbo_,32,32,view,std::span(&client,1),warmStep_%2); }
+    catch (...) { applyGraphics(saved); profile=savedProfile; debug=oldDebug; worldOnly=oldWorld; captureRequested=oldCapture; externalWorldFbo=oldExternal; throw; }
+    applyGraphics(saved); profile=savedProfile; debug=oldDebug; worldOnly=oldWorld; captureRequested=oldCapture; externalWorldFbo=oldExternal;
+    auto ms = std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
+    warmMs_ += ms; warmMaxMs_ = std::max(warmMaxMs_,ms);
+    ++warmStep_; warmFence_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0); glFlush();
+    return false;
+}
 void Renderer::cancelPrepare() {
+    warmStep_ = -1;
+    if (warmFence_) { glDeleteSync(warmFence_); warmFence_ = nullptr; }
     if (!pending_)
         return;
     GLState state;
@@ -1284,6 +1347,13 @@ void Renderer::debugHUD(int w, int h) {
     text(26 * scale, 24 * scale, message.str(), {.79f, .9f, .96f}, w, h, scale);
 }
 
+void Renderer::drawLoading(GLuint target, int w, int h) {
+    GLState guard;
+    glBindFramebuffer(GL_FRAMEBUFFER,target);glViewport(0,0,w,h);
+    glDisable(GL_SCISSOR_TEST);glDisable(GL_STENCIL_TEST);glDisable(GL_RASTERIZER_DISCARD);
+    glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);glClearColor(.012f,.018f,.03f,1);glClear(GL_COLOR_BUFFER_BIT);
+    if(textTexture_) text(w*.4f,h*.5f,"LOADING WORLD / SHADERS",{.6f,.8f,1},w,h,1.5f);
+}
 void Renderer::drawHUD(GLuint target, int w, int h) {
     GLState state;
     glBindFramebuffer(GL_FRAMEBUFFER, target);
@@ -1648,6 +1718,7 @@ world::Json Renderer::timings() const {
                            {"upscale_sharpen", cost({5})},      {"native_surfaces_geometry", cost({1})},
                            {"output_markers", cost({3})}};
     return {{"renderedFrames", frames},
+            {"shaderCache", {{"hits", ProgramCache::hits}, {"misses", ProgramCache::misses}, {"rejected", ProgramCache::rejected}, {"compileMs", ProgramCache::compileMs}, {"warmupMs", warmMs_}, {"warmupMaxStepMs", warmMaxMs_}, {"warming", warmStep_ >= 0}}},
             {"deliveredFPS", deliveredFPS_},
             {"graphics", graphics},
             {"gpuEffectsMs", effects},
@@ -1659,7 +1730,7 @@ world::Json Renderer::timings() const {
             {"cpuRenderMs", renderMs_},
             {"cpuUpdateMs", updateMs},
             {"upload",
-             {{"pending", bool(pending_)},
+             {{"pending", bool(pending_) || warmStep_ >= 0},
               {"steps", uploadSteps_},
               {"bytes", uploadBytes_},
               {"cpuMs", uploadMs_},
@@ -1735,6 +1806,9 @@ Renderer::Pixels Renderer::snapshot() {
     return pixels;
 }
 void Renderer::destroy() {
+    if (warmFence_) glDeleteSync(warmFence_);
+    warmFence_ = nullptr; warmStep_ = -1;
+    glDeleteFramebuffers(1, &warmFbo_); glDeleteTextures(1, &warmTexture_); warmFbo_ = warmTexture_ = 0;
     cancelPrepare();
     GLState state;
     for (auto fence : frameFences_)

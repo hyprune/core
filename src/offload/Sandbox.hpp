@@ -56,6 +56,8 @@ inline void sandbox(const std::filesystem::path &package) {
     for (auto &entry : std::filesystem::directory_iterator("/dev"))
         if (entry.path().filename().string().starts_with("nvidia"))
             allow(entry.path(), true);
+    if (const char *cache = getenv("XDG_CACHE_HOME"); cache && *cache)
+        allow(std::filesystem::path(cache)/"hyprune/programs", true);
     allow("/dev/null", true);
     allow("/dev/urandom");
     allow("/dev/random");

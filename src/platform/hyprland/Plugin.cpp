@@ -3224,6 +3224,10 @@ class Pass final : public IPassElement {
             auto *fb = dynamic_cast<Render::GL::CGLFramebuffer *>(data.currentFB.get());
             if (!fb)
                 return;
+            if (runtime->loading) {
+                runtime->renderer.drawLoading(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y);
+                return;
+            }
             if (!runtime->layout.desktop.is_null() || runtime->fullscreen.phase == 2) {
                 runtime->renderer.drawHUD(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y);
                 return;

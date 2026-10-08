@@ -22,12 +22,14 @@ class Renderer {
     void draw(GLuint target, int width, int height, const sim::Camera &, std::span<const surfaces::Surface>,
               bool typing);
     void destroy();
+    void drawLoading(GLuint target, int width, int height);
     void drawHUD(GLuint target, int width, int height);
     void collisionChanged(); // Deferred owner tick after editor transforms.
     // Optional prepared, display-encoded opaque world colour. Native depth,
     // window buffers, glass, prompts and debug UI remain in this GL owner.
     GLuint externalWorldFbo = 0;
     bool worldOnly = false;
+    bool warmShaders = true; // Offline benchmark can disable; runtime always warms.
     world::Json offloadState = {{"activeRenderer", "in-process"}, {"powerW", nullptr}};
     bool debug = false, captureRequested = false;
     double updateMs = 0, captureMs = 0, ipcMs = 0, gpuCaptureMs = -1;
@@ -149,6 +151,11 @@ class Renderer {
     void panel(float x, float y, float width, float height);
     void present(GLuint, int, int, bool);
     void debugGeometry(const sim::Camera &, std::span<const surfaces::Surface>);
+    int warmStep_ = -1;
+    GLuint warmFbo_ = 0, warmTexture_ = 0;
+    GLsync warmFence_ = nullptr;
+    double warmMs_ = 0, warmMaxMs_ = 0;
+    bool continueWarmup();
     void init();
     void targets(int, int);
     void freeTargets();

@@ -275,7 +275,12 @@ class Supervisor {
             posix_spawnattr_setsigmask(&attr, &empty);
             posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK);
             char path[] = "PATH=/usr/bin", cache[] = "__GL_SHADER_DISK_CACHE=0";
-            char *env[] = {path, cache, nullptr};
+            const char *xdg = getenv("XDG_CACHE_HOME"), *home = getenv("HOME");
+            auto cacheRoot = xdg && *xdg ? std::filesystem::path(xdg) : home && *home ? std::filesystem::path(home)/".cache" : std::filesystem::path{};
+            std::error_code cacheError;
+            if (!cacheRoot.empty()) std::filesystem::create_directories(cacheRoot/"hyprune/programs",cacheError);
+            std::string cacheEnv = "XDG_CACHE_HOME=" + (cacheError ? std::string{} : cacheRoot.string());
+            char *env[] = {path, cache, cacheEnv.data(), nullptr};
             int rc = posix_spawn(&child_, executable_.c_str(), &actions, &attr, av.data(), env);
             posix_spawnattr_destroy(&attr);
             posix_spawn_file_actions_destroy(&actions);
