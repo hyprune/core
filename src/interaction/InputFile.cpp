@@ -93,7 +93,8 @@ InputFile::~InputFile() {
 }
 std::optional<Json> InputFile::read() {
     auto j = validateInput(readJSON(path));
-    if (!inputConflicts(j).empty()) throw std::runtime_error("conflicting Hyprune actions in one mode");
+    if (!inputConflicts(j).empty())
+        throw std::runtime_error("conflicting Hyprune actions in one mode");
     auto encoded = j.dump();
     if (encoded == bytes)
         return {};
@@ -126,8 +127,9 @@ std::optional<Json> InputFile::poll() {
 }
 void InputFile::save(const Json &j) {
     auto next = validateInput(j);
-    if (!inputConflicts(next).empty()) throw std::runtime_error("conflicting Hyprune actions in one mode");
-    if (next == current)
+    if (!inputConflicts(next).empty())
+        throw std::runtime_error("conflicting Hyprune actions in one mode");
+    if (next == current && error.empty())
         return;
     atomicJSON(path, next);
     current = next;

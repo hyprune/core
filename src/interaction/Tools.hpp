@@ -34,5 +34,8 @@ class Tools {
     void toggleLock(const std::string &world, const surfaces::Instance &);
     void restore(const Json &);
     Json saved() const;
+
+  private:
+    mutable std::map<std::string, Json> liveLocks;
 };
 } // namespace hyprune::interaction

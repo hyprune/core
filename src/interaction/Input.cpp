@@ -112,16 +112,22 @@ Json validateInput(const Json &j) {
 Json inputConflicts(const Json &j) {
     Json result = Json::array();
     for (auto &[mode, actions] : j["modes"].items()) {
-        std::map<std::string, std::string> seen;
+        struct Binding {
+            std::string action, name;
+            Trigger trigger;
+        };
+        std::vector<Binding> all;
         for (auto &[action, bindings] : actions.items())
-            for (auto &v : bindings) {
-                auto t = parseBinding(v);
-                t.hold = false;
-                auto k = bindingName(t);
-                if (seen.contains(k))
-                    result.push_back({{"mode", mode}, {"binding", v}, {"actions", {seen[k], action}}});
-                else
-                    seen[k] = action;
+            for (auto &v : bindings)
+                all.push_back({action, v, parseBinding(v)});
+        for (size_t i = 0; i < all.size(); i++)
+            for (size_t k = i + 1; k < all.size(); k++) {
+                auto a = all[i].trigger, b = all[k].trigger;
+                bool overlap = a.key == b.key || (a.key == "Wheel" && b.key.starts_with("Wheel")) ||
+                               (b.key == "Wheel" && a.key.starts_with("Wheel"));
+                if (a.mods == b.mods && overlap)
+                    result.push_back(
+                        {{"mode", mode}, {"binding", all[k].name}, {"actions", {all[i].action, all[k].action}}});
             }
     }
     return result;

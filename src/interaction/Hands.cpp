@@ -83,6 +83,9 @@ void Hands::begin(Gesture g, const surfaces::Surface &s, surfaces::Hit h) {
     pose = start;
     offset = s.right() * ((h.u - .5f) * s.width) + s.up() * ((.5f - h.v) * s.height);
     reference = length(offset) > .01f ? offset : s.up() * .01f;
+    if (g == Gesture::CornerResize)
+        reference = s.right() * ((h.u >= .5f ? 1 : -1) * s.width * .5f) +
+                    s.up() * ((h.v <= .5f ? 1 : -1) * s.height * .5f) - offset;
 }
 void Hands::wheel(float steps) {
     targetDistance = std::clamp(targetDistance * std::pow(1.06f, std::clamp(steps, -2.f, 2.f)), .08f, 100.f);
@@ -111,7 +114,7 @@ bool Hands::update(const sim::Camera &camera, Vec3 ray, float dt, std::span<cons
                 float sx = dot(offset, start.right()) >= 0 ? 1 : -1, sy = dot(offset, start.up()) >= 0 ? 1 : -1;
                 auto opposite =
                     start.center - start.right() * (sx * start.width * .5f) - start.up() * (sy * start.height * .5f);
-                auto drag = camera.position + ray * h->distance;
+                auto drag = camera.position + ray * h->distance + reference;
                 next.width =
                     std::clamp(sx * dot(drag - opposite, start.right()), start.width * 160 / start.pixelWidth, 12.f);
                 next.height =

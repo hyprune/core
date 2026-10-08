@@ -39,6 +39,13 @@ std::vector<Handle> gizmo(Vec3 c, const std::string &mode, float size) {
     return out;
 }
 std::optional<int> pickHandle(std::span<const Handle> handles, Vec3 o, Vec3 ray, float tolerance) {
+    for (size_t i = 0; i < handles.size(); i++)
+        if (handles[i].uniform) {
+            auto p = (handles[i].start + handles[i].end) * .5f;
+            float d = dot(p - o, ray);
+            if (d > 0 && length(o + ray * d - p) < tolerance)
+                return int(i);
+        }
     std::optional<int> result;
     float best = tolerance;
     for (size_t i = 0; i < handles.size(); i++) {
@@ -104,6 +111,11 @@ void Tools::wheel(int steps) {
         cycle(positionMode, 3);
 }
 void Tools::point(const std::string &world, const std::string &area, Vec3 p) {
+    size_t total = 0;
+    for (auto &path : paths)
+        total += path["points"].size();
+    if (total >= 2048)
+        throw std::runtime_error("total path point budget");
     if (paths.size() >= 128 && activePath.empty())
         throw std::runtime_error("path budget");
     if (activePath.empty()) {
@@ -125,20 +137,30 @@ void Tools::finishPath() {
     activePath.clear();
 }
 bool Tools::locked(const std::string &world, const surfaces::Instance &i) const {
+    auto key = world + ":" + i.id;
+    if (liveLocks.contains(key))
+        return true;
     for (auto &l : locks)
-        if (l["worldId"] == world && l["appClass"] == i.appClass && l["title"] == i.title)
+        if (l["worldId"] == world && l["appClass"] == i.appClass && l["title"] == i.title) {
+            if (liveLocks.size() >= 1024)
+                liveLocks.erase(liveLocks.begin());
+            liveLocks[key] = l;
             return true;
+        }
     return false;
 }
 void Tools::toggleLock(const std::string &world, const surfaces::Instance &i) {
-    auto n = locks.size();
-    std::erase_if(locks.get_ref<Json::array_t &>(), [&](auto &l) {
-        return l["worldId"] == world && l["appClass"] == i.appClass && l["title"] == i.title;
-    });
-    if (locks.size() == n) {
-        if (n >= 128)
+    auto key = world + ":" + i.id;
+    if (locked(world, i)) {
+        auto rule = liveLocks.at(key);
+        std::erase_if(liveLocks, [&](auto &entry) { return entry.second == rule; });
+        std::erase_if(locks.get_ref<Json::array_t &>(), [&](auto &l) { return l == rule; });
+    } else {
+        if (locks.size() >= 128)
             throw std::runtime_error("lock budget");
-        locks.push_back({{"worldId", world}, {"appClass", i.appClass}, {"title", i.title}});
+        Json rule = {{"worldId", world}, {"appClass", i.appClass}, {"title", i.title}};
+        locks.push_back(rule);
+        liveLocks[key] = rule;
     }
 }
 Json Tools::saved() const {
@@ -195,9 +217,15 @@ void Tools::restore(const Json &j) {
         for (auto k : {"worldId", "appClass", "title"})
             text(l.at(k));
     }
+    size_t total = 0;
+    for (auto &path : j["paths"])
+        total += path["points"].size();
+    if (total > 2048)
+        throw std::runtime_error("total path point budget");
     paths = j["paths"];
     objects = j["objects"];
     locks = j["locks"];
+    liveLocks.clear();
     selected.clear();
     activePath.clear();
     activeHandle = -1;
