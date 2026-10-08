@@ -3322,19 +3322,20 @@ class Pass final : public IPassElement {
                     surfaces.push_back(fs->surface);
                 }
             }
+            runtime->renderer.showInteractionHints = !runtime->freeCursor;
             runtime->renderer.toolPrompt = nullptr;
             auto prompt = [&](Vec3 point, std::string text) {
                 runtime->renderer.toolPrompt = {{"position", {point.x, point.y, point.z}}, {"text", text}};
             };
-            if (runtime->editor.slot == 4) {
+            if (runtime->renderer.showInteractionHints && runtime->editor.slot == 4) {
                 if (auto object = runtime->objectAim())
                     prompt(object->second.point, "LMB SELECT / WHEEL " + runtime->editor.submode());
             }
-            if (runtime->editor.slot == 2 && runtime->editor.windowMode == 0 && !runtime->tagged.empty()) {
+            if (runtime->renderer.showInteractionHints && runtime->editor.slot == 2 && runtime->editor.windowMode == 0 && !runtime->tagged.empty()) {
                 if (auto hit = runtime->worldHit())
                     prompt(hit->point, "LMB MOUNT HERE");
             }
-            if (!runtime->noclip && runtime->movement == &runtime->walk && !runtime->typing &&
+            if (runtime->renderer.showInteractionHints && !runtime->noclip && runtime->movement == &runtime->walk && !runtime->typing &&
                 (runtime->climbing.active() || runtime->climbing.nearby(runtime->camera, runtime->world->climbables)))
                 prompt(runtime->camera.position + runtime->camera.forward() * 2,
                        runtime->climbing.prompt(

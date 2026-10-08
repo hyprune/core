@@ -1622,24 +1622,26 @@ void Renderer::worldOverlays(const sim::Camera &camera, std::span<const surfaces
             marker(position(place["position"]), place["name"], false, false);
     const surfaces::Surface *selected = nullptr;
     std::optional<surfaces::Hit> closest;
-    for (auto &surface : surfaces)
-        if (auto hit = surfaces::intersect(surface, camera.position, camera.forward());
-            hit && hit->distance <= useDistance && (!closest || hit->distance < closest->distance)) {
-            selected = &surface;
-            closest = hit;
-        }
+    if (showInteractionHints)
+        for (auto &surface : surfaces)
+            if (auto hit = surfaces::intersect(surface, camera.position, camera.forward());
+                hit && hit->distance <= useDistance && (!closest || hit->distance < closest->distance)) {
+                selected = &surface;
+                closest = hit;
+            }
     if (selected) {
         auto obstruction = interaction::raycast(camera.position, camera.forward(), world_->collision);
         if (!obstruction || obstruction->distance >= closest->distance - .08f)
             marker(selected->center + selected->up() * (selected->height / 2 + .12f), "E USE / F FOCUS", false, true);
     }
-    if (!toolPrompt.is_null())
+    if (showInteractionHints && !toolPrompt.is_null())
         marker(position(toolPrompt["position"]), toolPrompt["text"], false, true);
     world::Json projected = world::Json::array();
     for (auto &label : labels)
         projected.push_back({{"x", label.x}, {"y", label.y}, {"text", label.text}});
     overlayDiagnostics = {{"frame", frames + 1},   {"heading", camera.yaw},
                           {"pitch", camera.pitch}, {"areaMarkers", showAreaMarkers},
+                          {"interactionHints", showInteractionHints},
                           {"labels", projected},   {"routeSegments", routeVertices.size() / 2}};
 }
 void Renderer::debugGeometry(const sim::Camera &camera, std::span<const surfaces::Surface> surfaces) {

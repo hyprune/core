@@ -41,7 +41,7 @@ def acceptance(logs,recorded,children,check):
         return subprocess.check_output(['qs','ipc','--pid',str(qpid()),'call','preview',*map(str,args)],env=env,text=True,stderr=subprocess.DEVNULL,timeout=3).strip()
     def status():return json.loads(ui('status'))
     wait(lambda:status().get('lease'))
-    initial=status();check('live_like_IPC08_grant',initial['protocol']=='0.8' and bool(initial['lease']))
+    initial=status();check('live_like_IPC012_grant',initial['protocol']=='0.12' and bool(initial['lease']))
     check('native_workspace_inventory_without_home_bindings',len(initial['workspaces'])>0)
     s.ctl('eval','hl.unbind("SUPER + RETURN")')
     s.ctl('eval','hl.bind("SUPER + Return",hl.dsp.exec_cmd("kitty --start-as normal --class hyprune-live-regression --title Live-launch-regression"))')
@@ -144,14 +144,24 @@ def acceptance(logs,recorded,children,check):
         result=wait(lambda:next((p for p in capture_dir.glob('capture-*.json') if p.stat().st_mtime>=previous),None),20)
         assert json.loads(result.read_text())['mode']==mode
         return result
+    # The carry check intentionally leaves the window rotated away from the
+    # later marker-look pose. Aim at its actual plane before testing E-use.
+    held=next(v for v in s.camera()['captures'] if v['id']==carried_id)
+    x,y,z,w=held['rotation'];normal=[2*(x*z+y*w),2*(y*z-x*w),1-2*(x*x+y*y)]
+    at=[held['position'][i]+normal[i]*2 for i in range(3)]
+    yaw=math.atan2(-normal[0],normal[2]);pitch=math.asin(-normal[1])
+    s.ctl('eval',f'hl.plugin.hyprune.camera({at[0]},{at[1]},{at[2]},{yaw},{pitch})')
+    wait(lambda:s.camera()['aim']==carried_id)
     keys('-k','e');wait(lambda:s.camera()['mode']=='typing')
     capture_in('interactive');check('U_works_in_window_interactive_mode',True)
-    chord();wait(lambda:s.camera()['mode']=='movement')
-    keys('-k','f');wait(lambda:s.camera()['fullscreen']==2)
+    chord();wait(lambda:status()['mode']=='cursor');chord();wait(lambda:s.camera()['mode']=='typing')
+    s.ctl('eval',f'hl.dispatch(hl.dsp.window.fullscreen({{window="address:{native["address"]}",action="set"}}))');wait(lambda:s.camera()['fullscreen']==2)
     keys('-k','F3');wait(lambda:s.camera()['debug'])
     focused_capture=capture_in('focus');focused_dump=json.loads(focused_capture.read_text())
     check('F3_and_U_work_in_native_focus',focused_dump['frame']['source']=='last-completed-world-frame' and focused_dump['frame']['ageMs']>=0)
-    chord();wait(lambda:s.camera()['fullscreen']==0)
+    chord();wait(lambda:status()['mode']=='cursor');check('shell_receives_cursor_mode',True)
+    chord();wait(lambda:s.camera()['fullscreen']==2)
+    s.ctl('eval',f'hl.dispatch(hl.dsp.window.fullscreen({{window="address:{native["address"]}",action="unset"}}))');wait(lambda:s.camera()['fullscreen']==0)
     keys('-k','F3');wait(lambda:not s.camera()['debug'])
     # A native top layer represents the owner's launcher/bar. It must receive
     # ordinary pointer input, while hidden desktop clients remain masked.
@@ -175,11 +185,14 @@ ShellRoot {
 '''%json.dumps(str(marker)))
     layer=subprocess.Popen(['qs','-p',str(config),'--no-color'],env=env,stdout=open(logs/'layer.log','w'),stderr=subprocess.STDOUT);children.append(layer);time.sleep(.8)
     pointer('button',275);wait(lambda:s.camera()['layerCursor'])
+    # Send native motion after focus restoration before checking the pointer image.
+    pointer(1,0);wait(lambda:s.camera()['cursor']=='desktop' and s.camera()['nativeCursorVisible'])
     check('Back_world_opens_real_layer_cursor',s.camera()['cursor']=='desktop' and s.camera()['nativeCursorVisible'])
     monitor=next(m for m in json.loads(s.ctl('monitors','-j')) if m['name']=='HEADLESS-1')
     xy=list(map(float,s.ctl('cursorpos').split(',')));pointer(monitor['x']+120-xy[0],monitor['y']+40-xy[1]);pointer('button',272)
     wait(marker.exists);check('launcher_layer_receives_real_click',True)
-    xy=list(map(float,s.ctl('cursorpos').split(',')));pointer(monitor['x']+700-xy[0],monitor['y']+500-xy[1]);pointer('button',272)
+    # Centre-screen is a projected window now; test empty space at the edge.
+    xy=list(map(float,s.ctl('cursorpos').split(',')));pointer(monitor['x']+20-xy[0],monitor['y']+monitor['height']/monitor['scale']-20-xy[1]);pointer('button',272)
     check('off_layer_hidden_desktop_has_no_pointer_focus',s.camera()['layerCursor'] and not s.camera()['nativePointerFocused'])
     chord();wait(lambda:not s.camera()['layerCursor']);check('SuperTab_leaves_layer_cursor',s.camera()['mode']=='movement' and s.camera()['cursor']=='reticle')
     layer.terminate();layer.wait(timeout=5)

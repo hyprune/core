@@ -27,6 +27,18 @@ def acceptance(client, children, args, shell_token, socketpath):
     def attached():return state()['state']=='climbing'
     s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")');time.sleep(.6)
     client.call('movement.set',{'modeId':'com.hyprune.walk'})
+    pose()
+    client.call('waypoint.set',{'id':'cursor-test','label':'KEPT WAYPOINT','target':{'position':[0,1.7,-2]}})
+    def labels(): return [label['text'] for label in s.camera()['overlays']['labels']]
+    wait(lambda:any('climb' in label.lower() for label in labels()))
+    check('world_ladder_hint_drawn',any('climb' in label.lower() for label in labels()))
+    device.stdin.write('button 275\n');device.stdin.flush();assert device.stdout.readline().strip()=='ok'
+    wait(lambda:s.camera()['layerCursor'] and not s.camera()['overlays']['interactionHints'])
+    check('free_cursor_keeps_waypoint_hides_ladder', 'KEPT WAYPOINT' in labels() and not any('climb' in label.lower() for label in labels()), labels())
+    device.stdin.write('button 275\n');device.stdin.flush();assert device.stdout.readline().strip()=='ok'
+    wait(lambda:not s.camera()['layerCursor'] and any('climb' in label.lower() for label in labels()))
+    check('return_restores_ladder_hint',True)
+    client.call('waypoint.clear',{})
     for name in ['grab','look-to-climb','auto-traverse']:
         mode(name);pose(pitch=.9)
         if name=='auto-traverse':keys('-k','e');time.sleep(.8)

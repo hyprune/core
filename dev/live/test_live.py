@@ -4,6 +4,12 @@ from unittest.mock import patch
 spec=importlib.util.spec_from_file_location('live',pathlib.Path(__file__).with_name('live.py'));live=importlib.util.module_from_spec(spec);spec.loader.exec_module(live)
 
 class Tests(unittest.TestCase):
+    def test_live_protocol_includes_cursor_and_climbing(self):
+        self.assertEqual(live.PROTOCOL, '0.12')
+        with patch.object(live.socket, 'socket'), patch.object(live.RPC, 'call', return_value={}) as call:
+            live.RPC('/unused/nested-test', 'test-only')
+        self.assertEqual(call.call_args.args[1]['protocols'], ['0.12'])
+
     def test_binding_selection_preserves_collision(self):
         self.assertEqual(live.choose_bind([{'key':'h','modmask':65},{'key':'n','modmask':65}]),'SUPER + SHIFT + F10')
         self.assertEqual(live.choose_bind([{'key':'h','modmask':65},{'key':'n','modmask':64}]),'SUPER + SHIFT + F10')

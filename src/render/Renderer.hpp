@@ -52,7 +52,7 @@ class Renderer {
     std::vector<Label> labels;
     world::Json overlayStyle = overlayDefaults(), waypoint = nullptr, route = world::Json::array(),
                 toolPrompt = nullptr;
-    bool showAreaMarkers = false;
+    bool showAreaMarkers = false, showInteractionHints = true;
     float useDistance = 6;
     void applyOverlayStyle(const world::Json &patch); // Deferred, validates before any upload.
     world::Json overlayDiagnostics = world::Json::object();
