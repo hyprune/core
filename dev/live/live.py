@@ -6,6 +6,7 @@ HERE = ROOT / 'dev/live'
 BUILD = ROOT / 'build/live'
 SHELL = pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR', ROOT.parent / 'shell'))
 WORLD_ID = 'com.hyprune.lumen-reach'
+PROTOCOL = '0.8'
 GRANTS = ['state.read', 'world.control', 'surface.control', 'movement.control', 'shell.control', 'runtime.control', 'input.control']
 
 
@@ -248,7 +249,7 @@ def wait(test, seconds=8):
 class RPC:
     def __init__(self,path,token):
         self.s=socket.socket(socket.AF_UNIX); self.s.settimeout(35);self.s.connect(str(path));self.n=0
-        self.call('session.hello',{'protocols':['0.7'],'client':{'id':'org.hyprune.live','name':'Supervised live launcher'},'capabilities':GRANTS,'token':token})
+        self.call('session.hello',{'protocols':[PROTOCOL],'client':{'id':'org.hyprune.live','name':'Supervised live launcher'},'capabilities':GRANTS,'token':token})
     def read(self,n):
         b=b''
         while len(b)<n:
@@ -280,9 +281,9 @@ def bootstrap(args,path):
     rpc=RPC(sock,tokens['org.hyprune.live']);rpc.call('world.load',{'worldId':WORLD_ID})
     lua(s,'hl.plugin.hyprune.toggle()');wait(lambda:camera(s,runroot)['active'])
     read,write=os.pipe();os.write(write,(tokens['com.hyprune.shell']+'\n').encode());os.close(write)
-    env=env_for(s);env.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_PROTOCOL='0.7',HYPRUNE_SOCKET=str(sock))
+    env=env_for(s);env.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_PROTOCOL=PROTOCOL,HYPRUNE_SOCKET=str(sock))
     log=open(path.parent/'shell.log','a')
-    child=subprocess.Popen([sys.executable,str(SHELL/'bridge/launch.py'),'--protocol','0.7','--world-package',str(world()/'world.json')],env=env,pass_fds=(read,),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT);os.close(read)
+    child=subprocess.Popen([sys.executable,str(SHELL/'bridge/launch.py'),'--protocol',PROTOCOL,'--world-package',str(world()/'world.json')],env=env,pass_fds=(read,),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT);os.close(read)
     # Persist identity immediately: down can recover even before ready.
     atomic(runroot/'processes.json',[{'record':process(child.pid),'group':True}])
     sub=rpc.call('state.subscribe',{'topics':['state']})['subscriptionId']

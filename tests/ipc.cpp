@@ -1,3 +1,5 @@
+#include "control/Control.hpp"
+#include "ipc/Protocol.hpp"
 #include "ipc/Server.hpp"
 #include <arpa/inet.h>
 #include <atomic>
@@ -66,6 +68,109 @@ Json hello(const std::string &token = "") {
         p["token"] = token;
     return req("hello", "session.hello", p);
 }
+// Exercise every negotiated version, not a hand-picked latest pair. Appending
+// Supported automatically includes the next release in the inheritance matrix.
+void inheritance(const std::string &runtime) {
+    using namespace hyprune::ipc::protocol;
+    check(atLeast("0.10", "0.9") && !atLeast("0.9", "0.10") && atLeast("1.0", "0.99"), "numeric versions");
+    check(exactly("0.8", "0.8") && !exactly("0.8", "0.7"), "exact versions");
+    for (auto invalid :
+         {"", "0", ".8", "0.", "0.8.1", "00.8", "0.08", "+0.8", "0.-1", "0.8x", " 0.8", "4294967296.0", "0.4294967296"})
+        check(!parse(invalid) && !atLeast(invalid, "0.1") && !exactly(invalid, invalid),
+              "malformed version passed gate");
+    check(negotiate(Supported) == Latest, "latest negotiation");
+    check(!negotiate(std::array{"9.9", "invalid"}), "unknown offer negotiated");
+    check(negotiate(std::array{"9.9", "0.1", "invalid"}) == "0.1", "compatible fallback");
+
+    auto methods = hyprune::control::Control::methods();
+    for (auto m :
+         {"world.load",      "surface.focus",       "movement.set",      "runtime.exit",       "workspace.bind",
+          "workspace.focus", "workspace.unfocus",   "surface.pull",      "surface.place",      "surface.return",
+          "surfaces.recall", "placements.list",     "placements.remove", "data.object.bind",   "camera.fov",
+          "atmosphere.get",  "atmosphere.set",      "shell.bind",        "workspace.activate", "overlay.style",
+          "graphics.get",    "graphics.set",        "input.get",         "input.preview",      "input.set",
+          "input.capture",   "input.capture.cancel"})
+        methods[m] = "state.read"; // Version eligibility is independent of grants.
+    const std::set<std::string> allGrants{"state.read",      "world.control", "surface.control", "movement.control",
+                                          "runtime.control", "shell.control", "data.publish",    "input.control"};
+    std::vector<LaunchGrant> grants;
+    for (size_t i = 0; i < Supported.size(); ++i)
+        grants.push_back({randomId(), "org.hyprune.test", allGrants});
+    Server server(runtime, "inheritance", grants, [](auto &, auto &) { return Json{{"ok", true}}; });
+    server.advertise(methods);
+    const Json mounts{{"placements", Json::array({Json{{"pose", true}}, Json{{"anchorId", "wall"}}})}};
+    server.publish({{"runtime", Json::object()},
+                    {"location", Json::object()},
+                    {"integrations", Json::object()},
+                    {"spatial", Json::object()},
+                    {"workspaces", Json::object()},
+                    {"mounts", mounts},
+                    {"presentation", {{"fov", 10}}},
+                    {"interaction", Json::object()},
+                    {"apps", Json::array_t(17, Json::object())},
+                    {"editor", Json::object()},
+                    {"keymap", {{"holds", Json::array({Json{{"action", "menu.open"}}})}}}});
+    std::atomic<bool> sendMounts = false;
+    std::jthread polling([&](std::stop_token stop) {
+        while (!stop.stop_requested()) {
+            server.poll();
+            if (sendMounts.exchange(false))
+                server.notify("mounts.changed", {{"mounts", mounts}});
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    Json previousMethods = Json::array(), previousEvents = Json::array(), previousState = Json::object();
+    size_t index = 0;
+    for (auto version : Supported) {
+        Client c(server.path());
+        auto h = hello(grants[index++].token);
+        h["params"]["protocols"] = {version};
+        auto requested = allGrants;
+        if (!atLeast(version, "0.2"))
+            requested.erase("data.publish");
+        if (!atLeast(version, "0.6"))
+            requested.erase("input.control");
+        h["params"]["capabilities"] = requested;
+        c.sendJson(h);
+        auto response = c.receive().at("result");
+        check(response["protocol"] == version && response["capabilities"] == Json(requested), "version grants");
+        auto advertised = response.at("methods"), events = response.at("events");
+        for (const auto &m : previousMethods)
+            check(std::find(advertised.begin(), advertised.end(), m) != advertised.end(),
+                  "inherited method disappeared");
+        for (const auto &e : previousEvents)
+            check(std::find(events.begin(), events.end(), e) != events.end(), "inherited event disappeared");
+        for (const auto &[method, grant] : methods) {
+            const bool available = std::find(advertised.begin(), advertised.end(), method) != advertised.end();
+            check(available == methodAvailable(version, method), "advertisement disagrees with eligibility");
+            check(!available || methodAvailable("0.99", method), "future version lost method");
+            c.sendJson(req(method, method));
+            auto result = c.receive();
+            check(available ? result.contains("result") : result["error"]["code"] == -32601,
+                  "dispatch disagrees with advertisement");
+        }
+        c.sendJson(req("sub", "state.subscribe", {{"topics", {"state"}}}));
+        auto state = c.receive().at("result").at("snapshot").at("state");
+        for (auto it = previousState.begin(); it != previousState.end(); ++it)
+            check(state.contains(it.key()), "inherited state section disappeared");
+        if (atLeast(version, "0.4")) {
+            check(state["mounts"]["placements"].size() == (atLeast(version, "0.5") ? 2 : 1),
+                  "snapshot pose projection");
+            sendMounts = true;
+            auto event = c.receive();
+            check(event["method"] == "mounts.changed" && event["params"]["mounts"] == state["mounts"],
+                  "mount event lost pose or disagrees with snapshot");
+        }
+        if (atLeast(version, "0.6"))
+            check(state["apps"].size() == 17 && state["presentation"]["fov"] == 10,
+                  "latest state inherited old limits");
+        if (atLeast(version, "0.8"))
+            check(state["keymap"]["holds"].size() == 1, "latest state lost hold timing");
+        previousMethods = advertised;
+        previousEvents = events;
+        previousState = state;
+    }
+}
 } // namespace
 int main() {
     char pattern[] = "/tmp/hn-ipc-XXXXXX";
@@ -75,6 +180,7 @@ int main() {
     std::atomic<bool> stop = false;
     std::thread loop;
     try {
+        inheritance(dir);
         auto token = randomId(), token02 = randomId(), token03 = randomId(), token04 = randomId(), token05 = randomId();
         auto token06 = randomId(), token07 = randomId(), token08 = randomId();
         std::atomic<int> disconnected = 0;
@@ -217,7 +323,7 @@ int main() {
             c.sendJson(h);
             auto negotiated = c.receive()["result"];
             check(negotiated["protocol"] == protocol, "M2 negotiation");
-            bool m2 = std::string(protocol) == "0.4" || std::string(protocol) == "0.5";
+            bool m2 = protocol::atLeast(protocol, "0.4");
             check(std::find(negotiated["methods"].begin(), negotiated["methods"].end(), "placements.list") !=
                           negotiated["methods"].end()
                       ? m2

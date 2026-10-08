@@ -1,4 +1,5 @@
 #include "Server.hpp"
+#include "Protocol.hpp"
 #include <cstring>
 #include <fcntl.h>
 #include <filesystem>
@@ -103,17 +104,17 @@ Json Server::snapshot() const {
 }
 Json Server::visibleState(const Peer &p) const {
     Json state = state_;
-    if (p.protocol == "0.8")
+    if (protocol::atLeast(p.protocol, "0.8"))
         return state;
     if (state.contains("keymap"))
         state["keymap"].erase("holds");
-    if (p.protocol == "0.7" || p.protocol == "0.6")
+    if (protocol::atLeast(p.protocol, "0.6"))
         return state;
     state.erase("keymap");
     state.erase("editor");
     if (state.contains("presentation") && state["presentation"].contains("fov"))
         state["presentation"]["fov"] = std::max(30., state["presentation"]["fov"].get<double>());
-    if (p.protocol == "0.5") {
+    if (protocol::atLeast(p.protocol, "0.5")) {
         if (state.contains("apps") && state["apps"].size() > 16)
             state["apps"].erase(state["apps"].begin() + 16, state["apps"].end());
         return state;
@@ -125,16 +126,16 @@ Json Server::visibleState(const Peer &p) const {
     if (state.contains("mounts") && state["mounts"].contains("placements"))
         std::erase_if(state["mounts"]["placements"].get_ref<Json::array_t &>(),
                       [](auto &p) { return p.contains("pose"); });
-    if (p.protocol == "0.4")
+    if (protocol::atLeast(p.protocol, "0.4"))
         return state;
     if (state.is_object()) {
         state.erase("mounts");
         state.erase("presentation");
-        if (p.protocol == "0.3")
+        if (protocol::atLeast(p.protocol, "0.3"))
             return state;
         state.erase("spatial");
         state.erase("workspaces");
-        if (p.protocol == "0.2")
+        if (protocol::atLeast(p.protocol, "0.2"))
             return state;
         state.erase("location");
         state.erase("integrations");
@@ -150,12 +151,11 @@ void Server::notify(const std::string &event, Json params) {
         params["revision"] = revision_;
     }
     for (auto &p : peers_)
-        if (p.hello && !p.closing && p.protocol != "0.1" && !p.subscription.empty() &&
-            ((((p.protocol == "0.8" || p.protocol == "0.7") || p.protocol == "0.6") || p.protocol == "0.5" || p.protocol == "0.4") ||
-             (event != "mounts.changed" && event != "presentation.changed"))) {
+        if (p.hello && !p.closing && protocol::atLeast(p.protocol, "0.2") && !p.subscription.empty() &&
+            (protocol::atLeast(p.protocol, "0.4") || (event != "mounts.changed" && event != "presentation.changed"))) {
             auto projected = params;
-            if ((p.protocol != "0.8" && p.protocol != "0.7") && p.protocol != "0.6" && p.protocol != "0.5" && event == "mounts.changed" &&
-                projected.contains("mounts") && projected["mounts"].contains("placements"))
+            if (!protocol::atLeast(p.protocol, "0.5") && event == "mounts.changed" && projected.contains("mounts") &&
+                projected["mounts"].contains("placements"))
                 std::erase_if(projected["mounts"]["placements"].get_ref<Json::array_t &>(),
                               [](auto &placement) { return placement.contains("pose"); });
             queue(p, {{"jsonrpc", "2.0"}, {"method", event}, {"params", projected}});
@@ -226,18 +226,9 @@ void Server::frame(Peer &p, const std::string &bytes) {
                 check(!protocol.empty() && protocol.size() <= 256 && protocols.insert(protocol).second, -32602,
                       "invalid protocol list");
             }
-            check(protocols.contains("0.8") || protocols.contains("0.7") || protocols.contains("0.6") || protocols.contains("0.5") ||
-                      protocols.contains("0.4") || protocols.contains("0.3") || protocols.contains("0.2") ||
-                      protocols.contains("0.1"),
-                  -32001, "incompatible protocol");
-            p.protocol = protocols.contains("0.8") ? "0.8"
-                         : protocols.contains("0.7")   ? "0.7"
-                         : protocols.contains("0.6") ? "0.6"
-                         : protocols.contains("0.5") ? "0.5"
-                         : protocols.contains("0.4") ? "0.4"
-                         : protocols.contains("0.3") ? "0.3"
-                         : protocols.contains("0.2") ? "0.2"
-                                                     : "0.1";
+            auto selected = protocol::negotiate(protocols);
+            check(selected.has_value(), -32001, "incompatible protocol");
+            p.protocol = *selected;
             exact(params["client"], {"id", "name"});
             check(params["client"]["id"].is_string() && params["client"]["name"].is_string(), -32602,
                   "invalid client identity");
@@ -254,9 +245,9 @@ void Server::frame(Peer &p, const std::string &bytes) {
             for (auto &cap : params["capabilities"]) {
                 check(cap.is_string(), -32602, "invalid capability");
                 auto name = cap.get<std::string>();
-                check(known.contains(name) &&
-                          (name != "input.control" || ((p.protocol == "0.8" || p.protocol == "0.7") || p.protocol == "0.6")) &&
-                          (p.protocol != "0.1" || name != "data.publish") && requested.insert(name).second,
+                check(known.contains(name) && (name != "input.control" || protocol::atLeast(p.protocol, "0.6")) &&
+                          (protocol::atLeast(p.protocol, "0.2") || name != "data.publish") &&
+                          requested.insert(name).second,
                       -32602, "invalid capability list");
             }
             if (params.contains("token")) {
@@ -283,39 +274,26 @@ void Server::frame(Peer &p, const std::string &bytes) {
             if (p.grants.contains("state.read"))
                 for (auto s : {"state.subscribe", "state.snapshot", "state.unsubscribe"})
                     methods.push_back(s);
-            const std::set<std::string> legacy{"world.load",  "surface.focus", "movement.set", "runtime.exit",
-                                               "shell.claim", "shell.release", "shell.overlay"};
             for (auto &[m, grant] : methods_)
-                if (((p.protocol == "0.8" || p.protocol == "0.7") || !m.starts_with("graphics.")) &&
-                    (((p.protocol == "0.8" || p.protocol == "0.7") || p.protocol == "0.6") ||
-                     (!m.starts_with("input.") && !m.starts_with("graphics.") && m != "overlay.style")) &&
-                    p.grants.contains(grant) && (p.protocol != "0.1" || legacy.contains(m)) &&
-                    ((((p.protocol == "0.8" || p.protocol == "0.7") || p.protocol == "0.6") || p.protocol == "0.5" || p.protocol == "0.4") ||
-                     ((m != "workspace.bind" && m != "workspace.focus" && m != "workspace.unfocus" &&
-                       m != "surface.pull" && m != "surface.place" && m != "surface.return" && m != "surfaces.recall" &&
-                       m != "placements.list" && m != "placements.remove" && m != "data.object.bind" &&
-                       m != "camera.fov" && m != "atmosphere.get" && m != "atmosphere.set") &&
-                      (p.protocol == "0.3" || (m != "shell.bind" && m != "workspace.activate")))))
+                if (p.grants.contains(grant) && protocol::methodAvailable(p.protocol, m))
                     methods.push_back(m);
-            result = {
-                {"protocol", p.protocol},
-                {"sessionId", session_},
-                {"capabilities", p.grants},
-                {"methods", methods},
-                {"events",
-                 p.grants.contains("state.read")
-                     ? (((p.protocol == "0.8" || p.protocol == "0.7") || p.protocol == "0.6")
-                            ? Json::array({"state.delta", "location.transition", "ui.opened", "ui.closed",
-                                           "data.updated", "mounts.changed", "presentation.changed", "runtime.notice"})
-                        : p.protocol != "0.1"
-                            ? (((p.protocol == "0.8" || p.protocol == "0.7") || p.protocol == "0.6") || p.protocol == "0.5" ||
-                               p.protocol == "0.4")
-                                  ? Json::array({"state.delta", "location.transition", "ui.opened", "ui.closed",
-                                                 "data.updated", "mounts.changed", "presentation.changed"})
-                                  : Json::array({"state.delta", "location.transition", "ui.opened", "ui.closed",
-                                                 "data.updated"})
-                            : Json::array({"state.delta"}))
-                     : Json::array()}};
+            Json events = Json::array();
+            if (p.grants.contains("state.read")) {
+                events.push_back("state.delta");
+                if (protocol::atLeast(p.protocol, "0.2"))
+                    for (auto event : {"location.transition", "ui.opened", "ui.closed", "data.updated"})
+                        events.push_back(event);
+                if (protocol::atLeast(p.protocol, "0.4"))
+                    for (auto event : {"mounts.changed", "presentation.changed"})
+                        events.push_back(event);
+                if (protocol::atLeast(p.protocol, "0.6"))
+                    events.push_back("runtime.notice");
+            }
+            result = {{"protocol", p.protocol},
+                      {"sessionId", session_},
+                      {"capabilities", p.grants},
+                      {"methods", methods},
+                      {"events", events}};
         } else if (method == "session.hello")
             throw Error(-32600, "hello already completed");
         else if (method == "session.ping") {
@@ -361,24 +339,9 @@ void Server::frame(Peer &p, const std::string &bytes) {
                 }
             }
         } else {
-            check((p.protocol == "0.8" || p.protocol == "0.7") || !method.starts_with("graphics."), -32601,
-                  "method not advertised for protocol");
-            check(((p.protocol == "0.8" || p.protocol == "0.7") || p.protocol == "0.6") ||
-                      (!method.starts_with("input.") && !method.starts_with("graphics.") && method != "overlay.style"),
-                  -32601, "method not advertised for protocol");
+            check(protocol::methodAvailable(p.protocol, method), -32601, "method not advertised for protocol");
             auto it = methods_.find(method);
             check(it != methods_.end() && p.grants.contains(it->second), -32601, "method not advertised");
-            const std::set<std::string> legacy{"world.load",  "surface.focus", "movement.set", "runtime.exit",
-                                               "shell.claim", "shell.release", "shell.overlay"};
-            check(p.protocol != "0.1" || legacy.contains(method), -32601, "method not advertised for protocol");
-            check((((p.protocol == "0.8" || p.protocol == "0.7") || p.protocol == "0.6") || p.protocol == "0.5" || p.protocol == "0.4") ||
-                      ((method != "workspace.bind" && method != "workspace.focus" && method != "workspace.unfocus" &&
-                        method != "surface.pull" && method != "surface.place" && method != "surface.return" &&
-                        method != "surfaces.recall" && method != "placements.list" && method != "placements.remove" &&
-                        method != "data.object.bind" && method != "camera.fov" && method != "atmosphere.get" &&
-                        method != "atmosphere.set") &&
-                       (p.protocol == "0.3" || (method != "shell.bind" && method != "workspace.activate"))),
-                  -32601, "method not advertised for protocol");
             Json command = params;
             check(!command.contains("_actor") && !command.contains("_client") && !command.contains("_pid") &&
                       !command.contains("_protocol"),

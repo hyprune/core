@@ -44,6 +44,7 @@ extern "C" {
 #include "Capture.hpp"
 #include "interaction/Resize.hpp"
 #include "ipc/Bridge.hpp"
+#include "ipc/Protocol.hpp"
 #include "render/PNG.hpp"
 #include "render/Renderer.hpp"
 #include <fcntl.h>
@@ -2539,7 +2540,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
         auto placements = layout.placements;
-        if (protocol != "0.5" && protocol != "0.6" && protocol != "0.7")
+        if (!ipc::protocol::atLeast(protocol, "0.5"))
             std::erase_if(placements.get_ref<Json::array_t &>(), [](auto &p) { return p.contains("pose"); });
         return Json{{"placements", placements}};
     }
@@ -2718,7 +2719,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     }
     if (control::Control::methods().contains(method)) {
         if (method == "shell.overlay" && params.value("exclusiveInput", false) &&
-            (protocol != "0.3" && protocol != "0.4" && protocol != "0.5" && protocol != "0.6" && protocol != "0.7"))
+            !ipc::protocol::atLeast(protocol, "0.3"))
             throw ipc::Error(-32007, "verified association requires IPC 0.3");
         if ((method == "travel.start" || method == "autodrive.start") && !active)
             throw ipc::Error(-32005, "world mode inactive");

@@ -407,3 +407,25 @@ is entirely display-encoded; offload should provide HDR opaque colour and depth
 before that boundary. Public target ownership is unchanged. New world-loading
 entry points: `beginPrepare`, `continuePrepare`, `cancelPrepare`; synchronous
 `prepare` remains for offline tests. No edits to the offload spike were made.
+
+
+## IPC capability inheritance repair (0.8)
+
+All core version gates now use `ipc/Protocol.hpp`: canonical numeric major/minor
+parsing, `atLeast` feature floors, and one supported-version inventory. Hello
+negotiates only published supported versions; unknown future offers are not
+accepted merely because their number is larger. Advertisement and invocation
+share the same method eligibility check. Older state projections remain frozen.
+IPC 0.8 now inherits verified exclusive `shell.overlay` (0.3+) and custom
+placement poses (0.5+). No schema or SDK type change is needed.
+
+The supervised launcher now explicitly requests 0.8; update shell to 98b677a or
+later for animated hold timing. The socket regression iterates every supported
+version, testing inherited methods/events/grants, direct dispatch, snapshots,
+mount events and hold timing. Adding a version automatically extends the matrix.
+
+Validation: 9/9 CTests. Under the nested flock,
+`python3 dev/nested/protocol_acceptance.py` passes with shell 98b677a: animated
+HoldRing progress/cancel/fire, Director exclusive input, real Settings dropdowns
+and persisted graphics, and native `placements.list` retaining a saved pose.
+No cursor implementation changes; existing deferred Director transitions apply.
