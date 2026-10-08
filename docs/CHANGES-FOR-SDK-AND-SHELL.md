@@ -368,3 +368,25 @@ The output shader preserves the latter without a decode/encode round trip.
 MSAA-off renders directly into resolve colour/depth textures; the multisample
 renderbuffer target is unused in that mode. Target ownership and external draw /
 snapshot signatures are unchanged.
+
+
+### Landed shell reconciliation: graphics 0.7 and holds 0.8
+
+Shell 36cb85f already consumes the exact graphics amendment. Canonical schema
+commit e0739d1 publishes its byte-identical IPC 0.7 file; SDK types now include
+`GraphicsMethodMap` (0.7) and `HoldMethodMap` (0.8). Live tooling opts into 0.7,
+so World graphics appears with the shipped shell. No shell files were edited.
+
+For animated HoldRing, explicitly negotiate 0.8 and consume `keymap.holds`.
+Each pending hold has `{action,binding,startedAtMs,durationMs}`. For `menu`, use
+`clamp((CLOCK_MONOTONIC_ms-startedAtMs)/durationMs,0,1)`; bridge can calculate
+remaining milliseconds on receipt and let QML animate locally. Empty/removal
+means cancelled or fired; also clear on disconnect. Duration-only reload keeps
+start time. No per-frame progress IPC or shell keyboard interception is needed.
+0.7 remains frozen and does not receive holds. The shell's 0.8 pin/bridge/ring
+wiring is a small follow-up for its owner; do not enable 0.8 on its current build.
+
+The old first-session smoke used the removed Lua camera setter, a 500 ms TAB
+hold and click-to-type semantics. Current smoke uses camera.set, 1150 ms TAB,
+E to use and explicit Super key events for exit; exact terminal contents remain
+asserted. This does not reintroduce click-to-type into world mode.

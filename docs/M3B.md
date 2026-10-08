@@ -487,3 +487,10 @@ Supervised live checklist additions (not exercised against the owner's session):
   the world running with the last valid settings; repairing clears the error.
 - [ ] Auto resolution settles while moving through Lumen Reach. U records the
   selected preset, per-pass costs, new/reused frame counts and native-size PNG.
+
+
+Live shell graphics handoff: launch IPC 0.7 with shell 36cb85f. IPC 0.8 adds
+hold timing without cursor changes. Supervised checklist: E enters virtual
+cursor typing; Super+Tab exits to reticle; TAB hold enters Director cursor;
+release before threshold stays reticle. Timing publication itself never moves,
+shows, hides or changes the shape of a cursor.

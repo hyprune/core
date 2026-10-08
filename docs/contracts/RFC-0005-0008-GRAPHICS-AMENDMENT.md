@@ -1,9 +1,7 @@
 # Proposed RFC-0005 / RFC-0008 amendment: IPC 0.7 graphics controls
 
-Prepared in core because this workstream is restricted to the core checkout.
-The canonical docs/schema owners should adopt this text and
-`../graphics-ipc-amendment.json` together. Until then this is an explicit handoff,
-not a claim that external schema provenance has changed.
+Adopted in canonical docs RFC-0005/0008 and schema commit e0739d1.
+The shell 36cb85f IPC 0.7 pin is byte-identical to the published schema.
 
 IPC 0.7 inherits IPC 0.6 state, events, grants and methods. It adds:
 

@@ -98,7 +98,7 @@ def first_session(client,children,args,shell_token,socketpath):
     for output,data in layers.items():
         if output!=world_output:assert 'hyprune-hud' not in json.dumps(data)
     before=state()['movement']['position'];keys('-P','w','-s','600','-p','w');after=state()['movement']['position'];assert after[2]<before[2]-.5
-    keys('-P','Tab','-s','500','-p','Tab')
+    keys('-P','Tab','-s','1150','-p','Tab')
     wait_for(lambda:status().get('director'))
     assert any(o['exclusiveInput'] for l in state()['shell']['leases'] for o in l['overlays'])
     shot('session-director.png')
@@ -114,7 +114,7 @@ def first_session(client,children,args,shell_token,socketpath):
     ui('drive',0);wait_for(lambda:state()['location']['autodrive']);wait_for(lambda:not state()['location']['autodrive'])
     assert abs(state()['movement']['position'][2]-4.5)<.1
     # Travel requested by Map and authoritative passive warp.
-    keys('-P','Tab','-s','500','-p','Tab');wait_for(lambda:status().get('director'))
+    keys('-P','Tab','-s','1150','-p','Tab');wait_for(lambda:status().get('director'))
     ui('travel',research_index);wait_for(lambda:status().get('warp'));shot('session-warp.png')
     wait_for(lambda:state()['location']['transition']['phase']=='arrived',10)
     wait_for(lambda:not status().get('warp'),5)
@@ -122,13 +122,15 @@ def first_session(client,children,args,shell_token,socketpath):
     work=next(s for s in state()['surfaces'] if 'Build terminal' in s['title'])
     capture=next(s for s in camera()['captures'] if s['id']==work['id']);pos=capture['position']
     assert any(abs(pos[0]-x)<.01 for x in [-10.7,1.3,13.3])
-    ctl('eval',f'hl.plugin.hyprune.camera({pos[0]}, 2.25, {pos[2]+4}, 0, 0)')
+    client.call("camera.set", {"position": [pos[0], 2.25, pos[2]+4], "orientation": [0,0,0,1]})
     subprocess.run([str(HERE/'ctl.py'),'env',str(ROOT/'build/nested-pointer')],check=True)
     wait_for(lambda:next(s for s in state()['surfaces'] if s['id']==work['id'])['focused'])
+    # A plain click is pointer-only since M3B. E explicitly enters use mode.
+    keys('-k','e');wait_for(lambda:camera()['mode']=='typing')
     marker=STATE/'integration-typed.txt';marker.unlink(missing_ok=True)
     keys(f"printf 'typed in Switchyard\\n' > {marker}");keys('-k','Return')
-    wait_for(lambda:marker.exists());assert marker.read_text()=='typed in Switchyard\n'
-    keys('-k','Escape')
+    wait_for(lambda:marker.exists() and marker.read_text()=='typed in Switchyard\n')
+    keys('-M','logo','-P','Super_L','-k','Tab','-p','Super_L','-m','logo');wait_for(lambda:camera()['mode']!='typing')
     ui('workspace',11);wait_for(lambda:state()['world']['id']=='org.hyprune.quiet',20)
     wait_for(lambda:not status().get('warp'),5)
     # A compositor workspace switch (not an IPC world.load) takes us home.
@@ -195,12 +197,12 @@ def showcase(client,state,ui,status,pos):
         if browser:
             glide([btop[0],2.25,btop[2]+4.1] if btop else [workpos[0],2.25,workpos[2]+4.1],[browser[0],2.25,browser[2]+4.1],1.8);pause(1.5)
         # Core-owned hold opens the real shell. Set the waypoint from its Map.
-        pose([-4,1.7,4.5]);keys('-P','Tab','-s','500','-p','Tab');wait_for(lambda:status().get('director'))
+        pose([-4,1.7,4.5]);keys('-P','Tab','-s','1150','-p','Tab');wait_for(lambda:status().get('director'))
         ui('tab',0);pause(2);map_click_research();wait_for(lambda:state()['location']['waypoint'] and state()['location']['waypoint']['id']=='research');pause(2.5);shot('showcase-map.png')
         ui('travel',research);wait_for(lambda:status().get('warp'));pause(3);shot('showcase-travel.png')
         wait_for(lambda:state()['location']['transition']['phase']=='arrived',10);pause(2)
         # Workspace location change, then the genuine compositor switch home.
-        keys('-P','Tab','-s','500','-p','Tab');wait_for(lambda:status().get('director'))
+        keys('-P','Tab','-s','1150','-p','Tab');wait_for(lambda:status().get('director'))
         ui('tab',3);pause(2.5);ui('workspace',11)
         wait_for(lambda:state()['world']['id']=='org.hyprune.quiet',20);pause(2.5)
         glide([0,1.7,4],[0,1.7,4],2,0,.32);pause(1)

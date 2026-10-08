@@ -76,12 +76,13 @@ int main() {
     std::thread loop;
     try {
         auto token = randomId(), token02 = randomId(), token03 = randomId(), token04 = randomId(), token05 = randomId();
-        auto token06 = randomId(), token07 = randomId();
+        auto token06 = randomId(), token07 = randomId(), token08 = randomId();
         std::atomic<int> disconnected = 0;
         std::atomic<bool> notice = false;
         Server server(dir, "test",
                       {{token06, "org.hyprune.test", {"state.read"}},
                        {token07, "org.hyprune.test", {"state.read"}},
+                       {token08, "org.hyprune.test", {"state.read"}},
                        {token, "org.hyprune.test", {"state.read"}},
                        {token02, "org.hyprune.test", {"state.read", "data.publish"}},
                        {token03, "org.hyprune.test", {"state.read"}},
@@ -106,6 +107,7 @@ int main() {
                         {"workspaces", Json::object()},
                         {"mounts", {{"placements", Json::array({Json{{"pose", true}}})}}},
                         {"interaction", {{"mode", "typing"}}},
+                        {"keymap", {{"holds", Json::array()}}},
                         {"apps", Json::array_t(17, Json{{"surfaceId", "desktop-window-1"},
                                                         {"workspaceId", 1},
                                                         {"title", "Terminal"},
@@ -240,13 +242,13 @@ int main() {
             auto event = c.receive();
             check(event["method"] == "runtime.notice" && event["params"].size() == 3, "frozen notice fields widened");
         }
-        for (const auto *version : {"0.6", "0.7"}) {
+        for (const auto *version : {"0.6", "0.7", "0.8"}) {
             Client c(server.path());
-            auto h = hello(std::string(version) == "0.7" ? token07 : token06);
+            auto h = hello(std::string(version) == "0.8" ? token08 : std::string(version) == "0.7" ? token07 : token06);
             h["params"]["protocols"] = {version};
             c.sendJson(h);
             auto response = c.receive()["result"];
-            bool graphics = std::string(version) == "0.7";
+            bool graphics = std::string(version) != "0.6";
             check(response["protocol"] == version, "graphics protocol negotiation");
             auto methods = response["methods"];
             check((std::find(methods.begin(), methods.end(), "graphics.get") != methods.end()) == graphics,
@@ -256,6 +258,10 @@ int main() {
             c.sendJson(req("gfx", "graphics.get"));
             auto get = c.receive();
             check(graphics ? get.contains("result") : get["error"]["code"] == -32601, "graphics request isolation");
+            c.sendJson(req("holds-sub", "state.subscribe", {{"topics", {"state"}}}));
+            auto snapshot = c.receive()["result"]["snapshot"]["state"];
+            check(snapshot["keymap"].contains("holds") == (std::string(version) == "0.8"),
+                  "hold state leaked into frozen protocol");
             c.sendJson(req("set", "graphics.set", {{"patch", {{"quality", "low"}}}}));
             check(c.receive()["error"]["code"] == -32601, "graphics write unauthorized");
         }

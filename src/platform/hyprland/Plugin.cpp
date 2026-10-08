@@ -733,6 +733,7 @@ void Runtime::publish() {
           {"conflicts", interaction::inputConflicts(input.config)},
           {"steals", steals(input.config)},
           {"capture", captureRequest},
+          {"holds", input.holds()},
           {"error", inputFile.error}}},
         {"editor",
          {{"mode", inputMode()},

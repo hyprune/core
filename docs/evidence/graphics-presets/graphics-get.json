@@ -1,0 +1,231 @@
+{
+  "config": {
+    "alpha_haze": null,
+    "ambient_occlusion": null,
+    "anisotropy": null,
+    "bloom": null,
+    "bloom_strength": 0.15,
+    "dynamic_resolution": true,
+    "exposure": 1.0,
+    "fog": null,
+    "fov": 60.0,
+    "msaa": null,
+    "normal_maps": null,
+    "quality": "auto",
+    "reduced_motion": false,
+    "reflections": null,
+    "render_scale": "auto",
+    "sharpen": 0.35,
+    "sky": null,
+    "specular": null,
+    "target_fps": 60
+  },
+  "effective": {
+    "alpha_haze": false,
+    "ambient_occlusion": true,
+    "anisotropy": 1,
+    "bloom": "off",
+    "bloom_strength": 0.15,
+    "dynamic_resolution": true,
+    "exposure": 1.0,
+    "fog": "linear",
+    "fov": 60.0,
+    "msaa": 1,
+    "normal_maps": false,
+    "quality": "low",
+    "reduced_motion": false,
+    "reflections": false,
+    "render_scale": "auto",
+    "sharpen": 0.35,
+    "sky": "gradient",
+    "specular": false,
+    "target_fps": 60
+  },
+  "error": "",
+  "options": {
+    "alpha_haze": [
+      false,
+      true
+    ],
+    "ambient_occlusion": [
+      false,
+      true
+    ],
+    "anisotropy": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "bloom": [
+      "off",
+      "low",
+      "high"
+    ],
+    "dynamic_resolution": [
+      false,
+      true
+    ],
+    "fog": [
+      "off",
+      "linear",
+      "height"
+    ],
+    "msaa": [
+      1,
+      2,
+      4
+    ],
+    "normal_maps": [
+      false,
+      true
+    ],
+    "quality": [
+      "auto",
+      "low",
+      "medium",
+      "high",
+      "ultra"
+    ],
+    "reflections": [
+      false,
+      true
+    ],
+    "sky": [
+      "off",
+      "gradient",
+      "environment"
+    ],
+    "specular": [
+      false,
+      true
+    ]
+  },
+  "overrides": {},
+  "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/graphics.json",
+  "presets": {
+    "high": {
+      "alpha_haze": true,
+      "ambient_occlusion": true,
+      "anisotropy": 8,
+      "bloom": "high",
+      "fog": "height",
+      "msaa": 2,
+      "normal_maps": true,
+      "reflections": true,
+      "sky": "environment",
+      "specular": true
+    },
+    "low": {
+      "alpha_haze": false,
+      "ambient_occlusion": true,
+      "anisotropy": 1,
+      "bloom": "off",
+      "fog": "linear",
+      "msaa": 1,
+      "normal_maps": false,
+      "reflections": false,
+      "sky": "gradient",
+      "specular": false
+    },
+    "medium": {
+      "alpha_haze": true,
+      "ambient_occlusion": true,
+      "anisotropy": 2,
+      "bloom": "low",
+      "fog": "height",
+      "msaa": 1,
+      "normal_maps": true,
+      "reflections": true,
+      "sky": "environment",
+      "specular": true
+    },
+    "ultra": {
+      "alpha_haze": true,
+      "ambient_occlusion": true,
+      "anisotropy": 16,
+      "bloom": "high",
+      "fog": "height",
+      "msaa": 4,
+      "normal_maps": true,
+      "reflections": true,
+      "sky": "environment",
+      "specular": true
+    }
+  },
+  "timings": {
+    "captureMs": 0.089776,
+    "collisionTriangles": 547,
+    "cpuPassMs": [
+      0.061602,
+      0.012574,
+      0.005862,
+      0.004149
+    ],
+    "cpuRenderMs": 0.084956,
+    "cpuUpdateMs": 0.196343,
+    "debug": false,
+    "deliveredFPS": 0.0,
+    "frameMs": 16.761347,
+    "gpuCaptureMs": 0.018072,
+    "gpuEffectsMs": {
+      "bloom": 0.005729,
+      "msaa_resolve": 0.0,
+      "native_surfaces_geometry": 2.076458,
+      "output_markers": 0.187968,
+      "sky": 0.185781,
+      "upscale_sharpen": 0.265468,
+      "world_shading_shared": 0.422031
+    },
+    "gpuPassMs": [
+      0.607812,
+      2.076458,
+      0.27119699999999997,
+      0.187968
+    ],
+    "graphics": {
+      "alpha_haze": false,
+      "ambient_occlusion": true,
+      "anisotropy": 1,
+      "bloom": "off",
+      "bloom_strength": 0.15,
+      "dynamic_resolution": true,
+      "exposure": 1.0,
+      "fog": "linear",
+      "fov": 60.0,
+      "msaa": 1,
+      "normal_maps": false,
+      "quality": "low",
+      "reduced_motion": false,
+      "reflections": false,
+      "render_scale": "auto",
+      "sharpen": 0.35,
+      "sky": "gradient",
+      "specular": false,
+      "target_fps": 60
+    },
+    "inFlight": 1,
+    "internalSize": [
+      1920,
+      1080
+    ],
+    "ipcMs": 0.345546,
+    "msaaSamples": 1,
+    "nativeSize": [
+      1920,
+      1080
+    ],
+    "quality": "intel",
+    "renderScale": 1.0,
+    "renderedFrames": 31,
+    "renderer": "Mesa Intel(R) Graphics (PTL)",
+    "reusedFrames": 0,
+    "targetFPS": 60
+  },
+  "unsupported": [
+    "ssr",
+    "runtime_shadows",
+    "contact_shadows"
+  ]
+}

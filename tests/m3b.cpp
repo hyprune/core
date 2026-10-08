@@ -29,6 +29,16 @@ int main() {
     xkb_state_update_mask(keyboard, shift, 0, 0, 0, 0, 0);
     tabHold.event("world", bindingKey(keyboard, 23), Shift, false, 500);
     assert(tabHold.tick(1200).empty());
+    assert(tabHold.holds().empty());
+    tabHold.event("world", "Tab", 0, true, 2000);
+    assert(tabHold.holds() == Json::array({{{"action", "menu"}, {"binding", "Tab[L]"},
+                                           {"startedAtMs", 2000}, {"durationMs", 1000}}}));
+    assert(tabHold.tick(2999).empty() && tabHold.holds().size() == 1);
+    assert(tabHold.tick(3000).size() == 1 && tabHold.holds().empty());
+    tabHold.clear();
+    tabHold.event("world", "Tab", 0, true, 4000);
+    tabHold.clear();
+    assert(tabHold.holds().empty());
     xkb_state_unref(keyboard);
     xkb_keymap_unref(keymap);
     xkb_context_unref(context);

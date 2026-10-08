@@ -9,8 +9,8 @@ class Client:
     def __init__(self,path,token=None,protocol="0.1"):
         self.socket=socket.socket(socket.AF_UNIX);self.socket.settimeout(5);self.socket.connect(path);self.count=0;self.events=[];self.transcript=[]
         params={'protocols':[protocol],'client':{'id':'org.hyprune.nested','name':'Nested test'},'capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}
-        if protocol in ['0.2','0.3','0.4','0.5','0.6','0.7']:params['capabilities']+=['shell.control','data.publish']
-        if protocol in ['0.6','0.7']:params['capabilities']+=['input.control']
+        if protocol in ['0.2','0.3','0.4','0.5','0.6','0.7','0.8']:params['capabilities']+=['shell.control','data.publish']
+        if protocol in ['0.6','0.7','0.8']:params['capabilities']+=['input.control']
         if token:params['token']=token
         self.hello=self.call('session.hello',params)
     def receive(self):
@@ -156,7 +156,7 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,"0.7" if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.8" if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
         if args.m3b:
             from m3b import acceptance

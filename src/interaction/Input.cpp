@@ -198,10 +198,18 @@ std::vector<Action> Input::event(const std::string &mode, const std::string &key
                 ((matchMods & ~own) != t.mods && !(move && t.mods == 0 && (matchMods & ~(Shift | Ctrl)) == 0)))
                 continue;
             if (!key.starts_with("Wheel") && key != "MouseMove")
-                held[identity] = {action, now, t.hold, false};
+                held[identity] = {action, bindingName(t), now, t.hold, false};
             return {{action, t.hold ? false : true, value}};
         }
     return {};
+}
+Json Input::holds() const {
+    Json result = Json::array();
+    for (const auto &[key, p] : held)
+        if (p.hold && !p.fired && result.size() < 64)
+            result.push_back({{"action", p.action}, {"binding", p.binding},
+                              {"startedAtMs", p.started}, {"durationMs", config["longHoldMs"]}});
+    return result;
 }
 bool Input::gestureHeld() const {
     for (auto &[key, press] : held)

@@ -149,7 +149,14 @@ def acceptance(client,children,args,shell_token,socketpath):
  client.call('input.set',{'config':next});check('IPC_config_persist',json.loads((s.STATE/'input.json').read_text())==next)
  next['longHoldMs']=1000;path=s.STATE/'input.json';tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(next));tmp.replace(path);wait(lambda:state()['keymap']['config']['longHoldMs']==1000);check('watched_atomic_reload',True)
  invalid=json.loads(json.dumps(next));invalid['longHoldMs']=1;path.write_text(json.dumps(invalid));wait(lambda:state()['keymap']['error']);check('bad_reload_retains_last_good',state()['keymap']['config']==next);client.call('input.set',{'config':config})
- wait(lambda:status().get('lease'));keys('-P','Tab','-s','450','-p','Tab');check('Tab_short_hold_does_not_open',not status().get('director'));keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status().get('director'));check('Tab_hold_Map',True,status());unrelatedIn('menu');ui('tab',6);time.sleep(.4);shot('settings.png')
+ wait(lambda:status().get('lease'))
+ hold=s.envrun('wtype','-P','Tab','-s','700','-p','Tab');children.append(hold)
+ pending=wait(lambda:state()['keymap']['holds'])
+ check('hold_start_published',pending[0]['action']=='menu' and pending[0]['binding']=='Tab[L]' and pending[0]['durationMs']==1000,pending)
+ start=pending[0]['startedAtMs'];time.sleep(.12)
+ check('hold_start_stable',state()['keymap']['holds'][0]['startedAtMs']==start)
+ hold.wait(timeout=5);wait(lambda:not state()['keymap']['holds']);check('hold_cancel_published',not status().get('director'))
+ keys('-P','Tab','-s','450','-p','Tab');check('Tab_short_hold_does_not_open',not status().get('director'));keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status().get('director'));check('Tab_hold_Map',not state()['keymap']['holds'],status());unrelatedIn('menu');ui('tab',6);time.sleep(.4);shot('settings.png')
  # Verified Director capture uses the shell actor, not the acceptance actor.
  # QML dev action passes published intent methods through its own IPC connection.
  xy=list(map(float,s.ctl('cursorpos').split(',')));pointer(1600+854-xy[0],627-xy[1]);pointer();wait(lambda:state()['keymap']['capture'] and state()['keymap']['capture']['status']=='waiting');keys('-M','logo','-P','Super_L','-s','40','-k','Tab','-p','Super_L','-m','logo');captured=wait(lambda:status().get('captured'));check('settings_capture',captured['binding']=='Super+Tab' and captured['mode']=='world' and captured['action']=='debug' and captured['slot']==2,captured);ui('inputSave');wait(lambda:'Super+Tab' in state()['keymap']['config']['modes']['world']['debug']);check('settings_core_save',True);check('settings_Hyprland_collision',any(v['binding']=='Super+Tab' for v in state()['keymap']['steals']));shot('settings-conflict.png');keys('-k','Escape');wait(lambda:not status().get('director'));check('Esc_menu_exit',True)

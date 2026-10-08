@@ -1,0 +1,117 @@
+{
+  "passed": true,
+  "shell": {
+    "graphics": null,
+    "captured": null,
+    "status": "live",
+    "protocol": "0.3",
+    "screen": "",
+    "lease": "",
+    "director": false,
+    "revision": 578,
+    "tab": 0,
+    "warp": false,
+    "phase": "failed",
+    "world": "com.hyprune.switchyard",
+    "mode": null,
+    "tool": null,
+    "workspaces": [
+      {
+        "id": 1,
+        "surfaceId": "workspace-1",
+        "title": "1",
+        "kind": "workspace",
+        "focused": true,
+        "worldId": "",
+        "desktop": true
+      },
+      {
+        "id": 10,
+        "surfaceId": "workspace-10",
+        "title": "10",
+        "kind": "workspace",
+        "focused": true,
+        "worldId": "com.hyprune.switchyard",
+        "desktop": false
+      },
+      {
+        "id": 11,
+        "title": "Quiet observatory",
+        "kind": "workspace",
+        "worldId": "org.hyprune.quiet",
+        "desktop": false
+      }
+    ],
+    "appDetails": [],
+    "apps": 0,
+    "map": true,
+    "places": [
+      {
+        "id": "concourse",
+        "name": "concourse",
+        "position": [
+          -4,
+          1.7000000476837158,
+          4.5
+        ]
+      },
+      {
+        "id": "build",
+        "name": "build",
+        "position": [
+          -14.67,
+          1.7000000476837158,
+          -5
+        ]
+      },
+      {
+        "id": "studio",
+        "name": "studio",
+        "position": [
+          -14.67,
+          1.7000000476837158,
+          -19
+        ]
+      },
+      {
+        "id": "research",
+        "name": "research",
+        "position": [
+          -2.67,
+          1.7000000476837158,
+          -5
+        ]
+      },
+      {
+        "id": "systems",
+        "name": "systems",
+        "position": [
+          -2.67,
+          1.7000000476837158,
+          -19
+        ]
+      },
+      {
+        "id": "commons",
+        "name": "commons",
+        "position": [
+          9.33,
+          1.7000000476837158,
+          -5
+        ]
+      },
+      {
+        "id": "archive",
+        "name": "archive",
+        "position": [
+          9.33,
+          1.7000000476837158,
+          -19
+        ]
+      }
+    ],
+    "markers": 0
+  },
+  "frames": 1177,
+  "typed": "typed in Switchyard\n"
+}
