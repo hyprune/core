@@ -1,0 +1,36 @@
+PASS live: old_fixture_loaded
+PASS live: fixture_HUD_and_main_running
+PASS live: preflight_ABI_and_plan
+PASS live: preflight_read_only
+UP: efb50993780079460b0cbed1363e2166a2de1d9f_1791458071_1730299214 Lumen Reach; toggle SUPER + SHIFT + F10 
+Recovery state: /home/rick/workspace/hyprune/core/dev/nested/.state/live/state.json 
+Logs: /home/rick/workspace/hyprune/core/dev/nested/.state/live
+
+PASS live: exact_old_path_recorded
+PASS live: old_HUD_stopped_main_preserved
+PASS live: free_toggle_fallback
+PASS live: exclusive_core
+PASS live: world_active
+PASS live: isolated_default_input
+PASS live: status_logs_and_reports
+PASS live: toggle_deactivates
+PASS live: toggle_reactivates
+DOWN: core stopped, runtime bind removed, old plugin/HUD restored; cursor reset was deferred.
+
+PASS live: healthy_down
+UP: efb50993780079460b0cbed1363e2166a2de1d9f_1791458071_1730299214 Lumen Reach; toggle SUPER + SHIFT + F10 
+Recovery state: /home/rick/workspace/hyprune/core/dev/nested/.state/live/state.json 
+Logs: /home/rick/workspace/hyprune/core/dev/nested/.state/live
+
+PASS live: second_up_unique_core_path
+DOWN: core stopped, runtime bind removed, old plugin/HUD restored; cursor reset was deferred.
+
+PASS live: TTY_down_after_helper_crash
+PASS live: old_plugin_restored
+PASS live: runtime_bind_removed_original_kept
+PASS live: HUD_restarted_main_preserved
+DOWN: already restored
+
+PASS live: down_twice_no_duplicate_HUD
+DOWN: already restored
+PASS live tooling: 20 checks

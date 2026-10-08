@@ -1,0 +1,26 @@
+{
+  "passed": [
+    "old_fixture_loaded",
+    "fixture_HUD_and_main_running",
+    "preflight_ABI_and_plan",
+    "preflight_read_only",
+    "exact_old_path_recorded",
+    "old_HUD_stopped_main_preserved",
+    "free_toggle_fallback",
+    "exclusive_core",
+    "world_active",
+    "isolated_default_input",
+    "status_logs_and_reports",
+    "toggle_deactivates",
+    "toggle_reactivates",
+    "healthy_down",
+    "second_up_unique_core_path",
+    "TTY_down_after_helper_crash",
+    "old_plugin_restored",
+    "runtime_bind_removed_original_kept",
+    "HUD_restarted_main_preserved",
+    "down_twice_no_duplicate_HUD"
+  ],
+  "instance": "efb50993780079460b0cbed1363e2166a2de1d9f_1791458071_1730299214",
+  "nestedOnly": true
+}

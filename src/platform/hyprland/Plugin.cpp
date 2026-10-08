@@ -2,6 +2,9 @@
 #include "interaction/Config.hpp"
 #include "interaction/Hands.hpp"
 #include "interaction/InputFile.hpp"
+#ifdef HYPRUNE_LIVE_BUILD
+#include "../../../dev/live/Bootstrap.hpp"
+#endif
 #include "interaction/Tools.hpp"
 #include "world/Mounts.hpp"
 #include "world/Spatial.hpp"
@@ -2925,6 +2928,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     if (std::string(__hyprland_api_get_hash()) != std::string(__hyprland_api_get_client_hash()))
         throw std::runtime_error("Hyprune: Hyprland ABI mismatch");
     handle = pluginHandle;
+#ifdef HYPRUNE_LIVE_BUILD
+    hyprune::live::Environment liveEnvironment; // Restored before PLUGIN_INIT returns.
+#endif
     runtime = std::make_unique<Runtime>();
     runtime->input.apply(runtime->inputFile.current);
     if (auto p = getenv("HYPRUNE_EDITOR_FILE"))
@@ -2978,6 +2984,18 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     });
     HyprlandAPI::addLuaFunction(handle, "hyprune", "toggle", luaToggle);
     HyprlandAPI::addLuaFunction(handle, "hyprune", "camera", luaCamera);
+#ifdef HYPRUNE_LIVE_BUILD
+    HyprlandAPI::addLuaFunction(handle, "hyprune", "live_stop", [](lua_State *) {
+        runtime->deferInput([] {
+            runtime->exit();
+            // Panic recovery: one deferred visibility reset, never a cursor shape change.
+            if (!g_pHyprRenderer->shouldRenderCursor())
+                g_pHyprRenderer->setCursorHidden(false);
+            runtime->cursorHidden = false;
+        });
+        return 0;
+    });
+#endif
     HyprlandAPI::addLuaFunction(handle, "hyprune", "config", luaConfig);
     for (auto &match : HyprlandAPI::findFunctionsByName(handle, "CPointerManager4move"))
         if (match.demangled.find("CPointerManager::move(") != std::string::npos) {

@@ -1,0 +1,137 @@
+Selected: efb50993780079460b0cbed1363e2166a2de1d9f_1791458071_1730299214 wayland-4 PID 1490143
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/rick/workspace/hyprune/core/build/live
+[  7%] Built target hyprune-live-abi
+[ 70%] Built target hyprune_runtime
+[ 77%] Built target hypruned
+[ 92%] Built target hyprune-core
+[100%] Built target hyprune-world-check
+{
+  "anchors": 24,
+  "areas": [
+    {
+      "dataAnchors": [
+        "sun-court-slot-01-globe-01",
+        "sun-court-slot-01-crate-01",
+        "sun-court-slot-01-crate-02",
+        "sun-court-slot-01-crate-03",
+        "sun-court-slot-01-crate-04",
+        "sun-court-slot-01-crate-05",
+        "sun-court-slot-01-crate-06"
+      ],
+      "freePlacementZones": [
+        "sun-court-open-work"
+      ],
+      "id": "sun-court",
+      "primaryAnchor": "sun-court-slot-01-facade-wall-01",
+      "spawnId": "sun-court",
+      "theme": "sun-court",
+      "toolAnchors": [
+        "sun-court-slot-01-operator-desk-01",
+        "sun-court-slot-01-operator-desk-02",
+        "sun-court-slot-01-field-rig-01",
+        "sun-court-slot-01-field-rig-02",
+        "sun-court-slot-01-kiosk-pillar-01"
+      ],
+      "workspaceSlot": "01"
+    },
+    {
+      "dataAnchors": [
+        "array-hall-slot-02-crate-01",
+        "array-hall-slot-02-crate-02"
+      ],
+      "freePlacementZones": [
+        "array-hall-open-work"
+      ],
+      "id": "array-hall",
+      "primaryAnchor": "array-hall-slot-02-hanging-wall-01",
+      "spawnId": "array-hall",
+      "theme": "array-hall",
+      "toolAnchors": [
+        "array-hall-slot-02-lectern-01",
+        "array-hall-slot-02-lectern-02",
+        "array-hall-slot-02-banner-01",
+        "array-hall-slot-02-banner-02",
+        "array-hall-slot-02-operator-desk-01",
+        "array-hall-slot-02-operator-desk-02",
+        "array-hall-slot-02-operator-desk-03"
+      ],
+      "workspaceSlot": "02"
+    },
+    {
+      "dataAnchors": [
+        "rime-vault-slot-03-crate-01",
+        "rime-vault-slot-03-crate-02",
+        "rime-vault-slot-03-crate-03"
+      ],
+      "freePlacementZones": [
+        "rime-vault-open-work"
+      ],
+      "id": "rime-vault",
+      "primaryAnchor": "rime-vault-slot-03-wall-inset-console-01",
+      "spawnId": "rime-vault",
+      "theme": "rime-vault",
+      "toolAnchors": [
+        "rime-vault-slot-03-operator-desk-01",
+        "rime-vault-slot-03-operator-desk-02",
+        "rime-vault-slot-03-wall-inset-console-02",
+        "rime-vault-slot-03-terminal-bench-01"
+      ],
+      "workspaceSlot": "03"
+    },
+    {
+      "dataAnchors": [
+        "signal-rise-slot-04-radar-dish-01",
+        "signal-rise-slot-04-crate-01",
+        "signal-rise-slot-04-crate-02",
+        "signal-rise-slot-04-crate-03",
+        "signal-rise-slot-04-crate-04",
+        "signal-rise-slot-04-crate-05",
+        "signal-rise-slot-04-crate-06",
+        "signal-rise-slot-04-crate-07",
+        "signal-rise-slot-04-crate-08"
+      ],
+      "freePlacementZones": [
+        "signal-rise-open-work"
+      ],
+      "id": "signal-rise",
+      "primaryAnchor": "signal-rise-slot-04-blast-door-screen-01",
+      "spawnId": "signal-rise",
+      "theme": "signal-rise",
+      "toolAnchors": [
+        "signal-rise-slot-04-terminal-bench-01",
+        "signal-rise-slot-04-kiosk-pillar-01",
+        "signal-rise-slot-04-wall-inset-console-01",
+        "signal-rise-slot-04-operator-desk-01"
+      ],
+      "workspaceSlot": "04"
+    }
+  ],
+  "collisionTriangles": 3886,
+  "estimatedGpuBytes": 286736940,
+  "objects": 21,
+  "placementZones": 4,
+  "worldId": "com.hyprune.lumen-reach"
+}
+ABI/version matches: v0.56.2 efb50993780079460b0cbed1363e2166a2de1d9f_aq_0.15_hu_0.14_hg_0.5_hc_0.1_hlg_0.6
+World: /home/rick/workspace/hyprune/worlds/dist/com.hyprune.lumen-reach 
+Shell: /home/rick/workspace/hyprune/shell/bridge/launch.py 
+Helper: /home/rick/workspace/hyprune/core/build/live/hypruned
+Loaded plugins: [
+  {
+    "name": "hypr3d",
+    "author": "Hyprune tests",
+    "handle": "555ec633f210",
+    "version": "test",
+    "description": "Inert restoration fixture"
+  }
+]
+Old-plugin candidate paths: ['/home/rick/workspace/hyprune/core/dev/nested/.state/hypr3d-live-fixture.so']
+Quickshell instances: [(1490217, ['qs', '-p', '/home/rick/workspace/hyprune/core/dev/nested/.state/live-qs-config/quickshell/hypr3d'], 'STOP old HUD'), (1490218, ['qs', '-c', 'rick'], 'KEEP')]
+Toggle candidate: SUPER + SHIFT + F10 (rechecked after old-plugin unload)
+up will: record private recovery state; unload only hypr3d; stop only its -p .../quickshell/hypr3d HUD; copy/load core from a unique path;
+start its private helper and detached logged shell with in-memory grants; load/activate Lumen Reach; add one free runtime toggle.
+Core materializes default input.json in a private runtime test directory. No installed config is edited.
+Hyprland itself re-evaluates Lua on plugin load/unload; no explicit reload command is issued.
+down removes that bind, exits/shows cursor after the frame, unloads core, stops only recorded test processes, restores old plugin/HUD.

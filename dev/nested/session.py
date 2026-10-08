@@ -114,11 +114,15 @@ def run(args):
     environment=os.environ.copy();environment.update(AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read),HYPRUNE_LAYOUT_FILE=str(STATE/"layout.json"),HYPRUNE_INPUT_FILE=str(STATE/"input.json"),HYPRUNE_EDITOR_FILE=str(STATE/"editor.json"),XDG_STATE_HOME=str(STATE/"statehome"))
     if args.integration: environment['HYPRUNE_WORKSPACE_LOCATIONS']=str(STATE/'locations.json')
     config=str(HERE/'hyprland.lua')
+    if args.live:
+        config=str(STATE/'live-hyprland.lua')
+        pathlib.Path(config).write_text((HERE/'hyprland.lua').read_text()+'\nhl.bind("SUPER + SHIFT + N",hl.dsp.exec_cmd("true"),{description="Keep this binding"})\n')
     if args.m3b:
         config=str(STATE/'hyprland.lua')
         Path=pathlib.Path
         Path(config).write_text((HERE/'hyprland.lua').read_text().replace('general = {','input = { resolve_binds_by_sym = true },\n    general = {')+ '\nhl.bind("SUPER + TAB", hl.dsp.exec_cmd("touch '+str(STATE/'native-super-tab')+'"))\nhl.bind("SUPER + F9", hl.dsp.exec_cmd("touch '+str(STATE/'native-unrelated')+'"))\n')
     log=open(STATE/'hyprland.log','w')
+    if args.live: environment.pop('HYPRUNE_LAUNCH_FD',None)
     process=subprocess.Popen(['Hyprland','-c',config],env=environment,pass_fds=(read,),stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True);os.close(read)
     children=[];client=None
     try:
@@ -135,6 +139,10 @@ def run(args):
         (STATE/'session.json').write_text(json.dumps(state));verified()
         ctl('output','create','headless');time.sleep(.3)
         ctl('eval','hl.dispatch(hl.dsp.focus({ monitor = "HEADLESS-1" }))')
+        if args.live:
+            from live_check import acceptance
+            acceptance(state, children)
+            return
         copy=STATE/f'hyprune-{time.time_ns()}.so';shutil.copy2(ROOT/'build/hyprune-core.so',copy)
         result=ctl('plugin','load',str(copy));print('load:',result,flush=True)
         if result!='ok':raise RuntimeError(result)
@@ -370,6 +378,6 @@ def m1(client):
     print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--serve',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
     try:run(args)
     except KeyboardInterrupt:print("Nested session stopped.",flush=True)

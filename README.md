@@ -236,3 +236,8 @@ Matching actions steal colliding Hyprland bindings only in their active mode.
 Run `dev/nested/run.sh --m3b` for isolated real seat acceptance, or add `--record`
 for the demo. Both use the lifetime flock. See [M3B.md](docs/M3B.md), including the
 complete supervised live cursor checklist, input options, contracts and evidence.
+
+For the owner-supervised real-session check, see [dev/live/LIVE-TEST.md](dev/live/LIVE-TEST.md).
+`dev/live/preflight`, `up`, `status`, and idempotent `down` swap only the old
+hypr3d plugin/HUD and record recovery state. Agents must use explicit nested
+instances; `./dev/nested/run.sh --live` provides the locked dry-run.
