@@ -95,6 +95,7 @@ struct Runtime {
     std::string tagged;
     uint32_t gestureButton = 0;
     std::set<uint32_t> swallowedButtons, swallowedKeys, nativeButtons, nativeKeys;
+    std::map<uint32_t, std::string> inputNames;
     WP<CWLSurfaceResource> grabResource;
     std::string cursorState = "desktop";
     bool savedCursorHidden = false, cursorHidden = false;
@@ -1363,7 +1364,7 @@ Json Runtime::steals(const Json &config) const {
                 for (auto &bind : g_pKeybindManager->m_keybinds) {
                     if (!bind->enabled || (!bind->ignoreMods && bind->modmask != t.mods))
                         continue;
-                    auto bs = xkb_keysym_from_name(bind->key.c_str(), XKB_KEYSYM_CASE_INSENSITIVE);
+                    auto bs = xkb_keysym_to_lower(xkb_keysym_from_name(bind->key.c_str(), XKB_KEYSYM_CASE_INSENSITIVE));
                     bool match = bind->key == native || (sym != XKB_KEY_NoSymbol && bs == sym) ||
                                  (t.key == "Wheel" && (bind->key == "mouse_up" || bind->key == "mouse_down")) ||
                                  (t.key == "WheelUp" && bind->key == "mouse_up") ||
@@ -1422,16 +1423,22 @@ void Runtime::useAim(bool zoom) {
     if (!world || loading)
         return;
     auto hit = aim();
-    if (!hit) {
+    {
         float best = input.config["useDistance"];
+        if (hit)
+            best = std::min(best, hit->second.distance);
+        // The tolerance margin must keep the same occlusion policy as aim().
+        // Otherwise a rejected ray can re-enter a window through solid geometry.
+        if (auto obstacle = interaction::raycast(camera.position, pointerRay(), world->collision))
+            best = std::min(best, obstacle->distance + .01f);
         for (auto &s : capture.visible())
             if (auto h = surfaces::intersect(s, camera.position, pointerRay(), false)) {
                 float margin = input.config["useTolerance"];
                 if (h->u >= -margin / s.width && h->u <= 1 + margin / s.width && h->v >= -margin / s.height &&
                     h->v <= 1 + margin / s.height && h->distance < best) {
                     best = h->distance;
-                    h->u = std::clamp(h->u, 0.f, 1.f);
-                    h->v = std::clamp(h->v, 0.f, 1.f);
+                    h->u = std::clamp(h->u, 0.f, 1.f - 1.f / std::max(1, s.pixelWidth));
+                    h->v = std::clamp(h->v, 0.f, 1.f - 1.f / std::max(1, s.pixelHeight));
                     hit = {{s.id, *h}};
                 }
             }
@@ -3062,11 +3069,17 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 if (!kb || !kb->m_xkbSymState)
                     return;
                 auto sym = xkb_state_key_get_one_sym(kb->m_xkbSymState, event.keycode + 8);
-                char buffer[128];
-                if (xkb_keysym_get_name(sym, buffer, sizeof buffer) <= 0)
-                    return;
-                std::string key = buffer;
                 bool down = event.state == WL_KEYBOARD_KEY_STATE_PRESSED;
+                auto key = interaction::bindingKey(kb->m_xkbSymState, event.keycode + 8);
+                if (down) {
+                    auto [it, inserted] = runtime->inputNames.try_emplace(event.keycode, key);
+                    key = it->second;
+                } else if (auto it = runtime->inputNames.find(event.keycode); it != runtime->inputNames.end()) {
+                    key = it->second;
+                    runtime->inputNames.erase(it);
+                }
+                if (key.empty())
+                    return;
                 unsigned bit = sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R       ? 64
                                : sym == XKB_KEY_Shift_L || sym == XKB_KEY_Shift_R     ? 1
                                : sym == XKB_KEY_Control_L || sym == XKB_KEY_Control_R ? 4

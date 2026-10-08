@@ -5,9 +5,30 @@
 #include <cassert>
 #include <iostream>
 #include <unistd.h>
+#include <xkbcommon/xkbcommon.h>
 using namespace hyprune;
 using namespace interaction;
 int main() {
+    auto context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    xkb_rule_names names{};
+    names.layout = "us";
+    auto keymap = xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+    auto keyboard = xkb_state_new(keymap);
+    auto shift = 1u << xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_SHIFT);
+    xkb_state_update_mask(keyboard, shift, 0, 0, 0, 0, 0);
+    assert(xkb_state_key_get_one_sym(keyboard, 25) == XKB_KEY_W);
+    assert(bindingKey(keyboard, 25) == "w");
+    assert(bindingKey(keyboard, 23) == "Tab");
+    assert(bindingName(parseBinding("Shift+W")) == "Shift+w");
+    Input tabHold;
+    xkb_state_update_mask(keyboard, 0, 0, 0, 0, 0, 0);
+    tabHold.event("world", bindingKey(keyboard, 23), 0, true, 0);
+    xkb_state_update_mask(keyboard, shift, 0, 0, 0, 0, 0);
+    tabHold.event("world", bindingKey(keyboard, 23), Shift, false, 500);
+    assert(tabHold.tick(1200).empty());
+    xkb_state_unref(keyboard);
+    xkb_keymap_unref(keymap);
+    xkb_context_unref(context);
     auto defaults = validateInput(inputDefaults());
     assert(inputConflicts(defaults).empty());
     unsigned checked = 0;

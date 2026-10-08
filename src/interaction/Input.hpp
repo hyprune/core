@@ -2,6 +2,7 @@
 #include "world/World.hpp"
 #include <deque>
 #include <map>
+struct xkb_state;
 namespace hyprune::interaction {
 using Json = world::Json;
 enum Mod : unsigned { Shift = 1, Ctrl = 4, Alt = 8, Super = 64 };
@@ -11,6 +12,7 @@ struct Trigger {
     bool hold = false;
 };
 Trigger parseBinding(const std::string &);
+std::string bindingKey(xkb_state *, uint32_t keycode);
 std::string bindingName(const Trigger &);
 Json inputDefaults();
 Json validateInput(const Json &);

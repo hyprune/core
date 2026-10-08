@@ -3,6 +3,14 @@
 #include <set>
 #include <xkbcommon/xkbcommon.h>
 namespace hyprune::interaction {
+std::string bindingKey(xkb_state *state, uint32_t keycode) {
+    const xkb_keysym_t *symbols = nullptr;
+    auto count = xkb_keymap_key_get_syms_by_level(xkb_state_get_keymap(state), keycode,
+                                                  xkb_state_key_get_layout(state, keycode), 0, &symbols);
+    auto symbol = xkb_keysym_to_lower(count ? symbols[0] : xkb_state_key_get_one_sym(state, keycode));
+    char name[128];
+    return xkb_keysym_get_name(symbol, name, sizeof name) > 0 ? name : "";
+}
 Trigger parseBinding(const std::string &s) {
     if (s.empty() || s.size() > 96)
         throw std::runtime_error("binding must be 1–96 bytes");
@@ -36,6 +44,7 @@ Trigger parseBinding(const std::string &s) {
         auto sym = xkb_keysym_from_name(t.key.c_str(), XKB_KEYSYM_CASE_INSENSITIVE);
         if (sym == XKB_KEY_NoSymbol)
             throw std::runtime_error("unknown key: " + t.key);
+        sym = xkb_keysym_to_lower(sym);
         char name[128];
         xkb_keysym_get_name(sym, name, sizeof name);
         t.key = name;
