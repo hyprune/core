@@ -1,5 +1,6 @@
 #include "Layout.hpp"
 #include "ipc/Server.hpp"
+#include "world/Mounts.hpp"
 #include <set>
 namespace hyprune::surfaces {
 namespace {
@@ -310,12 +311,94 @@ void Layout::recall(std::span<const Instance> live) {
         recalled[i.id] = n++;
     carried.clear();
 }
+void Layout::spawn(const Instance &i, const world::World *w, const sim::Camera &camera, Surface s, float aspect) {
+    auto desired = s;
+    if (!w || hasPlacement(i, w))
+        return;
+    const Json *home = nullptr;
+    if (auto b = binding(i.workspaceId, w))
+        for (auto &a : w->areas)
+            if (a.at("id") == b->at("areaId"))
+                home = &a;
+    if (!home) {
+        float nearest = INFINITY;
+        for (auto &a : w->areas) {
+            float distance = length(world::areaSpawn(*w, a.at("id")).position - camera.position);
+            if (distance < nearest) {
+                nearest = distance;
+                home = &a;
+            }
+        }
+    }
+    if (home) {
+        // Fit the full oriented rectangle, including clearance, into this home's
+        // free zone. Never accept OBB recovery that moves it outside the zone.
+        for (auto &id : home->value("freePlacementZones", Json::array()))
+            for (auto &zone : w->placementZones) {
+                if (zone.at("id") != id)
+                    continue;
+                auto lo = vec(zone.at("bounds").at("min")), hi = vec(zone.at("bounds").at("max"));
+                float margin = zone.at("clearance");
+                s = desired;
+                for (int attempt = 0; attempt < 14; ++attempt) {
+                    auto candidate = s;
+                    auto r = candidate.right(), u = candidate.up(), n = candidate.normal();
+                    Vec3 half;
+                    half.x = std::abs(r.x) * candidate.width * .5f + std::abs(u.x) * candidate.height * .5f +
+                             std::abs(n.x) * .04f + margin;
+                    half.y = std::abs(r.y) * candidate.width * .5f + std::abs(u.y) * candidate.height * .5f +
+                             std::abs(n.y) * .04f + margin;
+                    half.z = std::abs(r.z) * candidate.width * .5f + std::abs(u.z) * candidate.height * .5f +
+                             std::abs(n.z) * .04f + margin;
+                    if (hi.x - lo.x >= 2 * half.x && hi.y - lo.y >= 2 * half.y && hi.z - lo.z >= 2 * half.z) {
+                        candidate.center = {std::clamp(s.center.x, lo.x + half.x, hi.x - half.x),
+                                            std::clamp(s.center.y, lo.y + half.y, hi.y - half.y),
+                                            std::clamp(s.center.z, lo.z + half.z, hi.z - half.z)};
+                        if (pushOut(candidate, w->collision) && candidate.center.x >= lo.x + half.x &&
+                            candidate.center.x <= hi.x - half.x && candidate.center.y >= lo.y + half.y &&
+                            candidate.center.y <= hi.y - half.y && candidate.center.z >= lo.z + half.z &&
+                            candidate.center.z <= hi.z - half.z) {
+                            auto forward = camera.forward();
+                            auto right = normalized(cross(forward, {0, 1, 0}));
+                            auto up = normalized(cross(right, forward));
+                            auto delta = candidate.center - camera.position;
+                            float depth = dot(delta, forward);
+                            float tangent = std::tan(camera.fov * float(M_PI) / 360.f);
+                            if (depth <= .05f || std::abs(dot(delta, right)) > depth * tangent * aspect ||
+                                std::abs(dot(delta, up)) > depth * tangent) {
+                                s.width *= .8f;
+                                s.height *= .8f;
+                                continue;
+                            }
+                            freePoses[i.id] = candidate;
+                            spawnAreas[i.id] = home->at("id");
+                            return;
+                        }
+                    }
+                    s.width *= .8f;
+                    s.height *= .8f;
+                }
+            }
+        spawnAreas[i.id] = home->at("id");
+        events.push_back({"runtime.notice",
+                          {{"level", "warning"},
+                           {"code", "placement.recalled"},
+                           {"message", "No visible safe home free zone; spawned " + i.title + " in front of player"}}});
+    }
+    s = desired;
+    if (overlaps(s, w->collision)) {
+        auto fallback = carryPlane(camera, s.width, s.height, w->collision);
+        fallback.id = s.id;
+        s = fallback;
+    }
+    freePoses[i.id] = s;
+}
 std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, const sim::Camera &camera, int pw,
                                       int ph) {
     auto b = binding(i.workspaceId, w);
     if (!b && recalled.contains(i.id))
         b = binding(i.workspaceId, nullptr);
-    if (!b)
+    if (!b && !freePoses.contains(i.id))
         return {};
     Surface s;
     s.id = i.id;
@@ -452,7 +535,7 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
     s.pixelHeight = ph;
     instances.push_back({{"surfaceId", i.id},
                          {"workspaceId", i.workspaceId},
-                         {"areaId", b->at("areaId")},
+                         {"areaId", b ? b->at("areaId") : Json(spawnAreas.at(i.id))},
                          {"anchorId", anchorId},
                          {"status", carried == i.id           ? "carried"
                                     : recalled.contains(i.id) ? "recalled"

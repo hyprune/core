@@ -217,3 +217,20 @@ M3B local input uses keymap v2 for all IPC peers. Older protocols keep their
 wire projections; they do not select a legacy physical keymap. Lua input key
 names are superseded by the independent file. M3A interaction documentation and
 recordings are historical; use the M3B acceptance harness for current defaults.
+
+## Live follow-up: IPC 0.6 native desktops
+
+Native workspaces are now published as workspace surfaces even without world
+home bindings. Shell merges these with workspaces.locations; desktop-only cards
+focus their surface instead of invoking workspace.activate. apps includes native
+mapped toplevels on all outputs (capture-independent), with a 128-entry bound in
+schema 0.6. 0.5 remains bounded to 16 through its compatibility projection.
+Refresh the 0.6 schema pin in core, SDK and shell together. No new fields/methods
+or input-file version are introduced. Native surface IDs are session-scoped.
+
+Shell presentation restarts reconnect to the launcher-owned authenticated bridge
+rather than reading inherited credential pipes again. Only descendant peers of
+the same UID are accepted; the bridge binds the replacement Wayland PID. Director
+uses anchored pages to avoid the observed Qt StackLayout crash. Back from world
+control gives a real layer cursor; Back/Super+Tab returns. See M3B.md for the
+added supervised cursor transitions and owner retry notes.

@@ -8,6 +8,8 @@ def acceptance(identity,children):
     _,env=verified(); tools=s.ROOT/'dev/live';state=s.STATE/'live';state.mkdir(exist_ok=True)
     def command(name,tty=False):
         environment=env.copy()
+        environment['HYPRUNE_DEV_AUTOMATION']='1'
+        if os.environ.get('HYPRUNE_SHELL_DIR'): environment['HYPRUNE_SHELL_DIR']=os.environ['HYPRUNE_SHELL_DIR']
         # Verify stale inherited signature is ignored even with an explicit target.
         environment['HYPRLAND_INSTANCE_SIGNATURE']='deliberately-stale'
         if tty:
@@ -36,10 +38,15 @@ APICALL EXPORT void PLUGIN_EXIT(){}
     main=subprocess.Popen(['qs','-c','rick'],env={**env,'XDG_CONFIG_HOME':str(config)},stdout=open(state/'fixture-main.log','w'),stderr=subprocess.STDOUT);children.append(main)
     time.sleep(1);check('fixture_HUD_and_main_running',old.poll() is None and main.poll() is None)
     # Reserve the preferred chord so fallback is proved without rewriting it.
+    s.ctl('eval','hl.bind("SUPER + SHIFT + H",hl.dsp.exec_cmd("true"),{description="Keep H binding"})')
     s.ctl('eval','hl.bind("SUPER + SHIFT + N",hl.dsp.exec_cmd("true"),{description="Keep this binding"})')
     before=json.loads(s.ctl('binds','-j'))
     output=command('preflight');(state/'preflight.log').write_text(output);check('preflight_ABI_and_plan','ABI/version matches' in output and 'No installed config' in output)
     check('preflight_read_only',json.loads(s.ctl('binds','-j'))==before and old.poll() is None)
+    monitor=next(m for m in json.loads(s.ctl('monitors','-j')) if m['name']=='HEADLESS-1')
+    xy=list(map(float,s.ctl('cursorpos').split(',')))
+    mover=s.envrun(str(s.ROOT/'build/nested-pointer'),str(monitor['x']+500-xy[0]),str(monitor['y']+400-xy[1]));mover.wait(timeout=5);time.sleep(.2)
+    s.ctl('eval','hl.dispatch(hl.dsp.focus({ monitor = "HEADLESS-1" }))')
     try:
         output=command('up');print(output,flush=True);(state/'up.log').write_text(output)
         recorded=json.loads((state/'state.json').read_text())
@@ -51,9 +58,12 @@ APICALL EXPORT void PLUGIN_EXIT(){}
         check('world_active',s.camera()['active'])
         check('isolated_default_input',json.loads((pathlib.Path(recorded['runroot'])/'input.json').read_text())==json.loads((s.ROOT/'config/input.default.json').read_text()))
         output=command('status');(state/'status.log').write_text(output);check('status_logs_and_reports','last 20 lines' in output and 'New crash reports' in output)
+        from live_regressions import acceptance as regressions
+        regressions(state, recorded, children, check)
         # Toggle via the installed runtime callback, then recover from helper death.
         s.ctl('eval','hl.plugin.hyprune.toggle()');time.sleep(.3);check('toggle_deactivates',not s.camera()['active'])
         s.ctl('eval','hl.plugin.hyprune.toggle()');time.sleep(.3);check('toggle_reactivates',s.camera()['active'])
+        check('adopted_terminal_survives_toggle',any(e['title']=='Live-launch-regression' and e['visible'] and not e['collision'] for e in s.camera()['captures']))
         print(command('down',tty=True),flush=True)
         check('healthy_down',json.loads((state/'state.json').read_text())['phase']=='down' and main.poll() is None)
         print(command('up'),flush=True)

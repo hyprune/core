@@ -12,6 +12,7 @@
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/LayerState.hpp>
+#include <hyprland/src/desktop/state/ViewState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/src/event/EventBus.hpp>
@@ -33,6 +34,7 @@
 #include <hyprland/src/render/gl/GLFramebuffer.hpp>
 #include <hyprland/src/render/pass/PassElement.hpp>
 #include <hyprland/src/state/MonitorState.hpp>
+#include <hyprland/src/state/WorkspaceState.hpp>
 #include <hyprutils/memory/UniquePtr.hpp>
 #include <sstream>
 extern "C" {
@@ -90,7 +92,7 @@ struct Runtime {
 
     Json config = interaction::defaultConfig(), configured = config;
     std::set<std::string> graphicsOverrides;
-    bool superHeld = false, altHeld = false, noclip = false, freeCursor = false, zoomHeld = false,
+    bool superHeld = false, altHeld = false, noclip = false, freeCursor = false, layerCursor = false, zoomHeld = false,
          cursorWarpPending = false;
     float zoom = 1, baseFov = 60, lookX = 0, lookY = 0;
     sim::Intent smoothIntent;
@@ -104,6 +106,7 @@ struct Runtime {
     bool savedCursorHidden = false, cursorHidden = false;
     void cursor();
     void modeToggle();
+    void useLayers();
     void button(IPointer::SButtonEvent, bool super);
     void axis(IPointer::SAxisEvent);
     void handTick(float);
@@ -258,6 +261,30 @@ void mouseAxisInput(void *self, IPointer::SAxisEvent event, SP<IPointer> pointer
     runtime->eventPointer = pointer;
     originalMouseAxis(self, event, pointer);
     runtime->eventPointer = previous;
+}
+bool interactiveLayerAt(Vector2D pos) {
+    if (!runtime || !runtime->monitor)
+        return false;
+    auto monitor = runtime->monitor.lock();
+    auto hit = Desktop::viewState()->hitTest();
+    Vector2D local;
+    PHLLS found;
+    if (hit.layerPopupSurfaceAt(pos, monitor, &local, &found) && found && found->m_layer >= 2)
+        return true;
+    for (size_t layer : {3, 2})
+        if (hit.layerSurfaceAt(pos, &monitor->m_layerSurfaceLayers[layer], &local, &found))
+            return true;
+    return false;
+}
+bool layerKeyboardFocus() {
+    if (!runtime || !runtime->monitor)
+        return false;
+    for (size_t layer : {3, 2})
+        for (auto &surface : runtime->monitor->m_layerSurfaceLayers[layer])
+            if (surface && surface->m_mapped &&
+                surface->wlSurface()->resource() == g_pSeatManager->m_state.keyboardFocus)
+                return true;
+    return false;
 }
 bool ownsInput() {
     return runtime && runtime->active && !runtime->loading && !runtime->control.uiVisible() && !locked() &&
@@ -564,6 +591,19 @@ void Runtime::publish() {
                             {"title", f.surface.title},
                             {"logicalSize", {f.surface.pixelWidth, f.surface.pixelHeight}},
                             {"focused", !layout.desktop.is_null() && layout.desktop == f.workspaceId}});
+    // Native desktop inventory does not depend on world capture leases, homes,
+    // or the launcher having authored workspace mappings.
+    for (auto &workspace : State::workspaceState()->workspaces()) {
+        if (workspace->m_id <= 0)
+            continue;
+        auto id = "workspace-" + std::to_string(workspace->m_id);
+        if (std::none_of(surfaces.begin(), surfaces.end(), [&](auto &s) { return s.at("id") == id; }))
+            surfaces.push_back({{"id", id},
+                                {"kind", "workspace"},
+                                {"title", workspace->m_name},
+                                {"logicalSize", {1280, 720}},
+                                {"focused", workspace->isVisible()}});
+    }
     float sy = std::sin(-camera.yaw / 2), cy = std::cos(-camera.yaw / 2), sp = std::sin(camera.pitch / 2),
           cp = std::cos(camera.pitch / 2);
     Json homes = locations;
@@ -604,13 +644,31 @@ void Runtime::publish() {
                  world::projectMarkers(*world, camera, float(monitor->m_pixelSize.x) / monitor->m_pixelSize.y)}};
     }
     Json apps = Json::array();
-    for (auto &e : capture.entries)
-        if (e.parentId.empty())
-            apps.push_back({{"surfaceId", e.surface.id},
-                            {"workspaceId", e.instance.workspaceId},
-                            {"title", e.instance.title},
-                            {"appClass", e.instance.appClass},
-                            {"icon", e.instance.appClass}});
+    for (auto &window : Desktop::windowState()->windows()) {
+        if (apps.size() >= 128)
+            break;
+        if (!window->m_isMapped || window->isHidden() || !window->m_workspace || window->m_workspace->m_id <= 0 ||
+            window->parent() || window->x11Parent())
+            continue;
+        auto entry =
+            std::find_if(capture.entries.begin(), capture.entries.end(), [&](auto &e) { return e.window == window; });
+        auto id = entry != capture.entries.end()
+                      ? entry->surface.id
+                      : "desktop-window-" + std::to_string(reinterpret_cast<uintptr_t>(window.get()));
+        if (entry == capture.entries.end())
+            surfaces.push_back({{"id", id},
+                                {"kind", "window"},
+                                {"title", window->m_title},
+                                {"logicalSize",
+                                 {std::max(1, int(window->resource() ? window->resource()->m_current.size.x : 1)),
+                                  std::max(1, int(window->resource() ? window->resource()->m_current.size.y : 1))}},
+                                {"focused", Desktop::focusState()->window() == window}});
+        apps.push_back({{"surfaceId", id},
+                        {"workspaceId", int(window->m_workspace->m_id)},
+                        {"title", window->m_title},
+                        {"appClass", window->m_class},
+                        {"icon", window->m_class}});
+    }
     Json publication = {
         {"interaction",
          {{"mode", !layout.desktop.is_null() ? "workspace"
@@ -723,6 +781,7 @@ void Runtime::finishLoad() {
         world = std::move(candidate);
         capture.release();
         layout.freePoses.clear();
+        layout.spawnAreas.clear();
         restoreFullscreenWindows();
         fullscreen = {};
         handover = {};
@@ -840,7 +899,7 @@ void Runtime::exit() {
     restoreFullscreenWindows();
     fullscreen = {};
     handover = {};
-    freeCursor = false;
+    freeCursor = layerCursor = false;
     cursor();
     layout.desktop = nullptr;
     control.stop();
@@ -881,8 +940,27 @@ void Runtime::focus(const std::string &id, bool keyboard) {
         return;
     }
     auto *entry = capture.find(id);
-    if (!entry)
+    if (!entry) {
+        for (auto &workspace : State::workspaceState()->workspaces())
+            if (id == "workspace-" + std::to_string(workspace->m_id)) {
+                auto target = workspace->m_id;
+                exit();
+                auto result = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(target));
+                if (!result.success)
+                    throw ipc::Error(-32004, "desktop workspace focus failed");
+                publish();
+                return;
+            }
+        for (auto &window : Desktop::windowState()->windows())
+            if (window->m_isMapped &&
+                id == "desktop-window-" + std::to_string(reinterpret_cast<uintptr_t>(window.get()))) {
+                exit();
+                Desktop::focusState()->fullWindowFocus(window, Desktop::FOCUS_REASON_CLICK);
+                publish();
+                return;
+            }
         throw ipc::Error(-32003, "unknown surface");
+    }
     auto w = entry->window.lock();
     if (keyboard && focused != id)
         cancelGrab();
@@ -938,6 +1016,24 @@ void Runtime::cursor() {
     cursorState = next;
     if (monitor && (next == "fullscreen" || next == "workspace"))
         Pointer::pointerController()->warpTo(monitor->m_position + monitor->m_size * .5, true);
+}
+void Runtime::useLayers() {
+    if (renderDepth)
+        throw std::runtime_error("layer cursor inside render pass");
+    cancelGrab();
+    input.clear();
+    keys.clear();
+    smoothIntent = {};
+    lookX = lookY = 0;
+    typing = true;
+    layerCursor = freeCursor = true;
+    focused.clear();
+    focusedParent.clear();
+    relativeSurface.clear();
+    g_pSeatManager->setPointerFocus(nullptr, {});
+    g_pSeatManager->setKeyboardFocus(nullptr);
+    cursor();
+    publish();
 }
 void Runtime::modeToggle() {
     if (!active)
@@ -1503,6 +1599,7 @@ void Runtime::useAim(bool zoom) {
     publish();
 }
 void Runtime::leaveInteraction() {
+    layerCursor = false;
     if (monitor && (freeCursor || monitor != Desktop::focusState()->monitor())) {
         Desktop::focusState()->rawMonitorFocus(monitor.lock());
         Pointer::pointerController()->warpTo(monitor->m_position + monitor->m_size * .5, true);
@@ -2517,7 +2614,7 @@ void Runtime::tick() {
     }
     // Relative pointer delivery can emit the bus notification before the pointer
     // manager commits its new position. Observe the committed position here too.
-    if (active && typing && freeCursor && !cursorWarpPending && monitor) {
+    if (active && typing && freeCursor && !layerCursor && !cursorWarpPending && monitor) {
         auto p = Pointer::mgr()->position();
         auto m = monitor.lock();
         if (p.x >= m->m_position.x && p.y >= m->m_position.y && p.x < m->m_position.x + m->m_size.x &&
@@ -2672,7 +2769,7 @@ void Runtime::tick() {
             if (auto plane = capture.plane(grabbed))
                 if (auto h = surfaces::intersect(*plane, camera.position, pointerRay(), false))
                     pointerHit = {{grabbed, *h}};
-        if (typing) {
+        if (typing && !layerCursor) {
             auto time = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
             if (pointerHit)
                 routePointer(pointerHit->first, pointerHit->second, time);
@@ -2708,7 +2805,7 @@ class Pass final : public IPassElement {
                 }
             }
             runtime->renderer.draw(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y, runtime->camera,
-                                   surfaces, runtime->typing);
+                                   surfaces, runtime->typing && !runtime->layerCursor);
         });
         return {};
     }
@@ -2866,6 +2963,8 @@ int luaCamera(lua_State *state) {
          {runtime->selectedTransform.scale.x, runtime->selectedTransform.scale.y, runtime->selectedTransform.scale.z}},
         {"superHeld", runtime->superHeld},
         {"ownsInput", ownsInput()},
+        {"layerCursor", runtime->layerCursor},
+        {"instances", runtime->layout.instances},
         {"aim", aim() ? aim()->first : ""},
         {"gestureId", runtime->hands.pose.id},
         {"mode", runtime->typing ? "typing" : "movement"},
@@ -2876,6 +2975,7 @@ int luaCamera(lua_State *state) {
         {"handover", runtime->handover.phase},
         {"cursor", runtime->cursorState},
         {"nativeCursorVisible", g_pHyprRenderer->shouldRenderCursor()},
+        {"nativePointerFocused", bool(g_pSeatManager->m_state.pointerFocus)},
         {"savedCursorHidden", runtime->savedCursorHidden},
         {"pointer", {runtime->pointerX, runtime->pointerY}},
         {"config", runtime->config},
@@ -3053,8 +3153,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     }));
     runtime->listeners.push_back(
         Event::bus()->m_events.input.mouse.move.listen([](Vector2D pos, Event::SCallbackInfo &info) {
-            if (runtime && runtime->active && runtime->typing && runtime->freeCursor && !runtime->cursorWarpPending &&
-                runtime->monitor) {
+            if (runtime && runtime->active && runtime->typing && runtime->freeCursor && !runtime->layerCursor &&
+                !runtime->cursorWarpPending && runtime->monitor) {
                 auto m = runtime->monitor.lock();
                 if (pos.x >= m->m_position.x && pos.y >= m->m_position.y && pos.x < m->m_position.x + m->m_size.x &&
                     pos.y < m->m_position.y + m->m_size.y) {
@@ -3072,6 +3172,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     });
                     info.cancelled = true;
                 }
+            }
+            if (runtime->active && runtime->layerCursor && runtime->monitor == Desktop::focusState()->monitor() &&
+                !runtime->control.uiVisible() && !interactiveLayerAt(pos)) {
+                info.cancelled = true;
+                runtime->deferInput([] { g_pSeatManager->setPointerFocus(nullptr, {}); });
             }
             if (ownsInput() || (runtime->active && runtime->monitor == Desktop::focusState()->monitor() &&
                                 runtime->layout.desktop.is_null() && runtime->fullscreen.phase != 2 &&
@@ -3115,7 +3220,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 if (owned)
                     info.cancelled = true;
                 bool scoped = runtime->active && !locked() && runtime->monitor == Desktop::focusState()->monitor() &&
-                              !runtime->freeCursor;
+                              (!runtime->freeCursor || runtime->layerCursor);
                 bool bindingScoped = runtime->active && !locked();
                 if (!bindingScoped && !owned)
                     return;
@@ -3161,7 +3266,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 // stay swallowed after transitions; forwarded world presses receive a
                 // matching manager release, without typing into hidden desktop clients.
                 bool native = !runtime->layout.desktop.is_null() || runtime->fullscreen.phase == 2 ||
-                              runtime->control.uiVisible();
+                              runtime->control.uiVisible() || (runtime->layerCursor && layerKeyboardFocus());
                 if (native && !owned)
                     return;
                 info.cancelled = true;
@@ -3204,7 +3309,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 bool down = event.state == WL_POINTER_BUTTON_STATE_PRESSED,
                      owned = !down && runtime->swallowedButtons.erase(event.button);
                 bool scoped = runtime->active && !locked() && runtime->monitor == Desktop::focusState()->monitor() &&
-                              (!runtime->freeCursor || runtime->cursorWarpPending);
+                              (!runtime->freeCursor || runtime->layerCursor || runtime->cursorWarpPending);
                 if (owned)
                     info.cancelled = true;
                 bool bindingScoped = runtime->active && !locked();
@@ -3241,6 +3346,23 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 }
                 if (!scoped && !owned)
                     return;
+                if (scoped && runtime->inputMode() == "world" &&
+                    event.button == runtime->config["input"]["typing_button"].get<uint32_t>() && mods == 0) {
+                    info.cancelled = true;
+                    if (down) {
+                        runtime->swallowedButtons.insert(event.button);
+                        runtime->deferInput([] { runtime->useLayers(); });
+                    }
+                    return;
+                }
+                if (runtime->layerCursor && !runtime->control.uiVisible()) {
+                    if (!owned && interactiveLayerAt(Pointer::mgr()->position()))
+                        return;
+                    info.cancelled = true;
+                    if (down)
+                        runtime->swallowedButtons.insert(event.button);
+                    return;
+                }
                 bool native = runtime->control.uiVisible() || !runtime->layout.desktop.is_null() ||
                               runtime->fullscreen.phase == 2;
                 if (native && !owned)
@@ -3263,8 +3385,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                                                                                    Event::SCallbackInfo &info) {
         safe([&] {
             if (!runtime->active || locked() || runtime->monitor != Desktop::focusState()->monitor() ||
-                (runtime->freeCursor && !runtime->cursorWarpPending))
+                (runtime->freeCursor && !runtime->layerCursor && !runtime->cursorWarpPending))
                 return;
+            if (runtime->layerCursor && !runtime->control.uiVisible()) {
+                if (!interactiveLayerAt(Pointer::mgr()->position()))
+                    info.cancelled = true;
+                return;
+            }
             float raw = event.deltaDiscrete ? event.deltaDiscrete / 120.f : event.delta * .05f;
             float steps = std::clamp(
                 event.relativeDirection == WL_POINTER_AXIS_RELATIVE_DIRECTION_INVERTED ? raw : -raw, -2.f, 2.f);

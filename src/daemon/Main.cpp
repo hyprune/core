@@ -118,7 +118,9 @@ int main() {
         const char *sig = getenv("HYPRLAND_INSTANCE_SIGNATURE");
         if (!dir || !sig)
             throw std::runtime_error("missing session environment");
+        std::fprintf(stderr, "hypruned: starting session %s\n", sig);
         Server endpoint(dir, sig, grants(), handler);
+        std::fprintf(stderr, "hypruned: IPC ready; private bridge connected\n");
         server = &endpoint;
         endpoint.contextual(true);
         auto heartbeat = std::chrono::steady_clock::now();
@@ -137,6 +139,7 @@ int main() {
             }
             endpoint.poll();
         }
+        std::fprintf(stderr, "hypruned: stopping\n");
         close(fd);
         return 0;
     } catch (const std::exception &e) {

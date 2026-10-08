@@ -1,0 +1,205 @@
+{
+  "camera": {
+    "active": true,
+    "activeHandle": -1,
+    "aim": "surface-1",
+    "captures": [
+      {
+        "collision": false,
+        "commits": 30,
+        "floating": false,
+        "id": "surface-1",
+        "parentId": "",
+        "pixels": [
+          1896,
+          1056
+        ],
+        "position": [
+          -8.0,
+          1.7000000476837158,
+          7.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "size": [
+          3.8400001525878906,
+          2.1600000858306885
+        ],
+        "title": "~/w/h/core",
+        "visible": true
+      },
+      {
+        "collision": false,
+        "commits": 25,
+        "floating": false,
+        "id": "surface-2",
+        "parentId": "",
+        "pixels": [
+          941,
+          1056
+        ],
+        "position": [
+          -8.0,
+          1.7000000476837158,
+          7.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "size": [
+          1.9000000953674316,
+          2.120000123977661
+        ],
+        "title": "Live-launch-regression",
+        "visible": true
+      }
+    ],
+    "childSurfaces": [],
+    "children": 0,
+    "config": {
+      "graphics": {
+        "bloom_strength": 0.15,
+        "exposure": 1.0,
+        "fov": 60.0,
+        "quality": "auto",
+        "reduced_motion": false
+      },
+      "input": {
+        "bindings": {
+          "back": "s",
+          "down": "Control_L",
+          "fly": "F4",
+          "focus": "f",
+          "forward": "w",
+          "jump": "space",
+          "left": "a",
+          "noclip": "v",
+          "right": "d",
+          "zoom": "c"
+        },
+        "carry_button": 272,
+        "resize_button": 273,
+        "roll_button": 274,
+        "typing_button": 275,
+        "typing_cursor": true
+      },
+      "player": {
+        "fly_speed": 5.0,
+        "jump_speed": 5.0,
+        "look_inertia": 0.03,
+        "look_sensitivity": 0.0025,
+        "move_inertia": 0.05,
+        "respawn_below": 30.0,
+        "run_multiplier": 1.8,
+        "step_height": 0.35,
+        "walk_speed": 3.5
+      },
+      "tools": {
+        "enabled": true,
+        "slots": [
+          "pointer",
+          "mount",
+          "path",
+          "path",
+          "path"
+        ]
+      },
+      "windows": {
+        "scale": 0.002,
+        "spawn_distance": 5.0,
+        "transition_seconds": 0.35,
+        "wheel_factor": 1.06
+      }
+    },
+    "cursor": "reticle",
+    "error": "",
+    "eyeHeight": 1.7000000476837158,
+    "frames": 86,
+    "fullscreen": 0,
+    "fullscreenId": "",
+    "gesture": 0,
+    "gestureId": "",
+    "grabbed": "",
+    "handover": 0,
+    "instances": [
+      {
+        "anchorId": "",
+        "areaId": "sun-court",
+        "status": "placed",
+        "surfaceId": "surface-1",
+        "workspaceId": 2
+      },
+      {
+        "anchorId": "",
+        "areaId": "sun-court",
+        "status": "placed",
+        "surfaceId": "surface-2",
+        "workspaceId": 2
+      }
+    ],
+    "keyboardFocus": false,
+    "layerCursor": false,
+    "mode": "movement",
+    "nativeCursorVisible": false,
+    "nativePointerFocused": false,
+    "noclip": false,
+    "ownsInput": true,
+    "pitch": 0.0,
+    "pointer": [
+      0.5,
+      0.5
+    ],
+    "position": [
+      -8.0,
+      1.7000000476837158,
+      12.0
+    ],
+    "positionMode": 0,
+    "pressedButtons": 0,
+    "savedCursorHidden": false,
+    "seatGrab": false,
+    "selectedScale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "superHeld": false,
+    "tool": 1,
+    "yaw": 0.0
+  },
+  "window": {
+    "collision": false,
+    "commits": 25,
+    "floating": false,
+    "id": "surface-2",
+    "parentId": "",
+    "pixels": [
+      941,
+      1056
+    ],
+    "position": [
+      -8.0,
+      1.7000000476837158,
+      7.0
+    ],
+    "rotation": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "size": [
+      1.9000000953674316,
+      2.120000123977661
+    ],
+    "title": "Live-launch-regression",
+    "visible": true
+  }
+}

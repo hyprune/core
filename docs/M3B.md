@@ -63,7 +63,7 @@ monitor; exit defers return to the world monitor. Uncolliding shortcuts stay nat
 Exact IPC 0.6 adds keymap/editor state, Map opening intent and input.get,
 input.preview, input.set, input.capture, input.capture.cancel. Reads/preview use
 state.read; edits/capture use input.control. Capture requires the active verified
-Director lease. Schemas are frozen from schema commit a1e2f84; older exact
+Director lease. Schemas include the live follow-up amendment from schema commit 2d41df5; older exact
 versions omit new fields/methods and retain prior projection bounds.
 RFC 0003, 0006 and 0008 amendments and CHANGES-FOR-SDK-AND-SHELL.md describe this.
 
@@ -160,3 +160,75 @@ confirm no reentrant render / CMonitor::useFP16 crash, stuck cursor or leaked in
 
 Video is encoded and inspected outside gallery, then moved as a completed MP4/JSON
 pair into gallery/videos. The gallery autocommit watcher is never signalled.
+
+## Supervised live follow-up (2026-10-08)
+
+The world adopts newly mapped toplevels on its output while active. Their native
+workspace stays unchanged; there is no owned room workspace or monitor switch.
+Adopted clients keep their identity/pose across toggles while they remain mapped.
+Existing desktop windows are baselined at activation rather than silently
+imported. New windows receive an ephemeral free pose, the nearest/current home
+(or their explicit workspace home), full-rectangle free-zone clearance and M2
+OBB recovery. If no home zone can fit the window safely in the current view (including arrival
+outside a home), it falls back to safe
+camera placement with a notice. Existing authored placements take precedence.
+The texture budget applies to actual world clients, not unrelated old desktops.
+
+Back in world mode enters the real layer cursor (the Lua `input.typing_button`,
+default 275, when no file binding consumes that button). Back or Super+Tab leaves
+this interactive mode. Mouse look and movement stop; top/overlay layer surfaces
+and their popups on the world output receive ordinary pointer input. Clicks,
+scroll and hover over the 3D scene remain masked from underlying desktop clients.
+Other outputs retain ordinary native input. This complements E's window-relative
+virtual cursor; it does not replace it.
+
+Director Workspaces comes from native workspace surfaces, merged with optional
+world homes. Desktop-only entries use surface.focus, while configured homes use
+workspace.activate. The IPC 0.6 apps inventory includes mapped native toplevels
+on all outputs, up to 128, independently of the 16 world texture leases. The
+schema 0.6 amendment and all validators are updated together; 0.5 stays at 16.
+
+Both owner's Quickshell crash reports (`kcex3galmt`, `kcexelalmt`) and coredumpctl
+backtraces identify Qt 6.11 StackLayout size-hint traversal, including
+qmlAttachedPropertiesObject/QQuickLayout/QQuickStackLayout on page change.
+Director pages now have explicit anchored geometry. The trusted launcher keeps
+the authenticated core bridge alive across presentation restarts, accepts only
+same-UID descendant replacements, replaces stale presentation sockets, and
+binds the new Wayland PID before opening an overlay. No token is put in QML,
+argv or files. A nonzero top-level QML exit is relaunched through that bridge.
+
+`hypruned.log` formerly recorded errors only. It now records session startup,
+IPC readiness, shutdown and bridge errors in the existing live log; secrets and
+raw input are not logged. Unspecified graphical glitches remain pending owner
+observations; this follow-up makes no claim to have diagnosed those.
+
+### Supervised live test checklist additions
+
+- [ ] World control → Back: real cursor becomes visible; virtual cursor disappears;
+      camera stops moving. Click the owner's bar/launcher, type into its search,
+      open its popup and scroll it.
+- [ ] Move from a layer over the world: hidden desktop windows get no hover,
+      click or scroll. Move to another output: normal desktop pointer still works.
+- [ ] Layer cursor → Back and → Super+Tab: cursor hide and return/warp are deferred;
+      movement/reticle resume; the owner's colliding overview bind is stolen.
+- [ ] Layer cursor → Super+Tab → TAB-held Director → Esc: deferred cursor/focus
+      transitions remain balanced and restore world control.
+- [ ] Layer cursor → toggle out, helper loss or unload: saved cursor visibility
+      returns through the deferred path, and native binds resume.
+- [ ] Launch kitty with Super+Enter while active: it appears safely in the current
+      home, is usable with E, and appears with title/class/icon in Workspaces.
+- [ ] Alternate Help/Workspaces/Settings/Map several times. Help stays open.
+- [ ] After a presentation restart, the menu can open again with a fresh Wayland
+      child association; the bridge retains its lease and credentials.
+
+Nested regressions run through `dev/nested/run.sh --live`, always under its
+lifetime `flock /tmp/worldshell-nested.lock`. They use the live bootstrap's exact
+0.6 grants and empty workspace mapping; include native launch, real layer click,
+menu page changes, forced presentation crash/reconnect, helper death and down
+twice. Nested software cursors still cannot validate hardware-cursor behavior.
+
+Live follow-up evidence: [35 nested checks](evidence/live-followup/acceptance.json),
+[spawn in view](evidence/live-followup/spawn.json),
+[recovered Director](evidence/live-followup/director.json), and the unit/schema/SDK/shell
+logs under `docs/evidence/live-followup/`. The test intentionally crashes only the
+nested presentation, limits its core dump size, and leaves the real session alone.

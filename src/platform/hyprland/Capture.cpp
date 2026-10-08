@@ -28,10 +28,24 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
     });
     if (layout)
         layout->instances = world::Json::array();
+    std::erase_if(knownWindows_, [](auto &w) { return !w || !w->m_isMapped; });
+    std::erase_if(adoptedWindows_, [](auto &w) { return !w.window || !w.window->m_isMapped; });
     std::set<std::string> refreshed;
     size_t leasedBytes = 0;
     for (auto &w : Desktop::windowState()->windows()) {
         if (!w->m_isMapped || w->isHidden() || w->m_monitor != monitor || !w->resource())
+            continue;
+        bool newlyMapped = std::none_of(knownWindows_.begin(), knownWindows_.end(), [&](auto &v) { return v == w; });
+        // Baseline all existing windows, including windows without a texture yet.
+        if (!spawnNew && newlyMapped)
+            knownWindows_.push_back(w);
+        auto remembered = std::find_if(adoptedWindows_.begin(), adoptedWindows_.end(),
+                                       [&](auto &v) { return v.window == w && world && v.worldId == world->id; });
+        auto existing = std::find_if(entries.begin(), entries.end(), [&](auto &e) { return e.window == w; });
+        surfaces::Instance identity{"", w->m_class, w->m_title, w->m_workspace ? int(w->m_workspace->m_id) : 0};
+        if (world && !world->areas.empty() && existing == entries.end() && !newlyMapped && layout &&
+            !layout->binding(identity.workspaceId, world) && !layout->hasPlacement(identity, world) &&
+            remembered == adoptedWindows_.end())
             continue;
         auto surface = w->resource();
         auto texture = surface->m_current.texture;
@@ -51,7 +65,8 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 continue;
             Entry e;
             e.window = w;
-            e.surface.id = "surface-" + std::to_string(++sequence_);
+            e.surface.id =
+                remembered != adoptedWindows_.end() ? remembered->id : "surface-" + std::to_string(++sequence_);
             size_t i = entries.size();
             e.surface.width = std::clamp(float(surface->m_current.size.x) * windowScale, .2f, 6.f);
             e.surface.height =
@@ -63,7 +78,9 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 e.surface.center = {-3.8f, 2, -2};
             if (i == 2)
                 e.surface.center = {3.8f, 2, -2};
-            if (camera && world && spawnNew) {
+            if (camera && world &&
+                ((spawnNew && newlyMapped) ||
+                 (remembered != adoptedWindows_.end() && layout && !layout->freePoses.contains(e.surface.id)))) {
                 e.surface.yaw = -camera->yaw;
                 e.surface.center = camera->position + camera->forward() * spawnDistance;
                 if (auto wall = interaction::raycast(camera->position, camera->forward(), world->collision))
@@ -81,14 +98,18 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 }
                 surfaces::Instance instance{e.surface.id, w->m_class, w->m_title,
                                             w->m_workspace ? int(w->m_workspace->m_id) : 0};
-                if (spawnNew && layout && layout->binding(instance.workspaceId, world) &&
-                    !layout->hasPlacement(instance, world))
-                    layout->freePoses[e.surface.id] = e.surface;
+                if (layout && !layout->hasPlacement(instance, world)) {
+                    layout->spawn(instance, world, *camera, e.surface, float(monitor->m_size.x) / monitor->m_size.y);
+                    if (remembered == adoptedWindows_.end())
+                        adoptedWindows_.push_back({w, e.surface.id, world->id});
+                }
             }
             e.commitListener = surface->m_events.commit.listen([count = e.commits] { ++*count; });
             entries.push_back(std::move(e));
             it = entries.end() - 1;
         }
+        if (newlyMapped)
+            knownWindows_.push_back(w);
         refreshed.insert(it->surface.id);
         it->texture = texture;
         it->surface.texture = texture->m_texID;
@@ -153,6 +174,7 @@ void Capture::release() {
             e.window->setSuspended(workspace && !workspace->isVisible());
         }
     entries.clear();
+    knownWindows_.clear();
     children.clear();
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
     render::GLState state;

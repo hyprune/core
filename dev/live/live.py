@@ -4,7 +4,7 @@ import argparse, contextlib, fcntl, json, os, pathlib, secrets, shutil, signal, 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HERE = ROOT / 'dev/live'
 BUILD = ROOT / 'build/live'
-SHELL = ROOT.parent / 'shell'
+SHELL = pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR', ROOT.parent / 'shell'))
 WORLD_ID = 'com.hyprune.lumen-reach'
 GRANTS = ['state.read', 'world.control', 'surface.control', 'movement.control', 'shell.control', 'runtime.control', 'input.control']
 

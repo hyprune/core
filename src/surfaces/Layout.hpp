@@ -13,6 +13,8 @@ class Layout {
     Json bindings = Json::array(), placements = Json::array(), instances = Json::array();
     std::string carried;
     std::map<std::string, Surface> freePoses;
+    std::map<std::string, std::string> spawnAreas;
+    void spawn(const Instance &, const world::World *, const sim::Camera &, Surface, float aspect = 16.f / 9);
     void mount(const Instance &, const world::World *, Surface);
     Json desktop = nullptr;
     Json state(const world::World *) const;

@@ -20,7 +20,7 @@ Tokens stay in memory/pipes; logs are `launcher.log`, `hypruned.log`, `shell.log
 Default input/editor/layout state belongs to this test's private runtime directory;
 Settings edits only that copy. Bootstrap environment is restored before init returns.
 
-Toggle: **Super+Shift+N**, otherwise F10/F11/F8 with those modifiers; up checks
+Toggle: **Super+Shift+H**, otherwise N/F10/F11/F8 with those modifiers; up checks
 binds after load and prints its choice. It conservatively reserves matching keys
 across modifiers because Hyprland's bind JSON omits ignore-mods flags.
 Hyprland itself **re-evaluates Lua on plugin load/unload**; scripts issue no reload
@@ -30,6 +30,8 @@ it removes runtime binds.
 Walking checklist ([full M3B detail](../../docs/M3B.md#supervised-live-test-checklist)):
 
 - [ ] Desktop → world: native cursor hides, reticle appears; main shell stays alive.
+- [ ] Super+Enter opens a terminal in view, clear of geometry; it survives toggling out/back and appears in Workspaces.
+- [ ] Back in world → real cursor: click launcher/bar and its popups; over the world, hidden desktops receive no pointer input. Back/Super+Tab returns to reticle.
 - [ ] E window: stationary camera, relative cursor, hover/click/scroll/typing reach root and popup.
 - [ ] Cursor off world output: deferred warp/show gives free native cursor; returning hides it and restores relative pointer.
 - [ ] E → Super+Tab/Back: release keys/buttons/focus, restore reticle. Repeat from neighbouring output.
@@ -38,6 +40,7 @@ Walking checklist ([full M3B detail](../../docs/M3B.md#supervised-live-test-chec
 - [ ] F wall: hidden through fly-in, visible at handover; exits fly back to saved camera.
 - [ ] Super+Tab never opens native overview in E/F, including release; it does in world/inactive. Unrelated binds work in every mode.
 - [ ] TAB hold → Map: release grabs, show cursor/focus Director after frame. Settings captures chords/buttons/wheel; Esc cancels/leaves menu, clears focus, restores reticle.
+- [ ] Workspaces lists real desktops/apps even without configured homes. Click Help; alternate Help/Workspaces/Settings several times and keep the menu open.
 - [ ] Q scope/vignette, tool/submodes, lock and gizmo: overlays only, no cursor shape/visibility changes. Try carry/resize and Shift snap.
 - [ ] Reload test input during hold/grab: balanced releases; settings-only edits preserve hold. Esc leaves Settings.
 - [ ] Lock/unlock: clear owned input, restore cursor policy, resume safely.
@@ -61,6 +64,7 @@ add `--state-dir /absolute/path/to/hyprune/live` (Recovery state's parent).
 
 **Capture:** U dumps in `$XDG_STATE_HOME/hyprune/captures/`, live logs/state, and
 `~/.cache/hyprland/hyprlandCrashReport*.txt` (or `$XDG_CACHE_HOME/hyprland`). Status
+also capture `~/.cache/quickshell/crashes/` and `coredumpctl info PID` for a shell crash. Status
 shows each log's last 20 lines and new/updated reports since up. Include failed
 tick, time, output, chord and preflight ABI output.
 

@@ -1,0 +1,189 @@
+{
+  "captured": null,
+  "status": "live",
+  "protocol": "0.6",
+  "screen": "HEADLESS-1",
+  "lease": "lease-435b827212c42c17",
+  "director": false,
+  "revision": 628,
+  "tab": 4,
+  "warp": false,
+  "phase": "idle",
+  "world": "com.hyprune.lumen-reach",
+  "mode": "movement",
+  "tool": 1,
+  "workspaces": [
+    {
+      "id": 1,
+      "surfaceId": "workspace-1",
+      "title": "1",
+      "kind": "workspace",
+      "focused": true,
+      "worldId": "",
+      "desktop": true
+    },
+    {
+      "id": 2,
+      "surfaceId": "workspace-2",
+      "title": "2",
+      "kind": "workspace",
+      "focused": true,
+      "worldId": "",
+      "desktop": true
+    }
+  ],
+  "appDetails": [
+    {
+      "appClass": "kitty",
+      "icon": "kitty",
+      "surfaceId": "surface-1",
+      "title": "~/w/h/core",
+      "workspaceId": 2
+    },
+    {
+      "appClass": "hyprune-live-regression",
+      "icon": "hyprune-live-regression",
+      "surfaceId": "surface-2",
+      "title": "Live-launch-regression",
+      "workspaceId": 2
+    },
+    {
+      "appClass": "org.quickshell",
+      "icon": "org.quickshell",
+      "surfaceId": "surface-3",
+      "title": "quickshell",
+      "workspaceId": 2
+    }
+  ],
+  "apps": 3,
+  "map": true,
+  "places": [
+    {
+      "id": "arrival",
+      "name": "Sun Court",
+      "position": [
+        -8,
+        1.7000000476837158,
+        12
+      ]
+    },
+    {
+      "id": "globe-platform",
+      "name": "Instrument terrace",
+      "position": [
+        -6,
+        2.9000000953674316,
+        -7
+      ]
+    },
+    {
+      "id": "lookout",
+      "name": "West lookout",
+      "position": [
+        -21.5,
+        5.699999809265137,
+        -6
+      ]
+    },
+    {
+      "id": "cascade-bridge",
+      "name": "Upper Cascade",
+      "position": [
+        -31,
+        5.699999809265137,
+        -14
+      ]
+    },
+    {
+      "id": "rooftop",
+      "name": "Rooftop shelter",
+      "position": [
+        -5,
+        17.700000762939453,
+        -24
+      ]
+    },
+    {
+      "id": "hall-arrival",
+      "name": "Array Hall",
+      "position": [
+        8,
+        1.7000000476837158,
+        -33
+      ]
+    },
+    {
+      "id": "hall-upper",
+      "name": "Upper balcony",
+      "position": [
+        -3.5,
+        9.699999809265137,
+        -40
+      ]
+    },
+    {
+      "id": "vault-arrival",
+      "name": "Rime Vault",
+      "position": [
+        38,
+        -4.300000190734863,
+        -79
+      ]
+    },
+    {
+      "id": "vault-platform",
+      "name": "Maintenance deck",
+      "position": [
+        28.5,
+        -0.2999999523162842,
+        -94
+      ]
+    },
+    {
+      "id": "rise-arrival",
+      "name": "Signal Rise",
+      "position": [
+        54,
+        1.7000000476837158,
+        -125
+      ]
+    },
+    {
+      "id": "fortress-room",
+      "name": "Gate operator room",
+      "position": [
+        63,
+        4.100000381469727,
+        -152
+      ]
+    },
+    {
+      "id": "diagnostics-platform",
+      "name": "Diagnostics deck",
+      "position": [
+        76.5,
+        4.100000381469727,
+        -142
+      ]
+    },
+    {
+      "id": "dish-platform",
+      "name": "Dish terrace",
+      "position": [
+        31.5,
+        5.699999809265137,
+        -144
+      ]
+    },
+    {
+      "id": "gantry-west",
+      "name": "Cable gantry",
+      "position": [
+        44,
+        7.699999809265137,
+        -152
+      ]
+    }
+  ],
+  "markers": 5
+}

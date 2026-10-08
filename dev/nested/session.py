@@ -116,7 +116,7 @@ def run(args):
     config=str(HERE/'hyprland.lua')
     if args.live:
         config=str(STATE/'live-hyprland.lua')
-        pathlib.Path(config).write_text((HERE/'hyprland.lua').read_text()+'\nhl.bind("SUPER + SHIFT + N",hl.dsp.exec_cmd("true"),{description="Keep this binding"})\n')
+        pathlib.Path(config).write_text((HERE/'hyprland.lua').read_text().replace('general = {','input = { resolve_binds_by_sym = true },\n    general = {')+'\nhl.bind("SUPER + SHIFT + N",hl.dsp.exec_cmd("true"),{description="Keep this binding"})\nhl.bind("SUPER + SHIFT + H",hl.dsp.exec_cmd("true"),{description="Keep H binding"})\n')
     if args.m3b:
         config=str(STATE/'hyprland.lua')
         Path=pathlib.Path

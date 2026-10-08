@@ -100,7 +100,11 @@ int main() {
                         {"workspaces", Json::object()},
                         {"mounts", {{"placements", Json::array({Json{{"pose", true}}})}}},
                         {"interaction", {{"mode", "typing"}}},
-                        {"apps", Json::array()},
+                        {"apps", Json::array_t(17, Json{{"surfaceId", "desktop-window-1"},
+                                                        {"workspaceId", 1},
+                                                        {"title", "Terminal"},
+                                                        {"appClass", "kitty"},
+                                                        {"icon", "kitty"}})},
                         {"presentation", Json::object()}});
         loop = std::thread([&] {
             while (!stop) {
@@ -218,6 +222,8 @@ int main() {
             check(state.contains("interaction") == (std::string(protocol) == "0.5") &&
                       state.contains("apps") == (std::string(protocol) == "0.5"),
                   "hands state leaked into frozen version");
+            if (std::string(protocol) == "0.5")
+                check(state["apps"].size() == 16, "0.6 desktop budget leaked into 0.5");
             if (m2)
                 check(state["mounts"]["placements"].size() == (std::string(protocol) == "0.5" ? 1 : 0),
                       "user pose leaked into frozen mounts");

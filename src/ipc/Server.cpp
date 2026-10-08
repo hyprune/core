@@ -109,8 +109,11 @@ Json Server::visibleState(const Peer &p) const {
     state.erase("editor");
     if (state.contains("presentation") && state["presentation"].contains("fov"))
         state["presentation"]["fov"] = std::max(30., state["presentation"]["fov"].get<double>());
-    if (p.protocol == "0.5")
+    if (p.protocol == "0.5") {
+        if (state.contains("apps") && state["apps"].size() > 16)
+            state["apps"].erase(state["apps"].begin() + 16, state["apps"].end());
         return state;
+    }
     if (state.is_object()) {
         state.erase("interaction");
         state.erase("apps");

@@ -202,3 +202,8 @@ and coalesced. Nested pointer devices persist across events so popup grabs survi
 M3B adds E use-in-place on window/workspace, F window fullscreen, Super+Tab/Back
 exit stealing, Settings capture, scope and editor overlays. The exhaustive new
 cursor transitions and first-live-session checks are in [M3B.md](M3B.md#supervised-live-test-checklist).
+
+The supervised live follow-up adds a real layer cursor (Back from world),
+Back/Super+Tab exit, native launcher/bar routing and presentation restart
+association. Every added transition is listed in
+[M3B's supervised live additions](M3B.md#supervised-live-test-checklist-additions).

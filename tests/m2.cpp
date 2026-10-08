@@ -23,6 +23,37 @@ int main(int argc, char **argv) {
     try {
         auto w = world::load(argv[1]);
         check(w->areas.size() == 2 && w->anchors.size() == 5, "home metadata");
+        surfaces::Layout adopted;
+        surfaces::Instance opened{"new-live", "kitty", "new terminal", 1};
+        sim::Camera spawnCamera;
+        auto homeSpawn = world::areaSpawn(*w, "sun-court");
+        spawnCamera.position = homeSpawn.position + Vec3{0, 1.7f, 0};
+        surfaces::Surface proposed;
+        proposed.id = opened.id;
+        proposed.width = 1.6f;
+        proposed.height = .9f;
+        proposed.center = spawnCamera.position + spawnCamera.forward() * 5;
+        adopted.spawn(opened, w.get(), spawnCamera, proposed);
+        auto adoptedPlane = adopted.locate(opened, w.get(), spawnCamera, 1600, 900);
+        check(adoptedPlane && !surfaces::overlaps(*adoptedPlane, w->collision),
+              "unbound new window missing or colliding");
+        check(adopted.spawnAreas.at(opened.id) == "sun-court", "new window chose wrong home");
+        auto bounds = w->placementZones[0].at("bounds");
+        check(adoptedPlane->center.x >= bounds["min"][0] && adoptedPlane->center.x <= bounds["max"][0] &&
+                  adoptedPlane->center.y >= bounds["min"][1] && adoptedPlane->center.y <= bounds["max"][1] &&
+                  adoptedPlane->center.z >= bounds["min"][2] && adoptedPlane->center.z <= bounds["max"][2],
+              "spawn outside home free zone");
+        check(adopted.bindings.empty() && adopted.placements.empty(), "spawn rewrote native workspace or saved homes");
+        auto outside = *w;
+        outside.collision.clear();
+        surfaces::Layout arrival;
+        spawnCamera.position = {-100, 1.7f, 3};
+        proposed.center = spawnCamera.position + spawnCamera.forward() * 5;
+        arrival.spawn(opened, &outside, spawnCamera, proposed);
+        auto arrivalPlane = arrival.locate(opened, &outside, spawnCamera, 1600, 900);
+        check(arrivalPlane && length(arrivalPlane->center - proposed.center) < .001f &&
+                  std::abs(arrivalPlane->width - proposed.width) < .001f && !arrival.events.empty(),
+              "off-view home zone hid/shrank arriving client's fallback");
         surfaces::Layout layout;
         layout.bind(10, w->id, "sun-court", w.get());
         layout.bind(11, w->id, "array-hall", w.get());

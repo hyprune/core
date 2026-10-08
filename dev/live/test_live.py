@@ -5,14 +5,17 @@ spec=importlib.util.spec_from_file_location('live',pathlib.Path(__file__).with_n
 
 class Tests(unittest.TestCase):
     def test_binding_selection_preserves_collision(self):
-        self.assertEqual(live.choose_bind([{'key':'n','modmask':65}]),'SUPER + SHIFT + F10')
-        self.assertEqual(live.choose_bind([{'key':'n','modmask':64}]),'SUPER + SHIFT + F10')
-        self.assertEqual(live.choose_bind([{'key':'n','modmask':0,'ignoreMods':True}]),'SUPER + SHIFT + F10')
-        self.assertEqual(live.choose_bind([{'keycode':49,'modmask':65}]),'SUPER + SHIFT + F10')
-        self.assertEqual(live.choose_bind([{'keycode':57,'modmask':65}]),'SUPER + SHIFT + F10')
-        self.assertEqual(live.choose_bind([{'key':'code:49','modmask':65}]),'SUPER + SHIFT + F10')
+        self.assertEqual(live.choose_bind([{'key':'h','modmask':65},{'key':'n','modmask':65}]),'SUPER + SHIFT + F10')
+        self.assertEqual(live.choose_bind([{'key':'h','modmask':65},{'key':'n','modmask':64}]),'SUPER + SHIFT + F10')
+        self.assertEqual(live.choose_bind([{'key':'h','modmask':65},{'key':'n','modmask':0,'ignoreMods':True}]),'SUPER + SHIFT + F10')
+        self.assertEqual(live.choose_bind([{'key':'h','modmask':65},{'keycode':49,'modmask':65}]),'SUPER + SHIFT + F10')
+        self.assertEqual(live.choose_bind([{'key':'h','modmask':65},{'keycode':57,'modmask':65}]),'SUPER + SHIFT + F10')
+        self.assertEqual(live.choose_bind([{'key':'h','modmask':65},{'key':'code:49','modmask':65}]),'SUPER + SHIFT + F10')
+    def test_owner_H_preferred(self):
+        self.assertEqual(live.choose_bind([]),'SUPER + SHIFT + H')
+        self.assertEqual(live.choose_bind([{'key':'H','modmask':65}]),'SUPER + SHIFT + N')
     def test_no_free_chord_fails_closed(self):
-        with self.assertRaises(RuntimeError):live.choose_bind([{'key':k,'modmask':65} for k in ['n','F10','F11','F8']])
+        with self.assertRaises(RuntimeError):live.choose_bind([{'key':k,'modmask':65} for k in ['h','n','F10','F11','F8']])
     def test_process_identity_reuse(self):
         with patch.object(live,'process',return_value={'start':'new'}):self.assertFalse(live.alive({'pid':123,'start':'old'}))
         with patch.object(live,'process',return_value=None),patch.object(live.os,'kill') as kill:
