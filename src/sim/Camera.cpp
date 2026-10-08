@@ -1,4 +1,5 @@
 #include "Camera.hpp"
+#include "interaction/Hands.hpp"
 namespace hyprune::sim {
 namespace {
 Vec3 closestTriangle(Vec3 p, const Triangle &t) {
@@ -85,15 +86,50 @@ void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) c
     if (length(d) > 1)
         d = normalized(d);
     if (i.jump && c.grounded)
-        c.verticalSpeed = 5;
+        c.verticalSpeed = i.jumpSpeed;
     // At most 8 mm horizontal movement per substep: no thin-wall tunneling at M0 speeds.
     int steps = std::max(1, int(std::ceil(dt / .002f)));
     float h = dt / steps;
     for (int k = 0; k < steps; k++) {
         bool supported = c.grounded && !i.jump;
         c.verticalSpeed -= 9.81f * h;
-        c.position += d * (3.5f * h) + Vec3{0, c.verticalSpeed * h, 0};
+        auto before = c;
+        auto desired = c.position + d * (3.5f * i.speed * h) + Vec3{0, c.verticalSpeed * h, 0};
+        c.position = desired;
         resolveCapsule(c, mesh);
+        Vec3 lost = desired - c.position;
+        lost.y = 0;
+        if (supported && i.stepHeight > 0 && length(d) > .001f && length(lost) > .0005f) {
+            // Probe the forward footprint for a discrete top, then sweep the entire capsule
+            // up and forward. A tall wall or a low ceiling must never become a step.
+            auto probe = desired + d * .3f;
+            probe.y = before.position.y - 1.7f + i.stepHeight + .01f;
+            auto hit = interaction::raycast(probe, {0, -1, 0}, mesh);
+            float rise = hit ? hit->point.y - (before.position.y - 1.7f) : 0;
+            if (hit && hit->normal.y > .65f && rise > .002f && rise <= i.stepHeight + .001f) {
+                bool clear = true;
+                auto candidate = before;
+                for (float y = .02f; y < rise + .02f; y += .02f) {
+                    auto check = before;
+                    check.position.y += std::min(y, rise) + .002f;
+                    auto expected = check.position;
+                    resolveCapsule(check, mesh);
+                    if (length(check.position - expected) > .004f) {
+                        clear = false;
+                        break;
+                    }
+                }
+                candidate.position = desired;
+                candidate.position.y = hit->point.y + 1.7f + .002f;
+                auto expected = candidate.position;
+                resolveCapsule(candidate, mesh);
+                if (clear && length(candidate.position - expected) < .004f) {
+                    candidate.grounded = true;
+                    candidate.verticalSpeed = 0;
+                    c = candidate;
+                }
+            }
+        }
         // Follow continuous descending ramps without alternating airborne frames.
         // This bounded support snap does not climb stair risers or cross walls.
         if (supported && !c.grounded && c.verticalSpeed <= 0) {
@@ -109,7 +145,7 @@ void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh) c
 void Fly::step(Camera &c, Intent i, float dt, std::span<const Triangle>) const {
     Vec3 r{std::cos(c.yaw), 0, std::sin(c.yaw)};
     Vec3 d = c.forward() * i.forward + r * i.right + Vec3{0, i.up, 0};
-    c.position += normalized(d) * (5 * std::clamp(dt, 0.f, .05f));
+    c.position += normalized(d) * (5 * i.speed * std::clamp(dt, 0.f, .05f));
     c.verticalSpeed = 0;
 }
 } // namespace hyprune::sim

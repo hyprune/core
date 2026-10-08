@@ -1,0 +1,144 @@
+#include "Config.hpp"
+#include <cmath>
+#include <set>
+namespace hyprune::interaction {
+using Json = world::Json;
+Json defaultConfig() {
+    return {
+        {"input",
+         {{"typing_button", 275},
+          {"carry_button", 272},
+          {"resize_button", 273},
+          {"roll_button", 274},
+          {"typing_cursor", true},
+          {"bindings",
+           {{"forward", "w"},
+            {"back", "s"},
+            {"left", "a"},
+            {"right", "d"},
+            {"jump", "space"},
+            {"down", "Control_L"},
+            {"focus", "f"},
+            {"noclip", "v"},
+            {"fly", "F4"},
+            {"zoom", "c"}}}}},
+        {"player",
+         {{"walk_speed", 3.5},
+          {"fly_speed", 5.0},
+          {"run_multiplier", 1.8},
+          {"jump_speed", 5.0},
+          {"look_sensitivity", .0025},
+          {"look_inertia", .03},
+          {"move_inertia", .05},
+          {"step_height", .35},
+          {"respawn_below", 30.0}}},
+        {"windows", {{"spawn_distance", 5.0}, {"scale", .002}, {"wheel_factor", 1.06}, {"transition_seconds", .35}}},
+        {"tools", {{"enabled", true}, {"slots", Json::array({"pointer", "mount", "path", "path", "path"})}}},
+        {"graphics",
+         {{"quality", "auto"}, {"fov", 60.0}, {"exposure", 1.0}, {"bloom_strength", .15}, {"reduced_motion", false}}}};
+}
+Json configPatch(const Json &current, const Json &patch) {
+    if (!patch.is_object())
+        throw std::runtime_error("config must be a table");
+    auto result = current;
+    for (auto &[section, value] : patch.items()) {
+        if (!result.contains(section) || !value.is_object())
+            throw std::runtime_error("unknown config section: " + section);
+        for (auto &[key, v] : value.items()) {
+            if (!result[section].contains(key))
+                throw std::runtime_error("unknown config option: " + section + "." + key);
+            if (section == "input" && key == "bindings") {
+                if (!v.is_object())
+                    throw std::runtime_error("bindings must be a table");
+                for (auto &[action, sym] : v.items()) {
+                    if (!result[section][key].contains(action) || !sym.is_string() || sym.get<std::string>().empty() ||
+                        sym.get<std::string>().size() > 32)
+                        throw std::runtime_error("invalid binding: " + action);
+                    result[section][key][action] = sym;
+                }
+                std::set<std::string> names;
+                for (auto &[action, sym] : result[section][key].items())
+                    if (!names.insert(sym).second)
+                        throw std::runtime_error("duplicate binding");
+                continue;
+            }
+            auto old = result[section][key];
+            if (old.is_boolean()) {
+                if (!v.is_boolean())
+                    throw std::runtime_error(key + " must be boolean");
+            } else if (old.is_number()) {
+                if (!v.is_number() || !std::isfinite(v.get<double>()))
+                    throw std::runtime_error(key + " must be finite number");
+                double min = 0, max = 100;
+                if (key.ends_with("_button")) {
+                    min = 0;
+                    max = 767;
+                    if (!v.is_number_integer())
+                        throw std::runtime_error("typing_button must be an evdev integer");
+                }
+                if (key == "walk_speed" || key == "fly_speed") {
+                    min = .1;
+                    max = 20;
+                }
+                if (key == "run_multiplier") {
+                    min = 1;
+                    max = 4;
+                }
+                if (key == "jump_speed") {
+                    min = 0;
+                    max = 15;
+                }
+                if (key == "look_sensitivity") {
+                    min = .00001;
+                    max = .05;
+                }
+                if (key == "look_inertia" || key == "move_inertia") {
+                    max = 1;
+                }
+                if (key == "step_height") {
+                    max = .5;
+                }
+                if (key == "spawn_distance") {
+                    min = .2;
+                    max = 50;
+                }
+                if (key == "scale") {
+                    min = .0001;
+                    max = .02;
+                }
+                if (key == "wheel_factor") {
+                    min = 1.001;
+                    max = 1.5;
+                }
+                if (key == "transition_seconds") {
+                    max = 2;
+                }
+                if (key == "fov") {
+                    min = 30;
+                    max = 110;
+                }
+                if (key == "exposure") {
+                    min = .01;
+                    max = 16;
+                }
+                if (key == "bloom_strength") {
+                    max = 4;
+                }
+                if (v.get<double>() < min || v.get<double>() > max)
+                    throw std::runtime_error(key + " outside supported range");
+            } else if (key == "quality") {
+                if (v != "auto" && v != "high" && v != "intel")
+                    throw std::runtime_error("quality must be auto, high or intel");
+            } else if (key == "slots") {
+                if (!v.is_array() || v.size() != 5)
+                    throw std::runtime_error("tools.slots needs five entries");
+                for (auto &s : v)
+                    if (s != "pointer" && s != "mount" && s != "path")
+                        throw std::runtime_error("tool must be pointer, mount or path");
+            }
+            result[section][key] = v;
+        }
+    }
+    return result;
+}
+} // namespace hyprune::interaction

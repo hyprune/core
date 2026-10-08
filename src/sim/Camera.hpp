@@ -15,6 +15,7 @@ struct Camera {
 struct Intent {
     float forward = 0, right = 0, up = 0;
     bool jump = false;
+    float speed = 1, jumpSpeed = 5, stepHeight = .35f;
 };
 class MotionStrategy {
   public:
