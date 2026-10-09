@@ -39,7 +39,10 @@ struct Material {
     float intensity = 1;
 };
 struct Mesh {
-    std::vector<Vertex> vertices;
+    std::vector<Vertex> vertices; // flat triangle list (collision, picking, editing)
+    // Optional indexed GPU copy of the same triangles; empty means draw vertices.
+    std::vector<Vertex> gpuVertices;
+    std::vector<uint32_t> indices;
     unsigned material = 0;
     unsigned node = 0;
 };
@@ -86,6 +89,8 @@ struct ImageUse {
     bool color = false, data = false;
 };
 std::vector<ImageUse> imageUses(const World &);
+// Fills mesh.gpuVertices/indices from decoded accessor vertices and indices.
+void buildGpuMesh(Mesh &, std::span<const Vertex> unique, std::vector<uint32_t> indices, bool keepTriangleOrder);
 // Conservative GPU bytes: vertex buffers, every image's full mip chain once
 // (twice only when it is both colour and data without sRGB-decode control)
 // and the given RGBA16F environment cube levels.

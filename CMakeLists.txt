@@ -18,7 +18,10 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS config/input.defa
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/config/input.default.json" HYPRUNE_INPUT_DEFAULTS)
 configure_file(src/interaction/InputDefaults.hpp.in generated/InputDefaults.hpp @ONLY)
 pkg_check_modules(OVERLAY REQUIRED IMPORTED_TARGET libpng freetype2 fontconfig)
-add_library(hyprune_runtime STATIC src/interaction/Tools.cpp src/interaction/InputFile.cpp src/interaction/Input.cpp src/interaction/Hands.cpp src/interaction/Config.cpp src/world/Environment.cpp src/world/Mounts.cpp src/surfaces/Layout.cpp src/world/Spatial.cpp src/control/Control.cpp src/world/World.cpp src/world/Playable.cpp src/world/Schema.cpp src/render/PNG.cpp src/sim/Camera.cpp src/sim/Climbing.cpp src/surfaces/Surface.cpp src/ipc/Server.cpp src/ipc/WireAudit.cpp src/ipc/Bridge.cpp)
+# Vendored meshoptimizer v0.25 (MIT), unmodified; see third_party/README.md.
+file(GLOB MESHOPTIMIZER_SOURCES third_party/meshoptimizer/*.cpp)
+set_source_files_properties(${MESHOPTIMIZER_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
+add_library(hyprune_runtime STATIC ${MESHOPTIMIZER_SOURCES} src/interaction/Tools.cpp src/interaction/InputFile.cpp src/interaction/Input.cpp src/interaction/Hands.cpp src/interaction/Config.cpp src/world/Environment.cpp src/world/Mounts.cpp src/surfaces/Layout.cpp src/world/Spatial.cpp src/control/Control.cpp src/world/World.cpp src/world/Playable.cpp src/world/Schema.cpp src/render/PNG.cpp src/sim/Camera.cpp src/sim/Climbing.cpp src/surfaces/Surface.cpp src/ipc/Server.cpp src/ipc/WireAudit.cpp src/ipc/Bridge.cpp)
 target_link_libraries(hyprune_runtime PUBLIC PkgConfig::SPATIAL PkgConfig::PLATFORM PkgConfig::OVERLAY)
 target_include_directories(hyprune_runtime PUBLIC src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_include_directories(hyprune_runtime SYSTEM PUBLIC third_party)

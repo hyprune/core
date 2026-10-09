@@ -27,6 +27,56 @@ int main(int argc, char **argv) {
         return 1;
     auto temp = std::filesystem::temp_directory_path() / ("hyprune-unit-" + std::to_string(getpid()));
     try {
+        {
+            // Indexed GPU copy: duplicates merged, identical triangle multiset;
+            // blended meshes keep their triangle order.
+            std::vector<world::Vertex> unique(6);
+            for (int i = 0; i < 6; ++i) {
+                unique[i].position = {float(i % 3), float(i / 3 % 2), 0};
+                unique[i].normal = {0, 0, 1};
+            }
+            unique[4] = unique[1]; // exact duplicate of vertex 1
+            std::vector<uint32_t> indices{0, 1, 2, 2, 1, 3, 3, 4, 5, 0, 2, 5};
+            auto triangles = [](std::span<const world::Vertex> v, std::span<const uint32_t> idx) {
+                std::vector<std::array<float, 9>> out;
+                for (size_t t = 0; t < idx.size(); t += 3) {
+                    std::array<float, 9> tri;
+                    for (int k = 0; k < 3; ++k)
+                        std::copy_n(&v[idx[t + k]].position.x, 3, tri.begin() + 3 * k);
+                    out.push_back(tri);
+                }
+                return out;
+            };
+            for (bool keep : {false, true}) {
+                world::Mesh mesh;
+                world::buildGpuMesh(mesh, unique, indices, keep);
+                assert(mesh.gpuVertices.size() == 5);
+                auto before = triangles(unique, indices), after = triangles(mesh.gpuVertices, mesh.indices);
+                if (keep) {
+                    // Same order; rotation within a triangle is not allowed either.
+                    assert(before == after);
+                } else {
+                    std::sort(before.begin(), before.end());
+                    std::sort(after.begin(), after.end());
+                    // Vertex-cache order may rotate a triangle's corners; compare canonical forms.
+                    auto canonical = [](std::vector<std::array<float, 9>> list) {
+                        for (auto &tri : list) {
+                            std::array<std::array<float, 3>, 3> c{};
+                            for (int k = 0; k < 3; ++k) std::copy_n(tri.begin() + 3 * k, 3, c[k].begin());
+                            auto best = c;
+                            for (int r = 1; r < 3; ++r) {
+                                std::rotate(c.begin(), c.begin() + 1, c.end());
+                                best = std::min(best, c);
+                            }
+                            for (int k = 0; k < 3; ++k) std::copy_n(best[k].begin(), 3, tri.begin() + 3 * k);
+                        }
+                        std::sort(list.begin(), list.end());
+                        return list;
+                    };
+                    assert(canonical(before) == canonical(after));
+                }
+            }
+        }
         world::validateMapSvg("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><path d=\"M 0 0 L 10 "
                               "10\" stroke=\"#fff\"/></svg>");
         for (const auto &bad :

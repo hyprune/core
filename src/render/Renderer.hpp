@@ -84,8 +84,9 @@ class Renderer {
 
   private:
     struct Batch {
-        GLuint vao = 0, vbo = 0;
-        GLsizei count = 0;
+        GLuint vao = 0, vbo = 0, ibo = 0;
+        GLsizei count = 0; // indices when indexed, else vertices
+        bool indexed = false;
         unsigned material = 0, node = 0;
         Vec3 center, lo, hi; // world-space bounds of the pre-transformed vertices
     };

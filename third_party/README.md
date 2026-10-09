@@ -4,6 +4,11 @@ Vendored source, unmodified, licenses embedded in each header:
 - nlohmann/json v3.12.0, https://github.com/nlohmann/json/tree/v3.12.0 (MIT).
 - stb_image, commit f0569113c93ad095470c54bf34a17b36646bbbb5,
   https://github.com/nothings/stb (MIT/public domain).
+- meshoptimizer v0.25 (tag commit 6daea4695c48338363b08022d2fb15deaef6ac09),
+  https://github.com/zeux/meshoptimizer/tree/v0.25 (MIT, `meshoptimizer/LICENSE.md`).
+  Runtime subset of `src/` only: allocator, index generator, vertex cache /
+  fetch / overdraw optimizers, vertex/index codecs, vertex filters, quantization.
+  Release tarball SHA-256 `68b2fef4e4eaad98e00c657c1e7f8982a7176e61dd7efdeaec67a025b8519be9`.
 
 No prototype assets or source files are included.
 

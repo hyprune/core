@@ -419,6 +419,7 @@ void Renderer::init() {
 void Renderer::freeWorld() {
     for (auto b : batches_) {
         glDeleteBuffers(1, &b.vbo);
+        glDeleteBuffers(1, &b.ibo);
         glDeleteVertexArrays(1, &b.vao);
     }
     batches_.clear();
@@ -652,18 +653,39 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
         }
         if (b.count)
             b.center = b.center / float(b.count);
-        size_t bytes = mesh.vertices.size() * sizeof(world::Vertex);
-        add(0, [p, i, bytes] {
+        // Indexed meshes draw their optimized GPU copy with glDrawElements;
+        // meshes without one (e.g. built in code) draw the flat list.
+        bool indexed = !mesh.indices.empty();
+        const auto *vertices = indexed ? &mesh.gpuVertices : &mesh.vertices;
+        if (indexed)
+            b.count = mesh.indices.size();
+        b.indexed = indexed;
+        size_t bytes = vertices->size() * sizeof(world::Vertex), indexBytes = mesh.indices.size() * 4;
+        add(0, [p, i, bytes, indexBytes] {
             auto &b = p->batches[i];
             layout(b.vao, b.vbo);
             glBufferData(GL_ARRAY_BUFFER, bytes, nullptr, GL_STATIC_DRAW);
+            if (indexBytes) {
+                // Element buffer binding is VAO state: our VAO is bound here.
+                glGenBuffers(1, &b.ibo);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, b.ibo);
+                glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexBytes, nullptr, GL_STATIC_DRAW);
+            }
         });
         for (size_t offset = 0; offset < bytes; offset += chunk) {
             auto count = std::min(chunk, bytes - offset);
-            add(count, [p, i, offset, count] {
+            add(count, [p, i, offset, count, vertices] {
                 glBindBuffer(GL_ARRAY_BUFFER, p->batches[i].vbo);
-                glBufferSubData(GL_ARRAY_BUFFER, offset, count,
-                                reinterpret_cast<const char *>(p->world->meshes[i].vertices.data()) + offset);
+                glBufferSubData(GL_ARRAY_BUFFER, offset, count, reinterpret_cast<const char *>(vertices->data()) + offset);
+            });
+        }
+        for (size_t offset = 0; offset < indexBytes; offset += chunk) {
+            auto count = std::min(chunk, indexBytes - offset);
+            add(count, [p, i, offset, count] {
+                glBindVertexArray(p->batches[i].vao);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, p->batches[i].ibo);
+                glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, offset, count,
+                                reinterpret_cast<const char *>(p->world->meshes[i].indices.data()) + offset);
             });
         }
     }
@@ -817,6 +839,7 @@ void Renderer::cancelPrepare() {
         glDeleteSync(p->fence);
     for (auto b : p->batches) {
         glDeleteBuffers(1, &b.vbo);
+        glDeleteBuffers(1, &b.ibo);
         glDeleteVertexArrays(1, &b.vao);
     }
     glDeleteTextures(1, &p->cube);
@@ -1246,7 +1269,10 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             state.identity = edited == transforms.end();
         }
         glBindVertexArray(b.vao);
-        glDrawArrays(GL_TRIANGLES, 0, b.count);
+        if (b.indexed)
+            glDrawElements(GL_TRIANGLES, b.count, GL_UNSIGNED_INT, nullptr);
+        else
+            glDrawArrays(GL_TRIANGLES, 0, b.count);
     };
     for (auto index : order)
         if (!externalWorldFbo && world_->materials[batches_[index].material].alphaMode != 2)

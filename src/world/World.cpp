@@ -1,4 +1,5 @@
 #include "World.hpp"
+#include <meshoptimizer/meshoptimizer.h>
 #include "Visibility.hpp"
 #include "Environment.hpp"
 #include "Mounts.hpp"
@@ -54,6 +55,22 @@ const Spawn &World::spawn(const std::string &id) const {
             return s;
     throw std::runtime_error("unknown spawn");
 }
+void buildGpuMesh(Mesh &mesh, std::span<const Vertex> unique, std::vector<uint32_t> indices, bool keepOrder) {
+    // Exact duplicates merged, then meshoptimizer's vertex-cache and fetch
+    // orders. Blended materials keep their authored triangle order (blending
+    // within one batch depends on it).
+    std::vector<unsigned> remap(unique.size());
+    size_t used = meshopt_generateVertexRemap(remap.data(), indices.data(), indices.size(), unique.data(),
+                                              unique.size(), sizeof(Vertex));
+    mesh.gpuVertices.resize(used);
+    meshopt_remapVertexBuffer(mesh.gpuVertices.data(), unique.data(), unique.size(), sizeof(Vertex), remap.data());
+    meshopt_remapIndexBuffer(indices.data(), indices.data(), indices.size(), remap.data());
+    if (!keepOrder)
+        meshopt_optimizeVertexCache(indices.data(), indices.data(), indices.size(), used);
+    meshopt_optimizeVertexFetch(mesh.gpuVertices.data(), indices.data(), indices.size(), mesh.gpuVertices.data(), used,
+                                sizeof(Vertex));
+    mesh.indices = std::move(indices);
+}
 std::vector<ImageUse> imageUses(const World &world) {
     std::vector<ImageUse> uses(world.images.size());
     auto mark = [&](int image, bool color) {
@@ -70,7 +87,8 @@ std::vector<ImageUse> imageUses(const World &world) {
 size_t gpuBytes(const World &world, bool srgbDecode, std::span<const CubeLevel> environment) {
     size_t bytes = 0;
     for (const auto &mesh : world.meshes)
-        bytes += mesh.vertices.size() * sizeof(Vertex);
+        bytes += mesh.indices.empty() ? mesh.vertices.size() * sizeof(Vertex)
+                                      : mesh.gpuVertices.size() * sizeof(Vertex) + mesh.indices.size() * 4;
     auto uses = imageUses(world);
     for (size_t i = 0; i < world.images.size(); ++i) {
         size_t chain = 0;
@@ -387,13 +405,20 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
                 require(slot.texture < 0 || (slot.texCoord == 0 ? uv : uv1), "material references missing UV set");
             size_t count = p.indices ? p.indices->count : pos->count;
             require(count % 3 == 0 && count < 3000000, "invalid triangle count");
+            require(pos->count < 3000000, "invalid vertex count");
             memory += count * sizeof(Vertex);
             require(memory <= 512 * 1024 * 1024, "world GPU budget exceeded");
-            for (size_t i = 0; i < count; i++) {
-                size_t index = p.indices ? cgltf_accessor_read_index(p.indices, i) : i;
+            // Each accessor vertex is decoded once; the flat triangle list used by
+            // collision, editing and picking is expanded from these.
+            Vec3 a{transform.v[0], transform.v[1], transform.v[2]}, b{transform.v[4], transform.v[5], transform.v[6]},
+                c{transform.v[8], transform.v[9], transform.v[10]};
+            float det = dot(a, cross(b, c));
+            require(!normal || std::abs(det) > 1e-8f, "singular node transform");
+            std::vector<Vertex> unique(pos->count);
+            for (size_t index = 0; index < pos->count; ++index) {
                 float v[3];
                 require(cgltf_accessor_read_float(pos, index, v, 3), "invalid position");
-                Vertex vert;
+                Vertex &vert = unique[index];
                 vert.position = transform.point({v[0], v[1], v[2]});
                 require(std::isfinite(vert.position.x + vert.position.y + vert.position.z), "nonfinite vertex");
                 if (uv)
@@ -404,15 +429,19 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
                 if (normal) {
                     float n[3];
                     require(cgltf_accessor_read_float(normal, index, n, 3), "invalid normal");
-                    Vec3 a{transform.v[0], transform.v[1], transform.v[2]},
-                        b{transform.v[4], transform.v[5], transform.v[6]},
-                        c{transform.v[8], transform.v[9], transform.v[10]};
-                    float det = dot(a, cross(b, c));
-                    require(std::abs(det) > 1e-8f, "singular node transform");
                     vert.normal = normalized((cross(b, c) * n[0] + cross(c, a) * n[1] + cross(a, b) * n[2]) / det);
                 }
-                mesh.vertices.push_back(vert);
             }
+            std::vector<uint32_t> indices(count);
+            for (size_t i = 0; i < count; i++) {
+                size_t index = p.indices ? cgltf_accessor_read_index(p.indices, i) : i;
+                require(index < unique.size(), "index out of range");
+                indices[i] = uint32_t(index);
+                mesh.vertices.push_back(unique[index]);
+            }
+            // Without authored normals the flat list carries per-face normals: draw it.
+            if (visible.contains(&node) && normal)
+                buildGpuMesh(mesh, unique, std::move(indices), result->materials[mesh.material].alphaMode == 2);
             for (size_t i = 0; i < count; i += 3) {
                 Triangle t{mesh.vertices[i].position, mesh.vertices[i + 1].position, mesh.vertices[i + 2].position};
                 Vec3 n = normalized(cross(t.b - t.a, t.c - t.a));
