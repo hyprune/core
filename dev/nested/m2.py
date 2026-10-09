@@ -58,6 +58,9 @@ def acceptance(client,children,args,shell_token,socketpath):
  # Actual seat click and typing, with no public input-injection method.
  pose(client,[-2.7,1.7,2.2]);time.sleep(.15);pointer();time.sleep(.2)
  assert next(x for x in state()['surfaces'] if x['id']==surface['id'])['focused']
+ # Keyboard text reaches a window only in Use (E) mode; in movement mode keys
+ # drive the player. The click above only clicks into the aimed window.
+ keys('-k','e');wait(lambda:s.camera()['mode']=='typing')
  marker=s.STATE/'m2-typed.txt';marker.unlink(missing_ok=True)
  keys(f"printf 'M2 mounted terminal input\\n' > {marker}");keys('-k','Return')
  # The redirect creates the file before printf writes it; wait for the content.
@@ -80,7 +83,8 @@ def acceptance(client,children,args,shell_token,socketpath):
  other=wait(lambda:next((x for x in state()['surfaces'] if x['title']=='M2 other'),None))
  client.call('surface.pull',{'surfaceId':other['id']});client.call('surface.place',{'surfaceId':other['id'],'anchorId':'array-hall-slot-02-banner-01'})
  client.call('workspace.activate',{'id':10});time.sleep(.8);pose(client,[5,2,-1.5]);time.sleep(.15)
- before=state()['movement']['position'];pointer();wait(lambda:state()['workspaces']['currentId']==11)
+ before=state()['movement']['position'];pointer();keys('-k','e')
+ wait(lambda:state()['workspaces']['currentId']==11 and s.camera()['mode']=='typing')
  assert state()['movement']['position']==before,'tool click unexpectedly travelled away from its mount'
  other_marker=s.STATE/'m2-other-typed.txt';other_marker.unlink(missing_ok=True)
  keys(f"printf 'M2 other home input\\n' > {other_marker}");keys('-k','Return');wait(lambda:other_marker.exists())
@@ -119,9 +123,14 @@ def acceptance(client,children,args,shell_token,socketpath):
   try:return json.loads(ui('status'))
   except (subprocess.CalledProcessError,json.JSONDecodeError):return {}
  wait(lambda:status().get('lease'))
- keys('-P','Tab','-s','450','-p','Tab');wait(lambda:status().get('director'));ui('tab',2);time.sleep(.3);shot('m2-director.png')
+ keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status().get('director'));ui('tab',2);time.sleep(.3);shot('m2-director.png')
  # Click the actual Recall button through the nested seat on the leased output.
- current=list(map(float,s.ctl('cursorpos').split(',')));output=next(m for m in json.loads(s.ctl('monitors','-j')) if m['name']=='HEADLESS-1');target=[output['x']+175,output['y']+410]
+ current=list(map(float,s.ctl('cursorpos').split(',')));output=next(m for m in json.loads(s.ctl('monitors','-j')) if m['name']=='HEADLESS-1')
+ # Locate the visible label (the Director layout changes between shell releases).
+ import csv,io
+ tsv=subprocess.check_output(['tesseract',str(s.STATE/'m2-director.png'),'stdout','--psm','11','tsv'],text=True,stderr=subprocess.DEVNULL)
+ label=next(r for r in csv.DictReader(io.StringIO(tsv),delimiter='\t') if r['text']=='Recall')
+ target=[output['x']+int(label['left'])+int(label['width'])//2,output['y']+int(label['top'])+int(label['height'])//2]
  for _ in range(8):
   dx=target[0]-current[0];dy=target[1]-current[1]
   if abs(dx)+abs(dy)<2:break
@@ -182,7 +191,7 @@ def record(client,state,ui):
   # Smooth views inspect original alpha cards, wet paving, practical emission and reflections.
   for i in range(140):
    t=i/139;x=1.2*math.sin(t*math.tau);pose(client,[x,2.4+.4*math.sin(t*math.pi),1.2-2.6*t],-x*.13,-.06);pause(.09)
-  keys('-P','Tab','-s','450','-p','Tab');pause(1);ui('tab',2);pause(2);ui('close');pause(.5)
+  keys('-P','Tab','-s','1100','-p','Tab');pause(1);ui('tab',2);pause(2);ui('close');pause(.5)
   client.call('surfaces.recall',{});pose(client,[0,1.7,3.5]);pause(2)
   client.call('surface.place',{'surfaceId':surface['id'],'anchorId':'sun-court-slot-01-operator-desk-01'});pose(client,[0,2.5,3],0,-.1);pause(3)
  finally:
