@@ -53,6 +53,8 @@ def run(args):
     if getattr(args,'playable',False): args.m3b=True
     if getattr(args,'placement',False): args.m3b=True
     if getattr(args,'ink',False): args.authoring=True
+    if getattr(args,'perf',False):
+        STATE=HERE/'.perf-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if not hasattr(args,'authoring'): args.authoring=False
     if args.authoring: args.m3b=True
     if not hasattr(args,'climbing'): args.climbing=False
@@ -121,6 +123,11 @@ def run(args):
     if args.authoring:
         subprocess.run([sys.executable,str(ROOT/'tests/fixtures/visibility.py')],check=True)
         shutil.copytree(ROOT/'tests/fixtures/visibility',installed/'org.hyprune.visibility',dirs_exist_ok=True)
+    if getattr(args,'perf',False):
+        # Frozen copy, so before/after runs measure identical package bytes.
+        source=pathlib.Path(os.environ.get('HYPRUNE_PERF_WORLD','/tmp/hyprune-perf/com.hyprune.lumen-reach'))
+        shutil.rmtree(installed/'com.hyprune.lumen-reach',ignore_errors=True);shutil.copytree(source,installed/'com.hyprune.lumen-reach')
+        (STATE/'layout.json').unlink(missing_ok=True)
     (STATE/"graphics.json").unlink(missing_ok=True)
     if getattr(args,'ipc_warp',False):
         from ipc_warp import prepare
@@ -130,7 +137,7 @@ def run(args):
         from playable import prepare
         prepare(installed)
     grants=[{'token':token,'client':'org.hyprune.nested','capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}]
-    if args.m1 or args.integration or args.m2 or args.m3a or args.m3b:grants[0]['capabilities']+=['shell.control','data.publish']
+    if args.m1 or args.integration or args.m2 or args.m3a or args.m3b or getattr(args,'perf',False):grants[0]['capabilities']+=['shell.control','data.publish']
     if args.authoring: grants[0]['capabilities'].append('camera.author')
     shell_token=secrets.token_hex(32)
     if args.integration or args.m2 or args.m3a or args.m3b: grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control']})
@@ -183,8 +190,12 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,"0.15" if getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.15" if getattr(args,"perf",False) or getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
+        if getattr(args,"perf",False):
+            from perf import acceptance
+            acceptance(client,children,args,shell_token,socketpath)
+            return
         if getattr(args,"ipc_warp",False):
             from ipc_warp import acceptance
             acceptance(client,children,args,shell_token,socketpath)
@@ -439,6 +450,6 @@ def m1(client):
     print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--ipc-warp',action='store_true');parser.add_argument('--playable',action='store_true');parser.add_argument('--placement',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--ipc-warp',action='store_true');parser.add_argument('--perf',action='store_true');parser.add_argument('--playable',action='store_true');parser.add_argument('--placement',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
     try:run(args)
     except KeyboardInterrupt:print("Nested session stopped.",flush=True)

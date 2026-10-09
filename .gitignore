@@ -21,3 +21,5 @@ tests/fixtures/m3b/
 /dev/nested/.climbing-state/
 
 /tests/fixtures/visibility/
+
+/dev/nested/.perf-state/
