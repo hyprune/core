@@ -119,6 +119,7 @@ bool Climbing::use(Camera &c, std::span<const Climbable> ladders, ClimbMode requ
     return true;
 }
 std::string Climbing::prompt(ClimbMode m) const {
+    if (!active() && cooldown > 0) return "Step back; climb grip resetting";
     if (!active())
         return m == ClimbMode::Auto ? "E traverse ladder" : "Move into ladder to climb";
     if (m == ClimbMode::Auto)

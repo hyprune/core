@@ -45,6 +45,7 @@ int main(int argc, char **argv) {
         for (int n = 0; n < 600 && climb.active(); ++n)
             tick({.forward = 1}, 1);
         assert(!climb.active() && c.position.y > 7.6f && c.position.z < 0);
+        assert(climb.prompt(mode).find("grip resetting") != std::string::npos);
         // E down from a top exit, or press into the face then backwards.
         if (mode == ClimbMode::Auto) {
             // An explicit E press works immediately despite automatic catch cooldown.
