@@ -36,7 +36,8 @@ def acceptance(client,children,args,shell_token,socketpath):
  sub=client.call('state.subscribe',{'topics':['state']})['subscriptionId']
  def state():return client.call('state.snapshot',{'subscriptionId':sub})['snapshot']['state']
  s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")');wait(lambda:state()['runtime']['active']);time.sleep(.8)
- assert len([x for x in state()['surfaces'] if x['kind']=='workspace'])==2
+ # Native workspaces are listed too (5cd2229); count only the two area wall frames.
+ assert len([x for x in state()['surfaces'] if x['kind']=='workspace' and ' / workspace ' in x['title']])==2
  assert len(state()['workspaces']['locations'])==3
  client.call('data.publish',{'sourceId':'org.hyprune.nested.globe','sequence':1,'values':{'status':'live'},'ttlMs':60000})
  client.call('data.object.bind',{'objectId':'sun-court-slot-01-globe-01','sourceId':'org.hyprune.nested.globe'})
@@ -58,8 +59,9 @@ def acceptance(client,children,args,shell_token,socketpath):
  pose(client,[-2.7,1.7,2.2]);time.sleep(.15);pointer();time.sleep(.2)
  assert next(x for x in state()['surfaces'] if x['id']==surface['id'])['focused']
  marker=s.STATE/'m2-typed.txt';marker.unlink(missing_ok=True)
- keys(f"printf 'M2 mounted terminal input\\n' > {marker}");keys('-k','Return');wait(lambda:marker.exists())
- assert marker.read_text()=='M2 mounted terminal input\n'
+ keys(f"printf 'M2 mounted terminal input\\n' > {marker}");keys('-k','Return')
+ # The redirect creates the file before printf writes it; wait for the content.
+ wait(lambda:marker.exists() and marker.read_text()=='M2 mounted terminal input\n')
  pointer('drag',100,30);pointer('scroll',1);time.sleep(.2)
  assert s.camera()['pressedButtons']==0 and s.camera()['grabbed']==''
  keys('-k','Escape')
