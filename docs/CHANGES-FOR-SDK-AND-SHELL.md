@@ -1021,3 +1021,80 @@ survive a load for unbound clients, which is why earlier fixtures saw none.
 World 0.6 playable bounds (section above) are committed as core `d853d0c`; IPC
 is unchanged at 0.15. `dev/live/down` now frees each run's world/plugin copies
 from `XDG_RUNTIME_DIR` (`c474ef5`); leaked nested copies had filled the tmpfs.
+
+## Default area homes from the world (2026-10-09, IPC 0.15 unchanged)
+
+Owner request: area walls should be real workspaces with no manual binding.
+Normative text: the RFC-0005 M2 follow-up "world-derived default homes" (docs
+`1c7c47c`). The wire shape is unchanged, so there is no schema/SDK bump.
+
+- On every world load, each area without an explicit `workspace.bind` gets
+  `windows.workspace_base + int(workspaceSlot)`. The base is a new Lua config key
+  (default 10, integer 0–990000, 0 disables). Lumen Reach: 11 sun-court,
+  12 array-hall, 13 rime-vault, 14 signal-rise. The room workspace 8 is unchanged.
+- Defaults appear in `mounts.bindings` and `workspaces.locations` exactly like
+  explicit homes (`{id,worldId,areaId}`; locations label is the area ID). The
+  **Director needs no change**: `ShellState.qml` already lists
+  `workspaces.locations`, and `workspace.activate` travels to the area. Clients
+  cannot tell defaults from explicit homes, and should not need to.
+- Explicit wins: `workspace.bind` on a default's area or ID replaces it, and
+  only explicit bindings persist. hypruned receives the derived IDs on the
+  private bridge and filters them out of `layout.json`. IDs used by an explicit
+  binding of another world, the room or `HYPRUNE_WORKSPACE_LOCATIONS` are skipped.
+- Stock Hyprland keybinds and dispatchers (`workspace 12`) travel to the area,
+  like the Director. This is the existing M2 tick (`workspaceLocation()`,
+  outside the render pass); it had no effect before because nothing was bound.
+  New: going back to any unbound workspace (e.g. room 8) re-arms travel to the
+  same home. A switch from a focused-in wall still leaves 2D and travels (M2).
+- Windows opened on 11–14 stay tiled natively and are composited onto the
+  area's primary wall; tool placement from them belongs to that area.
+
+Shell follow-up (optional, cosmetic): label homes by area theme/name instead of
+the raw area ID if the Director shows them prominently.
+
+Nested evidence: `dev/nested/run.sh --workspace-homes` (28 checks,
+`docs/evidence/workspace-homes.json`, stills `dev/nested/.m3b-state/home-*.png`).
+`dev/nested/world_workspace.py` now uses workspace 30 as its "unrelated"
+workspace, since 12 is a default home of Lumen Reach.
+
+## Client strings clamped to schema limits (2026-10-09, IPC 0.15 unchanged)
+
+Live bug: shell logged `protocol.invalid` for `state.delta`
+`/params/changes/surfaces/23/title` `maxLength`. Core (`881e91c`) now clamps
+every string it projects from outside its control to the schema `maxLength`,
+counted in code points as JSON Schema does, never splitting a code point.
+Malformed UTF-8 becomes U+FFFD. A clamped string keeps its prefix and ends
+with `…` (U+2026), which counts toward the limit. Covered: surface/app
+titles (512), app classes and icons (256), placement rules (256), native
+workspace names (512), output names (128), keymap steals (description 1024,
+submap 256), keymap/graphics paths and errors, recording status, error
+messages and runtime notices (4096). Limits are identical in 0.1–0.15.
+
+Shell/SDK: no change needed. Do not expect full window titles past 512 code
+points, and treat a trailing `…` as a clamp marker. Placement rules from
+very long titles store the 256 code point form, and core matches windows in
+that same form. Nested proof: `dev/nested/run.sh --long-titles`.
+
+## Owner workspace numbering: room 20, homes 21+ (2026-10-09, IPC 0.15 unchanged)
+
+Defaults changed: `windows.world_workspace` 8 → **20**, `windows.workspace_base`
+10 → **20**. Lumen Reach is now 21 sun-court, 22 array-hall, 23 rime-vault,
+24 signal-rise. The owner's binds pick workspaces in groups of ten
+(Super+N = group*10+N), so homes 21–29 share one group and the room (20)
+sits in the 11–20 group, by their choice. An explicit Lua config value
+(including the old 8) and explicit `workspace.bind`/kit homes still win.
+Wire shape is unchanged. Shell (`7ffda21`) and SDK (`2d4d926`) only had
+nested harnesses/fixtures that used 8 as the room. No QML, bridge or mock
+code assumed a number. Docs `5339098`.
+
+## Carry release no longer drops windows into walls behind them (2026-10-09)
+
+Releasing a carried window dropped it into any workspace wall the pointer ray
+hit within 12 m, even with the held window metres in front of that wall. With
+default homes, every area's main wall is a workspace wall, so a normal carry
+release in front of one swallowed the window: it was tiled natively on that
+workspace, lost its placement and was hidden from the world. Core now drops
+only when the wall is no farther than the held window plus 0.5 m, i.e. the
+window was brought to the wall (pushed against it, or pulled off and released
+at once). Otherwise the release is a normal placement. No IPC change. The
+shell needs no change.

@@ -1,5 +1,6 @@
 #include "Capture.hpp"
 #include "interaction/Hands.hpp"
+#include "ipc/Text.hpp"
 #include "render/GLState.hpp"
 #include "render/SurfaceSampler.hpp"
 #include <GLES3/gl3.h>
@@ -71,7 +72,9 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             knownWindows_.push_back(w);
         auto remembered = std::find_if(adoptedWindows_.begin(), adoptedWindows_.end(),
                                        [&](auto &v) { return v.window == w && world && v.worldId == world->id; });
-        surfaces::Instance identity{"", w->m_class, w->m_title, w->m_workspace ? int(w->m_workspace->m_id) : 0};
+        surfaces::Instance identity{"", ipc::boundedText(w->m_class, ipc::ClassLimit),
+                                    ipc::boundedText(w->m_title, ipc::TitleLimit),
+                                    w->m_workspace ? int(w->m_workspace->m_id) : 0};
         // Only the dedicated room is adopted implicitly. Authored workspace
         // walls/mounts remain available without changing their native layout.
         const bool inRoom = identity.workspaceId == worldWorkspace;
@@ -117,8 +120,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 // Keep the full client size. Failed recovery is handled by the
                 // bounded spawn search, which queues the client if no spot fits.
                 surfaces::pushOut(e.surface, world->collision);
-                surfaces::Instance instance{e.surface.id, w->m_class, w->m_title,
-                                            w->m_workspace ? int(w->m_workspace->m_id) : 0};
+                surfaces::Instance instance{e.surface.id, identity.appClass, identity.title, identity.workspaceId};
                 if (layout && !layout->hasPlacement(instance, world)) {
                     // Existing unplaced room clients wait for explicit placement. New
                     // clients may auto-spawn only when a free full-sized spot exists.
@@ -140,8 +142,8 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         refreshed.insert(it->surface.id);
         it->texture = texture;
         it->surface.texture = texture->m_texID;
-        it->surface.title = w->m_title;
-        it->instance = {it->surface.id, w->m_class, w->m_title, w->m_workspace ? int(w->m_workspace->m_id) : 0};
+        it->surface.title = identity.title;
+        it->instance = {it->surface.id, identity.appClass, identity.title, identity.workspaceId};
         it->visible = true;
         it->surface.pixelWidth = std::max(1, int(surface->m_current.size.x));
         it->surface.pixelHeight = std::max(1, int(surface->m_current.size.y));
@@ -454,7 +456,7 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         sampler_ = render::createSurfaceSampler();
     }
     std::set<int> live;
-    for (const auto &b : layout.bindings) {
+    for (const auto &b : layout.effectiveBindings()) {
         if (b.at("worldId") != world->id)
             continue;
         auto area = std::find_if(world->areas.begin(), world->areas.end(),

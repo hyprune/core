@@ -75,7 +75,8 @@ Bridge::~Bridge() {
 }
 void Bridge::send(Json j) {
     j["epoch"] = epoch_;
-    std::string bytes = j.dump();
+    // Last resort: invalid UTF-8 never aborts a frame (sources are bounded upstream).
+    std::string bytes = j.dump(-1, ' ', false, Json::error_handler_t::replace);
     if (bytes.size() > 196608 || output_.size() >= 64)
         throw Error(-32008, "private bridge budget exceeded");
     output_.push_back(std::move(bytes));
@@ -83,12 +84,15 @@ void Bridge::send(Json j) {
 void Bridge::advertise(std::map<std::string, std::string> methods) {
     send({{"type", "methods"}, {"methods", methods}});
 }
-void Bridge::publish(Json state) {
-    if (state == state_)
+void Bridge::publish(Json state, Json derived) {
+    if (state == state_ && derived == derived_)
         return;
-    state_ = std::move(state);
-    ++revision_;
-    send({{"type", "state"}, {"state", state_}});
+    if (state != state_) {
+        state_ = std::move(state);
+        ++revision_;
+    }
+    derived_ = std::move(derived);
+    send({{"type", "state"}, {"state", state_}, {"derivedBindings", derived_}});
 }
 void Bridge::complete(Json result) {
     if (pending_.empty())

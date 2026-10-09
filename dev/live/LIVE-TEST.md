@@ -59,6 +59,8 @@ Walking checklist ([full M3B detail](../../docs/M3B.md#supervised-live-test-chec
 - [ ] F window: cursor hidden through zoom, visible/centred at 2D handover; Super+Tab/Back exits fullscreen to world/reticle.
 - [ ] E wall: stationary camera, deferred workspace/focus switch, relative clicks/typing. Test both exits.
 - [ ] F wall: hidden through fly-in, visible at handover; Back/Super+Tab flies out to world/reticle.
+- [ ] Carry release near a main wall: carry a window (Super+LMB) a few metres in front of an area's main wall and release; it stays placed where you left it. Push it right up to the wall (or pull a client off a wall and release at once) and it drops into that workspace, tiled on the wall. No cursor flash either way.
+- [ ] Default homes (Lumen Reach: 21 sun-court, 22 array-hall, 23 rime-vault, 24 signal-rise; room is 20): in world, your normal workspace keybind to 21–24 travels there with the reticle kept and no cursor flash; a window opened there shows on that area's main wall. Back to 20 (room) and to the same home again travels again. From an E/F wall the keybind also travels (leaves 2D); from free cursor, travel waits until you return to the reticle. Watch for any cursor flash.
 - [ ] Super+Tab never opens native overview while world/use/focus/free cursor is active, including release; it does when inactive. Other native binds keep working; free cursor intercepts Back/Super+Tab and Escape when no app has keyboard focus.
 - [ ] TAB hold → Map: release grabs, show cursor/focus Director after frame. Settings captures chords/buttons/wheel; Esc cancels/leaves menu, clears focus, restores reticle.
 - [ ] Workspaces lists real desktops/apps even without configured homes. Click Help; alternate Help/Workspaces/Settings several times and keep the menu open.
@@ -97,7 +99,7 @@ isolated HUD fixtures; checks healthy down, helper SIGKILL, TTY and repeated dow
 
 
 Workspace/IPC retry additions: `up` now uses IPC 0.8 (shell 98b677a or later).
-World entry switches the selected output to dedicated workspace 8 and enables
+World entry switches the selected output to dedicated workspace 20 and enables
 the scoped pre-layout floating policy. No Hyprland config edit is required. Check that
 Super+Enter opens a floating terminal there, and toggle out restores the previous
 workspace without changing its tiled layout. TAB hold should animate and open the

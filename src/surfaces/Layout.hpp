@@ -11,8 +11,13 @@ struct Instance {
 // Pure authority: all identity rules and bindings are independent of compositor handles.
 class Layout {
   public:
-    Json bindings = Json::array(), placements = Json::array(), instances = Json::array();
-    int roomWorkspace = 8;
+    // `bindings` are explicit user homes (durable). `defaults` are derived from the
+    // loaded world (workspaceBase + workspaceSlot) and never persisted.
+    Json bindings = Json::array(), defaults = Json::array(), placements = Json::array(), instances = Json::array();
+    int roomWorkspace = 20, workspaceBase = 0;
+    std::set<int> reservedWorkspaces;
+    void deriveDefaults(const world::World *);
+    Json effectiveBindings() const;
     std::vector<std::string> pocketOrder;
     void stash(const Instance &, Surface);
     float windowScale = .002f;

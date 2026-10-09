@@ -62,7 +62,7 @@ int main() {
         };
         auto send = [&](Json j) {
             j["epoch"] = epoch;
-            auto bytes = j.dump();
+            auto bytes = j.dump(-1, ' ', false, Json::error_handler_t::replace);
             if (::send(fd, bytes.data(), bytes.size(), MSG_NOSIGNAL) != (ssize_t)bytes.size())
                 throw std::runtime_error("bridge write failed");
         };
@@ -81,7 +81,8 @@ int main() {
             }
             if (j.at("type") == "state") {
                 if (persistReady && j.at("state").contains("mounts"))
-                    layouts.save(j.at("state").at("mounts"));
+                    layouts.save(hyprune::daemon::durableLayout(j.at("state").at("mounts"),
+                                                                j.value("derivedBindings", Json::array())));
                 server->publish(j.at("state"));
             } else if (j.at("type") == "event") {
                 server->notify(j.at("event"), j.at("params"), j.value("actor", ""));

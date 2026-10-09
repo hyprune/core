@@ -11,12 +11,27 @@ int main() {
     assert(interaction::limitSpawnDistance(interaction::limitSpawnDistance(5, 4), 1) == near);
 
     auto c = interaction::defaultConfig();
-    assert(c["windows"]["world_workspace"] == 8);
+    assert(c["windows"]["world_workspace"] == 20);
+    // An explicit user setting (including the old default 8) still wins over the default.
     assert(interaction::configPatch(c, {{"windows", {{"world_workspace", 18}}}})["windows"]["world_workspace"] == 18);
+    assert(interaction::configPatch(c, {{"windows", {{"world_workspace", 8}}}})["windows"]["world_workspace"] == 8);
     for (auto value : {world::Json(0), world::Json(-1), world::Json(8.5), world::Json(1000000), world::Json("8")}) {
         bool rejected = false;
         try {
             interaction::configPatch(c, {{"windows", {{"world_workspace", value}}}});
+        } catch (...) {
+            rejected = true;
+        }
+        assert(rejected);
+    }
+    assert(c["windows"]["workspace_base"] == 20);
+    assert(interaction::configPatch(c, {{"windows", {{"workspace_base", 10}}}})["windows"]["workspace_base"] == 10);
+    assert(interaction::configPatch(c, {{"windows", {{"workspace_base", 0}}}})["windows"]["workspace_base"] == 0);
+    assert(interaction::configPatch(c, {{"windows", {{"workspace_base", 100}}}})["windows"]["workspace_base"] == 100);
+    for (auto value : {world::Json(-1), world::Json(10.5), world::Json(990001), world::Json("10")}) {
+        bool rejected = false;
+        try {
+            interaction::configPatch(c, {{"windows", {{"workspace_base", value}}}});
         } catch (...) {
             rejected = true;
         }

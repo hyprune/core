@@ -43,14 +43,15 @@ extern "C" {
 #include <lua.h>
 }
 #include "Capture.hpp"
+#include "hud/Telemetry.hpp"
 #include "interaction/Resize.hpp"
 #include "ipc/Bridge.hpp"
 #include "ipc/Protocol.hpp"
-#include "hud/Telemetry.hpp"
+#include "ipc/Text.hpp"
 #include "offload/Client.hpp"
-#include "replay/Session.hpp"
 #include "render/PNG.hpp"
 #include "render/Renderer.hpp"
+#include "replay/Session.hpp"
 #include <fcntl.h>
 #include <fstream>
 #include <future>
@@ -299,6 +300,7 @@ struct Runtime {
     std::map<std::string, Binding> bindings;
     Json locations = Json::array();
     void workspaceLocation();
+    void deriveHomes();
     SP<CWLSurfaceResource> directorSurface();
     void publish();
     void publishHUD();
@@ -669,11 +671,28 @@ void Runtime::unfocus() {
     pointerX = pointerY = .5f;
     publish();
 }
+void Runtime::deriveHomes() {
+    // Each loaded world's areas get default homes at workspace_base + slot.
+    // Explicit binds, configured locations and the room workspace win.
+    layout.workspaceBase = config["windows"]["workspace_base"];
+    layout.reservedWorkspaces = {config["windows"]["world_workspace"].get<int>()};
+    if (worldWorkspace)
+        layout.reservedWorkspaces.insert(worldWorkspace);
+    for (auto &entry : locations)
+        layout.reservedWorkspaces.insert(entry.at("id").get<int>());
+    layout.deriveDefaults(world.get());
+}
 void Runtime::workspaceLocation() {
     if (layerCursor) return;
     if (!active || !monitor || !monitor->m_activeWorkspace)
         return;
     auto id = monitor->m_activeWorkspace->m_id;
+    if (!layout.binding(id, nullptr) &&
+        std::none_of(locations.begin(), locations.end(), [&](auto &entry) { return entry.at("id") == id; })) {
+        // Leaving every home (e.g. back to the room) re-arms travel to the same one.
+        resolvedLocation.clear();
+        return;
+    }
     if (auto b = layout.binding(id, nullptr)) {
         std::string key =
             std::to_string(id) + ":" + b->at("worldId").get<std::string>() + ":" + b->at("areaId").get<std::string>();
@@ -860,12 +879,12 @@ void Runtime::publish() {
         if (std::none_of(surfaces.begin(), surfaces.end(), [&](auto &s) { return s.at("id") == id; }))
             surfaces.push_back({{"id", id},
                                 {"kind", "workspace"},
-                                {"title", workspace->m_name},
+                                {"title", ipc::boundedText(workspace->m_name, ipc::TitleLimit)},
                                 {"logicalSize", {1280, 720}},
                                 {"focused", workspace->isVisible()}});
     }
     Json homes = locations;
-    for (auto &b : layout.bindings) {
+    for (auto &b : layout.effectiveBindings()) {
         std::erase_if(homes.get_ref<Json::array_t &>(), [&](auto &v) { return v.at("id") == b.at("id"); });
         std::string spawnId = "arrival";
         if (world && b.at("worldId") == world->id) {
@@ -887,7 +906,7 @@ void Runtime::publish() {
     if (monitor) {
         auto output = "output-" + std::to_string(monitor->m_id);
         spatial["output"] = {{"id", output},
-                             {"name", monitor->m_name},
+                             {"name", ipc::boundedText(monitor->m_name, ipc::OutputNameLimit)},
                              {"width", int(monitor->m_pixelSize.x)},
                              {"height", int(monitor->m_pixelSize.y)},
                              {"scale", monitor->m_scale}};
@@ -922,16 +941,16 @@ void Runtime::publish() {
         if (entry == capture.entries.end())
             surfaces.push_back({{"id", id},
                                 {"kind", "window"},
-                                {"title", window->m_title},
+                                {"title", ipc::boundedText(window->m_title, ipc::TitleLimit)},
                                 {"logicalSize",
                                  {std::max(1, int(window->resource() ? window->resource()->m_current.size.x : 1)),
                                   std::max(1, int(window->resource() ? window->resource()->m_current.size.y : 1))}},
                                 {"focused", Desktop::focusState()->window() == window}});
         apps.push_back({{"surfaceId", id},
                         {"workspaceId", int(window->m_workspace->m_id)},
-                        {"title", window->m_title},
-                        {"appClass", window->m_class},
-                        {"icon", window->m_class}});
+                        {"title", ipc::boundedText(window->m_title, ipc::TitleLimit)},
+                        {"appClass", ipc::boundedText(window->m_class, ipc::ClassLimit)},
+                        {"icon", ipc::boundedText(window->m_class, ipc::ClassLimit)}});
     }
     Json publication = {
         {"interaction",
@@ -947,12 +966,12 @@ void Runtime::publish() {
           {"taggedSurfaceId", tagged.empty() ? Json(nullptr) : Json(tagged)}}},
         {"keymap",
          {{"config", input.config},
-          {"path", inputFile.path.string()},
+          {"path", ipc::boundedText(inputFile.path.string(), ipc::PathLimit)},
           {"conflicts", interaction::inputConflicts(input.config)},
           {"steals", steals(input.config)},
           {"capture", captureRequest},
           {"holds", input.holds()},
-          {"error", inputFile.error}}},
+          {"error", ipc::boundedText(inputFile.error, ipc::MessageLimit)}}},
         {"editor",
          {{"unplaced", unplacedState()},
           {"contentScale", contentFeedback},
@@ -1005,7 +1024,10 @@ void Runtime::publish() {
         if (world && editor.locked(world->id, e.instance))
             publication["editor"]["locked"].push_back(e.surface.id);
     lastPublished = publication;
-    ipc->publish(publication);
+    Json derived = Json::array();
+    for (auto &b : layout.defaults)
+        derived.push_back(b.at("id"));
+    ipc->publish(publication, derived);
     for (auto &[event, params] : layout.events)
         ipc->notify(event, params);
     layout.events.clear();
@@ -1076,6 +1098,7 @@ void Runtime::finishLoad() {
         layout.freePoses.clear();
         layout.occupiedPoses.clear();
         layout.spawnAreas.clear();
+        deriveHomes();
         restoreFullscreenWindows();
         fullscreen = {};
         handover = {};
@@ -1524,9 +1547,13 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         if (g == interaction::Gesture::Carry) {
             auto held = capture.find(id);
             std::optional<std::pair<int, float>> wall;
+            // Drop into a workspace wall only when the window was brought to it. A wall
+            // merely behind the held window (every area main wall is a home) keeps the
+            // release a normal placement instead of swallowing the window.
+            float heldDepth = dot(hands.pose.center - pointerCamera().position, pointerRay());
             for (auto &f : capture.workspaces)
                 if (auto h = surfaces::intersect(f.surface, pointerCamera().position, pointerRay());
-                    h && h->distance < 12 && (!wall || h->distance < wall->second))
+                    h && h->distance < 12 && h->distance <= heldDepth + .5f && (!wall || h->distance < wall->second))
                     wall = {{f.workspaceId, h->distance}};
             if (held && wall) {
                 auto w = held->window.lock();
@@ -1858,9 +1885,11 @@ Json Runtime::steals(const Json &config) const {
                         out.push_back({{"mode", mode},
                                        {"action", action},
                                        {"binding", value},
-                                       {"description", bind->description.empty() ? bind->handler + " " + bind->arg
-                                                                                 : bind->description},
-                                       {"submap", bind->submap.name}});
+                                       {"description",
+                                        ipc::boundedText(bind->description.empty() ? bind->handler + " " + bind->arg
+                                                                                   : bind->description,
+                                                         ipc::DescriptionLimit)},
+                                       {"submap", ipc::boundedText(bind->submap.name, ipc::SubmapLimit)}});
                 }
             }
     return out;
@@ -3016,12 +3045,15 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             applyGraphics(merged);
         } else if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
-        Json response{
-            {"config", config["graphics"]},         {"effective", renderer.graphics},
-            {"overrides", graphicsFile.current},    {"path", graphicsFile.path.string()},
-            {"error", graphicsFile.error},          {"presets", render::graphicsPresets()},
-            {"options", render::graphicsOptions()}, {"unsupported", {"ssr", "runtime_shadows", "contact_shadows"}},
-            {"timings", renderer.timings()}};
+        Json response{{"config", config["graphics"]},
+                      {"effective", renderer.graphics},
+                      {"overrides", graphicsFile.current},
+                      {"path", ipc::boundedText(graphicsFile.path.string(), ipc::PathLimit)},
+                      {"error", ipc::boundedText(graphicsFile.error, ipc::MessageLimit)},
+                      {"presets", render::graphicsPresets()},
+                      {"options", render::graphicsOptions()},
+                      {"unsupported", {"ssr", "runtime_shadows", "contact_shadows"}},
+                      {"timings", renderer.timings()}};
         if (ipc::protocol::atLeast(protocol, "0.10")) response["performance"] = performance();
         else for (auto section : {"config", "effective", "overrides", "options"})
             for (auto key : {"offload", "offload_power_cap_w", "scale_min", "scale_max"}) response[section].erase(key);
@@ -3043,8 +3075,10 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     if (method == "input.get") {
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
-        auto response = Json{{"config", input.config}, {"path", inputFile.path.string()},
-                             {"steals", steals(input.config)}, {"conflicts", interaction::inputConflicts(input.config)}};
+        auto response = Json{{"config", input.config},
+                             {"path", ipc::boundedText(inputFile.path.string(), ipc::PathLimit)},
+                             {"steals", steals(input.config)},
+                             {"conflicts", interaction::inputConflicts(input.config)}};
         if (!ipc::protocol::atLeast(protocol, "0.15"))
             response = interaction::beforePlacementInput(response);
         return ipc::protocol::atLeast(protocol, "0.9") ? response : interaction::legacyInputNames(response);
@@ -3114,6 +3148,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     }
     if (method == "_layout.restore") {
         layout.restore(params);
+        deriveHomes();
         publish();
         return Json::object();
     }
@@ -3882,6 +3917,7 @@ int luaConfig(lua_State *L) {
             runtime->tagged.clear();
         }
         runtime->config = next;
+        runtime->deriveHomes();
         runtime->applyGraphics(runtime->graphicsFile.current);
         runtime->cursor();
         runtime->publish();
@@ -3974,8 +4010,15 @@ int luaCamera(lua_State *state) {
              {"size", {e.surface.width, e.surface.height}},
              {"collision", runtime->world && e.visible && surfaces::overlaps(e.surface, runtime->world->collision)},
              {"rotation", e.surface.rotation},
+             {"workspaceId", e.instance.workspaceId},
              {"pixels", {e.surface.pixelWidth, e.surface.pixelHeight}},
              {"position", {e.surface.center.x, e.surface.center.y, e.surface.center.z}}});
+    j["workspaceFrames"] = Json::array();
+    for (auto &f : runtime->capture.workspaces)
+        j["workspaceFrames"].push_back({{"id", f.surface.id},
+                                        {"workspaceId", f.workspaceId},
+                                        {"title", f.surface.title},
+                                        {"position", {f.surface.center.x, f.surface.center.y, f.surface.center.z}}});
     lua_pushstring(state, j.dump().c_str());
     return 1;
 }

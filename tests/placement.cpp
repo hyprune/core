@@ -11,7 +11,7 @@ int main() {
     sim::Camera camera;
     camera.position = {0, 2, 0};
     surfaces::Layout layout;
-    surfaces::Instance a{"a", "kitty", "First", 8}, b{"b", "kitty", "Second", 8};
+    surfaces::Instance a{"a", "kitty", "First", 20}, b{"b", "kitty", "Second", 20};
     surfaces::Surface s;
     s.id = a.id;
     s.center = {0, 2, -2};
@@ -39,7 +39,7 @@ int main() {
     assert(scaled && std::abs(scaled->width - 3.6f) < .001f && std::abs(scaled->height - 2) < .001f);
     a.workspaceId = 1;
     assert(!restored.hasPlacement(a, &world)); // no implicit adoption on desktop workspaces
-    a.workspaceId = 8;
+    a.workspaceId = 20;
     layout.stash(a, at);
     layout.stash(b, at);
     assert(layout.pocketOrder[0] == b.id && layout.pocketOrder[1] == a.id);

@@ -1,0 +1,39 @@
+{
+  "nestedOnly": true,
+  "lock": "/tmp/worldshell-nested.lock",
+  "protocols": [
+    "0.15",
+    "0.1",
+    "0.3",
+    "0.5",
+    "0.8",
+    "0.11",
+    "0.14"
+  ],
+  "checks": [
+    "long-room title arrives longer than 4096 code points",
+    "long-home title arrives longer than 4096 code points",
+    "long-invalid title arrives longer than 4096 code points",
+    "long-wayland title arrives longer than 1000 code points",
+    "surface titles clamped to 512 code points, prefix kept",
+    "apps titles and classes clamped",
+    "malformed client bytes reach the wire only as valid UTF-8",
+    "placement rule clamped to 256 code points",
+    "placements.list rule clamped",
+    "native bind description clamped to 1024",
+    "IPC 0.1 snapshot titles clamped",
+    "IPC 0.3 snapshot titles clamped",
+    "IPC 0.5 snapshot titles clamped",
+    "IPC 0.8 snapshot titles clamped",
+    "IPC 0.11 snapshot titles clamped",
+    "IPC 0.14 snapshot titles clamped",
+    "IPC 0.15: 21 client frames valid",
+    "IPC 0.1: 13 client frames valid",
+    "IPC 0.3: 15 client frames valid",
+    "IPC 0.5: 14 client frames valid",
+    "IPC 0.8: 13 client frames valid",
+    "IPC 0.11: 13 client frames valid",
+    "IPC 0.14: 13 client frames valid",
+    "core wire audit validated 171 outgoing frames"
+  ]
+}

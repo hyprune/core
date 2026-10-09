@@ -34,9 +34,9 @@ def acceptance(client,children,args,token,socket):
         child=s.envrun('kitty','--class','placement-'+title,'--title',title,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);children.append(child)
         wait(lambda:any(w['title']==title for w in json.loads(s.ctl('clients','-j'))));time.sleep(.4);return child
     client.call('world.load',{'worldId':'org.hyprune.m3b'})
-    client.call('workspace.bind',{'id':8,'worldId':'org.hyprune.m3b','areaId':'sun-court'})
+    client.call('workspace.bind',{'id':20,'worldId':'org.hyprune.m3b','areaId':'sun-court'})
     s.ctl('eval','hl.dispatch(hl.dsp.focus({monitor="HEADLESS-1"}))')
-    s.ctl('eval','hl.dispatch(hl.dsp.focus({workspace="8"}))')
+    s.ctl('eval','hl.dispatch(hl.dsp.focus({workspace="20"}))')
     launch('Pocket-A');launch('Pocket-B');launch('Pocket-C')
     s.ctl('eval','hl.dispatch(hl.dsp.focus({workspace="91"}))')
     s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")')
@@ -75,7 +75,11 @@ def acceptance(client,children,args,token,socket):
     check('keep_orientation_while_looking',sum(abs(a-b) for a,b in zip(q,capture(first)['rotation']))<.003)
     wait(lambda:state()['editor']['carryFacing'] is True)
     pointer('button',272,0);wait(lambda:s.camera()['gesture']==0);carrying.wait(timeout=10)
-    check('carry_releases');pose(client,[0,capture(first)['position'][1],2]);time.sleep(.3);wait(lambda:s.camera()['aim']==first)
+    check('carry_releases')
+    # The room wall (20 is bound here) is behind the held window, not reached:
+    # releasing places the window instead of dropping it into that workspace.
+    check('release_before_wall_keeps_window',capture(first)['visible'] and any(i['surfaceId']==first for i in state()['mounts']['instances']))
+    pose(client,[0,capture(first)['position'][1],2]);time.sleep(.3);wait(lambda:s.camera()['aim']==first)
     modified(logo+shift,lambda:pointer('button',274));wait(lambda:state()['editor']['contentScale']['reset'])
     reset=capture(first);check('reset_preserves_quad_size',all(abs(reset['size'][i]-size[i])<.003 for i in range(2)))
     check('reset_client_size',reset['pixels']==base)

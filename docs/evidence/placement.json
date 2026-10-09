@@ -16,6 +16,7 @@
     "carry_defaults_face_player",
     "keep_orientation_while_looking",
     "carry_releases",
+    "release_before_wall_keeps_window",
     "reset_preserves_quad_size",
     "reset_client_size",
     "repeated_reset_has_feedback",

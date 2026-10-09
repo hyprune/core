@@ -43,7 +43,9 @@ void WireAudit::check(const std::string &protocol, const Json &frame, const std:
     if (pending_.size() >= 2048)
         failed("validator backlog exceeded (no frames skipped)");
     pending_.push_back(
-        Json{{"protocol", protocol.empty() ? "0.1" : protocol}, {"method", method}, {"frame", frame}}.dump() + "\n");
+        Json{{"protocol", protocol.empty() ? "0.1" : protocol}, {"method", method}, {"frame", frame}}.dump(
+            -1, ' ', false, Json::error_handler_t::replace) +
+        "\n");
     ready_.notify_one();
 }
 void WireAudit::run() {

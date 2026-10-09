@@ -8,7 +8,7 @@ for version in ['0.'+str(n) for n in range(1,16)]:
     item['frame']={'jsonrpc':'2.0','id':'a','error':{'code':-32602,'message':'invalid parameter'}}
     audit.validate(item)
 mounts={'areas':[],'anchors':[],'objects':[],'bindings':[],'placements':[],'placementZones':[],
-        'instances':[{'surfaceId':'app','workspaceId':8,'anchorId':'free','status':'placed'}],
+        'instances':[{'surfaceId':'app','workspaceId':20,'anchorId':'free','status':'placed'}],
         'carriedSurfaceId':None,'desktopWorkspaceId':None}
 item={'protocol':'0.15','method':'','frame':{'jsonrpc':'2.0','method':'mounts.changed','params':{'sessionId':'test','revision':1,'mounts':mounts}}}
 audit.validate(item)

@@ -36,7 +36,8 @@ Json defaultConfig() {
           {"step_height", .35},
           {"respawn_below", 30.0}}},
         {"windows",
-         {{"world_workspace", 8},
+         {{"world_workspace", 20},
+          {"workspace_base", 20},
           {"carry_face_player", true},
           {"spawn_distance", 5.0},
           {"scale", .002},
@@ -118,6 +119,12 @@ Json configPatch(const Json &current, const Json &patch) {
                     max = 999999;
                     if (!v.is_number_integer())
                         throw std::runtime_error("world_workspace must be a positive integer");
+                }
+                if (key == "workspace_base") {
+                    min = 0;
+                    max = 990000;
+                    if (!v.is_number_integer())
+                        throw std::runtime_error("workspace_base must be a non-negative integer");
                 }
                 if (key == "fly_bounds_allowance") { min = 0; max = 20; }
                 if (key == "offload_power_cap_w") { min = 20; max = 100; }
