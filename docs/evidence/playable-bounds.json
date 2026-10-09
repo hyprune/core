@@ -11,7 +11,7 @@
       "name": "fly stops at soft side boundary",
       "passed": true,
       "evidence": [
-        1.9997235536575317,
+        1.9996994733810425,
         1.7000000476837158,
         4.0
       ]
@@ -30,7 +30,7 @@
       "passed": true,
       "evidence": [
         0.0,
-        3.4989473819732666,
+        3.4988558292388916,
         4.0
       ]
     },
@@ -71,7 +71,7 @@
       "name": "fly returns gradually after noclip",
       "passed": true,
       "evidence": [
-        3.40000057220459,
+        3.450000524520874,
         1.7000000476837158,
         4.0
       ]
@@ -89,7 +89,7 @@
       "name": "walking remains collision driven outside playable volume",
       "passed": true,
       "evidence": [
-        3.7916524410247803,
+        3.849985122680664,
         1.7000000476837158,
         4.0
       ]

@@ -70,6 +70,18 @@ def acceptance(client,children,args,shell_token,socketpath):
         check(f'workspace {id} renders on the {area} primary wall',ok,data)
         d=face(id,area)
         check(f'{area} wall is reachable and aimable',d is not None,d)
+    # Intentional drop still works: pull the real client off its wall with
+    # Super+LMB and release it at the wall; it returns to native tiling on 21.
+    device=s.envrun(str(s.ROOT/'build/nested-pointer'),'serve',stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True);children.append(device)
+    def pointer(*args):
+        device.stdin.write(' '.join(map(str,args))+'\n');device.stdin.flush();assert device.stdout.readline().strip()=='ok';time.sleep(.1)
+    face(21,'sun-court')
+    mod=s.envrun('wtype','-P','Super_L','-s','900','-p','Super_L');children.append(mod);time.sleep(.15)
+    pointer('button',272,1);wait(lambda:s.camera()['gesture']==1)
+    pulled=next(c for c in s.camera()['captures'] if c['id']==s.camera()['gestureId'])
+    pointer('button',272,0);mod.wait(timeout=5);wait(lambda:s.camera()['gesture']==0);time.sleep(.3)
+    native=next(w for w in windows() if w['title']==pulled['title'])
+    check('carry released at its wall drops back into workspace 21',pulled['title']=='Home-21' and native['workspace']['id']==21 and not native['floating'] and not any(i.get('status')=='carried' for i in state()['mounts']['instances']),{'title':pulled['title'],'workspace':native['workspace']['id'],'floating':native['floating']})
     client.call('movement.set',{'modeId':'com.hyprune.walk'})
 
     # Travel: Director, native dispatcher and a normal Hyprland keybind agree.
