@@ -43,7 +43,8 @@ def acceptance(client,children,args,shell_token,socketpath):
     static=['--override','cursor_blink_interval=0','--override','font_size=14','--override','remember_window_size=no','--override','initial_window_width=1280','--override','initial_window_height=720']
     s.ctl('dispatch','hl.dsp.focus({ workspace = "10" })')
     flag=out/'video.go';flag.unlink(missing_ok=True)
-    terminals={'Perf wall':'echo mounted wall; exec sleep 3600','Perf-room':'echo placed terminal; exec sleep 3600',
+    wallflag=out/'wall.go';wallflag.unlink(missing_ok=True)
+    terminals={'Perf wall':f'echo mounted wall; while [ ! -e {wallflag} ]; do sleep .2; done; while :; do date +%s.%N; sleep 0.033; done','Perf-room':'echo placed terminal; exec sleep 3600',
                # Static until the flag appears, then ~30 Hz commits like a playing video.
                'Perf-video':f'echo waiting; while [ ! -e {flag} ]; do sleep .2; done; while :; do date +%s.%N; sleep 0.033; done'}
     for title,command in terminals.items():
@@ -123,5 +124,29 @@ def acceptance(client,children,args,shell_token,socketpath):
     b=timings();dt=time.monotonic()-t0
     report['resume'].update({'glideRenderedPerS':(b['renderedFrames']-a['renderedFrames'])/dt,'glideReused':b['reusedFrames']-a['reusedFrames'],'cameraUpdatesPerS':n/dt})
     print('MEASURE resume',json.dumps(report['resume']),flush=True)
+    # 5. Video wall: the Sun Court workspace wall (composited client) updates at ~30 Hz.
+    pose(client,POSES[0][1],POSES[0][2],POSES[0][3]);time.sleep(1.5)
+    wallflag.touch();time.sleep(1.5)
+    report['idle']['videoWall']=window(5);print('MEASURE videoWall',json.dumps(report['idle']['videoWall']),flush=True)
+    wallflag.unlink();time.sleep(2)
+    # 6. Walking: W held for 6 s from the arrival spawn (renders every tick).
+    from m2 import keys
+    client.call('movement.set',{'modeId':'com.hyprune.walk'});pose(client,POSES[0][1],POSES[0][2],POSES[0][3]);time.sleep(1)
+    a=timings();c0=gpu_cycles(pid);t0=time.monotonic()
+    keys('-P','w','-s','6000','-p','w')
+    b=timings();c1=gpu_cycles(pid);dt=time.monotonic()-t0
+    report['walking']={'seconds':dt,'renderedPerS':(b['renderedFrames']-a['renderedFrames'])/dt,'reused':b['reusedFrames']-a['reusedFrames'],
+        'nestedGpuBusyPct':100*(c1[0]-c0[0])/max(1,c1[1]-c0[1]),'renderScale':b['renderScale'],'gpuMs':b['gpuEffectsMs'],'cpuRenderMs':b['cpuRenderMs']}
+    print('MEASURE walking',json.dumps(report['walking']),flush=True)
+    # 7. Load: reload the active world; time to upload done and to the first new frame.
+    prev=timings();before=prev['renderedFrames'];t0=time.monotonic()
+    client.call('world.load',{'worldId':LUMEN})
+    wait(lambda:(u:=timings()['upload'])['pending'] or u!=prev['upload'],timeout=10)   # a fast upload may finish before the first poll
+    wait(lambda:not timings()['upload']['pending'],timeout=60);uploaded=time.monotonic()
+    wait(lambda:(pose(client,POSES[0][1],POSES[0][2]+1e-4,POSES[0][3]) or True) and timings()['renderedFrames']>before,timeout=20)
+    u=timings()['upload']
+    report['load']={'uploadDoneMs':(uploaded-t0)*1000,'firstFrameMs':(time.monotonic()-t0)*1000,'gpuMiB':u.get('gpuBytes',0)/2**20,
+        'uploadMiB':u['bytes']/2**20,'steps':u['steps'],'uploadCpuMs':u['cpuMs'],'maxStepMs':u['maxStepMs'],'maxJobMs':u['maxJobMs'],'slowestJob':u['slowestJob']}
+    print('MEASURE load',json.dumps(report['load']),flush=True)
     (out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PERF report',out/'report.json',flush=True)
