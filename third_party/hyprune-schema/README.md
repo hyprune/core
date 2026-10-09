@@ -20,3 +20,6 @@ World contracts and earlier IPC bytes remain unchanged.
 World 0.5 bytes are pinned to schema `2c030cb`. The world schema inlines its
 optional atmosphere extension and otherwise reuses the frozen 0.4 common
 constraints. Regenerated with `dev/embed-schema.py`; no runtime sibling access.
+
+World 0.6 playable bounds/backdrop bytes are pinned to `2c1be9b3359025a0467eab7b0c11bc9aa339eeb5`;
+its common schema reuses the already-pinned 0.6 bytes.

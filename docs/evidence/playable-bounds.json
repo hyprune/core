@@ -1,0 +1,121 @@
+{
+  "nestedOnly": true,
+  "lock": "/tmp/worldshell-nested.lock",
+  "checks": [
+    {
+      "name": "nested world owns input",
+      "passed": true,
+      "evidence": "2560, 540"
+    },
+    {
+      "name": "fly stops at soft side boundary",
+      "passed": true,
+      "evidence": [
+        1.9996994733810425,
+        1.7000000476837158,
+        4.0
+      ]
+    },
+    {
+      "name": "fly stops at maximum height",
+      "passed": true,
+      "evidence": [
+        0.0,
+        2.9998507499694824,
+        4.0
+      ]
+    },
+    {
+      "name": "allowance live applies to ceiling",
+      "passed": true,
+      "evidence": [
+        0.0,
+        3.4988558292388916,
+        4.0
+      ]
+    },
+    {
+      "name": "noclip escapes box",
+      "passed": true,
+      "evidence": [
+        6.999978542327881,
+        1.7000000476837158,
+        4.0
+      ]
+    },
+    {
+      "name": "one outward crossing notice",
+      "passed": true,
+      "evidence": 1
+    },
+    {
+      "name": "no notice spam",
+      "passed": true,
+      "evidence": null
+    },
+    {
+      "name": "re-entry rearms notice",
+      "passed": true,
+      "evidence": null
+    },
+    {
+      "name": "noclip ignores fall respawn",
+      "passed": true,
+      "evidence": [
+        0.0,
+        -80.0,
+        4.0
+      ]
+    },
+    {
+      "name": "fly returns gradually after noclip",
+      "passed": true,
+      "evidence": [
+        3.500000476837158,
+        1.7000000476837158,
+        4.0
+      ]
+    },
+    {
+      "name": "fly recovers inside expanded volume",
+      "passed": true,
+      "evidence": [
+        2.5000014305114746,
+        1.7000000476837158,
+        4.0
+      ]
+    },
+    {
+      "name": "walking remains collision driven outside playable volume",
+      "passed": true,
+      "evidence": [
+        3.849985122680664,
+        1.7000000476837158,
+        4.0
+      ]
+    },
+    {
+      "name": "IPC snapshot remains usable",
+      "passed": true,
+      "evidence": null
+    },
+    {
+      "name": "com.hyprune.lumen-reach legacy unrestricted fly",
+      "passed": true,
+      "evidence": [
+        0.0,
+        121.50045776367188,
+        0.0
+      ]
+    },
+    {
+      "name": "com.hyprune.switchyard legacy unrestricted fly",
+      "passed": true,
+      "evidence": [
+        0.0,
+        121.41709899902344,
+        0.0
+      ]
+    }
+  ]
+}

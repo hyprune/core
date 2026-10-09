@@ -1,4 +1,5 @@
 #pragma once
+#include "Playable.hpp"
 #include "sim/Camera.hpp"
 #include "sim/Climbing.hpp"
 #include <array>
@@ -51,6 +52,8 @@ struct CubeLevel {
     std::array<std::vector<float>, 6> faces;
 };
 struct World {
+    PlayableBounds playable;
+    std::vector<std::string> warnings;
     std::string id, name, defaultSpawn;
     std::vector<Spawn> spawns;
     std::vector<sim::Climbable> climbables;

@@ -684,7 +684,10 @@ void Layout::mount(const Instance &i, const world::World *w, Surface s) {
         carried.clear();
 }
 Json Layout::state(const world::World *w) const {
-    return {{"areas", w ? w->areas : Json::array()},
+    auto areas = w ? w->areas : Json::array();
+    // Authoring-only gameplay geometry is not part of the IPC area contract.
+    for (auto &area : areas) area.erase("playable");
+    return {{"areas", areas},
             {"anchors", w ? w->anchors : Json::array()},
             {"objects", w ? w->objects : Json::array()},
             {"bindings", bindings},

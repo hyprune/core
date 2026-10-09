@@ -252,3 +252,19 @@ M4 phase 1 adds optional runtime dGPU offload, **off by default**, and exact IPC
 0.10 Performance controls. Build also requires Vulkan and GBM development packages
 for `hyprune-renderer`; the local path continues to run without a discrete GPU.
 See [graphics controls](docs/GRAPHICS.md) and [M4 acceptance](docs/M4.md).
+
+### Playable bounds and backdrop checks
+
+World format 0.6 optionally declares world/area `playable` boxes or convex hulls
+and `maxFlyHeight` (absolute eye Y). Fly eases against the authored region plus
+`player.fly_bounds_allowance` (live Lua config, default 0.5 m, range 0–20 m).
+Walking keeps its collision behavior; noclip ignores bounds and respawn, with a
+`world.bounds.left` notice on each outward crossing. Older worlds are unchanged.
+
+`backdrop.farCards` declares glTF node subtrees for sky-card sampler checks.
+`build/hyprune-world-check PACKAGE` emits CLAMP_TO_EDGE warnings on stderr and
+in its JSON `warnings` array without rejecting intentional clamping. See the
+[RFC-0004 amendment](https://hyprune.com/rfcs/0004-world-format/).
+
+Regression commands: `ctest --test-dir build --output-on-failure` and
+`dev/nested/run.sh --playable` (the runner acquires the nested lifetime flock).

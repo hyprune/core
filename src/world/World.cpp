@@ -72,7 +72,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     });
     validateManifest(j);
     require((j.at("formatVersion") == "0.1" || j.at("formatVersion") == "0.2" || j.at("formatVersion") == "0.3" ||
-             j.at("formatVersion") == "0.4" || j.at("formatVersion") == "0.5"),
+             j.at("formatVersion") == "0.4" || j.at("formatVersion") == "0.5" || j.at("formatVersion") == "0.6"),
             "unsupported world format");
     require(std::regex_match(j.at("id").get<std::string>(), std::regex("[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+")),
             "invalid world ID");
@@ -427,6 +427,32 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     result->atmosphere = j.value("atmosphere", defaultAtmosphere());
     validateAtmosphere(result->atmosphere);
     loadVisibility(*result);
+    result->playable = loadPlayable(j);
+    for (auto &card : j.value("backdrop", Json::object()).value("farCards", Json::array())) {
+        if (card.get<uint64_t>() >= raw->nodes_count)
+            throw std::runtime_error("backdrop farCards: unknown node");
+        unsigned node = card.get<unsigned>();
+        for (auto &mesh : result->meshes) {
+            int ancestor = mesh.node;
+            while (ancestor >= 0 && unsigned(ancestor) != node)
+                ancestor = result->nodeParents[ancestor];
+            if (ancestor < 0)
+                continue;
+            for (auto &slot : result->materials[mesh.material].slots) {
+                if (slot.texture < 0)
+                    continue;
+                auto &sampler = result->samplers.at(slot.texture);
+                if (sampler.wrapS == 33071 || sampler.wrapT == 33071) {
+                    auto warning =
+                        "backdrop far card node " + std::to_string(node) + " texture " + std::to_string(slot.texture) +
+                        " uses CLAMP_TO_EDGE (" + (sampler.wrapS == 33071 ? std::string("S") : "") +
+                        (sampler.wrapT == 33071 ? std::string("T") : "") + "); far cards may smear at their edges";
+                    if (std::find(result->warnings.begin(), result->warnings.end(), warning) == result->warnings.end())
+                        result->warnings.push_back(warning);
+                }
+            }
+        }
+    }
     if (result->atmosphere.contains("environment")) {
         int i = 0;
         for (const auto &face : result->atmosphere["environment"]["faces"]) {

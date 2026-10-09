@@ -5,6 +5,7 @@ int main(int argc, char **argv) {
         if (argc != 2)
             throw std::runtime_error("usage: hyprune-world-check PACKAGE");
         auto w = hyprune::world::load(argv[1]);
+        for (auto &warning : w->warnings) std::cerr << "warning: " << warning << '\n';
         size_t bytes = 0;
         for (auto &mesh : w->meshes)
             bytes += mesh.vertices.size() * sizeof(hyprune::world::Vertex);
@@ -25,7 +26,7 @@ int main(int argc, char **argv) {
             bytes += size_t(level.size) * level.size * 6 * 8;
         if (bytes > 512 * 1024 * 1024)
             throw std::runtime_error("world GPU budget exceeded including mip/color/environment views");
-        std::cout << hyprune::world::Json{{"worldId", w->id},
+        std::cout << hyprune::world::Json{{"worldId", w->id}, {"warnings", w->warnings},
                                           {"areas", w->areas},
                                           {"anchors", w->anchors.size()},
                                           {"objects", w->objects.size()},

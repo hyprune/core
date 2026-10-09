@@ -159,6 +159,7 @@ struct Runtime {
         if (!zoomHeld && !control.photoHeld())
             camera.fov = baseFov;
     }
+    bool outsidePlayable = false;
     bool superHeld = false, altHeld = false, noclip = false, freeCursor = false, layerCursor = false, zoomHeld = false,
          cursorWarpPending = false;
     float zoom = 1, baseFov = 60, lookX = 0, lookY = 0;
@@ -1062,6 +1063,7 @@ void Runtime::finishLoad() {
         renderer.profile = graphicsBaseProfile;
         applyGraphics(graphicsFile.current);
         world = std::move(candidate);
+        outsidePlayable = false;
         capture.release();
         layout.invalidateCollision();
         layout.freePoses.clear();
@@ -3535,6 +3537,7 @@ void Runtime::tick() {
         accumulator = std::min(accumulator + double(dt), 4.0 / 60.0);
         while (accumulator >= 1.0 / 60.0) {
             if (!layerCursor && !loading && !control.driving() && !control.uiVisible() && !handover.phase && fullscreen.phase == 0) {
+                const auto beforeMove = camera.position;
                 if (noclip) {
                     auto speed = intent.speed;
                     intent.speed = config["player"]["fly_speed"].get<float>() / 5.f;
@@ -3546,10 +3549,19 @@ void Runtime::tick() {
                                   config["graphics"]["reduced_motion"], world->collision, &world->collisionIndex);
                 else
                     movement->step(camera, intent, 1.f / 60.f, world->collision, &world->collisionIndex);
+                if (movement == &fly && !noclip && !typing && ownsInput() && !control.photoHeld())
+                    camera.position = world->playable.constrain(
+                        beforeMove, camera.position, config["player"]["fly_bounds_allowance"].get<float>(), 1.f / 60.f);
             }
             accumulator -= 1.0 / 60.0;
         }
-        if (!control.photoHeld() && config["player"]["respawn_below"].get<float>() > 0 &&
+        const bool outside = noclip && !world->playable.contains(camera.position);
+        if (outside && !outsidePlayable)
+            ipc->notify("runtime.notice", {{"level", "warning"},
+                                           {"code", "world.bounds.left"},
+                                           {"message", "Leaving world bounds · noclip is unbounded"}});
+        outsidePlayable = outside;
+        if (!noclip && !control.photoHeld() && config["player"]["respawn_below"].get<float>() > 0 &&
             camera.position.y < world->spawn().position.y + 1.7f - config["player"]["respawn_below"].get<float>()) {
             auto s = world->spawn();
             climbing.reset(camera);

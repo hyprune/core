@@ -27,6 +27,7 @@ Json defaultConfig() {
         {"player",
          {{"walk_speed", 3.5},
           {"fly_speed", 5.0},
+          {"fly_bounds_allowance", 0.5},
           {"run_multiplier", 1.8},
           {"jump_speed", 5.0},
           {"look_sensitivity", .0025},
@@ -118,6 +119,7 @@ Json configPatch(const Json &current, const Json &patch) {
                     if (!v.is_number_integer())
                         throw std::runtime_error("world_workspace must be a positive integer");
                 }
+                if (key == "fly_bounds_allowance") { min = 0; max = 20; }
                 if (key == "offload_power_cap_w") { min = 20; max = 100; }
                 if (key == "scale_min" || key == "scale_max") { min = .375; max = 1; }
                 if (key == "target_fps") {

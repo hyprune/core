@@ -237,3 +237,14 @@ compositor work. Reduction requires 0.6 seconds above 108% of that budget;
 increase requires 6 seconds below 60%. Missing/disjoint timer samples do not
 change resolution. This is a GPU-work target, not a guarantee of compositor FPS
 under concurrent GPU load. Fixed scale disables automatic adaptation.
+
+### Playable bounds (world 0.6)
+
+`hl.plugin.hyprune.config({player={fly_bounds_allowance=0.5}})` live-applies the
+0–20 m allowance around authored flight volumes and maximum fly height. World
+bounds use eye coordinates, brake in the final metre and preserve walking.
+Noclip stays unbounded and emits a warning when leaving the authored region.
+No cursor state transitions were added. Supervised check: fly toward a side and
+ceiling, confirm a soft stop; toggle noclip, cross the boundary, confirm one
+notice; return inside and cross again; disable noclip outside and verify a
+gradual return. Run only after the owner chooses to retry.

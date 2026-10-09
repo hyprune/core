@@ -986,3 +986,17 @@ currently fails `live instances present after warp`; the strengthened shell
 recovery run also times out waiting for an unzoned instance. The initial shell
 fault-injection/credential-renewal checks passed, but complete nonempty-instance
 warp acceptance remains open. See `HANDOFF.md` for the precise next steps.
+
+## World 0.6: playable bounds and backdrop diagnostics
+
+Core and SDK accept world manifests at 0.6. `playable` on the world/areas adds
+boxes/convex hulls and maxFlyHeight; `backdrop.farCards` opts glTF node subtrees
+into clamp-wrap warnings. RFC-0004 defines the contract. Shell package validators
+should accept 0.6 (SDK `World06_Document`); existing IPC remains **0.15**.
+`mounts.areas` deliberately omits authoring-only `playable`, preserving every
+existing IPC area schema. No new shell projection or movement calculation.
+
+Noclip emits `runtime.notice` with warning code `world.bounds.left` and text
+“Leaving world bounds · noclip is unbounded”, once per outward crossing. Show
+through the usual notice UI. Fly bounds allowance is the live Lua config
+`player.fly_bounds_allowance` (0.5 m default, 0–20). No cursor changes.
