@@ -51,15 +51,16 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('other_workspace_not_adopted',not any(e['title'].startswith('Before-room') for e in s.camera()['captures']))
     # Move focus to another workspace while active: scope must follow the room,
     # not the active monitor or the last launch on that monitor.
-    change(12)
+    # 11-14 are Lumen Reach's default area homes (workspace_base 10 + slot); use a plain workspace.
+    change(30)
     other = launch('Other-workspace', True)
-    check('other_workspace_launch_stays_tiled',not other['floating'] and other['workspace']['id']==12)
+    check('other_workspace_launch_stays_tiled',not other['floating'] and other['workspace']['id']==30)
     time.sleep(.3)
     check('other_workspace_launch_not_adopted',not any(e['title']=='Other-workspace' for e in s.camera()['captures']))
     change(8)
-    s.ctl('eval','hl.window_rule({name="room-test-redirect",match={title="^Redirected-room$"},workspace="12 silent"})')
+    s.ctl('eval','hl.window_rule({name="room-test-redirect",match={title="^Redirected-room$"},workspace="30 silent"})')
     redirected=launch('Redirected-room',True)
-    check('explicit_workspace_rule_stays_tiled',redirected['workspace']['id']==12 and not redirected['floating'],redirected)
+    check('explicit_workspace_rule_stays_tiled',redirected['workspace']['id']==30 and not redirected['floating'],redirected)
     toggle(False); check('exit_returns_previous_workspace',workspace()==10)
     toggle(True); check('reenter_returns_room',workspace()==8)
     check('adopted_identity_survives_toggle',wait(lambda:any(e['id']==plane['id'] and e['visible'] for e in s.camera()['captures'])))
