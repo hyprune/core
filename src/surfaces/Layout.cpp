@@ -1,5 +1,6 @@
 #include "Layout.hpp"
 #include "ipc/Server.hpp"
+#include "ipc/Text.hpp"
 #include "world/Mounts.hpp"
 #include <set>
 namespace hyprune::surfaces {
@@ -165,12 +166,15 @@ void anchorPlane(Surface &s, const Json &a, int pw, int ph) {
     }
 }
 Json Layout::rule(const Instance &i) const {
-    return {{"appClass", i.appClass}, {"title", i.title}};
+    return {{"appClass", ipc::boundedText(i.appClass, ipc::RuleLimit)},
+            {"title", ipc::boundedText(i.title, ipc::RuleLimit)}};
 }
 bool Layout::matches(const Json &p, const Instance &i) const {
     // Exact class/title and the explicit empty-title class rule; no arbitrary regex execution.
-    return p.at("rule").at("appClass") == i.appClass &&
-           (p.at("rule").at("title") == "" || p.at("rule").at("title") == i.title);
+    // Rules hold wire-bounded identity; compare the same bounded form.
+    auto r = rule(i);
+    return p.at("rule").at("appClass") == r["appClass"] &&
+           (p.at("rule").at("title") == "" || p.at("rule").at("title") == r["title"]);
 }
 const Json *Layout::binding(int id, const world::World *w) const {
     for (const auto *list : {&bindings, &defaults})

@@ -62,7 +62,7 @@ int main() {
         };
         auto send = [&](Json j) {
             j["epoch"] = epoch;
-            auto bytes = j.dump();
+            auto bytes = j.dump(-1, ' ', false, Json::error_handler_t::replace);
             if (::send(fd, bytes.data(), bytes.size(), MSG_NOSIGNAL) != (ssize_t)bytes.size())
                 throw std::runtime_error("bridge write failed");
         };

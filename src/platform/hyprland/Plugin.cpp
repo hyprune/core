@@ -43,14 +43,15 @@ extern "C" {
 #include <lua.h>
 }
 #include "Capture.hpp"
+#include "hud/Telemetry.hpp"
 #include "interaction/Resize.hpp"
 #include "ipc/Bridge.hpp"
 #include "ipc/Protocol.hpp"
-#include "hud/Telemetry.hpp"
+#include "ipc/Text.hpp"
 #include "offload/Client.hpp"
-#include "replay/Session.hpp"
 #include "render/PNG.hpp"
 #include "render/Renderer.hpp"
+#include "replay/Session.hpp"
 #include <fcntl.h>
 #include <fstream>
 #include <future>
@@ -871,7 +872,7 @@ void Runtime::publish() {
         if (std::none_of(surfaces.begin(), surfaces.end(), [&](auto &s) { return s.at("id") == id; }))
             surfaces.push_back({{"id", id},
                                 {"kind", "workspace"},
-                                {"title", workspace->m_name},
+                                {"title", ipc::boundedText(workspace->m_name, ipc::TitleLimit)},
                                 {"logicalSize", {1280, 720}},
                                 {"focused", workspace->isVisible()}});
     }
@@ -898,7 +899,7 @@ void Runtime::publish() {
     if (monitor) {
         auto output = "output-" + std::to_string(monitor->m_id);
         spatial["output"] = {{"id", output},
-                             {"name", monitor->m_name},
+                             {"name", ipc::boundedText(monitor->m_name, ipc::OutputNameLimit)},
                              {"width", int(monitor->m_pixelSize.x)},
                              {"height", int(monitor->m_pixelSize.y)},
                              {"scale", monitor->m_scale}};
@@ -933,16 +934,16 @@ void Runtime::publish() {
         if (entry == capture.entries.end())
             surfaces.push_back({{"id", id},
                                 {"kind", "window"},
-                                {"title", window->m_title},
+                                {"title", ipc::boundedText(window->m_title, ipc::TitleLimit)},
                                 {"logicalSize",
                                  {std::max(1, int(window->resource() ? window->resource()->m_current.size.x : 1)),
                                   std::max(1, int(window->resource() ? window->resource()->m_current.size.y : 1))}},
                                 {"focused", Desktop::focusState()->window() == window}});
         apps.push_back({{"surfaceId", id},
                         {"workspaceId", int(window->m_workspace->m_id)},
-                        {"title", window->m_title},
-                        {"appClass", window->m_class},
-                        {"icon", window->m_class}});
+                        {"title", ipc::boundedText(window->m_title, ipc::TitleLimit)},
+                        {"appClass", ipc::boundedText(window->m_class, ipc::ClassLimit)},
+                        {"icon", ipc::boundedText(window->m_class, ipc::ClassLimit)}});
     }
     Json publication = {
         {"interaction",
@@ -958,12 +959,12 @@ void Runtime::publish() {
           {"taggedSurfaceId", tagged.empty() ? Json(nullptr) : Json(tagged)}}},
         {"keymap",
          {{"config", input.config},
-          {"path", inputFile.path.string()},
+          {"path", ipc::boundedText(inputFile.path.string(), ipc::PathLimit)},
           {"conflicts", interaction::inputConflicts(input.config)},
           {"steals", steals(input.config)},
           {"capture", captureRequest},
           {"holds", input.holds()},
-          {"error", inputFile.error}}},
+          {"error", ipc::boundedText(inputFile.error, ipc::MessageLimit)}}},
         {"editor",
          {{"unplaced", unplacedState()},
           {"contentScale", contentFeedback},
@@ -1873,9 +1874,11 @@ Json Runtime::steals(const Json &config) const {
                         out.push_back({{"mode", mode},
                                        {"action", action},
                                        {"binding", value},
-                                       {"description", bind->description.empty() ? bind->handler + " " + bind->arg
-                                                                                 : bind->description},
-                                       {"submap", bind->submap.name}});
+                                       {"description",
+                                        ipc::boundedText(bind->description.empty() ? bind->handler + " " + bind->arg
+                                                                                   : bind->description,
+                                                         ipc::DescriptionLimit)},
+                                       {"submap", ipc::boundedText(bind->submap.name, ipc::SubmapLimit)}});
                 }
             }
     return out;
@@ -3031,12 +3034,15 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             applyGraphics(merged);
         } else if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
-        Json response{
-            {"config", config["graphics"]},         {"effective", renderer.graphics},
-            {"overrides", graphicsFile.current},    {"path", graphicsFile.path.string()},
-            {"error", graphicsFile.error},          {"presets", render::graphicsPresets()},
-            {"options", render::graphicsOptions()}, {"unsupported", {"ssr", "runtime_shadows", "contact_shadows"}},
-            {"timings", renderer.timings()}};
+        Json response{{"config", config["graphics"]},
+                      {"effective", renderer.graphics},
+                      {"overrides", graphicsFile.current},
+                      {"path", ipc::boundedText(graphicsFile.path.string(), ipc::PathLimit)},
+                      {"error", ipc::boundedText(graphicsFile.error, ipc::MessageLimit)},
+                      {"presets", render::graphicsPresets()},
+                      {"options", render::graphicsOptions()},
+                      {"unsupported", {"ssr", "runtime_shadows", "contact_shadows"}},
+                      {"timings", renderer.timings()}};
         if (ipc::protocol::atLeast(protocol, "0.10")) response["performance"] = performance();
         else for (auto section : {"config", "effective", "overrides", "options"})
             for (auto key : {"offload", "offload_power_cap_w", "scale_min", "scale_max"}) response[section].erase(key);
@@ -3058,8 +3064,10 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     if (method == "input.get") {
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
-        auto response = Json{{"config", input.config}, {"path", inputFile.path.string()},
-                             {"steals", steals(input.config)}, {"conflicts", interaction::inputConflicts(input.config)}};
+        auto response = Json{{"config", input.config},
+                             {"path", ipc::boundedText(inputFile.path.string(), ipc::PathLimit)},
+                             {"steals", steals(input.config)},
+                             {"conflicts", interaction::inputConflicts(input.config)}};
         if (!ipc::protocol::atLeast(protocol, "0.15"))
             response = interaction::beforePlacementInput(response);
         return ipc::protocol::atLeast(protocol, "0.9") ? response : interaction::legacyInputNames(response);

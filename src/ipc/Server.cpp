@@ -1,6 +1,7 @@
 #include "Server.hpp"
-#include "WireAudit.hpp"
 #include "Protocol.hpp"
+#include "Text.hpp"
+#include "WireAudit.hpp"
 #include "interaction/Input.hpp"
 #include <cstring>
 #include <fcntl.h>
@@ -257,14 +258,14 @@ void Server::notify(const std::string &event, Json params, const std::string &ac
 void Server::publish(Json state) {
     if (state == state_)
         return;
-    if (state.dump().size() > MaxFrame - 4096)
+    if (state.dump(-1, ' ', false, Json::error_handler_t::replace).size() > MaxFrame - 4096)
         throw Error(-32008, "snapshot resource limit");
     state_ = std::move(state);
     ++revision_;
 }
 void Server::queue(Peer &p, const Json &value, const std::string &method) {
     audit_->check(p.protocol, value, method);
-    auto s = value.dump();
+    auto s = value.dump(-1, ' ', false, Json::error_handler_t::replace);
     if (s.size() > MaxFrame || p.output.size() + s.size() + 4 > MaxQueue) {
         p.closing = true;
         p.output.clear();
@@ -486,7 +487,9 @@ void Server::frame(Peer &p, const std::string &bytes) {
         }
         queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"result", result}}, method);
     } catch (const Error &e) {
-        queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"error", {{"code", e.code}, {"message", e.what()}}}});
+        queue(p, {{"jsonrpc", "2.0"},
+                  {"id", id},
+                  {"error", {{"code", e.code}, {"message", boundedText(e.what(), MessageLimit)}}}});
         if (!p.hello)
             p.closing = true;
     } catch (const Json::exception &) {

@@ -1,5 +1,6 @@
 #pragma once
 #include "Server.hpp"
+#include "Text.hpp"
 #include <deque>
 #include <optional>
 #include <sys/types.h>
@@ -15,6 +16,8 @@ class Bridge {
     // publishes them but never persists them as user layout.
     void publish(Json state, Json derived = Json::array());
     void notify(const std::string &event, Json params, const std::string &actor = "") {
+        if (params.is_object() && params.contains("message") && params["message"].is_string())
+            params["message"] = boundedText(params["message"].get<std::string>(), MessageLimit);
         send({{"type", "event"}, {"event", event}, {"params", std::move(params)}, {"actor", actor}});
     }
     void renderer(Json request) { send({{"type", "renderer.request"}, {"request", std::move(request)}}); }

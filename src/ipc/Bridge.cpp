@@ -75,7 +75,8 @@ Bridge::~Bridge() {
 }
 void Bridge::send(Json j) {
     j["epoch"] = epoch_;
-    std::string bytes = j.dump();
+    // Last resort: invalid UTF-8 never aborts a frame (sources are bounded upstream).
+    std::string bytes = j.dump(-1, ' ', false, Json::error_handler_t::replace);
     if (bytes.size() > 196608 || output_.size() >= 64)
         throw Error(-32008, "private bridge budget exceeded");
     output_.push_back(std::move(bytes));

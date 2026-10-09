@@ -1,5 +1,6 @@
 #pragma once
 #include "interaction/Input.hpp"
+#include "ipc/Text.hpp"
 #include "world/World.hpp"
 #include <chrono>
 #include <condition_variable>
@@ -173,13 +174,16 @@ class Session {
     }
     uint64_t logicalMillis() const { return began_ / 1000000 + frame * 1000 / 60; }
     Json status() {
+        Json bounded = Json::array();
+        for (auto &failure : failures)
+            bounded.push_back(ipc::boundedText(failure.get<std::string>(), ipc::FailureLimit));
         return {{"recording", recording},
                 {"playing", playing},
-                {"path", path.empty() ? Json(nullptr) : Json(path)},
+                {"path", path.empty() ? Json(nullptr) : Json(ipc::boundedText(path, ipc::PathLimit))},
                 {"frame", frame},
                 {"mode", mode},
-                {"failures", failures},
-                {"error", error().empty() ? Json(nullptr) : Json(error())}};
+                {"failures", bounded},
+                {"error", error().empty() ? Json(nullptr) : Json(ipc::boundedText(error(), ipc::RecordingErrorLimit))}};
     }
     void startRecording(Json initial, bool appKeys) {
         if (recording || playing)

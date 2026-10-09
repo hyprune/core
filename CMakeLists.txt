@@ -156,6 +156,10 @@ endif()
 if(BUILD_TESTING)
  find_package(Python3 COMPONENTS Interpreter REQUIRED)
  add_test(NAME wire-schema COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/wire-audit.py)
+ add_executable(text-tests tests/text.cpp)
+ target_link_libraries(text-tests PRIVATE hyprune_runtime)
+ add_test(NAME wire-text COMMAND text-tests)
+ add_test(NAME wire-text-schema COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/wire-text.py $<TARGET_FILE:text-tests>)
  add_test(NAME live-credentials COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/dev/live/test_credentials.py)
  # The inheritance unit intentionally publishes incomplete projection fixtures;
  # full wire shapes are asserted by wire-schema and every nested helper instead.
