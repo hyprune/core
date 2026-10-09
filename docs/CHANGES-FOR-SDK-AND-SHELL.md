@@ -1000,3 +1000,24 @@ Noclip emits `runtime.notice` with warning code `world.bounds.left` and text
 “Leaving world bounds · noclip is unbounded”, once per outward crossing. Show
 through the usual notice UI. Fly bounds allowance is the live Lua config
 `player.fly_bounds_allowance` (0.5 m default, 0–20). No cursor changes.
+
+## Recovery acceptance closed; playable bounds landed (2026-10-09)
+
+The nonempty-instance gap above is closed. Unzoned mount instances come only
+from saved free-space placements (tool-5 LMB) of clients on the **unbound** world
+workspace, re-located after a world load; recall and free spawn poses do not
+survive a load for unbound clients, which is why earlier fixtures saw none.
+
+- Core `dev/nested/run.sh --ipc-warp` (core `5298196`): two real clients, one
+  mounted per world, four warps on one connection. Every check point has
+  nonempty instances, no empty areaId and at least one instance without areaId;
+  client-side 0.15 responses/notifications validate and the helper's wire audit
+  passes (519 frames on the merged tree). Evidence: `docs/evidence/ipc-warp.json`.
+- Shell `dev/recovery-core.py` (shell `e45dbe0`) now defaults to the generic
+  visibility fixture and asserts the same after each warp, after invalid-frame
+  snapshot recovery and after both forced disconnects with renewed credentials.
+  Only the injected frame is quarantined; no reconnect occurs through warps.
+
+World 0.6 playable bounds (section above) are committed as core `d853d0c`; IPC
+is unchanged at 0.15. `dev/live/down` now frees each run's world/plugin copies
+from `XDG_RUNTIME_DIR` (`c474ef5`); leaked nested copies had filled the tmpfs.

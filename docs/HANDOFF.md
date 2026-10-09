@@ -1,169 +1,105 @@
-# Core lead handoff — 2026-10-09
+# Core lead handoff — 2026-10-09 (evening)
 
-Checkpoint requested by the owner. Stop here; no live retry was performed.
-The live compositor is running. All further engineering tests must be nested
-under `/tmp/worldshell-nested.lock`. Never load, unload, dispatch to or otherwise
-change the owner's live session. Never signal the gallery watcher. Private
-packages are local test inputs only: do not publish their identities or content.
+The IPC recovery acceptance gap is closed and the queued playable-bounds work is
+committed. Nothing was pushed. All testing was nested under
+`/tmp/worldshell-nested.lock`; the owner's live compositor was never loaded,
+dispatched to or restarted. The gallery watcher was not touched. Private
+packages were not used: every run below used generic public fixtures.
 
-## Committed urgent fix
+## Commits (local, unpushed)
 
-Core **cc2dc8a** checkpoints post-warp schema correction, negotiated outgoing-frame
-validation and private credential renewal. The preceding multiworld live launcher
-is **0735e4d**. Nothing was pushed.
-
-Live captures identified empty `mounts.instances[].areaId` strings for unzoned
-windows. The rejected notification itself was not retained, so its precise
-original envelope is unknown. Core now omits absent area IDs. Corrected IPC 0.15
-permits omission but still requires nonempty IDs when present. Older protocols
-omit unzoned mount-instance metadata rather than violating their frozen schema;
-ordinary surface/app lists are unchanged. HUD-style and visibility data were not
-the identified malformed fields.
-
-Every outgoing helper IPC frame can be checked against its negotiated canonical
-schema, including the originating method for successful replies. Debug enables
-this by default; nested sets `HYPRUNE_VALIDATE_IPC=1`; Release leaves it off unless
-explicitly enabled. A bounded worker validates off the compositor thread and
-aborts the test helper on failure with a redacted method/path diagnostic. Schema
-files are pinned locally for offline validation.
-
-The live bootstrap now stays alive and brokers fresh, expiring one-use tokens
-over inherited private sockets. `SCM_CREDENTIALS` authenticates the exact launcher
-PID/UID/GID; grants are PID-bound and cannot exceed original capabilities. Limits
-are 8 requests/s, 4096 per launch and 64 outstanding grants, with a 30 s expiry.
-The helper services renewal even while a plugin command is pending. No public
-credential method, token files, config edits or cursor transitions were added.
-Already-running old supervisors require an owner-run down/up to gain renewal.
-
-Related commits, all local and committed:
-
-| Repo | Urgent fix | Earlier queued bounds contract |
+| Repo | Commit | What |
 | --- | --- | --- |
-| schema | `d44126a` | `2c1be9b` |
-| sdk | `9763829` | `729634c` |
-| docs | `7997a0b` | `ed06870` |
-| shell (separate agent) | `72a75a9`, handoff `5803c57` | — |
+| core | `5298196` | Nested warp fixture with genuine unzoned mount instances |
+| core | `6c1861d` | Deflake render test (GPU sync before checked overlay draws) |
+| core | `d853d0c` | World 0.6 playable fly bounds + backdrop card warnings (restored stash) |
+| core | `c474ef5` | `dev/live/down` frees per-run world/plugin copies in the runtime tmpfs |
+| core | this commit | Handoff and CHANGES notes |
+| shell | `e45dbe0` | Recovery harness: generic fixture, unzoned instances, evidence |
 
-Shell independently quarantines malformed complete frames, resnapshots with
-bounded backoff, and reconnects using the renewed credential channel. Its schema
-pin includes the corrected 0.15 definition. See the shell's `docs/HANDOFF.md` and
-`docs/bridge-recovery.md`; core did not edit shell files.
+Earlier urgent fix: core `cc2dc8a`, schema `d44126a`, sdk `9763829`, docs
+`7997a0b`, shell `72a75a9`. Playable contracts: schema `2c1be9b`, sdk `729634c`,
+docs `ed06870`; core's pinned 0.6 world/common and 0.15 IPC bytes match schema
+`d44126a`. The playable stash `d03bd34…` is now committed as `d853d0c`; the
+stash entry is still in the list and can be dropped.
 
-## Validation and remaining acceptance gap
+## What closed the acceptance gap
 
-Passed: core CTest **16/16**, live-tooling **15**, credential-broker **3**,
-canonical schema **109**, SDK **63 passed / 2 skipped**, docs build/link checks.
-Core and `build/live` Release were rebuilt. Python compilation and diff checks
-passed at checkpoint. Shell reports **100** unit tests passing.
+Unzoned instances come only from **saved free-space placements** (tool-5 LMB)
+of clients on the **unbound** world workspace 8, located again after a world
+load (`Layout::saved` + cleared `spawnAreas`). Recall and free spawn poses do not
+survive a world load for unbound clients, so the old fixtures had no instances.
+Pointer ownership was not the cause. The fixtures now launch two real clients on
+workspace 8, enter, and mount one per world with tool 5 + LMB.
 
-The initial nested styled/visibility warp passed **310 audited outgoing frames**
-and retained authentication. However, its mount-instance array was empty: that
-run does **not** prove the unzoned-instance regression. The stronger core harness
-now fails `live instances present after warp`. An attempted stronger shell run
-also timed out waiting for unzoned instances. These are open acceptance gaps,
-not green results. The earlier shell run did pass injected-invalid-delta
-resnapshot plus two forced disconnects, fresh credentials and restored HUD lease;
-that result predates the final schema repin. Evidence records preserve these
-limitations. Local diagnostic logs:
+Observation, unchanged: right after a placement the instance reports the spawn
+or first area as areaId; after the next world load the same instance omits it.
+Both shapes are valid 0.15. Not changed (no new scope).
 
-- `/tmp/hyprune-ipc-ctest.log`
-- `/tmp/hyprune-ipc-warp-installed.log`
-- `/tmp/hyprune-recovery-test.log`
-
-## Exact next steps
-
-1. Complete the stronger nested fixture in `dev/nested/ipc_warp.py`. First verify
-   input ownership and a real window on the dedicated world workspace (default
-   8). The current harness focuses HEADLESS-1 but does not first move the persistent
-   virtual pointer onto it; compare established nested input helpers. This is a
-   hypothesis, not a confirmed cause. Explicitly place/pull a pocketed window if
-   necessary, and assert a nonempty unzoned instance before and after each warp.
-2. Re-run the complete wire-audited regression and shell recovery with the final
-   schema pin. Use generic fixtures by default; any external styled package
-   remains local. The originally supplied source package had changed and failed
-   existing UV validation; its installed snapshot validated. Do not weaken world
-   validation to accommodate that unrelated issue.
-
-   ```sh
-   cd /home/rick/workspace/hyprune/core
-   flock /tmp/worldshell-nested.lock ctest --test-dir build --output-on-failure
-   python3 dev/live/test_live.py
-   python3 dev/live/test_credentials.py
-   dev/nested/run.sh --ipc-warp
-   # run.sh already holds the lifetime flock; do not wrap it in another flock.
-   # Optional local package: HYPRUNE_WARP_PACKAGE=/path/to/package dev/nested/run.sh --ipc-warp
-
-   cd /home/rick/workspace/hyprune/shell
-   HYPRUNE_RECOVERY_WORLD=/path/to/styled-visibility-package \
-     flock /tmp/worldshell-nested.lock python3 dev/recovery-core.py
-   ```
-
-3. Record actual nonempty-instance acceptance evidence, then finish the queued
-   bounds work below. No additional feature work was started after the wrap-up.
-
-## Queued playable bounds and backdrop warning
-
-Core implementation is preserved, built and previously tested, but **not committed
-or applied to main**. Stable stash object:
-
-`d03bd3421bd532f2b5e99061de942bcfc1b6343f`
-
-Current label: `stash@{0}`, `playable-bounds: validated implementation paused for
-live IPC blocker`. Preserve it until the implementation has been restored and
-committed. Restore after the urgent acceptance checks with:
+## Validation (all run green on the final tree)
 
 ```sh
 cd /home/rick/workspace/hyprune/core
-git stash apply d03bd3421bd532f2b5e99061de942bcfc1b6343f
+flock /tmp/worldshell-nested.lock ctest --test-dir build --output-on-failure   # 18/18
+python3 dev/live/test_live.py           # 16 OK
+python3 dev/live/test_credentials.py    # 3 OK
+dev/nested/run.sh --playable            # 15 PASS, wire audit 276 frames
+dev/nested/run.sh --ipc-warp            # 28 PASS; client 49 responses + 447
+                                        # notifications valid 0.15; audit 519 frames
+cd /home/rick/workspace/hyprune/shell
+python3 -m unittest discover -s tests -q                                  # 100 OK
+flock /tmp/worldshell-nested.lock python3 dev/recovery-core.py            # all PASS
 ```
 
-It implements world-format 0.6 optional per-world/per-area playable volumes
-(boxes and convex hulls), max fly height, live `player.fly_bounds_allowance`,
-soft fly boundary braking/sliding and recovery, unbounded noclip with one-shot
-leaving-bounds notices, and declared backdrop-card CLAMP_TO_EDGE warnings from
-`hyprune-world-check`. Walking/climbing behavior remains unchanged. It also
-prevents noclip fall-respawn and strips authoring-only bounds metadata from IPC
-area records. Schema/SDK/docs contracts are already committed in the table above.
+`run.sh` already holds the flock. The shell recovery ran from a clean worktree of
+shell `e45dbe0` against the rebuilt `build/live`: unzoned instances (areaId
+omitted, none empty) after both warps, after invalid-frame snapshot recovery and
+after both forced disconnects. It also covered renewed credentials and the
+restored HUD lease. The injected delta was the only quarantined frame, with no
+reconnect through the warps.
+Evidence: core `docs/evidence/ipc-warp.json`, `docs/evidence/playable-bounds.json`;
+shell `docs/evidence/bridge-recovery.json`.
 
-Before stashing: 16 core tests and 15 nested playable checks passed, covering side
-and ceiling limits, allowance reload, noclip exit/notices/re-entry, recovery,
-walking behavior and legacy Lumen Reach/Switchyard behavior. Re-run after merge;
-these results do not cover integration with the urgent fixes.
+Render flake: `render` failed about 5 of 12 runs before `6c1861d` (at HEAD
+without playable too). Frame pacing re-presents the previous frame while two
+fences are pending, so overlay checks read the prior draw. After the fix: 20/20.
 
-Expected merge points: CMake (preserve both Playable and WireAudit/tests),
-`dev/nested/session.py` (both `--playable` and `--ipc-warp`, validation env),
-`src/surfaces/Layout.cpp` (both stripped playable metadata and absent area IDs),
-and shared `CHANGES-FOR-SDK-AND-SHELL.md` (keep both sets of notes). Then rebuild,
-run full CTest and `dev/nested/run.sh --playable`, review contracts and commit.
-No other explicit feature backlog remains from this session.
+`build` (RelWithDebInfo) and `build/live` (Release) are rebuilt at `d853d0c`.
 
-## Owner-only retry commands
+## Runtime tmpfs incident (fixed in tooling)
 
-Do not run these as part of automated work. Finish the acceptance gap first.
-The shared shell main already contains the recovery commits; no shell fast-forward
-is needed here. Other checkouts need those commits and the corrected schema pin
-before retrying. Do not push without the owner's instruction.
+`/run/user/1000` was 100% full: every `dev/live/up` copied ~140 MB of worlds into
+`hyprune-live/<instance>/<run>/` and `down` never removed them. I deleted only
+the directories of **dead nested compositors** (61 dirs, 5.6 GB freed). The
+owner's live instance directory (`…_1791385985_…`, 346 MB of old runs, state
+`down`) was left untouched; the owner may delete its old `*/worlds` dirs.
 
-For the default Lumen Reach session:
+## Owner-only live retest
+
+Do not run as automated work. The old supervisor lacks renewal; use a fresh
+down/up.
 
 ```sh
 cd /home/rick/workspace/hyprune/core
 dev/live/down
 dev/live/preflight
 dev/live/up
+# two-world variant: add --world /path/to/first --world /path/to/second to preflight and up
 ```
 
-For the two-world reproduction, replace the package directory placeholders with
-validated local directories (the first is the starting world):
+Enter with the printed chord (normally Super+Shift+H). To reproduce the original
+bug: place a pocketed window with tool 5 + LMB in free space, warp via the Director
+and back, then confirm the HUD stays connected. Panic: `dev/live/down` (works
+from a TTY). Capture shell/helper logs if anything fails.
 
-```sh
-cd /home/rick/workspace/hyprune/core
-dev/live/down
-dev/live/preflight --world /path/to/first-package --world /path/to/second-package
-dev/live/up --world /path/to/first-package --world /path/to/second-package
-```
+## Remaining gaps
 
-`up` loads on the desktop and prints/notifies the actual toggle chord (normally
-Super+Shift+H); use that chord to enter, then warp through the Director. Capture
-shell/helper logs and U dumps if anything fails. Panic/recovery remains
-`dev/live/down`, including from a TTY. Never reuse old one-shot token pipes.
+- No live (owner) retest yet; nested cannot cover hardware cursor paths.
+- Lumen Reach still uses its tall collision perimeter. To use core playable
+  volumes, the world (owned by the worlds agent) needs format 0.6 with `playable`
+  volumes. Its 13 footprint rects exceed the 8-volume world-level limit, so
+  either merge them into ≤8 boxes/convex hulls, or move from the legacy mounts
+  extension to canonical `areas[]` and declare per-area volumes. Keep only low
+  walking backstops; walking is still collision-driven.
+- Shell Placement sizing is another agent's work (`2eeb691`); not re-shot
+  through real core here.
