@@ -2,6 +2,7 @@
 #include "GLState.hpp"
 #include "PNG.hpp"
 #include "ProgramCache.hpp"
+#include "Fsr.hpp"
 #include "world/Environment.hpp"
 #include "world/Mounts.hpp"
 #include "world/Visibility.hpp"
@@ -266,6 +267,54 @@ void main(){vec2 p=gl_FragCoord.xy*internalPerOutput;
  if(coverage<=0.)discard;
  result=vec4(colour,coverage);
 })";
+// AMD FidelityFX FSR 1: EASU (edge-adaptive upscale) then RCAS (robust contrast-
+// adaptive sharpening), both on display-encoded (perceptual) colour, as AMD
+// specifies. The headers need GLSL ES 3.1 (textureGather, bitfield ops).
+const std::string fsrVertex = std::string("#version 310 es\n") + (screenVertex + std::string_view(screenVertex).find('\n') + 1);
+const std::string fsrPrelude = "#version 310 es\nprecision highp float;precision highp int;\n#define A_GPU 1\n#define A_GLSL 1\n";
+// GLSL ES has no implicit int->uint conversion; the header's constant-setup
+// helpers (unused on the GPU) assign literal 0 to uint lanes three times.
+std::string fsrHeader() {
+    std::string text = fsr::ffxFsr1;
+    for (auto [from, to] : {std::pair{"con3[2]=con3[3]=0;}", "con3[2]=con3[3]=0u;}"},
+                            {" con[2]=0;\n con[3]=0;}", " con[2]=0u;\n con[3]=0u;}"}}) {
+        auto at = text.find(from);
+        if (at == std::string::npos)
+            throw std::runtime_error("unexpected ffx_fsr1.h revision");
+        text.replace(at, std::string_view(from).size(), to);
+    }
+    return text;
+}
+const std::string easuFragment = fsrPrelude + fsr::ffxA + R"(
+uniform highp sampler2D image;uniform highp uvec4 con0,con1,con2,con3;out vec4 result;
+#define FSR_EASU_F 1
+AF4 FsrEasuRF(AF2 p){return textureGather(image,p,0);}
+AF4 FsrEasuGF(AF2 p){return textureGather(image,p,1);}
+AF4 FsrEasuBF(AF2 p){return textureGather(image,p,2);}
+)" + fsrHeader() + R"(
+void main(){AF3 c;FsrEasuF(c,AU2(gl_FragCoord.xy),con0,con1,con2,con3);result=vec4(c,0);}
+)";
+// RCAS also carries the old upscale's nearest internal-resolution depth.
+const std::string rcasFragment = fsrPrelude + fsr::ffxA + R"(
+uniform highp sampler2D image,depthImage;uniform highp uvec4 con;out vec4 result;
+#define FSR_RCAS_F 1
+AF4 FsrRcasLoadF(ASU2 p){return texelFetch(image,clamp(p,ivec2(0),textureSize(image,0)-1),0);}
+void FsrRcasInputF(inout AF1 r,inout AF1 g,inout AF1 b){}
+)" + fsrHeader() + R"(
+void main(){AF1 r,g,b;FsrRcasF(r,g,b,AU2(gl_FragCoord.xy),con);result=vec4(r,g,b,0);
+ vec2 st=gl_FragCoord.xy/vec2(textureSize(image,0));ivec2 size=textureSize(depthImage,0);
+ gl_FragDepth=texelFetch(depthImage,clamp(ivec2(st*vec2(size)),ivec2(0),size-1),0).r;}
+)";
+// FsrEasuCon / FsrRcasCon from ffx_fsr1.h, evaluated on the CPU.
+std::array<GLuint, 16> easuConstants(float inW, float inH, float outW, float outH) {
+    float c[16]{inW / outW, inH / outH, .5f * inW / outW - .5f, .5f * inH / outH - .5f,
+                1 / inW,    1 / inH,    1 / inW,               -1 / inH,
+                -1 / inW,   2 / inH,    1 / inW,               2 / inH,
+                0,          4 / inH,    0,                     0};
+    std::array<GLuint, 16> bits;
+    std::memcpy(bits.data(), c, sizeof c);
+    return bits;
+}
 void layout(GLuint &vao, GLuint &vbo) {
     glGenVertexArrays(1, &vao);
     glGenBuffers(1, &vbo);
@@ -501,6 +550,7 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
     add(0, [this] { if (!inkProgram_) inkProgram_ = program(screenVertex, inkFragment); }, "shader ink edges");
     add(0, [this] { if (!inkComposite_) inkComposite_ = program(screenVertex, inkCompositeFragment); }, "shader ink composite");
     add(0, [this] { if (!depthProgram_) materialBlock(depthProgram_ = program(vertex, depthFragment)); }, "shader depth");
+    add(0, [this] { if (upscaler == "fsr1") fsrPrograms(); }, "shader fsr1");
     add(
         0,
         [this] {
@@ -812,7 +862,7 @@ bool Renderer::continueWarmup() {
     settings["msaa"] = std::array{1,2,4,1}[warmStep_%4];
     settings["fog"] = std::array{"off","linear","height"}[warmStep_%3];
     settings["bloom"] = std::array{"off","low","high"}[warmStep_%3];
-    settings["render_scale"] = 1.; settings["dynamic_resolution"] = false;
+    settings["render_scale"] = warmStep_ % 2 ? .5 : 1.; settings["dynamic_resolution"] = false;
     applyGraphics(settings);
     profile["outline"]={{"enabled",true},{"colour",{0,0,0}},{"widthPx",2},{"depthThreshold",.02},{"normalThreshold",.2}};
     debug = true; worldOnly = false; captureRequested = false; reuseFrame = false;
@@ -874,6 +924,7 @@ void Renderer::collisionChanged() {
     collisionCount_ = wire.size();
 }
 void Renderer::freeTargets() {
+    freeFsrTargets();
     glDeleteFramebuffers(1,&inkFbo_); glDeleteTextures(1,&inkNormal_); glDeleteTextures(1,&inkDepth_);
     inkFbo_=inkNormal_=inkDepth_=0;
     glDeleteFramebuffers(1, &msaa_);
@@ -923,6 +974,54 @@ void Renderer::applyGraphics(const world::Json &config) {
                 glSamplerParameterf(sampler, 0x84FE, std::min(maximum, graphics["anisotropy"].get<float>()));
         }
     }
+}
+bool Renderer::fsrPrograms() {
+    if (fsrFailed_)
+        return false;
+    if (easu_ && rcas_)
+        return true;
+    try {
+        if (!easu_)
+            easu_ = program(fsrVertex.c_str(), easuFragment.c_str());
+        if (!rcas_)
+            rcas_ = program(fsrVertex.c_str(), rcasFragment.c_str());
+        return true;
+    } catch (const std::exception &e) {
+        // Needs GLSL ES 3.1; the bilinear + sharpen path remains.
+        fsrFailed_ = true;
+        fsrError_ = e.what();
+        return false;
+    }
+}
+void Renderer::fsrTargets(int w, int h) {
+    if (fsrInputFbo_ && fsrSize_ == std::array{scaledWidth_, scaledHeight_, w, h})
+        return;
+    freeFsrTargets();
+    auto target = [](GLuint &fbo, GLuint &texture, int width, int height) {
+        glGenTextures(1, &texture);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, width, height);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glGenFramebuffers(1, &fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+            throw std::runtime_error("FSR target unavailable");
+    };
+    target(fsrInputFbo_, fsrInputTex_, scaledWidth_, scaledHeight_);
+    target(fsrEasuFbo_, fsrEasuTex_, w, h);
+    fsrSize_ = {scaledWidth_, scaledHeight_, w, h};
+}
+void Renderer::freeFsrTargets() {
+    glDeleteFramebuffers(1, &fsrInputFbo_);
+    glDeleteFramebuffers(1, &fsrEasuFbo_);
+    glDeleteTextures(1, &fsrInputTex_);
+    glDeleteTextures(1, &fsrEasuTex_);
+    fsrInputFbo_ = fsrEasuFbo_ = fsrInputTex_ = fsrEasuTex_ = 0;
+    fsrSize_ = {};
 }
 void Renderer::targets(int w, int h) {
     int sw = std::max(1, int(std::round(w * resolution_.scale)));
@@ -1396,7 +1495,45 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glBindTexture(GL_TEXTURE_2D, resolvedDepth_);
     glBindSampler(1, 0);
     glBindVertexArray(screenVao_);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    fsrActive_ = upscaler == "fsr1" && resolution_.scale < 1 && fsrPrograms();
+    if (!fsrActive_)
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+    else {
+        fsrTargets(w, h); // may allocate on unit 0: rebind the resolved world
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, resolveTexture_);
+        // 1. Bloom + tone map + encode at internal resolution (no sharpening):
+        //    FSR works on perceptual colour.
+        glUniform1f(location(upscale_, "sharpness"), 0.f);
+        glBindFramebuffer(GL_FRAMEBUFFER, fsrInputFbo_);
+        glViewport(0, 0, scaledWidth_, scaledHeight_);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        // 2. EASU to an output-sized intermediate.
+        glBindFramebuffer(GL_FRAMEBUFFER, fsrEasuFbo_);
+        glViewport(0, 0, w, h);
+        glUseProgram(easu_);
+        auto con = easuConstants(scaledWidth_, scaledHeight_, w, h);
+        for (int i = 0; i < 4; ++i)
+            glUniform4uiv(location(easu_, std::array{"con0", "con1", "con2", "con3"}[i]), 1, con.data() + 4 * i);
+        uniform(easu_, "image", 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, fsrInputTex_);
+        glBindSampler(0, clamp_);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        // 3. RCAS into the native target, with the world's nearest depth.
+        //    sharpen 0..1 maps to 2..0 stops (0 stops = RCAS maximum).
+        glBindFramebuffer(GL_FRAMEBUFFER, nativeFbo_);
+        glUseProgram(rcas_);
+        float stops = 2.f * (1.f - std::clamp(graphics["sharpen"].get<float>(), 0.f, 1.f)), sharp = std::exp2(-stops);
+        GLuint rcas[4]{};
+        std::memcpy(rcas, &sharp, 4);
+        glUniform4uiv(location(rcas_, "con"), 1, rcas);
+        uniform(rcas_, "image", 0);
+        uniform(rcas_, "depthImage", 1);
+        glBindTexture(GL_TEXTURE_2D, fsrEasuTex_);
+        glBindSampler(0, 0);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
     }
     gpu_[5].end();
     gpu_[8].begin();
@@ -1659,7 +1796,7 @@ void Renderer::debugHUD(int w, int h) {
             << "\nMSAA " << samples_ << "x resolve                 " << gpu(2) << "\nBloom "
             << graphics["bloom"].get<std::string>() << "                       " << gpu(4)
             << "\nRenderer " << offloadState.value("activeRenderer", "in-process") << "  " << offloadState.value("powerW", world::Json(nullptr)).dump() << " W"
-            << "\nUpscale + sharpen               " << gpu(5) << "\nNative windows / haze " << enabled("alpha_haze") << "   " << gpu(1)
+            << "\nUpscale " << (fsrActive_ ? "FSR 1 EASU+RCAS   " : "+ sharpen         ") << "      " << gpu(5) << "\nNative windows / haze " << enabled("alpha_haze") << "   " << gpu(1)
             << "\nInk edges " << graphics["outline_quality"].get<std::string>() << " " << enabled("outline") << "          " << gpu(7)
             << "\nVisibility " << submittedBatches_ << " drawn / " << culledBatches_ << " culled (" << frustumCulled_ << " frustum)"
             << "\nOutput + markers                " << gpu(3) << "\nSSR / runtime shadows: unsupported"
@@ -2083,6 +2220,8 @@ world::Json Renderer::timings() const {
             {"debug", debug},
             {"reusedFrames", skipped_},
             {"idleFrames", idleFrames_},
+            {"upscaler", {{"requested", upscaler}, {"active", fsrActive_ ? "fsr1" : "bilinear"},
+                          {"error", fsrError_.empty() ? world::Json(nullptr) : world::Json(fsrError_)}}},
             {"inFlight", frameFences_.size()},
             {"renderer", device},
             {"offload", offloadState},
@@ -2176,6 +2315,8 @@ void Renderer::destroy() {
     upscale_ = 0;
     deleteProgram(bloom_);
     deleteProgram(sky_);
+    deleteProgram(easu_);
+    deleteProgram(rcas_);
     glDeleteBuffers(1, &quadVbo_);
     glDeleteVertexArrays(1, &quadVao_);
     glDeleteVertexArrays(1, &screenVao_);

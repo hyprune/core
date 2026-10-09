@@ -613,12 +613,17 @@ int main(int argc, char **argv) {
         surface.center = {0, 2.8f, -.2f};
         surface.width = 1.4f;
         surface.height = .8f;
-        for (float scale : {1.f, .5f}) {
+        for (auto [upscaler, scale] : {std::pair{"bilinear", 1.f}, {"bilinear", .5f}, {"fsr1", .5f}}) {
+            renderer.upscaler = upscaler;
             renderer.renderScale = scale;
             glFinish();
             renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
             glFinish();
+            if (std::string_view(upscaler) == "fsr1")
+                check(renderer.timings()["upscaler"]["active"] == "fsr1",
+                      ("FSR 1 inactive: " + renderer.timings()["upscaler"]["error"].dump()).c_str());
             glReadPixels(150, 48, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+            if (!(pixel[0] > 150 && pixel[1] < 20 && pixel[2] > 150)) std::cerr << upscaler << " pixel " << int(pixel[0]) << "," << int(pixel[1]) << "," << int(pixel[2]) << "\n";
             check(pixel[0] > 150 && pixel[1] < 20 && pixel[2] > 150, "scaled world colour/depth Y flip or occlusion");
             surface.center.z = .2f;
             renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
@@ -626,7 +631,9 @@ int main(int argc, char **argv) {
             glReadPixels(150, 48, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
             check(std::abs(int(pixel[0]) - 128) <= 1, "native surface incorrectly hidden by scaled world depth");
             surface.center.z = -.2f;
+            check(glGetError() == GL_NO_ERROR, "upscaler GL error");
         }
+        renderer.upscaler = "bilinear";
         // A fully prepared worker frame replaces opaque colour only. Local
         // reconstruction must still occlude clients, and preserve native colour.
         GLuint remoteTex, remoteFbo;

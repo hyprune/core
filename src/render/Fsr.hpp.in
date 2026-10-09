@@ -1,0 +1,6 @@
+#pragma once
+// AMD FidelityFX FSR 1 (MIT), embedded unmodified from third_party/fidelityfx-fsr.
+namespace hyprune::render::fsr {
+inline constexpr const char *ffxA = R"FFX(@HYPRUNE_FFX_A@)FFX";
+inline constexpr const char *ffxFsr1 = R"FFX(@HYPRUNE_FFX_FSR1@)FFX";
+} // namespace hyprune::render::fsr

@@ -9,6 +9,10 @@ Vendored source, unmodified, licenses embedded in each header:
   Runtime subset of `src/` only: allocator, index generator, vertex cache /
   fetch / overdraw optimizers, vertex/index codecs, vertex filters, quantization.
   Release tarball SHA-256 `68b2fef4e4eaad98e00c657c1e7f8982a7176e61dd7efdeaec67a025b8519be9`.
+- AMD FidelityFX FSR 1, `ffx_a.h` and `ffx_fsr1.h`, commit
+  a21ffb8f6c13233ba336352bdff293894c706575,
+  https://github.com/GPUOpen-Effects/FidelityFX-FSR (MIT, `fidelityfx-fsr/license.txt`).
+  Embedded into the EASU/RCAS shaders at configure time (`src/render/Fsr.hpp.in`).
 
 No prototype assets or source files are included.
 

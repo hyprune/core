@@ -37,6 +37,9 @@ class Renderer {
     // frame (one output pass) instead of rendering the world again.
     bool reuseFrame = false;
     bool srgbDecodeAllowed = true; // Tests force the two-copy fallback.
+    // "fsr1" = AMD FSR 1 EASU+RCAS when the world renders below output size;
+    // "bilinear" = bilinear + bounded unsharp mask (also the fallback without ES 3.1).
+    std::string upscaler = getenv("HYPRUNE_UPSCALER") ? getenv("HYPRUNE_UPSCALER") : "bilinear";
     double updateMs = 0, captureMs = 0, ipcMs = 0, gpuCaptureMs = -1;
     struct Pixels {
         int width = 0, height = 0;
@@ -176,6 +179,13 @@ class Renderer {
     double warmMs_ = 0, warmMaxMs_ = 0;
     bool continueWarmup();
     void init();
+    GLuint easu_ = 0, rcas_ = 0, fsrInputFbo_ = 0, fsrInputTex_ = 0, fsrEasuFbo_ = 0, fsrEasuTex_ = 0;
+    std::array<int, 4> fsrSize_{};
+    bool fsrFailed_ = false, fsrActive_ = false;
+    std::string fsrError_;
+    bool fsrPrograms();
+    void fsrTargets(int, int);
+    void freeFsrTargets();
     void targets(int, int);
     void freeTargets();
     void freeWorld();
