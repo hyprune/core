@@ -338,6 +338,11 @@ void Capture::attach() {
         child.offset = offset;
         auto old = std::find_if(previous.begin(), previous.end(), [&](auto &c) { return c.resource == r; });
         child.surface.id = old == previous.end() ? "child-" + std::to_string(++sequence_) : old->surface.id;
+        if (old != previous.end()) {
+            child.commits = old->commits;
+            child.commitListener = std::move(old->commitListener);
+        } else
+            child.commitListener = r->m_events.commit.listen([count = child.commits] { ++*count; });
         auto &s = child.surface;
         auto &parent = owner.surface;
         s.rotation = parent.rotation;

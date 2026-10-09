@@ -32,6 +32,10 @@ class Renderer {
     bool warmShaders = true; // Offline benchmark can disable; runtime always warms.
     world::Json offloadState = {{"activeRenderer", "in-process"}, {"powerW", nullptr}};
     bool debug = false, captureRequested = false;
+    // Render on demand: the owner sets this when every frame input is unchanged
+    // since the last rendered frame. draw() then re-presents the cached native
+    // frame (one output pass) instead of rendering the world again.
+    bool reuseFrame = false;
     double updateMs = 0, captureMs = 0, ipcMs = 0, gpuCaptureMs = -1;
     struct Pixels {
         int width = 0, height = 0;
@@ -119,7 +123,7 @@ class Renderer {
     int width_ = 0, height_ = 0, samples_ = 4;
     int allocatedSamples_ = 0;
     std::deque<GLsync> frameFences_;
-    uint64_t skipped_ = 0, backlog_ = 0, fpsFrames_ = 0, fpsBacklog_ = 0;
+    uint64_t skipped_ = 0, backlog_ = 0, fpsFrames_ = 0, fpsBacklog_ = 0, idleFrames_ = 0;
     double deliveredFPS_ = 0;
     bool queuePressure_ = false;
     std::chrono::steady_clock::time_point fpsSince_{};

@@ -30,6 +30,8 @@ class Capture {
         std::string parentId;
         Vector2D offset;
         bool visible = true;
+        std::shared_ptr<uint64_t> commits = std::make_shared<uint64_t>(0);
+        CHyprSignalListener commitListener;
     };
     std::vector<Child> children;
     struct Target {

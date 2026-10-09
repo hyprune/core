@@ -308,6 +308,13 @@ struct Runtime {
     void toggle(const std::string &output = "");
     void exit();
     void tick();
+    // Render on demand: a world frame is a function of these inputs. While they
+    // are unchanged, tick schedules nothing and a compositor-initiated repaint
+    // re-presents the cached native frame.
+    std::vector<surfaces::Surface> frameSurfaces();
+    uint64_t frameKey(std::span<const surfaces::Surface>);
+    bool frameForced();
+    uint64_t renderedKey = 0;
     void focus(const std::string &, bool keyboard, bool enterUse = true);
     void load(const std::string &, const std::string &spawn = "");
     std::optional<Json> method(const std::string &, const Json &);
@@ -3624,8 +3631,10 @@ void Runtime::tick() {
         }
         for (auto &e : capture.entries)
             e.surface.focused = e.surface.id == focused;
-        g_pHyprRenderer->damageMonitor(monitor.lock());
-        monitor->scheduleFrame();
+        if (frameForced() || frameKey(frameSurfaces()) != renderedKey) {
+            g_pHyprRenderer->damageMonitor(monitor.lock());
+            monitor->scheduleFrame();
+        }
     }
     replayAfterTick();
     renderer.updateMs =
@@ -3641,6 +3650,101 @@ void Runtime::tick() {
     ipc->poll();
     renderer.gpuCaptureMs = captureGPU.available ? captureGPU.milliseconds : -1;
     renderer.ipcMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ipcStarted).count();
+}
+std::vector<surfaces::Surface> Runtime::frameSurfaces() {
+    auto surfaces = capture.visible();
+    if (editor.slot == 5 && !freeCursor)
+        if (auto preview = placementPreview())
+            surfaces.push_back(*preview);
+    if (fullscreen.phase == 1 || fullscreen.phase == 3) {
+        auto fs = capture.find(fullscreen.id);
+        if (fs) {
+            std::erase_if(surfaces, [&](auto &s) { return s.id == fs->surface.id; });
+            surfaces.push_back(fs->surface);
+        }
+    }
+    renderer.showInteractionHints = !freeCursor;
+    renderer.toolPrompt = nullptr;
+    auto prompt = [&](Vec3 point, std::string text) {
+        renderer.toolPrompt = {{"position", {point.x, point.y, point.z}}, {"text", text}};
+    };
+    if (renderer.showInteractionHints && editor.slot == 4) {
+        if (auto object = objectAim())
+            prompt(object->second.point, "LMB SELECT / WHEEL " + editor.submode());
+    }
+    if (renderer.showInteractionHints && editor.slot == 2 && editor.windowMode == 0 && !tagged.empty()) {
+        if (auto hit = worldHit())
+            prompt(hit->point, "LMB MOUNT HERE");
+    }
+    if (renderer.showInteractionHints && !noclip && movement == &walk && !typing &&
+        (climbing.active() || climbing.nearby(camera, world->climbables)))
+        prompt(camera.position + camera.forward() * 2,
+               climbing.prompt(
+                   sim::climbMode(config["movement"]["climb_mode"].get<std::string>())));
+    renderer.renderScale = control.photoHeld() ? control.photoScale :
+        (renderer.graphics["render_scale"] == "auto" ? 0.f : renderer.graphics["render_scale"].get<float>());
+    renderer.dynamicResolution = !control.photoHeld() && renderer.graphics["dynamic_resolution"].get<bool>();
+    renderer.logicalScale = monitor ? monitor->m_scale : 1.f;
+    return surfaces;
+}
+namespace {
+// FNV-1a over the exact draw inputs; collisions only cost a skipped repaint
+// until the next input change, and 64 bits make them practically impossible.
+struct FrameHash {
+    uint64_t value = 1469598103934665603ull;
+    void bytes(const void *data, size_t size) {
+        for (auto c = static_cast<const unsigned char *>(data); size--; ++c)
+            value = (value ^ *c) * 1099511628211ull;
+    }
+    template <class T>
+        requires std::is_arithmetic_v<T>
+    FrameHash &operator()(T v) {
+        bytes(&v, sizeof v);
+        return *this;
+    }
+    FrameHash &operator()(Vec3 v) { return (*this)(v.x)(v.y)(v.z); }
+    FrameHash &operator()(const std::string &s) {
+        bytes(s.data(), s.size());
+        return (*this)(s.size());
+    }
+    FrameHash &operator()(const Json &j) { return (*this)(j.dump()); }
+};
+} // namespace
+bool Runtime::frameForced() {
+    // Time-driven or externally produced frames always render. The environment
+    // switch keeps GPU clocks steady for fixed-scale profiling (dev/nested/perf.py).
+    static const bool continuous = getenv("HYPRUNE_CONTINUOUS_RENDER");
+    return continuous || debug || loading || handover.phase || fullscreen.phase || capturePending || renderer.captureRequested ||
+           offload.connected() || session.recording || session.playing || control.driving() || !renderer.frames;
+}
+uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
+    FrameHash h;
+    auto &r = renderer;
+    h(reinterpret_cast<uintptr_t>(world.get()))(camera.position)(camera.yaw)(camera.pitch)(camera.roll)(camera.fov);
+    h(camera.shiftX)(camera.shiftY)(camera.eyeHeight)(camera.climbBob);
+    if (auto m = monitor.lock())
+        h(m->m_pixelSize.x)(m->m_pixelSize.y)(m->m_scale);
+    for (auto &s : surfaces) {
+        h(s.id)(s.center)(s.width)(s.height)(s.yaw)(s.opacity)(s.texture)(s.focused)(s.pixelWidth)(s.pixelHeight);
+        for (auto q : s.rotation)
+            h(q);
+    }
+    // Client content: any commit, including hidden clients composed onto walls.
+    for (auto &e : capture.entries)
+        h(*e.commits)(e.visible);
+    for (auto &c : capture.children)
+        h(*c.commits);
+    h(typing && !layerCursor)(r.debug)(r.showAreaMarkers)(r.showInteractionHints)(r.useDistance)(r.renderScale);
+    h(r.logicalScale)(r.pointerX)(r.pointerY)(r.scopeVignette)(r.materialDetails)(r.effects)(r.worldOnly)(r.font);
+    h(r.waypoint)(r.route)(r.toolPrompt)(r.overlayStyle)(r.graphics)(r.profile);
+    for (auto &l : r.lines)
+        h(l.a)(l.b)(l.color)(l.width);
+    for (auto &[node, m] : r.transforms) {
+        h(node);
+        for (auto v : m.v)
+            h(v);
+    }
+    return h.value;
 }
 class Pass final : public IPassElement {
   public:
@@ -3660,46 +3764,17 @@ class Pass final : public IPassElement {
                 runtime->renderer.drawHUD(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y);
                 return;
             }
-            auto surfaces = runtime->capture.visible();
-            if (runtime->editor.slot == 5 && !runtime->freeCursor)
-                if (auto preview = runtime->placementPreview())
-                    surfaces.push_back(*preview);
-            if (runtime->fullscreen.phase == 1 || runtime->fullscreen.phase == 3) {
-                auto fs = runtime->capture.find(runtime->fullscreen.id);
-                if (fs) {
-                    std::erase_if(surfaces, [&](auto &s) { return s.id == fs->surface.id; });
-                    surfaces.push_back(fs->surface);
-                }
-            }
-            runtime->renderer.showInteractionHints = !runtime->freeCursor;
-            runtime->renderer.toolPrompt = nullptr;
-            auto prompt = [&](Vec3 point, std::string text) {
-                runtime->renderer.toolPrompt = {{"position", {point.x, point.y, point.z}}, {"text", text}};
-            };
-            if (runtime->renderer.showInteractionHints && runtime->editor.slot == 4) {
-                if (auto object = runtime->objectAim())
-                    prompt(object->second.point, "LMB SELECT / WHEEL " + runtime->editor.submode());
-            }
-            if (runtime->renderer.showInteractionHints && runtime->editor.slot == 2 && runtime->editor.windowMode == 0 && !runtime->tagged.empty()) {
-                if (auto hit = runtime->worldHit())
-                    prompt(hit->point, "LMB MOUNT HERE");
-            }
-            if (runtime->renderer.showInteractionHints && !runtime->noclip && runtime->movement == &runtime->walk && !runtime->typing &&
-                (runtime->climbing.active() || runtime->climbing.nearby(runtime->camera, runtime->world->climbables)))
-                prompt(runtime->camera.position + runtime->camera.forward() * 2,
-                       runtime->climbing.prompt(
-                           sim::climbMode(runtime->config["movement"]["climb_mode"].get<std::string>())));
+            auto surfaces = runtime->frameSurfaces();
             auto &r = runtime->renderer;
-            r.renderScale = runtime->control.photoHeld() ? runtime->control.photoScale :
-                (r.graphics["render_scale"] == "auto" ? 0.f : r.graphics["render_scale"].get<float>());
-            r.dynamicResolution = !runtime->control.photoHeld() && r.graphics["dynamic_resolution"].get<bool>();
-            r.logicalScale = runtime->monitor ? runtime->monitor->m_scale : 1.f;
+            auto key = runtime->frameKey(surfaces);
+            r.reuseFrame = !runtime->frameForced() && key == runtime->renderedKey;
             r.externalWorldFbo = runtime->control.photoHeld() ? 0 : runtime->offload.fbo();
             auto view = r.externalWorldFbo ? runtime->offload.camera() : runtime->camera;
             auto frames = r.frames;
             r.draw(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y, view,
                    surfaces, runtime->typing && !runtime->layerCursor);
             if (r.frames != frames) {
+                runtime->renderedKey = key;
                 if (runtime->session.recording) { auto state=runtime->sessionState(); state["camera"]=replay::pose(view); runtime->session.view(state,r.frames); }
                 runtime->displayedCamera = view;
                 runtime->renderedOffload = r.externalWorldFbo != 0;

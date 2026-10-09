@@ -651,7 +651,7 @@ bool Renderer::continueWarmup() {
     settings["render_scale"] = 1.; settings["dynamic_resolution"] = false;
     applyGraphics(settings);
     profile["outline"]={{"enabled",true},{"colour",{0,0,0}},{"widthPx",2},{"depthThreshold",.02},{"normalThreshold",.2}};
-    debug = true; worldOnly = false; captureRequested = false;
+    debug = true; worldOnly = false; captureRequested = false; reuseFrame = false;
     externalWorldFbo = warmStep_ == 11 ? warmFbo_ : 0;
     sim::Camera view; if (!world_->spawns.empty()) view.position = world_->spawn().position + Vec3{0,1.7f,0};
     surfaces::Surface client; client.center = view.position + view.forward()*3; client.texture=warmTexture_;
@@ -863,7 +863,8 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glDeleteSync(frameFences_.front());
         frameFences_.pop_front();
     }
-    if (frames && (captureRequested || frameFences_.size() >= 2)) {
+    bool idle = reuseFrame && !captureRequested && nativeFbo_ && w == width_ && h == height_;
+    if (frames && (captureRequested || frameFences_.size() >= 2 || idle)) {
         GLState guard;
         glDisable(GL_SCISSOR_TEST);
         glDisable(GL_STENCIL_TEST);
@@ -872,6 +873,10 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glDisable(GL_RASTERIZER_DISCARD);
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         present(target, w, h, frameTyping_);
+        if (idle) {
+            ++idleFrames_; // Nothing changed: not a queue-pressure signal.
+            return;
+        }
         ++skipped_;
         if (!captureRequested)
             ++backlog_;
@@ -1881,6 +1886,7 @@ world::Json Renderer::timings() const {
             {"gpuPassMs", gpu},
             {"debug", debug},
             {"reusedFrames", skipped_},
+            {"idleFrames", idleFrames_},
             {"inFlight", frameFences_.size()},
             {"renderer", device},
             {"offload", offloadState},
