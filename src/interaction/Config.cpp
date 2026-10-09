@@ -76,6 +76,15 @@ Json configPatch(const Json &current, const Json &patch) {
                 result[section][key] = v;
                 continue;
             }
+            if (section == "graphics" && (key == "outline_width_px" || key == "outline_colour")) {
+                bool valid = v.is_null();
+                if (key == "outline_width_px") valid |= v.is_number() && std::isfinite(v.get<double>()) && v >= 1 && v <= 4;
+                else if (v.is_array() && v.size() == 3)
+                    valid = std::all_of(v.begin(), v.end(), [](const Json &c) { return c.is_number() && std::isfinite(c.get<double>()) && c >= 0 && c <= 1; });
+                if (!valid) throw std::runtime_error("invalid graphics." + key);
+                result[section][key] = v;
+                continue;
+            }
             if (section == "graphics" && key == "render_scale") {
                 if (v != "auto" && (!v.is_number() || !std::isfinite(v.get<double>()) || v < .375 || v > 1))
                     throw std::runtime_error("render_scale must be auto or 0.375..1");

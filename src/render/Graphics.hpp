@@ -7,7 +7,7 @@ inline Json graphicsDefaults() {
     return {{"quality", "auto"},
             {"offload", "off"}, {"offload_power_cap_w", 80},
             {"scale_min", .375}, {"scale_max", 1.0},
-            {"outline", nullptr}, {"visibility_culling", true},
+            {"outline_width_px", nullptr}, {"outline_colour", nullptr}, {"outline_quality", nullptr}, {"outline", nullptr}, {"visibility_culling", true},
             {"msaa", nullptr},
             {"bloom", nullptr},
             {"fog", nullptr},
@@ -29,7 +29,7 @@ inline Json graphicsDefaults() {
 }
 inline Json graphicsPresets() {
     return {{"low",
-             {{"outline", true}, {"msaa", 1},
+             {{"outline_quality", "fast"}, {"outline", true}, {"msaa", 1},
               {"bloom", "off"},
               {"fog", "linear"},
               {"sky", "gradient"},
@@ -40,7 +40,7 @@ inline Json graphicsPresets() {
               {"alpha_haze", false},
               {"anisotropy", 1}}},
             {"medium",
-             {{"outline", true}, {"msaa", 1},
+             {{"outline_quality", "fast"}, {"outline", true}, {"msaa", 1},
               {"bloom", "low"},
               {"fog", "height"},
               {"sky", "environment"},
@@ -51,7 +51,7 @@ inline Json graphicsPresets() {
               {"alpha_haze", true},
               {"anisotropy", 2}}},
             {"high",
-             {{"outline", true}, {"msaa", 2},
+             {{"outline_quality", "smooth"}, {"outline", true}, {"msaa", 2},
               {"bloom", "high"},
               {"fog", "height"},
               {"sky", "environment"},
@@ -62,7 +62,7 @@ inline Json graphicsPresets() {
               {"alpha_haze", true},
               {"anisotropy", 8}}},
             {"ultra",
-             {{"outline", true}, {"msaa", 4},
+             {{"outline_quality", "smooth"}, {"outline", true}, {"msaa", 4},
               {"bloom", "high"},
               {"fog", "height"},
               {"sky", "environment"},
@@ -76,7 +76,7 @@ inline Json graphicsPresets() {
 inline Json graphicsOptions() {
     return {{"quality", {"auto", "low", "medium", "high", "ultra"}},
             {"offload", {"off", "auto", "on"}},
-            {"outline", {false, true}}, {"visibility_culling", {false,true}},
+            {"outline_quality", {"fast", "smooth"}}, {"outline", {false, true}}, {"visibility_culling", {false,true}},
             {"msaa", {1, 2, 4}},
             {"bloom", {"off", "low", "high"}},
             {"fog", {"off", "linear", "height"}},
@@ -88,6 +88,14 @@ inline Json graphicsOptions() {
             {"alpha_haze", {false, true}},
             {"anisotropy", {1, 2, 4, 8, 16}},
             {"dynamic_resolution", {false, true}}};
+}
+// User presentation overrides are independent of the current world's defaults.
+inline Json effectiveOutline(const Json &profile, const Json &graphics) {
+    auto ink = profile.value("outline", Json::object());
+    if (ink.empty()) return ink; // a width/colour override does not invent a style
+    for (auto [key, field] : {std::pair{"outline_width_px", "widthPx"}, std::pair{"outline_colour", "colour"}})
+        if (graphics.contains(key) && !graphics.at(key).is_null()) ink[field] = graphics.at(key);
+    return ink;
 }
 inline Json effectiveGraphics(const Json &config, const std::string &device) {
     auto result = config;

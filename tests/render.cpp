@@ -649,7 +649,7 @@ int main(int argc, char **argv) {
                                       {"depthThreshold",.02},{"normalThreshold",.2}};
         renderer.profile["toneMapping"]="linear";
         renderer.showInteractionHints=false; renderer.pointerX=renderer.pointerY=-1;
-        renderer.graphics["outline"]=true;
+        renderer.graphics["outline"]=true; renderer.graphics["outline_quality"]="smooth";
         camera.position.y=2.8f;
         auto stroke = [&] {
             renderer.draw(fbo,320,180,camera,{},false); glFinish();
@@ -665,6 +665,21 @@ int main(int argc, char **argv) {
             check(near>=int(6*density) && near<=int(10*density),"ink logical width incorrect");
             check(std::abs(near-far)<=2,"ink width changed with distance");
         }
+        // Fast mode remains one logical pixel even if the author requests four.
+        for(int samples:{1,2,4}) for(float scale:{1.f,.5f}) {
+            renderer.msaa=samples;renderer.renderScale=scale;renderer.logicalScale=1;
+            renderer.graphics["outline_quality"]="fast";camera.position.z=4;
+            int count=stroke();check(count<=4,"fast ink magnified by internal render scale");
+            // Use integrated coverage to include an antialiased one-pixel line.
+            std::vector<unsigned char> row(320*4);glReadPixels(0,90,320,1,GL_RGBA,GL_UNSIGNED_BYTE,row.data());
+            renderer.graphics["outline"]=false;stroke();
+            std::vector<unsigned char> background(320*4);glReadPixels(0,90,320,1,GL_RGBA,GL_UNSIGNED_BYTE,background.data());
+            renderer.graphics["outline"]=true;
+            float coverage=0;for(int x=0;x<320;++x)coverage+=std::max(0.f,float(row[x*4+1]-background[x*4+1])/std::max(1,255-background[x*4+1]));
+            if(coverage<1.5f || coverage>2.6f)std::cerr<<"ink coverage="<<coverage<<" samples="<<samples<<" scale="<<scale<<'\n';
+            check(coverage>=1.5f && coverage<=2.6f,"fast ink lost subpixel coverage");
+        }
+        renderer.graphics["outline_quality"]="smooth";
         renderer.graphics["outline"]=false;
         check(stroke()==0,"disabled ink still draws");
         renderer.graphics["outline"]=true; renderer.logicalScale=1; camera.position.z=4;
@@ -673,6 +688,27 @@ int main(int argc, char **argv) {
         glReadPixels(160,90,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
         check(std::abs(int(pixel[0])-128)<=1 && std::abs(int(pixel[1])-128)<=1,"ink altered live app pixels");
         check(glGetError()==GL_NO_ERROR,"ink GL state error");
+        // Equal-depth/equal-colour seam: depth-only reconstruction would miss it.
+        auto seams=std::make_shared<world::World>(*orientationWorld);
+        auto left=panel,right=panel;
+        for(auto &v:left.vertices)v.position.x=(v.position.x-.8f)*.5f;
+        for(auto &v:right.vertices){v.position.x=(v.position.x+.8f)*.5f;v.normal={1,0,0};}
+        seams->meshes={left,right};renderer.prepare(seams);
+        renderer.profile["outline"]={{"enabled",true},{"colour",{0,1,0}},{"widthPx",2},{"depthThreshold",.02},{"normalThreshold",.2}};
+        renderer.profile["toneMapping"]="linear";renderer.graphics["outline_quality"]="smooth";
+        for(int samples:{1,2,4}) {
+            renderer.msaa=samples;renderer.renderScale=.5;renderer.logicalScale=1;
+            renderer.draw(fbo,320,180,camera,{},false);glFinish();
+            glReadPixels(160,90,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
+            check(pixel[1]>180,"ink lost coplanar normal discontinuity after resolve");
+            glReadPixels(140,90,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
+            check(pixel[0]>240 && pixel[1]<5 && pixel[2]>240,"flat normal region or unlit colour changed");
+        }
+        // Offload worker must include ink in its world-only colour transport.
+        renderer.worldOnly=true;renderer.draw(fbo,320,180,camera,{},false);glFinish();renderer.worldOnly=false;
+        glReadPixels(160,90,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
+        check(pixel[1]>180,"offload worker omitted ink");
+        renderer.prepare(orientationWorld);
         // Visibility membership and fallback are independent of workspace homes.
         orientationWorld->nodeParents={-1,-1,1};
         auto hidden=panel;hidden.node=2;orientationWorld->meshes.push_back(hidden);

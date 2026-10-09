@@ -704,3 +704,43 @@ presses are swallowed. Core keeps the camera frozen. No shell files changed.
   to zero. Camera-video replay preserves/smooths those values.
 - The climb reset prompt is a normal movement prompt; free-cursor suppression is
   unchanged. No additional cursor transitions need live supervision.
+
+
+## IPC 0.14 — ink quality and lower GPU cost
+
+Negotiate 0.14 for `graphics.outline_quality: "fast" | "smooth" | null`.
+The Performance page can use the existing options/presets/control records:
+label **Ink quality**, choices **Fast · 1 px**, **Smooth · authored width**,
+and the existing preset-inherit reset. Low/Medium inherit fast; High/Ultra smooth.
+`graphics.outline` remains the independent on/off permit for the world's style.
+No world-format change (0.5); older protocol replies omit the tier and reject
+patches containing it. Every earlier capability is inherited through the helper.
+
+`controls.outline` and `controls.outline_quality` share the `outline` GPU timer:
+packed internal data, edge kernel and sparse native composite. Do not add these
+two costs together. Normal encoding shares world shading; paired benchmark
+results include that overhead. Worker ink cost is reported when offload is active.
+There is no native normal geometry re-render or additional MSAA resolve now.
+No shell files changed. No cursor state transition was added.
+
+
+### Persistent ink controls and live-launcher negotiation
+
+0.14 also adds `graphics.outline_width_px` (null or 1–4) and
+`graphics.outline_colour` (null or display-RGB triplet in 0–1). Write these through
+**graphics.set**, not `atmosphere.set`. They persist in the existing graphics.json
+file across world loads and restarts. Null resets to the current world's authored
+value. `atmosphere.get` reports the applied style; `graphics.get.config` retains
+requested values and `performance.controls` exposes actual values/cost. A style
+must still be enabled by the world; colour/width overrides do not create one.
+Fast fixes stroke width at 1 px; enable the width slider with Smooth.
+
+Shell 0ec998b currently uses transient `atmosphere.set` in OutlineController:
+update that bridge to patch the graphics keys, reset with null (rather than a
+remembered colour), offer the quality selector, and remove the reload-lifetime
+and fixed-quality labels. Replace exact `protocol === '0.13'` checks with feature
+floors. Import the 0.14 schema, which also fixes the revision-response envelope's
+overlapping `oneOf` branches (now `anyOf`; per-method validation remains strict).
+The live launcher's own RPC offers the C++ helper's whole inventory newest-first;
+it starts the installed shell at the newest **common** supported version. Thus
+0ec998b still starts safely at 0.13, and a 0.14 shell is picked automatically.

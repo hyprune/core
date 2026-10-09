@@ -146,6 +146,11 @@ struct Runtime {
                 patch.contains("bloom_strength") || graphicsOverrides.contains("bloom_strength")
                     ? next["graphics"]["bloom_strength"]
                     : graphicsBaseProfile["bloom"]["strength"];
+            if (graphicsBaseProfile.contains("outline")) {
+                renderer.profile["outline"] = render::effectiveOutline(graphicsBaseProfile, renderer.graphics);
+                renderer.graphics["outline_width_px"] = renderer.graphics["outline_quality"] == "fast" ? Json(1) : renderer.profile["outline"]["widthPx"];
+                renderer.graphics["outline_colour"] = renderer.profile["outline"]["colour"];
+            }
             renderer.graphics["exposure"] = renderer.profile["exposure"];
             renderer.graphics["bloom_strength"] = renderer.profile["bloom"]["strength"];
         }
@@ -688,7 +693,7 @@ Json Runtime::performance() const {
     if (renderedOffload && offload.timings.is_object() && offload.timings.contains("gpuEffectsMs")) {
         auto worker = offload.timings.at("gpuEffectsMs");
         state["costsMs"]["depth_reconstruction"] = state["costsMs"]["upscale_sharpen"];
-        for (auto key : {"world_shading_shared", "sky", "msaa_resolve", "bloom", "upscale_sharpen"})
+        for (auto key : {"world_shading_shared", "sky", "msaa_resolve", "bloom", "upscale_sharpen", "outline"})
             state["costsMs"][key] = worker.at(key);
         state["costsMs"]["transfer"] = offload.timings.value("transferGpuMs", Json(nullptr));
         state["effective"]["target_fps"] = offloadPolicy.value("targetFPS", 45);
@@ -699,7 +704,7 @@ Json Runtime::performance() const {
     state["controls"] = Json::object();
     for (auto &[key, value] : config["graphics"].items()) {
         std::string group = key == "bloom" || key == "bloom_strength" ? "bloom" :
-                            key == "outline" ? "outline" : key == "sky" ? "sky" : key == "msaa" ? "msaa_resolve" :
+                            (key == "outline" || key == "outline_quality" || key == "outline_width_px" || key == "outline_colour") ? "outline" : key == "sky" ? "sky" : key == "msaa" ? "msaa_resolve" :
                             key == "sharpen" ? "upscale_sharpen" : key == "alpha_haze" ? "native_surfaces_geometry" :
                             key == "fog" || key == "normal_maps" || key == "specular" || key == "reflections" ||
                             key == "ambient_occlusion" || key == "anisotropy" ? "world_shading_shared" : "";
@@ -1010,7 +1015,10 @@ void Runtime::finishLoad() {
             return;
         uploadingWorld.reset();
         loading = false;
-        graphicsBaseProfile = renderer.profile;
+        // Loading ticks may reapply user overrides during shader warm-up. Read
+        // immutable authored defaults, never the already overridden GPU profile.
+        graphicsBaseProfile = candidate->atmosphere.is_object() ? candidate->atmosphere : world::defaultAtmosphere();
+        renderer.profile = graphicsBaseProfile;
         applyGraphics(graphicsFile.current);
         world = std::move(candidate);
         capture.release();
@@ -2694,6 +2702,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                     if (params["patch"].contains(key)) throw ipc::Error(-32602, "setting requires IPC 0.10");
             if (!ipc::protocol::atLeast(protocol,"0.13") && (params["patch"].contains("outline") || params["patch"].contains("visibility_culling")))
                 throw ipc::Error(-32602,"setting requires IPC 0.13");
+            if (!ipc::protocol::atLeast(protocol,"0.14") && (params["patch"].contains("outline_quality") || params["patch"].contains("outline_width_px") || params["patch"].contains("outline_colour")))
+                throw ipc::Error(-32602,"setting requires IPC 0.14");
             auto merged = graphicsFile.current;
             merged.update(params["patch"]);
             try {
@@ -2714,6 +2724,12 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (ipc::protocol::atLeast(protocol, "0.10")) response["performance"] = performance();
         else for (auto section : {"config", "effective", "overrides", "options"})
             for (auto key : {"offload", "offload_power_cap_w", "scale_min", "scale_max"}) response[section].erase(key);
+        if (!ipc::protocol::atLeast(protocol,"0.14")) {
+            for(auto section:{"config","effective","overrides","options"}) for(auto key:{"outline_quality","outline_width_px","outline_colour"}) response[section].erase(key);
+            for(auto &preset:response["presets"]) preset.erase("outline_quality");
+            if(response.contains("performance"))
+                for(auto section:{"requested","effective","controls"}) for(auto key:{"outline_quality","outline_width_px","outline_colour"}) response["performance"][section].erase(key);
+        }
         if (!ipc::protocol::atLeast(protocol,"0.13")) {
             auto strip = [](Json &value) { if(value.is_object()) { value.erase("outline"); value.erase("visibility_culling"); } };
             for(auto section:{"config","effective","overrides","options"})strip(response[section]);

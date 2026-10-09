@@ -6,9 +6,9 @@ sys.path.insert(0,str(HERE))
 sys.modules.setdefault('session',sys.modules[__name__])
 from ctl import verified
 class Client:
-    def __init__(self,path,token=None,protocol="0.1"):
+    def __init__(self,path,token=None,protocol="0.1",client_id="org.hyprune.nested"):
         self.socket=socket.socket(socket.AF_UNIX);self.socket.settimeout(5);self.socket.connect(path);self.count=0;self.events=[];self.transcript=[]
-        params={'protocols':[protocol],'client':{'id':'org.hyprune.nested','name':'Nested test'},'capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}
+        params={'protocols':[protocol],'client':{'id':client_id,'name':'Nested test'},'capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}
         version=tuple(map(int,protocol.split('.')))  # numeric feature floors, including future test versions
         if version >= (0,2):params['capabilities']+=['shell.control','data.publish']
         if version >= (0,6):params['capabilities']+=['input.control']
@@ -49,6 +49,7 @@ def camera():
 
 def run(args):
     global STATE
+    if getattr(args,'ink',False): args.authoring=True
     if not hasattr(args,'authoring'): args.authoring=False
     if args.authoring: args.m3b=True
     if not hasattr(args,'climbing'): args.climbing=False
@@ -172,8 +173,12 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,"0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
+        if getattr(args,"ink",False):
+            from ink import acceptance
+            acceptance(client,children,args,shell_token,socketpath)
+            return
         if args.authoring:
             from authoring import acceptance
             acceptance(client,children,args,shell_token,socketpath)
@@ -409,6 +414,6 @@ def m1(client):
     print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--ink',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
     try:run(args)
     except KeyboardInterrupt:print("Nested session stopped.",flush=True)

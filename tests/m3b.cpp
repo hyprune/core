@@ -95,6 +95,17 @@ int main() {
     }
     assert(render::effectiveGraphics(render::graphicsDefaults(), "Intel PTL")["quality"] == "low");
     assert(render::effectiveGraphics(render::graphicsDefaults(), "AMD")["quality"] == "medium");
+    Json inkPatch={{"outline_width_px",3.5},{"outline_colour",{.1,.2,.3}}};
+    auto inkConfig=configPatch(defaultConfig(),{{"graphics",inkPatch}})["graphics"];
+    Json authored={{"outline",{{"enabled",true},{"widthPx",2},{"colour",{0,0,0}}}}};
+    assert(render::effectiveOutline(authored,inkConfig)["widthPx"]==3.5);
+    authored["outline"]["widthPx"]=1;
+    assert(render::effectiveOutline(authored,inkConfig)["widthPx"]==3.5);
+    inkConfig["outline_width_px"]=nullptr;
+    assert(render::effectiveOutline(authored,inkConfig)["widthPx"]==1);
+    for(auto patch:{Json{{"outline_width_px",5}},Json{{"outline_colour",{0,2,0}}},Json{{"outline_colour",{0,1}}}}){
+        bool rejected=false;try{configPatch(defaultConfig(),{{"graphics",patch}});}catch(...){rejected=true;}assert(rejected);
+    }
     auto graphicsOptions = render::graphicsOptions();
     for (auto &[key, values] : graphicsOptions.items()) {
         for (auto &value : values)

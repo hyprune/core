@@ -70,7 +70,7 @@ void main(){if(alphaMode==1){vec2 st=(uvMatrix[0]*vec3(uvSet[0]==0?uv:lightUV,1)
 float a=alpha*(present[0]!=0?texture(albedo,st).a:1.);if(a<alphaCutoff)discard;}result=vec4(0);}
 )";
 const char *fragment = R"(#version 300 es
-precision highp float;
+precision highp float;precision highp int;
 in vec3 n;in vec3 worldPosition;in vec2 uv;in vec2 lightUV;
 uniform sampler2D albedo,lightmap,normalMap,mrMap,aoMap,emissiveMap;
 uniform mat3 uvMatrix[5];uniform int uvSet[5];uniform int present[5];
@@ -78,12 +78,23 @@ uniform vec3 color,emission,eye;
 uniform int hasTexture,baked,lightSrgb,unlit,surface,details,nativeOutput,nativeTone;
 uniform float nativeExposure;
 uniform float intensity,metallic,roughness,normalScale,occlusionStrength;
+uniform int inkEnabled;
 uniform samplerCube environmentMap;
 uniform float cubeLevels,envRotation,envIntensity,alpha,alphaCutoff;
 uniform int alphaMode,excludeUnlit,effects,normalEnabled,specularEnabled,aoEnabled,reflectionEnabled,fogMode;
 uniform vec3 fogColor,sunDirection,sunColor;
 uniform float fogDensity,heightFalloff,baseHeight,sunIntensity;
 out vec4 result;
+// Octahedral geometry normal in the otherwise opaque HDR alpha channel. All
+// 14 bits round-trip through FP16 exactly (normal exponents only, no NaN/Inf).
+// Negative values distinguish metadata from sky/bloom coverage. No extra MRT,
+// geometry submission, multisample storage or resolve is needed.
+float packNormal(vec3 n){
+ n/=abs(n.x)+abs(n.y)+abs(n.z);
+ vec2 o=n.z>=0.?n.xy:(1.-abs(n.yx))*mix(vec2(-1),vec2(1),step(vec2(0),n.xy));
+ uvec2 q=uvec2(round(clamp(o*.5+.5,0.,1.)*127.));uint bits=q.x|(q.y<<7);
+ return -uintBitsToFloat(((113u+(bits>>10))<<23)|((bits&1023u)<<13));
+}
 vec3 decode(vec3 x){return mix(x/12.92,pow((x+.055)/1.055,vec3(2.4)),step(vec3(.04045),x));}
 vec2 coords(int i){return (uvMatrix[i]*vec3(uvSet[i]==0?uv:lightUV,1)).xy;}
 vec3 mappedNormal(vec3 N,vec2 st){
@@ -143,7 +154,7 @@ void main(){
  vec3 mapped=nativeTone==0?clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.):nativeTone==1?x/(1.+x):clamp(x,0.,1.);
  vec3 encoded=mix(12.92*mapped,1.055*pow(max(mapped,vec3(0)),vec3(1./2.4))-.055,step(vec3(.0031308),mapped));
  result=vec4(encoded*coverage,coverage);}
- else result=vec4(lit,alphaMode==2?coverage:1.);
+ else result=vec4(lit,alphaMode==2?coverage:inkEnabled!=0?packNormal(geometric):1.);
 }
 )";
 // Native app pixels stay in their encoded colour space. This avoids a decode /
@@ -187,7 +198,9 @@ void main(){vec2 st=vec2(uv.x,1.-uv.y);vec4 sampleColor=texture(frame,st);vec3 c
 const char *bloomFragment = R"(#version 300 es
 precision highp float;
 in vec2 uv;uniform sampler2D image;uniform vec2 stepSize;uniform float threshold;uniform int extract;out vec4 result;
-vec3 tap(vec2 st){vec4 c=texture(image,st);return c.rgb*(extract!=0?c.a:1.);}
+// Only opaque/masked world colour reaches bloom. Alpha is normal metadata,
+// never coverage here; live alpha surfaces compose after extraction.
+vec3 tap(vec2 st){return texture(image,st).rgb;}
 void main(){vec3 c;
  if(extract!=0){c=(tap(uv+stepSize*vec2(-.5,-.5))+tap(uv+stepSize*vec2(.5,-.5))+tap(uv+stepSize*vec2(-.5,.5))+tap(uv+stepSize*vec2(.5,.5)))*.25;float l=max(max(c.r,c.g),c.b);c*=max(0.,l-threshold)/max(l,.0001);}
  else c=tap(uv)*.227027027+ (tap(uv+stepSize*1.384615384)+tap(uv-stepSize*1.384615384))*.316216216+(tap(uv+stepSize*3.23076923)+tap(uv-stepSize*3.23076923))*.07027027;
@@ -198,34 +211,59 @@ precision highp float;
 in vec2 uv;uniform samplerCube environmentMap;uniform vec3 forward,right,up;uniform float tanFov,aspect,rotation;uniform vec2 lensShift;uniform int skyMode;uniform vec3 zenith,horizon,ground;out vec4 result;
 void main(){vec3 d=normalize(forward+right*((uv.x*2.-1.-lensShift.x)*tanFov*aspect)+up*((uv.y*2.-1.-lensShift.y)*tanFov));if(skyMode==1){result=vec4(mix(horizon,d.y>0.?zenith:ground,abs(d.y)),1);return;}float c=cos(rotation),s=sin(rotation);d=vec3(c*d.x+s*d.z,d.y,-s*d.x+c*d.z);result=vec4(textureLod(environmentMap,d,0.).rgb,1);}
 )";
-// Native-resolution geometry normals/depth, before app surfaces and HUD. Sampling
-// radii are logical pixels, independent of perspective distance and world scale.
-std::string inkNormalFragment() {
-    std::string source=depthFragment;
-    source.insert(source.find("in vec2 uv;"),"in vec3 n;");
-    source.replace(source.find("result=vec4(0);"),15,"result=vec4(normalize(n)*.5+.5,1);");
-    return source;
-}
+// Resolve colour/depth once, then pack normal + linear depth for one-fetch
+// neighbour tests. MSAA coverage blends metadata only at existing geometry edges;
+// the depth discontinuity still marks those edges. No extra MSAA attachment.
+const char *inkPackFragment = R"(#version 300 es
+precision highp float;precision highp int;
+uniform highp sampler2D image,depths;layout(location=0) out highp uvec4 result;
+void main(){ivec2 p=ivec2(gl_FragCoord.xy);float d=texelFetch(depths,p,0).r;
+ if(d>=.999999){result=uvec4(0);return;}
+ uint f=floatBitsToUint(abs(texelFetch(image,p,0).a));
+ uint bits=((((f>>23)&255u)-113u)*1024u+((f>>13)&1023u))&16383u;
+ result=uvec4(bits,floatBitsToUint(.10001/max(.000001,2.0002-2.*d)),0,0);
+})";
 const char *inkFragment = R"(#version 300 es
-precision highp float;
-in vec2 uv; uniform sampler2D normals,depths; uniform vec2 pixelStep;
-uniform float widthPx,depthThreshold,normalThreshold; uniform vec3 colour; out vec4 result;
-float linearDepth(float d){return .10001/max(.000001,2.0002-2.*d);}
-void main(){
- float d=texture(depths,uv).r; vec3 n=texture(normals,uv).rgb*2.-1.; float edge=0.;
- for(int axis=0;axis<4;++axis){
-  vec2 dir=axis==0?vec2(1,0):axis==1?vec2(-1,0):axis==2?vec2(0,1):vec2(0,-1);
-  vec2 at=uv+dir*pixelStep*widthPx*.5; float other=texture(depths,at).r;
-  bool here=d<.999999, there=other<.999999;
-  if(here!=there)edge=1.;
-  else if(here){
-   float z=linearDepth(d), oz=linearDepth(other);
-   if(abs(z-oz)/min(z,oz)>depthThreshold)edge=1.;
-   vec3 on=texture(normals,at).rgb*2.-1.;
-   if(1.-dot(normalize(n),normalize(on))>normalThreshold)edge=1.;
-  }
+precision highp float;precision highp int;
+uniform highp usampler2D packedData;uniform float depthThreshold,normalThreshold;uniform int radius;out vec4 result;
+uvec2 tap(ivec2 p){return texelFetch(packedData,clamp(p,ivec2(0),textureSize(packedData,0)-1),0).rg;}
+vec3 normal(uint bits){
+ vec2 o=vec2(bits&127u,(bits>>7)&127u)/127.*2.-1.;
+ vec3 n=vec3(o,1.-abs(o.x)-abs(o.y));
+ if(n.z<0.)n.xy=(1.-abs(n.yx))*mix(vec2(-1),vec2(1),step(vec2(0),n.xy));
+ return normalize(n);
+}
+bool edge(uvec2 a,uvec2 b){
+ if((a.y==0u)!=(b.y==0u))return true;
+ if(a.y==0u)return false;
+ float z=uintBitsToFloat(a.y),oz=uintBitsToFloat(b.y);
+ if(abs(z-oz)>depthThreshold*min(z,oz))return true;
+ // Flat geometry takes the cheap bit-equality path. Decode normals only at
+ // changing normals; packed depth retains full float precision, even at .0001.
+ if(a.x==b.x)return false;
+ return 1.-dot(normal(a.x),normal(b.x))>normalThreshold;
+}
+void main(){ivec2 p=ivec2(gl_FragCoord.xy);uvec2 c=tap(p);vec2 d=vec2(64);
+ for(int r=1;r<=radius;++r){
+  if(d.x==64.){if(edge(c,tap(p+ivec2(r,0))))d.x=float(r)-.5;
+               else if(edge(c,tap(p-ivec2(r,0))))d.x=.5-float(r);}
+  if(d.y==64.){if(edge(c,tap(p+ivec2(0,r))))d.y=float(r)-.5;
+               else if(edge(c,tap(p-ivec2(0,r))))d.y=.5-float(r);}
  }
- result=vec4(colour,edge);
+ result=vec4(d,0,1);
+})";
+// A sparse native composite avoids increasing the HDR/tone shader's register
+// pressure. Flat cells discard after one nearest fetch; only thin lines blend.
+const char *inkCompositeFragment = R"(#version 300 es
+precision highp float;
+uniform highp sampler2D edges;uniform vec2 internalPerOutput;uniform float halfWidth,outputPerInternal;uniform vec3 colour;out vec4 result;
+void main(){vec2 p=gl_FragCoord.xy*internalPerOutput;
+ vec2 d=texelFetch(edges,ivec2(p),0).rg;
+ if(min(abs(d.x),abs(d.y))>32.)discard;
+ d=abs(d-(fract(p)-.5));
+ float coverage=clamp((halfWidth-min(d.x,d.y))*outputPerInternal+.5,0.,1.);
+ if(coverage<=0.)discard;
+ result=vec4(colour,coverage);
 })";
 void layout(GLuint &vao, GLuint &vbo) {
     glGenVertexArrays(1, &vao);
@@ -252,8 +290,9 @@ void Renderer::init() {
     device = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
     if (!depthProgram_)
         depthProgram_ = program(vertex, depthFragment);
-    if (!inkNormals_) inkNormals_ = program(vertex, inkNormalFragment().c_str());
+    if (!inkNormals_) inkNormals_ = program(screenVertex, inkPackFragment);
     if (!inkProgram_) inkProgram_ = program(screenVertex, inkFragment);
+    if (!inkComposite_) inkComposite_ = program(screenVertex, inkCompositeFragment);
     if (!scene_)
         scene_ = program(vertex, fragment);
     if (!native_)
@@ -375,8 +414,9 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
                 sky_ = program(screenVertex, skyFragment);
         },
         "shader sky_");
-    add(0, [this] { if (!inkNormals_) inkNormals_ = program(vertex, inkNormalFragment().c_str()); }, "shader ink normals");
+    add(0, [this] { if (!inkNormals_) inkNormals_ = program(screenVertex, inkPackFragment); }, "shader ink packed depth-normal");
     add(0, [this] { if (!inkProgram_) inkProgram_ = program(screenVertex, inkFragment); }, "shader ink edges");
+    add(0, [this] { if (!inkComposite_) inkComposite_ = program(screenVertex, inkCompositeFragment); }, "shader ink composite");
     add(0, [this] { if (!depthProgram_) depthProgram_ = program(vertex, depthFragment); }, "shader depth");
     add(
         0,
@@ -914,6 +954,9 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     uniform(scene_, "albedo", 0);
     uniform(scene_, "lightmap", 1);
     uniform(scene_, "surface", 0);
+    auto ink = effectiveOutline(profile, graphics);
+    bool drawInk = !externalWorldFbo && graphics["outline"].get<bool>() && ink.value("enabled", false);
+    uniform(scene_, "inkEnabled", drawInk);
     uniform(scene_, "normalMap", 2);
     uniform(scene_, "mrMap", 3);
     uniform(scene_, "aoMap", 4);
@@ -953,11 +996,11 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             return !ta;
         return ta && length(batches_[a].center - camera.position) > length(batches_[b].center - camera.position);
     });
-    bool depthOnly = false, inkOnly = false;
+    bool depthOnly = false;
     auto drawBatch = [&](size_t index, bool nativeOutput) {
-        auto shader = inkOnly ? inkNormals_ : depthOnly ? depthProgram_ : scene_;
+        auto shader = depthOnly ? depthProgram_ : scene_;
         glUseProgram(shader);
-        if (depthOnly || inkOnly) {
+        if (depthOnly) {
             glUniformMatrix4fv(glGetUniformLocation(shader,"vp"),1,GL_FALSE,vp.v.data());
             uniform(shader,"albedo",0);
         }
@@ -1081,6 +1124,36 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             }
     }
     gpu_[4].end();
+    gpu_[7].begin();
+    float inkWidth = drawInk ? (graphics["outline_quality"]=="fast"?1.f:ink.at("widthPx").get<float>())*logicalScale*scaledWidth_/w : 0;
+    if (drawInk) {
+        if (!inkFbo_) {
+            glGenFramebuffers(1,&inkFbo_);
+            glBindFramebuffer(GL_FRAMEBUFFER,inkFbo_);
+            for (auto texture : {&inkNormal_, &inkDepth_}) {
+                glGenTextures(1,texture);glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,*texture);
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER,0);
+                glTexImage2D(GL_TEXTURE_2D,0,texture==&inkNormal_?GL_RG32UI:GL_RG16F,scaledWidth_,scaledHeight_,0,texture==&inkNormal_?GL_RG_INTEGER:GL_RG,texture==&inkNormal_?GL_UNSIGNED_INT:GL_HALF_FLOAT,nullptr);
+                glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+            }
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER,inkFbo_);glViewport(0,0,scaledWidth_,scaledHeight_);
+        glDisable(GL_DEPTH_TEST);glDisable(GL_BLEND);glDisable(GL_CULL_FACE);
+        glBindVertexArray(screenVao_);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,inkNormal_,0);
+        glUseProgram(inkNormals_);uniform(inkNormals_,"image",0);uniform(inkNormals_,"depths",1);
+        glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,resolveTexture_);glBindSampler(0,0);
+        glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,resolvedDepth_);glBindSampler(1,0);
+        glDrawArrays(GL_TRIANGLES,0,3);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,inkDepth_,0);
+        glUseProgram(inkProgram_);uniform(inkProgram_,"packedData",0);
+        uniform(inkProgram_,"radius",std::min(9,std::max(1,int(std::ceil(inkWidth*.5f)))));
+        for(auto name:{"depthThreshold","normalThreshold"}) glUniform1f(glGetUniformLocation(inkProgram_,name),ink.at(name).get<float>());
+        glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,inkNormal_);glBindSampler(0,0);
+        glDrawArrays(GL_TRIANGLES,0,3);
+    }
+    gpu_[7].end();
     gpu_[5].begin();
     glBindFramebuffer(GL_FRAMEBUFFER, nativeFbo_);
     glViewport(0, 0, w, h);
@@ -1126,44 +1199,19 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glDrawArrays(GL_TRIANGLES, 0, 3);
     }
     gpu_[5].end();
-    gpu_[7].begin();
-    auto ink = profile.value("outline", world::Json::object());
-    if (!worldOnly && graphics["outline"].get<bool>() && ink.value("enabled",false)) {
-        if (!inkFbo_) {
-            glGenFramebuffers(1,&inkFbo_); glBindFramebuffer(GL_FRAMEBUFFER,inkFbo_);
-            for (auto entry : {std::pair{&inkNormal_,false},std::pair{&inkDepth_,true}}) {
-                glGenTextures(1,entry.first); glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D,*entry.first);
-                glBindBuffer(GL_PIXEL_UNPACK_BUFFER,0);
-                glTexImage2D(GL_TEXTURE_2D,0,entry.second?GL_DEPTH_COMPONENT24:GL_RGBA8,w,h,0,
-                             entry.second?GL_DEPTH_COMPONENT:GL_RGBA,entry.second?GL_UNSIGNED_INT:GL_UNSIGNED_BYTE,nullptr);
-                glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
-                glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-                glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-                glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-                glFramebufferTexture2D(GL_FRAMEBUFFER,entry.second?GL_DEPTH_ATTACHMENT:GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,*entry.first,0);
-            }
-            if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE) throw std::runtime_error("ink framebuffer unavailable");
-        }
-        glBindFramebuffer(GL_FRAMEBUFFER,inkFbo_); glViewport(0,0,w,h);
-        glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LESS); glDepthMask(GL_TRUE);
-        glClearColor(.5,.5,1,0); glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-        inkOnly=true;
-        for(auto i:order) if(world_->materials[batches_[i].material].alphaMode!=2) drawBatch(i,false);
-        inkOnly=false;
-        glBindFramebuffer(GL_FRAMEBUFFER,nativeFbo_); glDisable(GL_DEPTH_TEST); glDepthMask(GL_FALSE);
-        glDisable(GL_CULL_FACE); glEnable(GL_BLEND); glBlendEquation(GL_FUNC_ADD);
-        glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ZERO,GL_ONE);
-        glUseProgram(inkProgram_); uniform(inkProgram_,"normals",0); uniform(inkProgram_,"depths",1);
-        uniform(inkProgram_,"colour",vec(ink.at("colour")));
-        glUniform2f(glGetUniformLocation(inkProgram_,"pixelStep"),logicalScale/w,logicalScale/h);
-        for(auto name:{"widthPx","depthThreshold","normalThreshold"})
-            glUniform1f(glGetUniformLocation(inkProgram_,name),ink.at(name).get<float>());
-        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D,inkNormal_); glBindSampler(0,0);
-        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D,inkDepth_); glBindSampler(1,0);
-        glBindVertexArray(screenVao_); glDrawArrays(GL_TRIANGLES,0,3);
-        glDisable(GL_BLEND); glEnable(GL_DEPTH_TEST); glDepthMask(GL_TRUE);
+    gpu_[8].begin();
+    if(drawInk){
+        glDisable(GL_DEPTH_TEST);glDepthMask(GL_FALSE);glEnable(GL_BLEND);
+        glBlendEquation(GL_FUNC_ADD);glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ZERO,GL_ONE);
+        glUseProgram(inkComposite_);uniform(inkComposite_,"edges",0);uniform(inkComposite_,"colour",vec(ink.at("colour")));
+        glUniform2f(glGetUniformLocation(inkComposite_,"internalPerOutput"),float(scaledWidth_)/w,float(scaledHeight_)/h);
+        glUniform1f(glGetUniformLocation(inkComposite_,"halfWidth"),inkWidth*.5f);
+        glUniform1f(glGetUniformLocation(inkComposite_,"outputPerInternal"),float(w)/scaledWidth_);
+        glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,inkDepth_);glBindSampler(0,0);
+        glBindVertexArray(screenVao_);glDrawArrays(GL_TRIANGLES,0,3);
+        glDisable(GL_BLEND);glEnable(GL_DEPTH_TEST);glDepthMask(GL_TRUE);
     }
-    gpu_[7].end();
+    gpu_[8].end();
     glDepthFunc(GL_LESS);
     glUseProgram(native_);
     glUniformMatrix4fv(glGetUniformLocation(native_, "vp"), 1, GL_FALSE, vp.v.data());
@@ -1383,7 +1431,7 @@ void Renderer::debugHUD(int w, int h) {
     auto gpu = [&](int index) {
         std::ostringstream out;
         out << std::fixed << std::setprecision(2);
-        const std::map<int, std::string> workerPass{{0,"world_shading_shared"},{2,"msaa_resolve"},
+        const std::map<int, std::string> workerPass{{0,"world_shading_shared"},{2,"msaa_resolve"},{7,"outline"},
                                                    {4,"bloom"},{5,"upscale_sharpen"},{6,"sky"}};
         auto worker = offloadState.value("worker", world::Json(nullptr));
         if (offloadState.value("activeRenderer", "") == "offload" && worker.is_object() && workerPass.contains(index)) {
@@ -1391,7 +1439,7 @@ void Renderer::debugHUD(int w, int h) {
             if (cost.is_number()) out << cost.get<double>() << " ms (worker)";
             else out << "N/A (worker)";
         } else if (gpu_[index].available)
-            out << gpu_[index].milliseconds << " ms";
+            out << gpu_[index].milliseconds + (index==7 ? gpu_[8].milliseconds : 0.) << " ms";
         else
             out << "N/A";
         return out.str();
@@ -1411,7 +1459,7 @@ void Renderer::debugHUD(int w, int h) {
             << graphics["bloom"].get<std::string>() << "                       " << gpu(4)
             << "\nRenderer " << offloadState.value("activeRenderer", "in-process") << "  " << offloadState.value("powerW", world::Json(nullptr)).dump() << " W"
             << "\nUpscale + sharpen               " << gpu(5) << "\nNative windows / haze " << enabled("alpha_haze") << "   " << gpu(1)
-            << "\nInk " << enabled("outline") << "                       " << gpu(7)
+            << "\nInk edges " << graphics["outline_quality"].get<std::string>() << " " << enabled("outline") << "          " << gpu(7)
             << "\nVisibility " << submittedBatches_ << " drawn / " << culledBatches_ << " culled"
             << "\nOutput + markers                " << gpu(3) << "\nSSR / runtime shadows: unsupported"
             << "\nRendered " << frames << " / reused " << skipped_;
@@ -1796,11 +1844,11 @@ world::Json Renderer::timings() const {
         }
         return sum;
     };
-    gpu = {cost({0, 6}), cost({1}), cost({2, 4, 5, 7}), cost({3})};
+    gpu = {cost({0, 6}), cost({1}), cost({2, 4, 5, 7, 8}), cost({3})};
     world::Json effects = {{"world_shading_shared", cost({0})}, {"sky", cost({6})},
                            {"msaa_resolve", cost({2})},         {"bloom", cost({4})},
                            {"upscale_sharpen", cost({5})},      {"native_surfaces_geometry", cost({1})},
-                           {"output_markers", cost({3})}, {"outline", cost({7})}};
+                           {"output_markers", cost({3})}, {"outline", cost({7,8})}};
     return {{"renderedFrames", frames},
             {"visibility", {{"submitted",submittedBatches_},{"culled",culledBatches_},{"total",batches_.size()}}},
             {"shaderCache", {{"hits", ProgramCache::hits}, {"misses", ProgramCache::misses}, {"rejected", ProgramCache::rejected}, {"compileMs", ProgramCache::compileMs}, {"warmupMs", warmMs_}, {"warmupMaxStepMs", warmMaxMs_}, {"warming", warmStep_ >= 0}}},
@@ -1916,7 +1964,7 @@ void Renderer::destroy() {
     collisionVao_ = collisionVbo_ = 0;
     collisionCount_ = 0;
     glDeleteProgram(scene_);
-    glDeleteProgram(inkNormals_); glDeleteProgram(inkProgram_); inkNormals_=inkProgram_=0;
+    glDeleteProgram(inkNormals_); glDeleteProgram(inkProgram_); glDeleteProgram(inkComposite_); inkNormals_=inkProgram_=inkComposite_=0;
     glDeleteProgram(depthProgram_); depthProgram_ = 0;
     glDeleteProgram(native_);
     glDeleteProgram(tone_);

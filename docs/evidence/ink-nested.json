@@ -1,0 +1,114 @@
+{
+  "nestedOnly": true,
+  "protocol": "0.14",
+  "checks": [
+    "low_inherits_fast",
+    "performance_tiers",
+    "older_response_frozen",
+    "com.hyprune.lumen-reach off Intel",
+    "com.hyprune.lumen-reach fast Intel",
+    "com.hyprune.lumen-reach smooth Intel",
+    "com.hyprune.lumen-reach msaa 2",
+    "com.hyprune.lumen-reach msaa 4",
+    "com.hyprune.lumen-reach msaa 1",
+    "com.hyprune.switchyard off Intel",
+    "com.hyprune.switchyard fast Intel",
+    "com.hyprune.switchyard smooth Intel",
+    "com.hyprune.switchyard msaa 2",
+    "com.hyprune.switchyard msaa 4",
+    "com.hyprune.switchyard msaa 1",
+    "live_width_colour",
+    "override_persisted",
+    "override_survives_world_reload",
+    "null_restores_world_style",
+    "IPC014_wire_conformance"
+  ],
+  "measurements": [
+    {
+      "world": "com.hyprune.lumen-reach",
+      "tier": "off",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "scale": 0.5,
+      "outlineMs": 0.0,
+      "totalGpuMs": 6.494971,
+      "upscaleMs": 1.5541405
+    },
+    {
+      "world": "com.hyprune.lumen-reach",
+      "tier": "fast",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "scale": 0.5,
+      "outlineMs": 1.097213,
+      "totalGpuMs": 5.8813515,
+      "upscaleMs": 1.576562
+    },
+    {
+      "world": "com.hyprune.lumen-reach",
+      "tier": "smooth",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "scale": 0.5,
+      "outlineMs": 1.0966399999999998,
+      "totalGpuMs": 7.204658,
+      "upscaleMs": 2.485729
+    },
+    {
+      "world": "com.hyprune.switchyard",
+      "tier": "off",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "scale": 0.5,
+      "outlineMs": 0.0,
+      "totalGpuMs": 4.4086695,
+      "upscaleMs": 1.548619
+    },
+    {
+      "world": "com.hyprune.switchyard",
+      "tier": "fast",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "scale": 0.5,
+      "outlineMs": 1.1122645000000002,
+      "totalGpuMs": 7.697784,
+      "upscaleMs": 2.6343224999999997
+    },
+    {
+      "world": "com.hyprune.switchyard",
+      "tier": "smooth",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "scale": 0.5,
+      "outlineMs": 1.1094,
+      "totalGpuMs": 6.061012,
+      "upscaleMs": 1.6115879999999998
+    }
+  ],
+  "captures": [
+    "dev/nested/.m3b-state/ink-captures/com.hyprune.lumen-reach-off.png",
+    "dev/nested/.m3b-state/ink-captures/com.hyprune.lumen-reach-fast.png",
+    "dev/nested/.m3b-state/ink-captures/com.hyprune.lumen-reach-smooth.png",
+    "dev/nested/.m3b-state/ink-captures/com.hyprune.switchyard-off.png",
+    "dev/nested/.m3b-state/ink-captures/com.hyprune.switchyard-fast.png",
+    "dev/nested/.m3b-state/ink-captures/com.hyprune.switchyard-smooth.png"
+  ]
+}

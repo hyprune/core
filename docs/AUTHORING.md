@@ -19,7 +19,7 @@ Normal shell grants must omit it. Request IPC 0.13, then call `camera.photo`:
   is the optical centre offset in NDC: +X right, +Y up, each within −2..2.
   The optical axis projects to `((1+x)/2,(1-y)/2)` in top-left screen coordinates.
 - `renderScale` is fixed within 0.25–1, overriding dynamic resolution for this
-  hold. It changes world resolution; app surfaces, ink and HUD stay native.
+  hold. It changes world resolution; app surfaces and HUD stay native; ink detects edges internally and composites native logical-pixel strokes.
 - Hold requires active world control, outside use/focus or replay. It finishes a
   carry, freezes locomotion/look/scope and suppresses gameplay actions. Debug,
   capture, record-toggle and world exit still work. No new cursor show/hide transition occurs.
@@ -51,20 +51,42 @@ All six fields are required if the object is present. `colour` is display RGB
 (0–1); `widthPx` is 1–4 logical pixels. `depthThreshold` is a relative linear-depth
 jump (0.0001–1), and `normalThreshold` is `1-dot(n1,n2)` (0.001–2).
 
-Core draws opaque/masked world geometry into native-resolution normal/depth
-textures, detects discontinuities, and composites ink before transparent world
-geometry, live app/screens and HUD. App buffers never feed the detector. Their
-premultiplied alpha naturally reveals the outlined world behind them. Blend/haze
-geometry does not generate ink. Material-ID edges are not implemented.
-Widths are independent of distance and internal render scale, scaled by the
-output's physical/logical ratio. Geometry normals are used, not normal maps.
+Core detects depth and geometry-normal discontinuities at the world's internal
+resolution. Opaque/masked shading encodes geometry normals in unused HDR alpha;
+the already-resolved colour/depth buffers feed a packed normal/depth texture.
+A sparse cross kernel reads one packed sample per neighbour. The final native
+composite reconstructs logical-pixel stroke coverage and discards flat cells.
+There is no second geometry pass, additional MSAA attachment or metadata resolve.
+Bloom retains coverage semantics. Native app/screens, HUD and blend/haze geometry
+are excluded from detection and drawn after ink. Material-ID edges are not implemented.
 
 `graphics.outline` is null (inherit preset), false (disable), or true (permit the
-world's style). Presets permit authored ink; worlds without enabled ink pay no
-geometry/fullscreen ink cost. Disabling ink does not unload the world. Programs
-and blend variants are prepared behind the loading state and use the binary cache.
-F3 and `graphics.get` expose its independent `outline` GPU timer, including the
-normal/depth pass. This is an optional effect with a measurable native-4K cost.
+world's style). IPC 0.14 adds nullable `graphics.outline_quality`:
+
+- `fast`: sparse one-logical-pixel outline, inherited by Low/Medium.
+- `smooth`: antialiased 1–4 logical px using the world's `widthPx`, inherited by
+  High/Ultra. Wider strokes expand the sparse sampling radius as needed.
+- `null`: inherit the selected preset. Explicit overrides survive preset changes.
+
+`graphics.outline_width_px` (null or 1–4) and `graphics.outline_colour` (null or
+RGB triplet) persist user overrides in graphics.json. User values beat the world's
+style across reloads; null restores the current world's default. Width editing
+uses Smooth; Fast is fixed at 1 px. `atmosphere.set` remains a transient whole-profile
+preview; settings must use `graphics.set` for persistence.
+
+Both modes use geometry normals, not normal maps. Stroke coverage stays thin at
+reduced render scales; silhouette location shares the world raster's precision.
+Normal packing is 7-bit octahedral per component in HDR FP16 alpha. Samples mixed
+by the existing MSAA resolve lie at geometry/coverage boundaries already covered
+by edge detection; no extra MSAA resolve is introduced.
+
+Worlds without enabled ink pay no ink draw cost. Controls apply without a world
+reload. All programs/variants warm behind the loading state and use the binary
+cache. Offload draws ink in the child before transport; parent native app/HUD
+composition excludes it. F3 and `graphics.get.timings.gpuEffectsMs.outline` measure
+packing, edge detection and sparse native composite together. The small normal
+encoding cost shares `world_shading_shared`; paired ink-on/off timings include it.
+See [INK-PERFORMANCE.md](INK-PERFORMANCE.md) for matched captures and measurements.
 
 ## World 0.5 visibility
 
@@ -101,10 +123,11 @@ worlds without region metadata are explicitly measured as unannotated controls.
 After ladder dismount, a short “Step back; climb grip resetting” prompt explains
 the automatic re-grab delay. Existing explicit auto-traverse E remains immediate.
 
-### Measured results
+### Original implementation baseline
 
 Intel PTL, nested 3840×2160, Low preset, fixed 0.5 world scale, 24 timing samples
-per case; ink stays native resolution. Median ink pass costs: Lumen Reach
+per case; the original ink implementation stayed native resolution. These are
+pre-optimization measurements; current timings are in INK-PERFORMANCE.md. Median ink pass costs: Lumen Reach
 **7.51 ms**, Switchyard **8.22 ms**. Combined core GPU passes with ink were
 15.87/16.22 ms respectively; these exclude the host compositor and are not a
 sustained 60 FPS claim. The effect is optional and independently switchable.

@@ -1,0 +1,577 @@
+{
+  "renderer": "Mesa Intel(R) Graphics (PTL)",
+  "output": [
+    3840,
+    2160
+  ],
+  "worldScale": 0.5,
+  "preset": "low",
+  "msaa": 1,
+  "authoredWidthPx": 2,
+  "historicalCore": "2494c13",
+  "nestedOnly": true,
+  "lock": "/tmp/worldshell-nested.lock",
+  "worlds": {
+    "com.hyprune.lumen-reach": {
+      "before": {
+        "cases": [
+          {
+            "edgeMs": 0.0,
+            "repeat": 0,
+            "tier": "off",
+            "totalMs": 6.572915,
+            "upscaleMs": 1.558489,
+            "worldMs": 2.53427
+          },
+          {
+            "edgeMs": 6.43125,
+            "repeat": 0,
+            "tier": "fast",
+            "totalMs": 13.557758,
+            "upscaleMs": 1.552552,
+            "worldMs": 2.518854
+          },
+          {
+            "edgeMs": 6.760572,
+            "repeat": 0,
+            "tier": "smooth",
+            "totalMs": 13.544789000000002,
+            "upscaleMs": 1.5525,
+            "worldMs": 2.534218
+          },
+          {
+            "edgeMs": 0.0,
+            "repeat": 1,
+            "tier": "off",
+            "totalMs": 6.325830999999999,
+            "upscaleMs": 1.544791,
+            "worldMs": 2.842083
+          },
+          {
+            "edgeMs": 6.723697,
+            "repeat": 1,
+            "tier": "fast",
+            "totalMs": 13.510206,
+            "upscaleMs": 1.543802,
+            "worldMs": 2.852916
+          },
+          {
+            "edgeMs": 6.751093,
+            "repeat": 1,
+            "tier": "smooth",
+            "totalMs": 13.616924,
+            "upscaleMs": 1.543541,
+            "worldMs": 2.547395
+          },
+          {
+            "edgeMs": 0.0,
+            "repeat": 2,
+            "tier": "off",
+            "totalMs": 6.5263,
+            "upscaleMs": 1.544895,
+            "worldMs": 2.51302
+          },
+          {
+            "edgeMs": 6.812812,
+            "repeat": 2,
+            "tier": "fast",
+            "totalMs": 13.494737,
+            "upscaleMs": 1.543593,
+            "worldMs": 2.520677
+          },
+          {
+            "edgeMs": 6.719427,
+            "repeat": 2,
+            "tier": "smooth",
+            "totalMs": 13.354163,
+            "upscaleMs": 1.544114,
+            "worldMs": 2.846145
+          }
+        ],
+        "pose": {
+          "pitch": 0.0,
+          "position": [
+            -8.0,
+            0.0,
+            12.0
+          ],
+          "yaw": -0.0
+        },
+        "renderer": "Mesa Intel(R) Graphics (PTL)",
+        "resolution": [
+          3840,
+          2160
+        ],
+        "samplesPerCase": 120,
+        "scale": 0.5
+      },
+      "after": {
+        "cases": [
+          {
+            "edgeMs": 0.0,
+            "repeat": 0,
+            "tier": "off",
+            "totalMs": 5.921873,
+            "upscaleMs": 1.556354,
+            "worldMs": 2.581718
+          },
+          {
+            "edgeMs": 1.094166,
+            "repeat": 0,
+            "tier": "fast",
+            "totalMs": 7.788589999999999,
+            "upscaleMs": 2.780625,
+            "worldMs": 2.665833
+          },
+          {
+            "edgeMs": 1.099947,
+            "repeat": 0,
+            "tier": "smooth",
+            "totalMs": 8.1526,
+            "upscaleMs": 3.127083,
+            "worldMs": 2.78026
+          },
+          {
+            "edgeMs": 0.0,
+            "repeat": 1,
+            "tier": "off",
+            "totalMs": 6.47229,
+            "upscaleMs": 1.556718,
+            "worldMs": 2.961145
+          },
+          {
+            "edgeMs": 1.098437,
+            "repeat": 1,
+            "tier": "fast",
+            "totalMs": 8.035569,
+            "upscaleMs": 3.112552,
+            "worldMs": 3.343541
+          },
+          {
+            "edgeMs": 1.098645,
+            "repeat": 1,
+            "tier": "smooth",
+            "totalMs": 7.91385,
+            "upscaleMs": 2.688854,
+            "worldMs": 3.253177
+          },
+          {
+            "edgeMs": 0.0,
+            "repeat": 2,
+            "tier": "off",
+            "totalMs": 6.183331000000001,
+            "upscaleMs": 1.55552,
+            "worldMs": 2.527812
+          },
+          {
+            "edgeMs": 1.096093,
+            "repeat": 2,
+            "tier": "fast",
+            "totalMs": 8.067759,
+            "upscaleMs": 3.007708,
+            "worldMs": 2.658958
+          },
+          {
+            "edgeMs": 1.096614,
+            "repeat": 2,
+            "tier": "smooth",
+            "totalMs": 7.686038,
+            "upscaleMs": 3.016666,
+            "worldMs": 2.630989
+          }
+        ],
+        "paired": {
+          "fast": {
+            "addedMs": 1.1754679999999995,
+            "addedP95Ms": 2.225885999999999,
+            "offMs": 6.475937,
+            "onMs": 7.58901
+          },
+          "smooth": {
+            "addedMs": 1.1742709999999992,
+            "addedP95Ms": 3.153854,
+            "offMs": 6.57776,
+            "onMs": 7.725208
+          }
+        },
+        "pose": {
+          "pitch": 0.0,
+          "position": [
+            -8.0,
+            0.0,
+            12.0
+          ],
+          "yaw": -0.0
+        },
+        "renderer": "Mesa Intel(R) Graphics (PTL)",
+        "resolution": [
+          3840,
+          2160
+        ],
+        "samplesPerCase": 120,
+        "scale": 0.5
+      }
+    },
+    "com.hyprune.switchyard": {
+      "before": {
+        "cases": [
+          {
+            "edgeMs": 0.0,
+            "repeat": 0,
+            "tier": "off",
+            "totalMs": 6.007549,
+            "upscaleMs": 1.528906,
+            "worldMs": 2.674427
+          },
+          {
+            "edgeMs": 6.522864,
+            "repeat": 0,
+            "tier": "fast",
+            "totalMs": 13.162914,
+            "upscaleMs": 1.529791,
+            "worldMs": 2.67927
+          },
+          {
+            "edgeMs": 6.688385,
+            "repeat": 0,
+            "tier": "smooth",
+            "totalMs": 13.42432,
+            "upscaleMs": 1.529062,
+            "worldMs": 2.669531
+          },
+          {
+            "edgeMs": 0.0,
+            "repeat": 1,
+            "tier": "off",
+            "totalMs": 6.422392,
+            "upscaleMs": 1.529062,
+            "worldMs": 3.006927
+          },
+          {
+            "edgeMs": 6.897031,
+            "repeat": 1,
+            "tier": "fast",
+            "totalMs": 13.624633000000001,
+            "upscaleMs": 1.529479,
+            "worldMs": 3.39375
+          },
+          {
+            "edgeMs": 6.821718,
+            "repeat": 1,
+            "tier": "smooth",
+            "totalMs": 13.787602,
+            "upscaleMs": 1.530625,
+            "worldMs": 2.734947
+          },
+          {
+            "edgeMs": 0.0,
+            "repeat": 2,
+            "tier": "off",
+            "totalMs": 5.983384,
+            "upscaleMs": 1.529322,
+            "worldMs": 2.667135
+          },
+          {
+            "edgeMs": 6.410677,
+            "repeat": 2,
+            "tier": "fast",
+            "totalMs": 13.345727,
+            "upscaleMs": 1.531302,
+            "worldMs": 2.675781
+          },
+          {
+            "edgeMs": 6.681822,
+            "repeat": 2,
+            "tier": "smooth",
+            "totalMs": 13.280623000000002,
+            "upscaleMs": 1.531614,
+            "worldMs": 2.695729
+          }
+        ],
+        "pose": {
+          "pitch": 0.0,
+          "position": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "yaw": -0.0
+        },
+        "renderer": "Mesa Intel(R) Graphics (PTL)",
+        "resolution": [
+          3840,
+          2160
+        ],
+        "samplesPerCase": 120,
+        "scale": 0.5
+      },
+      "after": {
+        "cases": [
+          {
+            "edgeMs": 0.0,
+            "repeat": 0,
+            "tier": "off",
+            "totalMs": 6.6897899999999995,
+            "upscaleMs": 1.529947,
+            "worldMs": 3.42401
+          },
+          {
+            "edgeMs": 1.099061,
+            "repeat": 0,
+            "tier": "fast",
+            "totalMs": 8.514788000000001,
+            "upscaleMs": 3.046093,
+            "worldMs": 3.514375
+          },
+          {
+            "edgeMs": 1.097291,
+            "repeat": 0,
+            "tier": "smooth",
+            "totalMs": 8.025101,
+            "upscaleMs": 2.997291,
+            "worldMs": 2.864375
+          },
+          {
+            "edgeMs": 0.0,
+            "repeat": 1,
+            "tier": "off",
+            "totalMs": 6.450101999999999,
+            "upscaleMs": 1.529218,
+            "worldMs": 2.736979
+          },
+          {
+            "edgeMs": 1.097135,
+            "repeat": 1,
+            "tier": "fast",
+            "totalMs": 8.14536,
+            "upscaleMs": 2.986979,
+            "worldMs": 3.192968
+          },
+          {
+            "edgeMs": 1.0980720000000002,
+            "repeat": 1,
+            "tier": "smooth",
+            "totalMs": 8.219008,
+            "upscaleMs": 2.80276,
+            "worldMs": 2.956145
+          },
+          {
+            "edgeMs": 0.0,
+            "repeat": 2,
+            "tier": "off",
+            "totalMs": 6.859634000000001,
+            "upscaleMs": 1.53052,
+            "worldMs": 3.415833
+          },
+          {
+            "edgeMs": 1.098384,
+            "repeat": 2,
+            "tier": "fast",
+            "totalMs": 8.048382,
+            "upscaleMs": 3.352968,
+            "worldMs": 3.51026
+          },
+          {
+            "edgeMs": 1.098228,
+            "repeat": 2,
+            "tier": "smooth",
+            "totalMs": 8.349111,
+            "upscaleMs": 3.372604,
+            "worldMs": 3.511354
+          }
+        ],
+        "paired": {
+          "fast": {
+            "addedMs": 1.829166999999999,
+            "addedP95Ms": 5.033958,
+            "offMs": 6.85776,
+            "onMs": 8.384375
+          },
+          "smooth": {
+            "addedMs": 1.0448960000000005,
+            "addedP95Ms": 4.881614,
+            "offMs": 6.722916,
+            "onMs": 7.896458
+          }
+        },
+        "pose": {
+          "pitch": 0.0,
+          "position": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "yaw": -0.0
+        },
+        "renderer": "Mesa Intel(R) Graphics (PTL)",
+        "resolution": [
+          3840,
+          2160
+        ],
+        "samplesPerCase": 120,
+        "scale": 0.5
+      }
+    }
+  },
+  "captures": [
+    {
+      "path": "build/ink-evidence/com.hyprune.lumen-reach/after/fast.png",
+      "sha256": "4247bcc51a9c0ce67c47065145fa18b629115ff059dd472e4ad5c1e8a18a1d0a"
+    },
+    {
+      "path": "build/ink-evidence/com.hyprune.lumen-reach/after/off.png",
+      "sha256": "4e517a4f1f5e72f1aeaa840fbccbe325fe03158fd21965c7ecee6d48ce481eb1"
+    },
+    {
+      "path": "build/ink-evidence/com.hyprune.lumen-reach/after/smooth.png",
+      "sha256": "2f3ce9103f10d9f55fc60e7a48f1bb47d450307b4abfe0ad538aae08f06cc9e5"
+    },
+    {
+      "path": "build/ink-evidence/com.hyprune.lumen-reach/before/fast.png",
+      "sha256": "434b550078aa3b2d211adff3b6f8bece7f7a4115932deaebfe325eea080fbded"
+    },
+    {
+      "path": "build/ink-evidence/com.hyprune.lumen-reach/before/off.png",
+      "sha256": "4e517a4f1f5e72f1aeaa840fbccbe325fe03158fd21965c7ecee6d48ce481eb1"
+    },
+    {
+      "path": "build/ink-evidence/com.hyprune.lumen-reach/before/smooth.png",
+      "sha256": "434b550078aa3b2d211adff3b6f8bece7f7a4115932deaebfe325eea080fbded"
+    },
+    {
+      "path": "build/ink-evidence/com.hyprune.switchyard/after/fast.png",
+      "sha256": "1d8d10e608caef6d23f89460cd06dfa4eb3a4ac799de2d418dd80cc78aabad97"
+    },
+    {
+      "path": "build/ink-evidence/com.hyprune.switchyard/after/off.png",
+      "sha256": "c76cd0a3563b1b8d24dac21837c83fefb31eaab66e832df6eeefa445bcc0d71a"
+    },
+    {
+      "path": "build/ink-evidence/com.hyprune.switchyard/after/smooth.png",
+      "sha256": "1b90787096ea7fab435762a82f0ae9cad78304a924926da03a9734ee097d98a3"
+    },
+    {
+      "path": "build/ink-evidence/com.hyprune.switchyard/before/fast.png",
+      "sha256": "b80ab5a08a6bf43d9cb58dc86e928dba10279aa7da33d35a3b9bb76123801c17"
+    },
+    {
+      "path": "build/ink-evidence/com.hyprune.switchyard/before/off.png",
+      "sha256": "c76cd0a3563b1b8d24dac21837c83fefb31eaab66e832df6eeefa445bcc0d71a"
+    },
+    {
+      "path": "build/ink-evidence/com.hyprune.switchyard/before/smooth.png",
+      "sha256": "b80ab5a08a6bf43d9cb58dc86e928dba10279aa7da33d35a3b9bb76123801c17"
+    }
+  ],
+  "switchyardQuietRepeat": {
+    "cases": [
+      {
+        "edgeMs": 0.0,
+        "repeat": 0,
+        "tier": "off",
+        "totalMs": 6.321404,
+        "upscaleMs": 1.540156,
+        "worldMs": 2.707812
+      },
+      {
+        "edgeMs": 1.103177,
+        "repeat": 0,
+        "tier": "fast",
+        "totalMs": 8.148384,
+        "upscaleMs": 3.375937,
+        "worldMs": 2.846197
+      },
+      {
+        "edgeMs": 1.099738,
+        "repeat": 0,
+        "tier": "smooth",
+        "totalMs": 8.264268000000001,
+        "upscaleMs": 3.372812,
+        "worldMs": 2.949687
+      },
+      {
+        "edgeMs": 0.0,
+        "repeat": 1,
+        "tier": "off",
+        "totalMs": 6.672186,
+        "upscaleMs": 1.535104,
+        "worldMs": 3.419531
+      },
+      {
+        "edgeMs": 1.099947,
+        "repeat": 1,
+        "tier": "fast",
+        "totalMs": 8.414632999999998,
+        "upscaleMs": 3.002656,
+        "worldMs": 3.516666
+      },
+      {
+        "edgeMs": 1.099218,
+        "repeat": 1,
+        "tier": "smooth",
+        "totalMs": 8.083798999999999,
+        "upscaleMs": 2.805729,
+        "worldMs": 2.856614
+      },
+      {
+        "edgeMs": 0.0,
+        "repeat": 2,
+        "tier": "off",
+        "totalMs": 6.467027999999999,
+        "upscaleMs": 1.535416,
+        "worldMs": 2.710729
+      },
+      {
+        "edgeMs": 1.099374,
+        "repeat": 2,
+        "tier": "fast",
+        "totalMs": 8.263798,
+        "upscaleMs": 2.97776,
+        "worldMs": 3.005416
+      },
+      {
+        "edgeMs": 1.098906,
+        "repeat": 2,
+        "tier": "smooth",
+        "totalMs": 8.181039,
+        "upscaleMs": 3.371614,
+        "worldMs": 3.512135
+      }
+    ],
+    "paired": {
+      "fast": {
+        "addedMs": 1.531771,
+        "addedP95Ms": 4.3121350000000005,
+        "offMs": 6.567916,
+        "onMs": 7.928229
+      },
+      "smooth": {
+        "addedMs": 1.194115,
+        "addedP95Ms": 3.2321360000000006,
+        "offMs": 6.396927,
+        "onMs": 7.568802
+      }
+    },
+    "pose": {
+      "pitch": 0.0,
+      "position": [
+        0.0,
+        0.0,
+        10.0
+      ],
+      "yaw": -0.0
+    },
+    "renderer": "Mesa Intel(R) Graphics (PTL)",
+    "resolution": [
+      3840,
+      2160
+    ],
+    "samplesPerCase": 120,
+    "scale": 0.5
+  },
+  "notes": [
+    "Dedicated outline timer includes pack, edges and sparse native composite; normal encoding shares opaque shading.",
+    "Alternating paired outer GPU queries measure whole-frame added cost, including shared work.",
+    "No live compositor commands or dGPU offload were used."
+  ]
+}

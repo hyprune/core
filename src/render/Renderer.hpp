@@ -108,7 +108,7 @@ class Renderer {
     std::vector<GLuint> textures_, colorTextures_, samplers_;
     GLuint scene_ = 0, tone_ = 0, quadVao_ = 0, quadVbo_ = 0, screenVao_ = 0, repeat_ = 0, clamp_ = 0;
     GLuint environment_ = 0, bloom_ = 0, sky_ = 0, native_ = 0, depthProgram_ = 0;
-    GLuint inkNormals_ = 0, inkProgram_ = 0, inkFbo_ = 0, inkNormal_ = 0, inkDepth_ = 0;
+    GLuint inkComposite_ = 0, inkNormals_ = 0, inkProgram_ = 0, inkFbo_ = 0, inkNormal_ = 0, inkDepth_ = 0;
     size_t submittedBatches_ = 0, culledBatches_ = 0;
     int cubeLevels_ = 1;
     GLuint bloomFbo_[2]{}, bloomTexture_[2]{};
@@ -125,7 +125,7 @@ class Renderer {
     std::chrono::steady_clock::time_point fpsSince_{};
     GLuint collisionVao_ = 0, collisionVbo_ = 0;
     GLsizei collisionCount_ = 0;
-    std::array<GPUTimer, 8> gpu_;
+    std::array<GPUTimer, 9> gpu_;
     std::array<double, 4> cpu_{};
     double frameMs_ = 0, renderMs_ = 0;
     std::chrono::steady_clock::time_point lastFrame_{};
