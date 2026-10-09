@@ -8,7 +8,7 @@ int main() {
     assert(mkdtemp(root));
     setenv("XDG_STATE_HOME", root, 1);
     replay::Session session;
-    sim::Camera cam;
+    sim::Camera cam; cam.roll=.3f; cam.shiftX=.2f; cam.shiftY=-.1f; cam.fov=15;
     Json initial = {
         {"camera", replay::pose(cam)}, {"mode", "world"},   {"tool", 1},       {"windowMode", 0}, {"pathMode", 0},
         {"positionMode", 0},           {"movement", "fly"}, {"noclip", false}, {"scope", false}};
@@ -38,6 +38,9 @@ int main() {
     session.load(file, "camera", 100, Json::object());
     session.frame = 1;
     auto smooth = session.cameraFrame();
+    assert(std::abs(smooth["camera"]["roll"].get<float>()-.3f)<1e-6f);
+    assert(std::abs(smooth["camera"]["lensShift"][0].get<float>()-.2f)<1e-6f);
+    assert(replay::camera(smooth["camera"]).fov==15);
     assert(smooth["camera"]["position"][0] > 1 && smooth["camera"]["position"][0] < 2);
     session.playing = true;
     session.finishFrame({{"tool", 2}});

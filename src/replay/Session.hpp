@@ -21,7 +21,7 @@ inline uint64_t clockNs() {
 inline Json pose(const sim::Camera &c) {
     return {{"position", {c.position.x, c.position.y, c.position.z}},
             {"yaw", c.yaw},
-            {"pitch", c.pitch},
+            {"pitch", c.pitch}, {"roll", c.roll}, {"lensShift", {c.shiftX,c.shiftY}},
             {"fov", c.fov},
             {"verticalSpeed", c.verticalSpeed},
             {"grounded", c.grounded},
@@ -34,6 +34,8 @@ inline sim::Camera camera(const Json &p) {
     c.yaw = p.at("yaw");
     c.pitch = p.at("pitch");
     c.fov = p.at("fov");
+    c.roll = p.value("roll",0.f);
+    auto shift = p.value("lensShift",Json::array({0,0})); c.shiftX=shift[0]; c.shiftY=shift[1];
     c.verticalSpeed = p.at("verticalSpeed");
     c.grounded = p.at("grounded");
     c.eyeHeight = p.at("eyeHeight");
@@ -63,7 +65,7 @@ inline std::string worldDigest(const world::World &world) {
 inline void validateState(const Json &state) {
     auto c = camera(state.at("camera"));
     if (!finite(state) || state.at("camera").at("position").size() != 3 || length(c.position) > 1e6 ||
-        std::abs(c.yaw) > 1e6 || std::abs(c.pitch) > 1.5f || c.fov < 3 || c.fov > 175 || c.eyeHeight < .5 ||
+        std::abs(c.yaw) > 1e6 || std::abs(c.pitch) > 1.571f || std::abs(c.roll) > 3.142f || std::abs(c.shiftX)>2 || std::abs(c.shiftY)>2 || c.fov < 3 || c.fov > 175 || c.eyeHeight < .5 ||
         c.eyeHeight > 2 || std::abs(c.verticalSpeed) > 10000)
         throw std::runtime_error("recorded camera out of range");
     if (state.at("tool") < 1 || state.at("tool") > 4 || state.at("windowMode") < 0 || state.at("windowMode") > 1 ||
@@ -407,7 +409,7 @@ class Session {
             return state;
         auto central = state.at("camera");
         double weights = 0;
-        std::array<double, 6> sum{};
+        std::array<double, 9> sum{};
         int lo = std::max(0, int(frame) - radius), hi = std::min(int(frames.size()) - 1, int(frame) + radius);
         for (int i = lo; i <= hi; ++i) {
             auto &p = frames.at(i).at("camera");
@@ -420,12 +422,16 @@ class Session {
                                                2 * 3.141592653589793));
             sum[4] += weight * p.at("pitch").get<double>();
             sum[5] += weight * p.at("fov").get<double>();
+            sum[6] += weight * (central.value("roll",0.) + std::remainder(p.value("roll",0.)-central.value("roll",0.),2*3.141592653589793));
+            auto shift=p.value("lensShift",Json::array({0,0}));
+            sum[7] += weight * shift[0].get<double>(); sum[8] += weight * shift[1].get<double>();
         }
         for (int k = 0; k < 3; ++k)
             state["camera"]["position"][k] = sum[k] / weights;
         state["camera"]["yaw"] = sum[3] / weights;
         state["camera"]["pitch"] = sum[4] / weights;
         state["camera"]["fov"] = sum[5] / weights;
+        state["camera"]["roll"] = sum[6]/weights; state["camera"]["lensShift"]={sum[7]/weights,sum[8]/weights};
         return state;
     }
     void compare(const Json &actual, const Json &expected, const std::string &where, double tolerance) {

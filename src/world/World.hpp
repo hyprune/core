@@ -54,6 +54,9 @@ struct World {
     std::string id, name, defaultSpawn;
     std::vector<Spawn> spawns;
     std::vector<sim::Climbable> climbables;
+    struct VisibilityArea { Vec3 min, max; std::vector<int> from; };
+    std::vector<VisibilityArea> visibility;
+    std::vector<int> nodeVisibility;
     std::vector<Mesh> meshes;
     std::vector<Triangle> collision, visualTriangles;
     sim::TriangleIndex collisionIndex, visualIndex;

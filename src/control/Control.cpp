@@ -44,13 +44,14 @@ void text(const Json &v, size_t max = 128) {
             -32602, "invalid string");
 }
 Json orientation(const sim::Camera &c) {
-    float cy = std::cos(-c.yaw / 2), sy = std::sin(-c.yaw / 2), cp = std::cos(c.pitch / 2), sp = std::sin(c.pitch / 2);
-    return Json::array({cy * sp, sy * cp, -sy * sp, cy * cp});
+    return c.orientation();
 }
 } // namespace
 std::map<std::string, std::string> Control::methods() {
     return {{"camera.get", "state.read"},
             {"camera.set", "movement.control"},
+            {"camera.photo", "camera.author"},
+            {"camera.release", "camera.author"},
             {"waypoint.set", "world.control"},
             {"waypoint.clear", "world.control"},
             {"route.set", "world.control"},
@@ -123,6 +124,7 @@ void Control::stop() {
         }
 }
 void Control::reset(const world::World *w) {
+    photoOwner.clear();
     stop();
     location = {{"zones", w ? w->manifest.value("zones", Json::array()) : Json::array()},
                 {"waypoint", nullptr},
@@ -155,7 +157,8 @@ bool Control::exclusive() const {
                 return true;
     return false;
 }
-void Control::disconnect(const std::string &actor) {
+void Control::disconnect(const std::string &actor, sim::Camera &camera) {
+    if (photoOwner == actor) releasePhoto(camera);
     associations.erase(actor);
     eraseJson(leases, [&](const Json &l) { return owners[l.at("id").get<std::string>()] == actor; });
     eraseJson(sources, [&](const Json &s) { return owners[s.at("sourceId").get<std::string>()] == actor; });
@@ -181,7 +184,7 @@ void Control::retainOutputs(const Json &outputs) {
     });
 }
 bool Control::driving() const {
-    return duration > 0 || location["autodrive"] == true;
+    return photoHeld() || duration > 0 || location["autodrive"] == true;
 }
 bool Control::uiVisible() const {
     for (const auto &l : leases)
@@ -204,8 +207,53 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
                                const world::World *w, sim::Camera &camera, const Json &outputs) {
     if (m == "camera.get") {
         fields(p, {});
-        return {{"position", xyz(camera.position)}, {"orientation", orientation(camera)}};
+        return {{"position", xyz(camera.position)}, {"orientation", orientation(camera)},
+                {"roll", camera.roll}, {"fov", camera.fov}, {"lensShift", {camera.shiftX, camera.shiftY}},
+                {"held", photoHeld()}, {"renderScale", photoHeld() ? Json(photoScale) : Json(nullptr)}};
     }
+    if (m == "camera.release") {
+        fields(p, {});
+        require(!photoHeld() || photoOwner == actor, -32002, "photo camera owned by another connection");
+        releasePhoto(camera);
+        return Json::object();
+    }
+    if (m == "camera.photo") {
+        fields(p, {"position", "orientation", "fov", "renderScale"}, {"lensShift"});
+        require(w, -32005, "no world loaded");
+        require(!photoHeld() || photoOwner == actor, -32002, "photo camera owned by another connection");
+        sim::Camera proposed = camera;
+        proposed.position = vector(p["position"]);
+        const auto &q = p["orientation"];
+        require(q.is_array() && q.size() == 4, -32602, "expected quaternion");
+        for (auto &v : q) require(v.is_number() && std::isfinite(v.get<float>()), -32602, "invalid quaternion");
+        std::array<float,4> rotation = q.get<std::array<float,4>>();
+        float norm = 0; for (float v : rotation) norm += v*v;
+        require(std::abs(norm-1) < .001f, -32602, "quaternion must be normalized");
+        for (float &v : rotation) v /= std::sqrt(norm);
+        auto f = rotate(rotation, {0,0,-1});
+        proposed.yaw = std::hypot(f.x,f.z) > 1e-5f ? std::atan2(f.x,-f.z) : 0;
+        proposed.pitch = std::asin(std::clamp(f.y,-1.f,1.f)); proposed.roll = 0;
+        auto r = rotate(rotation, {1,0,0});
+        proposed.roll = std::atan2(dot(r,proposed.up()),dot(r,proposed.right()));
+        auto number = [&](const Json &value, float lo, float hi) {
+            require(value.is_number(), -32602, "expected lens number");
+            float v = value;
+            require(std::isfinite(v) && v >= lo && v <= hi, -32602, "lens value outside bounds"); return v;
+        };
+        proposed.fov = number(p["fov"],5,140);
+        float scale = number(p["renderScale"],.25f,1.f);
+        proposed.shiftX = proposed.shiftY = 0;
+        if (p.contains("lensShift")) {
+            require(p["lensShift"].is_array() && p["lensShift"].size()==2,-32602,"expected lensShift vec2");
+            proposed.shiftX=number(p["lensShift"][0],-2,2); proposed.shiftY=number(p["lensShift"][1],-2,2);
+        }
+        proposed.climbBob = proposed.verticalSpeed = 0;
+        if (!photoHeld()) photoBefore = camera;
+        stop(); photoOwner=actor; photoPose=camera=proposed; photoScale=scale;
+        return Json::object();
+    }
+    require(!photoHeld() || (m != "camera.set" && m != "travel.start" && m != "autodrive.start"),
+            -32005, "release photo camera first");
     if (m == "camera.set") {
         fields(p, {"position", "orientation"});
         auto position = vector(p["position"]);
@@ -441,6 +489,9 @@ void Control::openMenu() {
             o["visible"] = true;
             events.emplace_back("ui.opened", Json{{"leaseId", l["id"]}, {"outputId", o["outputId"]}, {"panel", "map"}});
         }
+}
+void Control::releasePhoto(sim::Camera &camera) {
+    if (photoHeld()) { camera=photoBefore; photoOwner.clear(); }
 }
 void Control::tick(float dt, sim::Camera &camera, const world::World *w) {
     dt = std::clamp(dt, 0.f, .1f);

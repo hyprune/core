@@ -1,4 +1,5 @@
 #include "World.hpp"
+#include "Visibility.hpp"
 #include "Environment.hpp"
 #include "Mounts.hpp"
 #include "Schema.hpp"
@@ -71,7 +72,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     });
     validateManifest(j);
     require((j.at("formatVersion") == "0.1" || j.at("formatVersion") == "0.2" || j.at("formatVersion") == "0.3" ||
-             j.at("formatVersion") == "0.4"),
+             j.at("formatVersion") == "0.4" || j.at("formatVersion") == "0.5"),
             "unsupported world format");
     require(std::regex_match(j.at("id").get<std::string>(), std::regex("[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+")),
             "invalid world ID");
@@ -425,6 +426,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     loadMounts(*result, raw->nodes_count);
     result->atmosphere = j.value("atmosphere", defaultAtmosphere());
     validateAtmosphere(result->atmosphere);
+    loadVisibility(*result);
     if (result->atmosphere.contains("environment")) {
         int i = 0;
         for (const auto &face : result->atmosphere["environment"]["faces"]) {

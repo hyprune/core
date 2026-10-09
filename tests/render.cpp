@@ -3,6 +3,7 @@
 #include "render/Renderer.hpp"
 #include "render/SurfaceSampler.hpp"
 #include "world/Mounts.hpp"
+#include "world/Visibility.hpp"
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <iostream>
@@ -644,6 +645,52 @@ int main(int argc, char **argv) {
         check(glGetError()==GL_NO_ERROR,"offload native reconstruction GL error");
         renderer.externalWorldFbo=0;
         glDeleteFramebuffers(1,&remoteFbo);glDeleteTextures(1,&remoteTex);
+        renderer.profile["outline"]={{"enabled",true},{"colour",{0,1,0}},{"widthPx",4},
+                                      {"depthThreshold",.02},{"normalThreshold",.2}};
+        renderer.profile["toneMapping"]="linear";
+        renderer.showInteractionHints=false; renderer.pointerX=renderer.pointerY=-1;
+        renderer.graphics["outline"]=true;
+        camera.position.y=2.8f;
+        auto stroke = [&] {
+            renderer.draw(fbo,320,180,camera,{},false); glFinish();
+            std::vector<unsigned char> row(320*4);
+            glReadPixels(0,90,320,1,GL_RGBA,GL_UNSIGNED_BYTE,row.data());
+            int count=0;
+            for(int x=0;x<320;++x) if(row[x*4]<20 && row[x*4+1]>220 && row[x*4+2]<20) ++count;
+            return count;
+        };
+        for(float scaling:{1.f,.5f}) for(float density:{1.f,2.f}) {
+            renderer.renderScale=scaling; renderer.logicalScale=density;
+            camera.position.z=4; int near=stroke(); camera.position.z=8; int far=stroke();
+            check(near>=int(6*density) && near<=int(10*density),"ink logical width incorrect");
+            check(std::abs(near-far)<=2,"ink width changed with distance");
+        }
+        renderer.graphics["outline"]=false;
+        check(stroke()==0,"disabled ink still draws");
+        renderer.graphics["outline"]=true; renderer.logicalScale=1; camera.position.z=4;
+        surface.center={0,2.8f,.2f};
+        renderer.draw(fbo,320,180,camera,std::span(&surface,1),false);glFinish();
+        glReadPixels(160,90,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
+        check(std::abs(int(pixel[0])-128)<=1 && std::abs(int(pixel[1])-128)<=1,"ink altered live app pixels");
+        check(glGetError()==GL_NO_ERROR,"ink GL state error");
+        // Visibility membership and fallback are independent of workspace homes.
+        orientationWorld->nodeParents={-1,-1,1};
+        auto hidden=panel;hidden.node=2;orientationWorld->meshes.push_back(hidden);
+        orientationWorld->manifest["visibility"]={{"areas",world::Json::array({
+            {{"id","front"},{"bounds",{{"min",{-2,0,2}},{"max",{2,5,6}}}},{"nodes",{0}},{"visibleFrom",world::Json::array()}},
+            {{"id","rear"},{"bounds",{{"min",{-2,0,-6}},{"max",{2,5,-2}}}},{"nodes",{1}},{"visibleFrom",world::Json::array()}}
+        })}};
+        world::loadVisibility(*orientationWorld);renderer.prepare(orientationWorld);
+        camera.position={0,2.8f,4};renderer.draw(fbo,320,180,camera,{},false);glFinish();
+        check(renderer.timings()["visibility"]["culled"]==1,"hidden descendant submitted");
+        renderer.graphics["visibility_culling"]=false;renderer.draw(fbo,320,180,camera,{},false);glFinish();
+        check(renderer.timings()["visibility"]["submitted"]==2,"visibility override ignored");
+        renderer.graphics["visibility_culling"]=true;camera.position.z=0;
+        renderer.draw(fbo,320,180,camera,{},false);glFinish();
+        check(renderer.timings()["visibility"]["submitted"]==2,"outside-region fallback hid scene");
+        camera.position.z=4;renderer.transforms[2]=Mat4::identity();
+        renderer.draw(fbo,320,180,camera,{},false);glFinish();
+        check(renderer.timings()["visibility"]["submitted"]==2,"edited object wrongly culled");
         renderer.destroy();
         glDeleteTextures(1, &app);
         glDeleteTextures(1, &texture);

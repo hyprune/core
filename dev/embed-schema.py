@@ -3,7 +3,7 @@
 from pathlib import Path
 root=Path(__file__).resolve().parent.parent
 base=root/'third_party/hyprune-schema'
-entries=[('worldSchema','world.schema.json'),('commonSchema','common.schema.json'),('worldSchema02','v0.2/world.schema.json'),('commonSchema02','v0.2/common.schema.json'),('commonSchema03','v0.3/common.schema.json'),('worldSchema03','v0.3/world.schema.json'),('commonSchema04','v0.4/common.schema.json'),('worldSchema04','v0.4/world.schema.json')]
+entries=[('worldSchema','world.schema.json'),('commonSchema','common.schema.json'),('worldSchema02','v0.2/world.schema.json'),('commonSchema02','v0.2/common.schema.json'),('commonSchema03','v0.3/common.schema.json'),('worldSchema03','v0.3/world.schema.json'),('commonSchema04','v0.4/common.schema.json'),('worldSchema04','v0.4/world.schema.json'),('worldSchema05','v0.5/world.schema.json')]
 text='#pragma once\nnamespace hyprune::world {\n'
 for name,path in entries:
     text+=f'inline constexpr const char *{name} = R"schema({(base/path).read_text().rstrip()})schema";\n'

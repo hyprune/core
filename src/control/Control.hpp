@@ -21,12 +21,16 @@ class Control {
     void endLoad(bool success, bool cancelled = false);
     Json outputId = nullptr;
     void stop();
-    void disconnect(const std::string &);
+    void disconnect(const std::string &, sim::Camera &);
     void associate(const std::string &actor, bool verified);
     bool ownsLease(const std::string &actor, const std::string &lease) const;
     bool exclusive() const;
     void retainOutputs(const Json &);
     bool driving() const;
+    bool photoHeld() const { return !photoOwner.empty(); }
+    float photoScale = 1;
+    void releasePhoto(sim::Camera &);
+    void restorePhoto(sim::Camera &camera) const { if (photoHeld()) camera = photoPose; }
     bool uiVisible() const;
     float holdSeconds = 1;
     void openMenu();
@@ -34,6 +38,8 @@ class Control {
     static std::map<std::string, std::string> methods();
 
   private:
+    std::string photoOwner;
+    sim::Camera photoPose, photoBefore;
     std::map<std::string, std::string> owners;
     std::set<std::string> associations;
     std::map<std::string, std::chrono::steady_clock::time_point> publications, expiry;

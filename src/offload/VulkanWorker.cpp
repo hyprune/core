@@ -357,6 +357,7 @@ int main(int argc, char **argv) {
             camera.yaw = pose[3];
             camera.pitch = pose[4];
             camera.fov = pose[5];
+            if(pose.size()>=9) { camera.roll=pose[6];camera.shiftX=pose[7];camera.shiftY=pose[8]; }
             proc<PFNGLWAITSEMAPHOREEXTPROC>("glWaitSemaphoreEXT")(b.readyGL, 0, nullptr, 1, &b.tex, &layout);
             b.timer.stamp(0);
             auto count = renderer.frames;

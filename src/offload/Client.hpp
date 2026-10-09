@@ -36,6 +36,7 @@ class Client {
         c.yaw = p[3];
         c.pitch = p[4];
         c.fov = p[5];
+        if(p.size()>=9) { c.roll=p[6];c.shiftX=p[7];c.shiftY=p[8]; }
         return c;
     }
     void attach(int fd, int w, int h, uint64_t generation) {
@@ -167,7 +168,7 @@ class Client {
                                      {"profile", profile},
                                      {"pose",
                                       {camera.position.x, camera.position.y, camera.position.z, camera.yaw,
-                                       camera.pitch, camera.fov}}};
+                                       camera.pitch, camera.fov, camera.roll, camera.shiftX, camera.shiftY}}};
                         if (sendPacket(fd_, b.request)) {
                             b.phase = 1;
                             auto period = 1000. / std::clamp(fps, 1, 60);

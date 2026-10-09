@@ -150,7 +150,7 @@ struct Runtime {
             renderer.graphics["bloom_strength"] = renderer.profile["bloom"]["strength"];
         }
         baseFov = next["graphics"]["fov"];
-        if (!zoomHeld)
+        if (!zoomHeld && !control.photoHeld())
             camera.fov = baseFov;
     }
     bool superHeld = false, altHeld = false, noclip = false, freeCursor = false, layerCursor = false, zoomHeld = false,
@@ -699,13 +699,13 @@ Json Runtime::performance() const {
     state["controls"] = Json::object();
     for (auto &[key, value] : config["graphics"].items()) {
         std::string group = key == "bloom" || key == "bloom_strength" ? "bloom" :
-                            key == "sky" ? "sky" : key == "msaa" ? "msaa_resolve" :
+                            key == "outline" ? "outline" : key == "sky" ? "sky" : key == "msaa" ? "msaa_resolve" :
                             key == "sharpen" ? "upscale_sharpen" : key == "alpha_haze" ? "native_surfaces_geometry" :
                             key == "fog" || key == "normal_maps" || key == "specular" || key == "reflections" ||
                             key == "ambient_occlusion" || key == "anisotropy" ? "world_shading_shared" : "";
         auto cost = group.empty() ? Json(nullptr) : state["costsMs"].value(group, Json(nullptr));
         state["controls"][key] = {{"requested", value}, {"effective", state["effective"].at(key)},
-                                 {"gpuMs", group == "bloom" || group == "sky" ? cost : Json(nullptr)},
+                                 {"gpuMs", group == "bloom" || group == "sky" || group == "outline" ? cost : Json(nullptr)},
                                  {"sharedPass", group.empty() ? Json(nullptr) : Json(group)}, {"passGpuMs", cost}};
     }
     return state;
@@ -817,8 +817,6 @@ void Runtime::publish() {
                                 {"logicalSize", {1280, 720}},
                                 {"focused", workspace->isVisible()}});
     }
-    float sy = std::sin(-camera.yaw / 2), cy = std::cos(-camera.yaw / 2), sp = std::sin(camera.pitch / 2),
-          cp = std::cos(camera.pitch / 2);
     Json homes = locations;
     for (auto &b : layout.bindings) {
         std::erase_if(homes.get_ref<Json::array_t &>(), [&](auto &v) { return v.at("id") == b.at("id"); });
@@ -945,7 +943,7 @@ void Runtime::publish() {
            world && !noclip && movement == &walk && (climbing.active() || climbing.nearby(camera, world->climbables))
                ? climbing.prompt(sim::climbMode(config["movement"]["climb_mode"].get<std::string>()))
                : ""},
-          {"orientation", {cy * sp, sy * cp, -sy * sp, cy * cp}}}},
+          {"orientation", camera.orientation()}}},
         {"shell", {{"leases", control.leases}}},
         {"location", control.location},
         {"integrations", {{"sources", control.sources}}}};
@@ -1159,6 +1157,7 @@ void Runtime::toggle(const std::string &output) {
     publish();
 }
 void Runtime::exit() {
+    control.releasePhoto(camera);
     climbing.reset(camera);
     if (renderDepth)
         throw std::runtime_error("world exit inside render pass");
@@ -1824,14 +1823,8 @@ void Runtime::acceptCapture(const std::string &key, unsigned mods, bool down) {
 void Runtime::projectCursor() {
     if (auto s = capture.plane(relativeSurface)) {
         auto point = s->center + s->right() * ((localX - .5f) * s->width) + s->up() * ((.5f - localY) * s->height);
-        auto rel = point - camera.position, forward = camera.forward(), right = normalized(cross(forward, {0, 1, 0})),
-             up = cross(right, forward);
-        float depth = dot(rel, forward), tan = std::tan(camera.fov * .01745329252f / 2),
-              aspect = monitor->m_size.x / monitor->m_size.y;
-        if (depth > .01f) {
-            pointerX = .5f + dot(rel, right) / (2 * depth * tan * aspect);
-            pointerY = .5f - dot(rel, up) / (2 * depth * tan);
-        }
+        auto projected = camera.project(point, monitor->m_size.x / monitor->m_size.y);
+        if (projected.depth > .01f) { pointerX=projected.x; pointerY=projected.y; }
     }
 }
 void Runtime::useAim(bool zoom) {
@@ -2011,7 +2004,7 @@ void Runtime::debugCapture() {
     auto frameCamera = pixels.camera;
     value["camera"] = {{"position", {frameCamera.position.x, frameCamera.position.y, frameCamera.position.z}},
                        {"yaw", frameCamera.yaw},
-                       {"pitch", frameCamera.pitch},
+                       {"pitch", frameCamera.pitch}, {"roll",frameCamera.roll}, {"lensShift",{frameCamera.shiftX,frameCamera.shiftY}},
                        {"fov", frameCamera.fov},
                        {"eyeHeight", frameCamera.eyeHeight}};
     value["frame"] = {{"number", renderer.frames},     {"width", pixels.width},
@@ -2036,6 +2029,7 @@ namespace {
 interaction::Transform objectTransform(const interaction::Tools &, const world::World &, const std::string &);
 }
 void Runtime::action(interaction::Action a) {
+    if (control.photoHeld() && a.name != "capture" && a.name != "debug" && a.name != "record.toggle" && a.name != "world.toggle") return;
     if (a.name == "record.toggle") {
         if (a.pressed && a.edge && !session.playing) sessionMethod(session.recording ? "recording.stop" : "recording.start", Json::object());
         return;
@@ -2676,6 +2670,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     auto protocol = params.value("_protocol", "0.1");
     params.erase("_pid");
     params.erase("_protocol");
+    if (method == "replay.start" && control.photoHeld()) throw ipc::Error(-32005,"release photo camera before replay");
     if (method.starts_with("recording.") || method.starts_with("replay.")) return sessionMethod(method, params);
     if (method == "_renderer.channel") {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
@@ -2697,6 +2692,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             if (!ipc::protocol::atLeast(protocol, "0.10"))
                 for (auto key : {"offload", "offload_power_cap_w", "scale_min", "scale_max"})
                     if (params["patch"].contains(key)) throw ipc::Error(-32602, "setting requires IPC 0.10");
+            if (!ipc::protocol::atLeast(protocol,"0.13") && (params["patch"].contains("outline") || params["patch"].contains("visibility_culling")))
+                throw ipc::Error(-32602,"setting requires IPC 0.13");
             auto merged = graphicsFile.current;
             merged.update(params["patch"]);
             try {
@@ -2717,6 +2714,13 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (ipc::protocol::atLeast(protocol, "0.10")) response["performance"] = performance();
         else for (auto section : {"config", "effective", "overrides", "options"})
             for (auto key : {"offload", "offload_power_cap_w", "scale_min", "scale_max"}) response[section].erase(key);
+        if (!ipc::protocol::atLeast(protocol,"0.13")) {
+            auto strip = [](Json &value) { if(value.is_object()) { value.erase("outline"); value.erase("visibility_culling"); } };
+            for(auto section:{"config","effective","overrides","options"})strip(response[section]);
+            for(auto &preset:response["presets"])strip(preset);
+            if(response.contains("performance"))
+                for(auto section:{"requested","effective","controls"})strip(response["performance"][section]);
+        }
         return response;
     }
     if (method == "input.get") {
@@ -2792,7 +2796,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     }
     if (method == "_connection.closed") {
         bindings.erase(actor);
-        control.disconnect(actor);
+        control.disconnect(actor, camera);
         publish();
         return Json::object();
     }
@@ -2908,6 +2912,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         return Json{{"revision", ipc->revision()}};
     }
     if (method == "camera.fov") {
+        if (control.photoHeld()) throw ipc::Error(-32005, "release photo camera first");
         if (params.size() != 1 || !params.at("degrees").is_number())
             throw ipc::Error(-32602, "invalid FOV");
         float f = params.at("degrees");
@@ -2925,8 +2930,9 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     if (method == "atmosphere.get") {
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
-        return Json{{"profile", world ? renderer.profile : Json(nullptr)},
-                    {"quality", renderer.intelQuality ? "intel" : "high"}};
+        auto profile=world ? renderer.profile : Json(nullptr);
+        if(profile.is_object() && !ipc::protocol::atLeast(protocol,"0.13"))profile.erase("outline");
+        return Json{{"profile",profile},{"quality", renderer.intelQuality ? "intel" : "high"}};
     }
     if (method == "atmosphere.set") {
         if (params.size() != 1 || !world)
@@ -3006,7 +3012,12 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if ((method == "travel.start" || method == "autodrive.start") && !active)
             throw ipc::Error(-32005, "world mode inactive");
         auto outputs = monitor ? Json::array({"output-" + std::to_string(monitor->m_id)}) : Json::array();
+        if (method == "camera.photo" && (!active || typing || handover.phase || fullscreen.phase || !layout.desktop.is_null() || session.playing))
+            throw ipc::Error(-32005, "photo camera requires active world control");
         auto result = control.execute(method, params, actor, client, world.get(), camera, outputs);
+        if (method == "camera.photo") { climbing.reset(camera); keys.clear(); lookX=lookY=0; smoothIntent={}; cancelGrab(); }
+        if (method == "camera.get" && !ipc::protocol::atLeast(protocol,"0.13"))
+            for (auto field : {"roll", "fov", "lensShift", "held", "renderScale"}) result.erase(field);
         if (method == "camera.set" || method == "travel.start" || method == "autodrive.start")
             climbing.reset(camera);
         if (method == "shell.release") {
@@ -3176,11 +3187,13 @@ void Runtime::tick() {
         }
         float lookT = config["player"]["look_inertia"];
         float blend = lookT > 0 ? 1 - std::exp(-dt / lookT) : 1;
+        if (control.photoHeld()) { lookX=lookY=0; keys.clear(); }
         camera.yaw += lookX * blend;
         camera.pitch = std::clamp(camera.pitch + lookY * blend, -1.48f, 1.48f);
         lookX *= 1 - blend;
         lookY *= 1 - blend;
         camera.fov = std::max(3.f, baseFov / (zoomHeld ? zoom : 1.f));
+        control.restorePhoto(camera);
         renderer.debug = debug;
         renderer.showAreaMarkers = input.config["show_area_markers"];
         renderer.waypoint = control.location["waypoint"];
@@ -3215,7 +3228,7 @@ void Runtime::tick() {
             }
             accumulator -= 1.0 / 60.0;
         }
-        if (config["player"]["respawn_below"].get<float>() > 0 &&
+        if (!control.photoHeld() && config["player"]["respawn_below"].get<float>() > 0 &&
             camera.position.y < world->spawn().position.y + 1.7f - config["player"]["respawn_below"].get<float>()) {
             auto s = world->spawn();
             climbing.reset(camera);
@@ -3341,7 +3354,11 @@ class Pass final : public IPassElement {
                        runtime->climbing.prompt(
                            sim::climbMode(runtime->config["movement"]["climb_mode"].get<std::string>())));
             auto &r = runtime->renderer;
-            r.externalWorldFbo = runtime->offload.fbo();
+            r.renderScale = runtime->control.photoHeld() ? runtime->control.photoScale :
+                (r.graphics["render_scale"] == "auto" ? 0.f : r.graphics["render_scale"].get<float>());
+            r.dynamicResolution = !runtime->control.photoHeld() && r.graphics["dynamic_resolution"].get<bool>();
+            r.logicalScale = runtime->monitor ? runtime->monitor->m_scale : 1.f;
+            r.externalWorldFbo = runtime->control.photoHeld() ? 0 : runtime->offload.fbo();
             auto view = r.externalWorldFbo ? runtime->offload.camera() : runtime->camera;
             auto frames = r.frames;
             r.draw(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y, view,

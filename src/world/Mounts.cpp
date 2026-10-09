@@ -44,7 +44,7 @@ Json defaultAtmosphere() {
 void validateAtmosphere(const Json &profile) {
     // Reuse the exact offline world schema, including closed fields and numeric bounds.
     Json manifest = {
-        {"formatVersion", "0.3"},
+        {"formatVersion", "0.5"},
         {"id", "com.hyprune.validation"},
         {"version", "0.1.0"},
         {"name", "Validation"},
@@ -204,7 +204,7 @@ void loadMounts(World &w, size_t nodes) {
             need(id.is_string(), "areas.freePlacementZones must contain zone IDs, not objects");
             need(zoneIds.contains(id), "area references unknown placement zone");
         }
-    normalized["formatVersion"] = j.at("formatVersion") == "0.4" ? "0.4" : "0.3";
+    normalized["formatVersion"] = j.at("formatVersion") == "0.5" ? "0.5" : j.at("formatVersion") == "0.4" ? "0.4" : "0.3";
     normalized["areas"] = w.areas;
     normalized["anchors"] = Json::array();
     for (auto &[id, a] : anchors) {

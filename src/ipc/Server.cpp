@@ -105,6 +105,11 @@ Json Server::snapshot() const {
 }
 Json Server::visibleState(const Peer &p) const {
     Json state = state_;
+    if (!protocol::atLeast(p.protocol,"0.13") && state.contains("presentation")) {
+        auto &view=state["presentation"];
+        if (view.contains("profile") && view["profile"].is_object()) view["profile"].erase("outline");
+        if (view.contains("fov")) view["fov"]=std::min(110.,view["fov"].get<double>());
+    }
     if (!protocol::atLeast(p.protocol, "0.12")) {
         if (state.contains("editor") && state["editor"].value("mode", "") == "cursor") state["editor"]["mode"] = "interactive";
         if (state.contains("interaction") && state["interaction"].value("mode", "") == "cursor") state["interaction"]["mode"] = "typing";
@@ -193,6 +198,11 @@ void Server::notify(const std::string &event, Json params, const std::string &ac
         if (p.hello && !p.closing && protocol::atLeast(p.protocol, "0.2") && !p.subscription.empty() &&
             (protocol::atLeast(p.protocol, "0.4") || (event != "mounts.changed" && event != "presentation.changed"))) {
             auto projected = params;
+            if (!protocol::atLeast(p.protocol,"0.13") && event=="presentation.changed") {
+                auto &view=projected["presentation"];
+                if(view.contains("profile") && view["profile"].is_object())view["profile"].erase("outline");
+                if(view.contains("fov"))view["fov"]=std::min(110.,view["fov"].get<double>());
+            }
             if (!protocol::atLeast(p.protocol, "0.5") && event == "mounts.changed" && projected.contains("mounts") &&
                 projected["mounts"].contains("placements"))
                 std::erase_if(projected["mounts"]["placements"].get_ref<Json::array_t &>(),
@@ -279,12 +289,12 @@ void Server::frame(Peer &p, const std::string &bytes) {
                   -32602, "invalid client identity");
             check(params["capabilities"].is_array(), -32602, "invalid capabilities");
             const std::set<std::string> known{"state.read",    "world.control",   "surface.control", "movement.control",
-                                              "shell.control", "runtime.control", "data.publish",    "input.control"};
+                                              "shell.control", "runtime.control", "data.publish",    "input.control", "camera.author"};
             std::set<std::string> requested;
             for (auto &cap : params["capabilities"]) {
                 check(cap.is_string(), -32602, "invalid capability");
                 auto name = cap.get<std::string>();
-                check(known.contains(name) && (name != "input.control" || protocol::atLeast(p.protocol, "0.6")) &&
+                check(known.contains(name) && (name != "camera.author" || protocol::atLeast(p.protocol,"0.13")) && (name != "input.control" || protocol::atLeast(p.protocol, "0.6")) &&
                           (protocol::atLeast(p.protocol, "0.2") || name != "data.publish") &&
                           requested.insert(name).second,
                       -32602, "invalid capability list");

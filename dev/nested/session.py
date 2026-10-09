@@ -12,6 +12,7 @@ class Client:
         version=tuple(map(int,protocol.split('.')))  # numeric feature floors, including future test versions
         if version >= (0,2):params['capabilities']+=['shell.control','data.publish']
         if version >= (0,6):params['capabilities']+=['input.control']
+        if version >= (0,13):params['capabilities']+=['camera.author']
         if token:params['token']=token
         self.hello=self.call('session.hello',params)
     def receive(self):
@@ -48,6 +49,8 @@ def camera():
 
 def run(args):
     global STATE
+    if not hasattr(args,'authoring'): args.authoring=False
+    if args.authoring: args.m3b=True
     if not hasattr(args,'climbing'): args.climbing=False
     if not hasattr(args,'integration'): args.integration=False
     if args.integration:
@@ -110,10 +113,14 @@ def run(args):
             source=ROOT.parent/'worlds/dist'/worldid
             if not (source/'world.json').is_file():raise RuntimeError('Build '+worldid+' before M3A acceptance')
             shutil.copytree(source,installed/worldid,dirs_exist_ok=True)
+    if args.authoring:
+        subprocess.run([sys.executable,str(ROOT/'tests/fixtures/visibility.py')],check=True)
+        shutil.copytree(ROOT/'tests/fixtures/visibility',installed/'org.hyprune.visibility',dirs_exist_ok=True)
     (STATE/"graphics.json").unlink(missing_ok=True)
     token=secrets.token_hex(32)
     grants=[{'token':token,'client':'org.hyprune.nested','capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}]
     if args.m1 or args.integration or args.m2 or args.m3a or args.m3b:grants[0]['capabilities']+=['shell.control','data.publish']
+    if args.authoring: grants[0]['capabilities'].append('camera.author')
     shell_token=secrets.token_hex(32)
     if args.integration or args.m2 or args.m3a or args.m3b: grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control']})
     if args.m3b:
@@ -165,8 +172,12 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,"0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
+        if args.authoring:
+            from authoring import acceptance
+            acceptance(client,children,args,shell_token,socketpath)
+            return
         if args.climbing:
             from climbing import acceptance
             acceptance(client,children,args,shell_token,socketpath)
@@ -398,6 +409,6 @@ def m1(client):
     print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
     try:run(args)
     except KeyboardInterrupt:print("Nested session stopped.",flush=True)

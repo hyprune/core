@@ -683,3 +683,24 @@ a closed target falls back to world control. From F focus the first press shows
 the world; the second re-enters that focus. Layer/native-output input is ordinary
 Hyprland input; projected world presses own balanced releases and empty world
 presses are swallowed. Core keeps the camera frozen. No shell files changed.
+
+## IPC 0.13 / world 0.5 — authoring camera, ink, visibility
+
+- Negotiate 0.13 to render the new Performance controls. `graphics.outline` is
+  nullable boolean (preset inheritance); `graphics.visibility_culling` is boolean.
+  `graphics.get.performance.controls.outline` exposes `gpuMs`/`passGpuMs` with
+  `sharedPass: "outline"`; the cost includes geometry normals/depth and edge ink.
+  `timings.visibility` reports submitted/culled/total world batches.
+- `outline: true` permits the world's enabled `atmosphere.outline`, rather than
+  forcing an unauthored style. All presets permit it; default worlds omit it.
+  The existing graphics options/preset payloads include both controls. Do not add
+  either patch key on older protocols. Older clients get fields stripped.
+- World 0.5 adds optional ink and independent visibility regions. Shell package
+  discovery should accept 0.5; world collision and live surfaces are unaffected.
+- `camera.author` is **dev tooling only**. Do not add it to normal shell grants.
+  `camera.photo`/`camera.release` hold a rolled, shifted, wide-range lens and fixed
+  render scale. `camera.get` has actual lens state on 0.13. See AUTHORING.md.
+- Camera recording frames gain optional roll/lensShift; older recordings default
+  to zero. Camera-video replay preserves/smooths those values.
+- The climb reset prompt is a normal movement prompt; free-cursor suppression is
+  unchanged. No additional cursor transitions need live supervision.

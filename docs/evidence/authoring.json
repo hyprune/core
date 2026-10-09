@@ -1,0 +1,176 @@
+{
+  "checks": [
+    "author_grant",
+    "observer_cannot_author",
+    "roll_fov_shift_held",
+    "movement_cannot_move_held_camera",
+    "fixed_render_scale",
+    "shifted_marker_projected",
+    "photo_capture_PNG",
+    "release_restores_pose_and_lens",
+    "hidden_room_not_submitted",
+    "ink_cost_available",
+    "directed_visibility_link",
+    "IPC013_wire_conformance",
+    "disconnect_restores_camera"
+  ],
+  "measurements": [
+    {
+      "case": "lab culling off",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "renderScale": 0.5,
+      "visibility": {
+        "culled": 0,
+        "submitted": 401,
+        "total": 401
+      },
+      "cpuRenderMs": 0.7761385000000001,
+      "gpuMs": 4.2105705,
+      "outlineMs": 0.0
+    },
+    {
+      "case": "lab culling on",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "renderScale": 0.5,
+      "visibility": {
+        "culled": 384,
+        "submitted": 17,
+        "total": 401
+      },
+      "cpuRenderMs": 0.114919,
+      "gpuMs": 4.7926009999999994,
+      "outlineMs": 0.0
+    },
+    {
+      "case": "lab ink on",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "renderScale": 0.5,
+      "visibility": {
+        "culled": 384,
+        "submitted": 17,
+        "total": 401
+      },
+      "cpuRenderMs": 0.1819055,
+      "gpuMs": 5.0632515,
+      "outlineMs": 2.387864
+    },
+    {
+      "case": "com.hyprune.lumen-reach baseline",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "renderScale": 0.5,
+      "visibility": {
+        "culled": 0,
+        "submitted": 87,
+        "total": 87
+      },
+      "cpuRenderMs": 0.2787935,
+      "gpuMs": 6.613148,
+      "outlineMs": 0.0
+    },
+    {
+      "case": "com.hyprune.lumen-reach culling unannotated",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "renderScale": 0.5,
+      "visibility": {
+        "culled": 0,
+        "submitted": 87,
+        "total": 87
+      },
+      "cpuRenderMs": 0.2674645,
+      "gpuMs": 3.8596335,
+      "outlineMs": 0.0
+    },
+    {
+      "case": "com.hyprune.lumen-reach ink",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "renderScale": 0.5,
+      "visibility": {
+        "culled": 0,
+        "submitted": 87,
+        "total": 87
+      },
+      "cpuRenderMs": 0.48126650000000004,
+      "gpuMs": 15.865777999999999,
+      "outlineMs": 7.5110675
+    },
+    {
+      "case": "com.hyprune.switchyard baseline",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "renderScale": 0.5,
+      "visibility": {
+        "culled": 0,
+        "submitted": 134,
+        "total": 134
+      },
+      "cpuRenderMs": 0.383386,
+      "gpuMs": 3.9786444999999997,
+      "outlineMs": 0.0
+    },
+    {
+      "case": "com.hyprune.switchyard culling unannotated",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "renderScale": 0.5,
+      "visibility": {
+        "culled": 0,
+        "submitted": 134,
+        "total": 134
+      },
+      "cpuRenderMs": 0.40169699999999997,
+      "gpuMs": 6.9262475,
+      "outlineMs": 0.0
+    },
+    {
+      "case": "com.hyprune.switchyard ink",
+      "renderer": "Mesa Intel(R) Graphics (PTL)",
+      "size": [
+        3840,
+        2160
+      ],
+      "renderScale": 0.5,
+      "visibility": {
+        "culled": 0,
+        "submitted": 134,
+        "total": 134
+      },
+      "cpuRenderMs": 0.6918884999999999,
+      "gpuMs": 16.2174185,
+      "outlineMs": 8.224947499999999
+    }
+  ],
+  "nestedOnly": true,
+  "protocol": "0.13",
+  "samplesPerCase": 24,
+  "preset": "low"
+}

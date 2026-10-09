@@ -25,6 +25,34 @@ int main(int argc, char **argv) {
             }
             throw std::runtime_error("accepted invalid command " + m);
         };
+        const auto previous = camera;
+        for (float roll : {0.1f, 1.5707963f, -2.3f}) {
+            sim::Camera lens; lens.roll=roll; lens.yaw=.3f; lens.pitch=.4f;
+            call("camera.photo", {{"position",{2,3,4}},{"orientation",lens.orientation()},
+                 {"fov",15},{"lensShift",{.3,-.2}},{"renderScale",.5}});
+            auto actual=call("camera.get");
+            check(actual["held"] && std::abs(actual["roll"].get<float>()-roll)<1e-5f,"photo roll lost");
+            check(actual["fov"]==15 && actual["lensShift"]==Json::array({.3f,-.2f}),"photo lens lost");
+            check(control.driving(),"photo camera does not freeze locomotion");
+            for (float x : {.1f,.5f,.9f}) for(float y:{.2f,.7f}) {
+                auto ray=camera.ray(x,y,1.777f);
+                auto point=camera.project(camera.position+ray*5,1.777f);
+                check(std::abs(point.x-x)<1e-5 && std::abs(point.y-y)<1e-5,"rolled shifted ray/project mismatch");
+                auto clip=(camera.projection(1.777f)*camera.view()).point(camera.position+ray*5);
+                float depth=dot(ray*5,camera.forward());
+                check(std::abs((clip.x/depth+1)/2-x)<1e-5 && std::abs((1-clip.y/depth)/2-y)<1e-5,"matrix projection differs from markers");
+            }
+            rejects("camera.release",Json::object(),-32002,"other");
+            rejects("camera.set",{{"position",{0,0,0}},{"orientation",{0,0,0,1}}},-32005);
+            call("camera.release");
+            check(camera.orientation()==previous.orientation() && camera.fov==previous.fov,"photo release changed original camera");
+        }
+        Json photo={{"position",{2,3,4}},{"orientation",{0,0,0,1}},{"fov",140},{"renderScale",1}};
+        call("camera.photo",photo); control.disconnect("a",camera);
+        check(!control.photoHeld() && camera.position.x==previous.position.x,"disconnect leaked camera hold");
+        photo["fov"]=141; rejects("camera.photo",photo,-32602);
+        photo["fov"]=4; rejects("camera.photo",photo,-32602);
+        photo["fov"]=5; photo["lensShift"]={3,0}; rejects("camera.photo",photo,-32602);
         call("camera.set", {{"position", {0, 1.7, 4}}, {"orientation", {0, 0, 0, 1}}});
         check(call("camera.get")["position"][2] == 4, "camera round trip");
         rejects("camera.set", {{"position", {0, 1, 0}}, {"orientation", {0, 0, 0, 2}}}, -32602);
@@ -72,7 +100,7 @@ int main(int argc, char **argv) {
                 -32008);
         rejects("data.publish",
                 {{"sourceId", "org.other.metrics"}, {"sequence", uint64_t(1)}, {"values", Json::object()}}, -32002);
-        control.disconnect("a");
+        control.disconnect("a",camera);
         check(control.leases.empty() && control.sources.empty(), "disconnect cleanup");
         auto removed = call("shell.claim", {{"outputs", {"output"}}});
         control.retainOutputs(Json::array());

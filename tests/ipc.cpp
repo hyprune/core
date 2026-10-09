@@ -132,7 +132,7 @@ void inheritance(const std::string &runtime) {
           "input.capture",   "input.capture.cancel"})
         methods[m] = "state.read"; // Version eligibility is independent of grants.
     const std::set<std::string> allGrants{"state.read",      "world.control", "surface.control", "movement.control",
-                                          "runtime.control", "shell.control", "data.publish",    "input.control"};
+                                          "runtime.control", "shell.control", "data.publish",    "input.control", "camera.author"};
     std::vector<LaunchGrant> grants;
     for (size_t i = 0; i < Supported.size(); ++i)
         grants.push_back({randomId(), "org.hyprune.test", allGrants});
@@ -142,11 +142,11 @@ void inheritance(const std::string &runtime) {
     server.publish({{"movement", {{"state", "climbing"}, {"ladderId", "hatch"}, {"prompt", "W/S climb"}}},
                     {"runtime", Json::object()},
                     {"location", Json::object()},
-                    {"integrations", Json::object()},
+                    {"integrations", {{"sources",Json::array({{{"values",{{"outline",true}}}}})}}},
                     {"spatial", Json::object()},
                     {"workspaces", Json::object()},
                     {"mounts", mounts},
-                    {"presentation", {{"fov", 10}}},
+                    {"presentation", {{"fov", 10},{"profile",{{"outline",{{"enabled",true}}}}}}},
                     {"interaction", {{"mode", "cursor"}}},
                     {"apps", Json::array_t(17, Json::object())},
                     {"editor", {{"mode", "cursor"}}},
@@ -171,6 +171,7 @@ void inheritance(const std::string &runtime) {
             requested.erase("data.publish");
         if (!atLeast(version, "0.6"))
             requested.erase("input.control");
+        if (!atLeast(version,"0.13")) requested.erase("camera.author");
         h["params"]["capabilities"] = requested;
         c.sendJson(h);
         auto response = c.receive().at("result");
@@ -216,6 +217,8 @@ void inheritance(const std::string &runtime) {
         }
         previousMethods = advertised;
         previousEvents = events;
+        if (atLeast(version,"0.4")) check(state["presentation"]["profile"].contains("outline")==atLeast(version,"0.13"),"ink compatibility projection");
+        if(atLeast(version,"0.2"))check(state["integrations"]["sources"][0]["values"]["outline"]==true,"compatibility rewrote integration values");
         previousState = state;
     }
 }
