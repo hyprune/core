@@ -767,7 +767,7 @@ Json Runtime::performance() const {
     for (auto &[key, value] : config["graphics"].items()) {
         std::string group = key == "bloom" || key == "bloom_strength" ? "bloom" :
                             (key == "outline" || key == "outline_quality" || key == "outline_width_px" || key == "outline_colour") ? "outline" : key == "sky" ? "sky" : key == "msaa" ? "msaa_resolve" :
-                            key == "sharpen" ? "upscale_sharpen" : key == "alpha_haze" ? "native_surfaces_geometry" :
+                            key == "sharpen" || key == "upscaler" ? "upscale_sharpen" : key == "alpha_haze" ? "native_surfaces_geometry" :
                             key == "fog" || key == "normal_maps" || key == "specular" || key == "reflections" ||
                             key == "ambient_occlusion" || key == "anisotropy" ? "world_shading_shared" : "";
         auto cost = group.empty() ? Json(nullptr) : state["costsMs"].value(group, Json(nullptr));
@@ -3055,6 +3055,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                 throw ipc::Error(-32602,"setting requires IPC 0.13");
             if (!ipc::protocol::atLeast(protocol,"0.14") && (params["patch"].contains("outline_quality") || params["patch"].contains("outline_width_px") || params["patch"].contains("outline_colour")))
                 throw ipc::Error(-32602,"setting requires IPC 0.14");
+            if (!ipc::protocol::atLeast(protocol, "0.16") && params["patch"].contains("upscaler"))
+                throw ipc::Error(-32602, "setting requires IPC 0.16");
             auto merged = graphicsFile.current;
             merged.update(params["patch"]);
             try {
@@ -3078,6 +3080,15 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (ipc::protocol::atLeast(protocol, "0.10")) response["performance"] = performance();
         else for (auto section : {"config", "effective", "overrides", "options"})
             for (auto key : {"offload", "offload_power_cap_w", "scale_min", "scale_max"}) response[section].erase(key);
+        if (!ipc::protocol::atLeast(protocol, "0.16")) {
+            for (auto section : {"config", "effective", "overrides", "options"})
+                response[section].erase("upscaler");
+            for (auto &preset : response["presets"])
+                preset.erase("upscaler");
+            if (response.contains("performance"))
+                for (auto section : {"requested", "effective", "controls"})
+                    response["performance"][section].erase("upscaler");
+        }
         if (!ipc::protocol::atLeast(protocol,"0.14")) {
             for(auto section:{"config","effective","overrides","options"}) for(auto key:{"outline_quality","outline_width_px","outline_colour"}) response[section].erase(key);
             for(auto &preset:response["presets"]) preset.erase("outline_quality");

@@ -1140,3 +1140,15 @@ settings-schema or world-format change. Shell: no change required; a settings
 toggle would need a future IPC setting (there is no config RPC today). Meta
 kits may emit the key in generated `session.lua` if the owner wants it on.
 
+
+## IPC 0.16: upscaler setting (2026-10-10)
+
+`graphics.upscaler` = `"fsr1"` | `"bilinear"` | null (preset; all presets FSR 1),
+in config/effective/overrides/options/presets and Performance `requested`,
+`effective`, `controls` (shared pass `upscale_sharpen`). `timings.upscaler`
+(`{requested, active, error}`) shows the live reconstruction; bilinear is used at
+native scale or when GLSL ES 3.1 is missing. Older replies omit the key and older
+peers get invalid-params for writing it. Schema `1ae2ed1`, docs `cea6441`
+(RFC-0008 amendment), SDK `0cf79a4`, shell (Graphics settings Upscaler row,
+`supportsProtocol(16)`). Nested `dev/nested/run.sh --upscaler`: 12 checks,
+wire-audited, including a 0.15 session.

@@ -987,6 +987,9 @@ void Renderer::applyGraphics(const world::Json &config) {
     dynamicResolution = graphics["dynamic_resolution"];
     renderScale = graphics["render_scale"] == "auto" ? 0.f : graphics["render_scale"].get<float>();
     targetFPS = graphics["target_fps"];
+    upscaler = getenv("HYPRUNE_UPSCALER")              ? getenv("HYPRUNE_UPSCALER")
+               : graphics.value("upscaler", Json()).is_string() ? graphics["upscaler"].get<std::string>()
+                                                                : "fsr1";
     // Changing samplers does not rebuild meshes/textures or invalidate client leases.
     GLint count = 0;
     glGetIntegerv(GL_NUM_EXTENSIONS, &count);

@@ -45,8 +45,10 @@ Upscaling below output size uses AMD FidelityFX FSR 1 (EASU + RCAS) by default;
 `sharpen` 0–1 maps to RCAS 2–0 stops. It needs GLSL ES 3.1; without it, or with
 `HYPRUNE_UPSCALER=bilinear`, core uses the bilinear + bounded unsharp path, where
 `sharpen` 0–1 (default .35) weights the extra taps and zero disables them.
-`timings.upscaler` reports requested/active/error. A graphics setting is drafted
-for IPC 0.16. Costs and stills: [PERF-2026-10.md](PERF-2026-10.md).
+`timings.upscaler` reports requested/active/error. IPC 0.16 exposes the choice as
+the `upscaler` graphics key (`"fsr1"`, `"bilinear"`, null = preset; every preset
+uses FSR 1), also settable in graphics.json and Lua; `HYPRUNE_UPSCALER` overrides
+it for diagnostics. Costs and stills: [PERF-2026-10.md](PERF-2026-10.md).
 `fov` is 30–110 degrees; `exposure` .01–16; `bloom_strength` 0–4;
 `reduced_motion` boolean. Absent exposure/bloom strength overrides preserve the
 world's authored atmosphere. SSR, runtime shadow maps and runtime contact

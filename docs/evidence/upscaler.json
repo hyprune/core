@@ -1,0 +1,18 @@
+{
+  "protocol": "0.16",
+  "checks": [
+    "default_fsr1",
+    "options_and_presets",
+    "performance_control",
+    "fsr1_active_below_output_size",
+    "set_bilinear",
+    "bilinear_live",
+    "persisted",
+    "invalid_rejected",
+    "older_reply_frozen",
+    "older_cannot_write",
+    "null_restores_preset",
+    "fsr1_restored"
+  ],
+  "nestedOnly": true
+}

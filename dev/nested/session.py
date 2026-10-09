@@ -166,6 +166,9 @@ def run(args):
     if args.m1 or args.integration or args.m2 or args.m3a or args.m3b or getattr(args,'perf',False):grants[0]['capabilities']+=['shell.control','data.publish']
     if args.authoring: grants[0]['capabilities'].append('camera.author')
     shell_token=secrets.token_hex(32)
+    if getattr(args,'upscaler',False):
+        grants[0]['capabilities']+=['shell.control','data.publish','input.control','camera.author']
+        grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','data.publish','input.control','camera.author']})
     if args.integration or args.m2 or args.m3a or args.m3b: grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control']})
     if args.m3b:
         for grant in grants:grant['capabilities'].append('input.control')
@@ -219,8 +222,12 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,"0.15" if getattr(args,"perf",False) or getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) or getattr(args,"workspace_homes",False) or getattr(args,"long_titles",False) or getattr(args,"watermark",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.16" if getattr(args,"upscaler",False) else "0.15" if getattr(args,"perf",False) or getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) or getattr(args,"workspace_homes",False) or getattr(args,"long_titles",False) or getattr(args,"watermark",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
+        if getattr(args,"upscaler",False):
+            from upscaler import acceptance
+            acceptance(client,children,args,shell_token,socketpath)
+            return
         if getattr(args,"perf",False):
             from perf import acceptance
             acceptance(client,children,args,shell_token,socketpath)
@@ -494,6 +501,6 @@ def m1(client):
     print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--ipc-warp',action='store_true');parser.add_argument('--perf',action='store_true');parser.add_argument('--playable',action='store_true');parser.add_argument('--workspace-homes',action='store_true');parser.add_argument('--long-titles',action='store_true');parser.add_argument('--placement',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--watermark',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--ipc-warp',action='store_true');parser.add_argument('--perf',action='store_true');parser.add_argument('--upscaler',action='store_true');parser.add_argument('--playable',action='store_true');parser.add_argument('--workspace-homes',action='store_true');parser.add_argument('--long-titles',action='store_true');parser.add_argument('--placement',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--watermark',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
     try:run(args)
     except KeyboardInterrupt:print("Nested session stopped.",flush=True)
