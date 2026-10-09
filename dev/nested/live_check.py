@@ -56,13 +56,15 @@ APICALL EXPORT void PLUGIN_EXIT(){}
         check('free_toggle_fallback',recorded['binds'][0]['chord']=='SUPER + SHIFT + F10')
         current=json.loads(s.ctl('plugin','list','-j'));check('exclusive_core',any(p['name']=='hyprune-core' for p in current) and not any(p['name']=='hypr3d' for p in current))
         check('world_active',s.camera()['active'])
+        spec=importlib.util.spec_from_file_location('live_protocol_test',tools/'live.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        check('latest_launcher_and_common_shell_protocol',f'IPC: launcher {module.core_protocols()[0]}; shell {module.shell_protocol()}' in (state/'launcher.log').read_text())
         check('isolated_default_input',json.loads((pathlib.Path(recorded['runroot'])/'input.json').read_text())==json.loads((s.ROOT/'config/input.default.json').read_text()))
         output=command('status');(state/'status.log').write_text(output);check('status_logs_and_reports','last 20 lines' in output and 'New crash reports' in output)
         if os.environ.get('HYPRUNE_GRAPHICS_PROFILE')=='1':
             from graphics_profile import acceptance as regressions
         else:
             from live_regressions import acceptance as regressions
-        regressions(state, recorded, children, check)
+        regressions(state, recorded, children, check, module.shell_protocol())
         # Toggle via the installed runtime callback, then recover from helper death.
         s.ctl('eval','hl.plugin.hyprune.toggle()');time.sleep(.3);check('toggle_deactivates',not s.camera()['active'])
         s.ctl('eval','hl.plugin.hyprune.toggle()');time.sleep(.3);check('toggle_reactivates',s.camera()['active'])

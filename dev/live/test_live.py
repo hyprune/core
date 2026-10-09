@@ -4,11 +4,22 @@ from unittest.mock import patch
 spec=importlib.util.spec_from_file_location('live',pathlib.Path(__file__).with_name('live.py'));live=importlib.util.module_from_spec(spec);spec.loader.exec_module(live)
 
 class Tests(unittest.TestCase):
-    def test_live_protocol_includes_cursor_and_climbing(self):
-        self.assertEqual(live.PROTOCOL, '0.12')
-        with patch.object(live.socket, 'socket'), patch.object(live.RPC, 'call', return_value={}) as call:
-            live.RPC('/unused/nested-test', 'test-only')
-        self.assertEqual(call.call_args.args[1]['protocols'], ['0.12'])
+    def test_live_protocol_follows_cpp_inventory(self):
+        protocols=live.core_protocols()
+        with patch.object(live.socket, 'socket'), patch.object(live.RPC, 'call', return_value={'protocol':protocols[0]}) as call:
+            rpc=live.RPC('/unused/nested-test', 'test-only')
+        self.assertEqual(call.call_args.args[1]['protocols'], protocols)
+        self.assertEqual(rpc.hello['protocol'], protocols[0])
+        with tempfile.TemporaryDirectory() as d:
+            header=pathlib.Path(d)/'Protocol.hpp'
+            header.write_text('inline constexpr std::array Supported{"0.9", "0.10", "0.99"};')
+            self.assertEqual(live.core_protocols(header), ['0.99','0.10','0.9'])
+            with patch.object(live,'core_protocols',return_value=live.core_protocols(header)):
+                self.assertEqual(live.shell_protocol(['0.9','0.10']), '0.10')
+                self.assertEqual(live.shell_protocol(['0.9','0.99']), '0.99')
+                with self.assertRaisesRegex(RuntimeError,'no common protocol'):live.shell_protocol(['1.0'])
+            header.write_text('not an inventory')
+            with self.assertRaises(RuntimeError):live.core_protocols(header)
 
     def test_binding_selection_preserves_collision(self):
         self.assertEqual(live.choose_bind([{'key':'h','modmask':65},{'key':'n','modmask':65}]),'SUPER + SHIFT + F10')

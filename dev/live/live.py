@@ -1,14 +1,33 @@
 #!/usr/bin/env python3
 """Supervised session swap. Normal commands select WAYLAND_DISPLAY, not inherited signature."""
-import argparse, contextlib, fcntl, json, os, pathlib, secrets, shutil, signal, socket, struct, subprocess, sys, time
+import argparse, re, contextlib, fcntl, json, os, pathlib, secrets, shutil, signal, socket, struct, subprocess, sys, time
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HERE = ROOT / 'dev/live'
 BUILD = ROOT / 'build/live'
 SHELL = pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR', ROOT.parent / 'shell'))
 WORLD_ID = 'com.hyprune.lumen-reach'
-# Pin the version supported by both the supervised launcher and shipped shell.
-PROTOCOL = '0.12'
 GRANTS = ['state.read', 'world.control', 'surface.control', 'movement.control', 'shell.control', 'runtime.control', 'input.control']
+
+
+def core_protocols(header=None):
+    """Single inventory: C++ protocol helper. Numeric order, no duplicate Python pin."""
+    text = (header or ROOT / 'src/ipc/Protocol.hpp').read_text()
+    inventory = re.search(r'\bSupported\s*\{([^}]+)\}', text)
+    if not inventory: raise RuntimeError('Cannot read core protocol inventory')
+    versions = re.findall(r'"((?:0|[1-9]\d*)\.(?:0|[1-9]\d*))"', inventory[1])
+    if not versions or len(versions) != len(set(versions)): raise RuntimeError('Invalid core protocol inventory')
+    return sorted(versions, key=lambda value: tuple(map(int, value.split('.'))), reverse=True)
+
+
+def shell_protocol(supported=None):
+    # The installed shell may trail core. Read its actual validator inventory;
+    # never start it with a protocol its bridge cannot parse.
+    if supported is None:
+        code = 'import sys,json;sys.path.insert(0,sys.argv[1]);from protocol import SUPPORTED_PROTOCOLS;print(json.dumps(SUPPORTED_PROTOCOLS))'
+        supported = json.loads(run([sys.executable, '-c', code, str(SHELL / 'bridge')]))
+    match = next((version for version in core_protocols() if version in supported), None)
+    if not match: raise RuntimeError('Core and installed shell have no common protocol')
+    return match
 
 
 def run(argv, **kwargs):
@@ -168,6 +187,7 @@ def preflight(args):
     package, version, plugins, candidates = verify(s)
     print(run([str(BUILD/'hyprune-world-check'),str(package)]))
     run([sys.executable,'-c','import sys; sys.path.insert(0, sys.argv[1]); import launch',str(SHELL/'bridge')])
+    print('IPC newest:', core_protocols()[0], '; installed shell:', shell_protocol())
     print('ABI/version matches:', version['tag'], version['abiHash'])
     print('World:', package, '\nShell:', SHELL/'bridge/launch.py', '\nHelper:', BUILD/'hypruned')
     print('Loaded plugins:', json.dumps(plugins, indent=2))
@@ -251,7 +271,7 @@ def wait(test, seconds=8):
 class RPC:
     def __init__(self,path,token):
         self.s=socket.socket(socket.AF_UNIX); self.s.settimeout(35);self.s.connect(str(path));self.n=0
-        self.call('session.hello',{'protocols':[PROTOCOL],'client':{'id':'org.hyprune.live','name':'Supervised live launcher'},'capabilities':GRANTS,'token':token})
+        self.hello=self.call('session.hello',{'protocols':core_protocols(),'client':{'id':'org.hyprune.live','name':'Supervised live launcher'},'capabilities':GRANTS,'token':token})
     def read(self,n):
         b=b''
         while len(b)<n:
@@ -283,9 +303,11 @@ def bootstrap(args,path):
     rpc=RPC(sock,tokens['org.hyprune.live']);rpc.call('world.load',{'worldId':WORLD_ID})
     lua(s,'hl.plugin.hyprune.toggle()');wait(lambda:camera(s,runroot)['active'])
     read,write=os.pipe();os.write(write,(tokens['com.hyprune.shell']+'\n').encode());os.close(write)
-    env=env_for(s);env.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_PROTOCOL=PROTOCOL,HYPRUNE_SOCKET=str(sock))
+    protocol=shell_protocol()
+    print(f'IPC: launcher {rpc.hello["protocol"]}; shell {protocol}',flush=True)
+    env=env_for(s);env.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_PROTOCOL=protocol,HYPRUNE_SOCKET=str(sock))
     log=open(path.parent/'shell.log','a')
-    child=subprocess.Popen([sys.executable,str(SHELL/'bridge/launch.py'),'--protocol',PROTOCOL,'--world-package',str(world()/'world.json')],env=env,pass_fds=(read,),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT);os.close(read)
+    child=subprocess.Popen([sys.executable,str(SHELL/'bridge/launch.py'),'--protocol',protocol,'--world-package',str(world()/'world.json')],env=env,pass_fds=(read,),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT);os.close(read)
     # Persist identity immediately: down can recover even before ready.
     atomic(runroot/'processes.json',[{'record':process(child.pid),'group':True}])
     sub=rpc.call('state.subscribe',{'topics':['state']})['subscriptionId']

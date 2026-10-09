@@ -3,6 +3,8 @@
 **Owner + supervisor run live commands; agents use nested only. Keep a TTY ready.**
 No installed config is edited. Preflight builds Release and queries the session
 matching `WAYLAND_DISPLAY` in `hyprctl instances -j`, ignoring stale signatures.
+The launcher derives its offers from core’s protocol helper; the shell uses the
+newest common installed protocol. Preflight and launcher.log report both versions.
 
 ```bash
 cd /home/rick/workspace/hyprune/core

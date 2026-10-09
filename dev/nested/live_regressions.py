@@ -4,7 +4,7 @@ import session as s
 from ctl import verified
 
 
-def acceptance(logs,recorded,children,check):
+def acceptance(logs,recorded,children,check,expected_protocol):
     _,env=verified()
     def wait(fn,seconds=12):
         deadline=time.monotonic()+seconds
@@ -41,7 +41,7 @@ def acceptance(logs,recorded,children,check):
         return subprocess.check_output(['qs','ipc','--pid',str(qpid()),'call','preview',*map(str,args)],env=env,text=True,stderr=subprocess.DEVNULL,timeout=3).strip()
     def status():return json.loads(ui('status'))
     wait(lambda:status().get('lease'))
-    initial=status();check('live_like_IPC012_grant',initial['protocol']=='0.12' and bool(initial['lease']))
+    initial=status();check('live_like_newest_common_grant',initial['protocol']==expected_protocol and bool(initial['lease']))
     check('native_workspace_inventory_without_home_bindings',len(initial['workspaces'])>0)
     s.ctl('eval','hl.unbind("SUPER + RETURN")')
     s.ctl('eval','hl.bind("SUPER + Return",hl.dsp.exec_cmd("kitty --start-as normal --class hyprune-live-regression --title Live-launch-regression"))')
