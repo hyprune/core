@@ -1086,3 +1086,15 @@ sits in the 11–20 group, by their choice. An explicit Lua config value
 Wire shape is unchanged. Shell (`7ffda21`) and SDK (`2d4d926`) only had
 nested harnesses/fixtures that used 8 as the room. No QML, bridge or mock
 code assumed a number. Docs `5339098`.
+
+## Carry release no longer drops windows into walls behind them (2026-10-09)
+
+Releasing a carried window dropped it into any workspace wall the pointer ray
+hit within 12 m, even with the held window metres in front of that wall. With
+default homes, every area's main wall is a workspace wall, so a normal carry
+release in front of one swallowed the window: it was tiled natively on that
+workspace, lost its placement and was hidden from the world. Core now drops
+only when the wall is no farther than the held window plus 0.5 m, i.e. the
+window was brought to the wall (pushed against it, or pulled off and released
+at once). Otherwise the release is a normal placement. No IPC change. The
+shell needs no change.

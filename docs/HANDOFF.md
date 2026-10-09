@@ -1,3 +1,62 @@
+# Core lead handoff — 2026-10-09 (kits, carry drop)
+
+Nested only and nothing pushed. `build/live` was not rebuilt, the core-render
+worktree was not touched, no heavy batch work ran locally (AGENTS.md rule 3).
+
+| Repo | Commit | What |
+| --- | --- | --- |
+| core | `2c10abd` | Carry release drops into a workspace wall only when the window reached it |
+| core | `e70c0a2` | workspace_homes: intentional wall drop still tiles natively (30 checks) |
+| core | this commit | CHANGES note, handoff |
+| hyprune | `591393e` | Kit compiler: apps/start may target world-defined homes; `[[homes]]` optional |
+| hyprune | `6ef30c4` | Kits rely on the world: Lumen Reach/minimal on 21+, dev's Switchyard on 30 |
+| hyprune | `80f260d` | README/kits/guide docs: the world defines homes, kits may add explicit ones |
+
+**`--placement` failure: a real bug, fixed.** On release, a carried window
+dropped into any workspace wall within 12 m along the pointer ray, even when
+the wall was behind the held window. It was tiled natively there, lost its
+placement and stopped being drawn. With default homes every area's main wall
+is a workspace wall, so the owner would hit this live. The drop now needs the
+wall within the held window's depth + 0.5 m. `release_before_wall_keeps_window`
+(placement) and the intentional-drop check (workspace_homes) cover both sides.
+
+**Kits** (meta repo, done by a subagent and reviewed):
+- Lumen Reach and minimal have no `[[homes]]`. Apps launch on 21–24 with the
+  same mounts and start on 21.
+- The dev kit keeps one explicit home, Switchyard on 30 (it has no areas). Its
+  debug terminal uses Minimal's world-defined 21.
+- The standalone starter session binds Super+1…9 to 21…29, as it previously
+  bound Super+N to kit homes.
+- Meta repo checks: 20 unit tests OK; `nix flake check --no-build --offline`
+  passes; all three rendered `session.lua` pass `Hyprland --verify-config`.
+  Flake builds were skipped (heavy).
+
+Owner calls still open (kits):
+- From the dev kit's Switchyard, workspace 21 does nothing until Minimal is
+  loaded. Either add an explicit Minimal home or start the kit in Minimal.
+- With Home Manager, the kit's Super+1…9 binds sit alongside the owner's own
+  grouped binds.
+- Already generated profiles keep the old explicit homes until regenerated.
+
+Validation (final tree):
+
+```sh
+flock /tmp/worldshell-nested.lock ctest --test-dir build   # 20/20
+dev/nested/run.sh --placement        # 37 PASS lines incl. release_before_wall_keeps_window (was failing at :78)
+dev/nested/run.sh --workspace-homes  # 30 checks
+dev/nested/run.sh --long-titles      # PASS
+dev/nested/run.sh --ipc-warp         # PASS
+dev/nested/run.sh --playable         # 15 PASS (one batch run hit a 5 s client timeout on world.load; two reruns clean)
+dev/nested/run.sh --m2               # PASS
+flock /tmp/worldshell-nested.lock python3 dev/nested/world_workspace.py   # 23 PASS
+shell unittest 100 OK; sdk npm test 63 pass / 2 skipped
+```
+
+Pre-existing, not investigated: `dev/nested/run.sh --m3a` fails at
+`m3a.py:70` (roll check), identically with the drop fix reverted.
+
+---
+
 # Core lead handoff — 2026-10-09 (workspace numbering)
 
 ## Room 20, area homes 21+
