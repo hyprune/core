@@ -1,3 +1,66 @@
+# Core lead handoff — 2026-10-09 (late)
+
+## Default workspace homes (owner request: "workspaces 11, 12, 13… per area")
+
+Done, nested only, nothing pushed. `build/live` was **not** rebuilt (the owner
+was live-testing it); `dev/live/preflight` rebuilds it. No `dev/live/up/down`,
+no real-session calls, gallery watcher untouched.
+
+| Repo | Commit | What |
+| --- | --- | --- |
+| core | `fe29ae5` | Default area homes: `windows.workspace_base` (10) + `workspaceSlot` |
+| core | `acd0afe` | `dev/nested/run.sh --workspace-homes` (29 checks); room test uses ws 30 |
+| core | `45c7aaa` | m2 nested: two stale assertions fixed (suite still fails, see below) |
+| core | this commit | CHANGES note, LIVE-TEST item, handoff |
+| docs | `1c7c47c` | RFC-0005 M2 follow-up "world-derived default homes" |
+
+No schema/SDK change: the IPC 0.15 wire shape is unchanged. Defaults look
+exactly like explicit bindings in `mounts.bindings` / `workspaces.locations`.
+The shell Director already lists `workspaces.locations`, so it needs no change.
+
+How it works: `Layout::bindings` holds explicit (durable) homes, and
+`Layout::defaults` is derived (`deriveDefaults`). Runtime calls `deriveHomes()`
+on world load, `workspace.bind`, `_layout.restore` and Lua config change.
+Explicit wins by area and by ID across worlds; the room (8), the configured
+`world_workspace` and `HYPRUNE_WORKSPACE_LOCATIONS` IDs are reserved. The plugin
+sends the derived IDs on the private bridge (`derivedBindings`), and hypruned
+strips them before writing `layout.json`. Native keybind/dispatcher travel was
+already the M2 tick (`workspaceLocation()`, outside the render pass); it did
+nothing before only because no workspace was bound. New: an unbound active
+workspace (e.g. room 8) clears `resolvedLocation`, so going to the same home
+again travels again. No new hooks, cursor or focus calls were added.
+
+Validation on the final tree:
+
+```sh
+flock /tmp/worldshell-nested.lock ctest --test-dir build --output-on-failure  # 18/18
+dev/nested/run.sh --workspace-homes     # 29 PASS (evidence docs/evidence/workspace-homes.json)
+dev/nested/run.sh --ipc-warp            # PASS; 50 responses + 442 notifications valid 0.15; audit 515 frames
+dev/nested/run.sh --playable            # 15 PASS
+flock /tmp/worldshell-nested.lock python3 dev/nested/world_workspace.py   # 23 PASS
+python3 dev/live/test_live.py           # 16 OK (pure mocks)
+```
+
+Stills: gallery `screenshots/workspace-homes-2026-10-09/` (sun-court and
+array-hall walls show the real `WORKSPACE 11/12` kitty clients).
+
+Known gaps:
+
+- `dev/nested/run.sh --m2` fails: typed input never reaches the mounted
+  terminal. The unmodified HEAD plugin (`4c9bb27`) fails identically, so this
+  predates this work (last green 2026-10-08 09:24). Not investigated.
+- Lumen Reach array-hall arrival framing cuts off the top of its main wall.
+  This is for the worlds agent (generous view of screens).
+- Director labels homes by raw area ID (`sun-court`); a theme/name label is an
+  optional shell tweak.
+
+Owner live retest: down → preflight → up as below. In world, the normal
+workspace keybind to 11/12/13/14 travels to sun-court/array-hall/rime-vault/
+signal-rise. Windows opened there show on that area's main wall. 8 stays the
+free room. Checklist item added to `dev/live/LIVE-TEST.md`.
+
+---
+
 # Core lead handoff — 2026-10-09 (evening)
 
 The IPC recovery acceptance gap is closed and the queued playable-bounds work is

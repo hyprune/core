@@ -59,6 +59,7 @@ Walking checklist ([full M3B detail](../../docs/M3B.md#supervised-live-test-chec
 - [ ] F window: cursor hidden through zoom, visible/centred at 2D handover; Super+Tab/Back exits fullscreen to world/reticle.
 - [ ] E wall: stationary camera, deferred workspace/focus switch, relative clicks/typing. Test both exits.
 - [ ] F wall: hidden through fly-in, visible at handover; Back/Super+Tab flies out to world/reticle.
+- [ ] Default homes (Lumen Reach: 11 sun-court, 12 array-hall, 13 rime-vault, 14 signal-rise): in world, your normal workspace keybind to 11–14 travels there with the reticle kept and no cursor flash; a window opened there shows on that area's main wall. Back to 8 (room) and to the same home again travels again. From an E/F wall the keybind also travels (leaves 2D); from free cursor, travel waits until you return to the reticle. Watch for any cursor flash.
 - [ ] Super+Tab never opens native overview while world/use/focus/free cursor is active, including release; it does when inactive. Other native binds keep working; free cursor intercepts Back/Super+Tab and Escape when no app has keyboard focus.
 - [ ] TAB hold → Map: release grabs, show cursor/focus Director after frame. Settings captures chords/buttons/wheel; Esc cancels/leaves menu, clears focus, restores reticle.
 - [ ] Workspaces lists real desktops/apps even without configured homes. Click Help; alternate Help/Workspaces/Settings several times and keep the menu open.

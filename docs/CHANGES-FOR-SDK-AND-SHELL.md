@@ -1021,3 +1021,38 @@ survive a load for unbound clients, which is why earlier fixtures saw none.
 World 0.6 playable bounds (section above) are committed as core `d853d0c`; IPC
 is unchanged at 0.15. `dev/live/down` now frees each run's world/plugin copies
 from `XDG_RUNTIME_DIR` (`c474ef5`); leaked nested copies had filled the tmpfs.
+
+## Default area homes from the world (2026-10-09, IPC 0.15 unchanged)
+
+Owner request: area walls should be real workspaces with no manual binding.
+Normative text: the RFC-0005 M2 follow-up "world-derived default homes" (docs
+`1c7c47c`). The wire shape is unchanged, so there is no schema/SDK bump.
+
+- On every world load, each area without an explicit `workspace.bind` gets
+  `windows.workspace_base + int(workspaceSlot)`. The base is a new Lua config key
+  (default 10, integer 0–990000, 0 disables). Lumen Reach: 11 sun-court,
+  12 array-hall, 13 rime-vault, 14 signal-rise. The room workspace 8 is unchanged.
+- Defaults appear in `mounts.bindings` and `workspaces.locations` exactly like
+  explicit homes (`{id,worldId,areaId}`; locations label is the area ID). The
+  **Director needs no change**: `ShellState.qml` already lists
+  `workspaces.locations`, and `workspace.activate` travels to the area. Clients
+  cannot tell defaults from explicit homes, and should not need to.
+- Explicit wins: `workspace.bind` on a default's area or ID replaces it, and
+  only explicit bindings persist. hypruned receives the derived IDs on the
+  private bridge and filters them out of `layout.json`. IDs used by an explicit
+  binding of another world, the room or `HYPRUNE_WORKSPACE_LOCATIONS` are skipped.
+- Stock Hyprland keybinds and dispatchers (`workspace 12`) travel to the area,
+  like the Director. This is the existing M2 tick (`workspaceLocation()`,
+  outside the render pass); it had no effect before because nothing was bound.
+  New: going back to any unbound workspace (e.g. room 8) re-arms travel to the
+  same home. A switch from a focused-in wall still leaves 2D and travels (M2).
+- Windows opened on 11–14 stay tiled natively and are composited onto the
+  area's primary wall; tool placement from them belongs to that area.
+
+Shell follow-up (optional, cosmetic): label homes by area theme/name instead of
+the raw area ID if the Director shows them prominently.
+
+Nested evidence: `dev/nested/run.sh --workspace-homes` (28 checks,
+`docs/evidence/workspace-homes.json`, stills `dev/nested/.m3b-state/home-*.png`).
+`dev/nested/world_workspace.py` now uses workspace 30 as its "unrelated"
+workspace, since 12 is a default home of Lumen Reach.
