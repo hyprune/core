@@ -644,8 +644,12 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
         b.count = mesh.vertices.size();
         b.material = mesh.material;
         b.node = mesh.node;
-        for (auto &v : mesh.vertices)
+        b.lo = b.hi = mesh.vertices.empty() ? Vec3{} : mesh.vertices[0].position;
+        for (auto &v : mesh.vertices) {
             b.center += v.position;
+            b.lo = {std::min(b.lo.x, v.position.x), std::min(b.lo.y, v.position.y), std::min(b.lo.z, v.position.z)};
+            b.hi = {std::max(b.hi.x, v.position.x), std::max(b.hi.y, v.position.y), std::max(b.hi.z, v.position.z)};
+        }
         if (b.count)
             b.center = b.center / float(b.count);
         size_t bytes = mesh.vertices.size() * sizeof(world::Vertex);
@@ -1129,11 +1133,44 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glBindSampler(0, repeat_);
     glBindSampler(1, clamp_);
     auto visible = world::visibleAreas(*world_, camera.position);
-    auto keep = [&](size_t i) { return !graphics["visibility_culling"].get<bool>() ||
-        transforms.contains(batches_[i].node) || world::nodeVisible(*world_,batches_[i].node,visible); };
+    bool regions = graphics["visibility_culling"].get<bool>();
+    // Standard per-batch frustum test: world AABB (transformed for edited
+    // objects) against the six clip planes of vp (Gribb/Hartmann).
+    std::array<std::array<float, 4>, 6> planes;
+    for (int i = 0; i < 6; ++i)
+        for (int c = 0; c < 4; ++c)
+            planes[i][c] = vp.v[c * 4 + 3] + (i % 2 ? -1.f : 1.f) * vp.v[c * 4 + i / 2];
+    auto inFrustum = [&](size_t i) {
+        auto lo = batches_[i].lo, hi = batches_[i].hi;
+        if (auto edited = transforms.find(batches_[i].node); edited != transforms.end()) {
+            Vec3 a = edited->second.point(lo), b = a;
+            for (int corner = 1; corner < 8; ++corner) {
+                auto q = edited->second.point({corner & 1 ? hi.x : lo.x, corner & 2 ? hi.y : lo.y, corner & 4 ? hi.z : lo.z});
+                a = {std::min(a.x, q.x), std::min(a.y, q.y), std::min(a.z, q.z)};
+                b = {std::max(b.x, q.x), std::max(b.y, q.y), std::max(b.z, q.z)};
+            }
+            lo = a, hi = b;
+        }
+        for (auto &p : planes)
+            if (p[0] * (p[0] > 0 ? hi.x : lo.x) + p[1] * (p[1] > 0 ? hi.y : lo.y) + p[2] * (p[2] > 0 ? hi.z : lo.z) +
+                    p[3] < 0)
+                return false;
+        return true;
+    };
+    auto regionVisible = [&](size_t i) {
+        return !regions || transforms.contains(batches_[i].node) || world::nodeVisible(*world_, batches_[i].node, visible);
+    };
+    auto keep = [&](size_t i) { return regionVisible(i) && inFrustum(i); };
     std::vector<size_t> order;
-    for(size_t i=0;i<batches_.size();++i) if(keep(i)) order.push_back(i);
-    submittedBatches_=order.size(); culledBatches_=batches_.size()-order.size();
+    culledBatches_ = frustumCulled_ = 0;
+    for (size_t i = 0; i < batches_.size(); ++i)
+        if (!regionVisible(i))
+            ++culledBatches_;
+        else if (!inFrustum(i))
+            ++frustumCulled_;
+        else
+            order.push_back(i);
+    submittedBatches_ = order.size();
     std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
         bool ta = world_->materials[batches_[a].material].alphaMode == 2,
              tb = world_->materials[batches_[b].material].alphaMode == 2;
@@ -1598,7 +1635,7 @@ void Renderer::debugHUD(int w, int h) {
             << "\nRenderer " << offloadState.value("activeRenderer", "in-process") << "  " << offloadState.value("powerW", world::Json(nullptr)).dump() << " W"
             << "\nUpscale + sharpen               " << gpu(5) << "\nNative windows / haze " << enabled("alpha_haze") << "   " << gpu(1)
             << "\nInk edges " << graphics["outline_quality"].get<std::string>() << " " << enabled("outline") << "          " << gpu(7)
-            << "\nVisibility " << submittedBatches_ << " drawn / " << culledBatches_ << " culled"
+            << "\nVisibility " << submittedBatches_ << " drawn / " << culledBatches_ << " culled (" << frustumCulled_ << " frustum)"
             << "\nOutput + markers                " << gpu(3) << "\nSSR / runtime shadows: unsupported"
             << "\nRendered " << frames << " / reused " << skipped_;
     if (offloadState.value("activeRenderer", "") == "offload") {
@@ -1988,7 +2025,7 @@ world::Json Renderer::timings() const {
                            {"upscale_sharpen", cost({5})},      {"native_surfaces_geometry", cost({1})},
                            {"output_markers", cost({3})}, {"outline", cost({7,8})}};
     return {{"renderedFrames", frames},
-            {"visibility", {{"submitted",submittedBatches_},{"culled",culledBatches_},{"total",batches_.size()}}},
+            {"visibility", {{"submitted",submittedBatches_},{"culled",culledBatches_},{"frustumCulled",frustumCulled_},{"total",batches_.size()}}},
             {"shaderCache", {{"hits", ProgramCache::hits}, {"misses", ProgramCache::misses}, {"rejected", ProgramCache::rejected}, {"compileMs", ProgramCache::compileMs}, {"warmupMs", warmMs_}, {"warmupMaxStepMs", warmMaxMs_}, {"warming", warmStep_ >= 0}}},
             {"deliveredFPS", deliveredFPS_},
             {"graphics", graphics},

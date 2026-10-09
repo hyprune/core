@@ -727,10 +727,37 @@ int main(int argc, char **argv) {
         check(renderer.timings()["visibility"]["submitted"]==2,"visibility override ignored");
         renderer.graphics["visibility_culling"]=true;camera.position.z=0;
         renderer.draw(fbo,320,180,camera,{},false);glFinish();
-        check(renderer.timings()["visibility"]["submitted"]==2,"outside-region fallback hid scene");
+        // The camera sits in the panels' plane here: they are frustum-culled, not region-culled.
+        check(renderer.timings()["visibility"]["culled"]==0 &&
+              renderer.timings()["visibility"]["submitted"].get<int>()+renderer.timings()["visibility"]["frustumCulled"].get<int>()==2,
+              "outside-region fallback hid scene");
         camera.position.z=4;renderer.transforms[2]=Mat4::identity();
         renderer.draw(fbo,320,180,camera,{},false);glFinish();
         check(renderer.timings()["visibility"]["submitted"]==2,"edited object wrongly culled");
+        {
+            // Frustum: a panel behind the camera is skipped; moving it in front by
+            // an edited transform brings it back (transformed bounds).
+            auto frustum = std::make_shared<world::World>();
+            frustum->materials = orientationWorld->materials;
+            auto front = panel, behind = panel;
+            behind.node = 1;
+            for (auto &v : behind.vertices) v.position.z = 10;
+            frustum->meshes = {front, behind};
+            renderer.transforms.clear();
+            renderer.prepare(frustum);
+            camera.position = {0, 2.8f, 4};
+            renderer.draw(fbo, 320, 180, camera, {}, false);
+            glFinish();
+            auto v = renderer.timings()["visibility"];
+            check(v["submitted"] == 1 && v["frustumCulled"] == 1, "batch behind camera not frustum-culled");
+            Mat4 forward = Mat4::identity();
+            forward.v[14] = -10;
+            renderer.transforms[1] = forward;
+            renderer.draw(fbo, 320, 180, camera, {}, false);
+            glFinish();
+            check(renderer.timings()["visibility"]["submitted"] == 2, "edited object culled by its untransformed bounds");
+            renderer.transforms.clear();
+        }
         {
             // One image as base colour and occlusion: one sRGB upload, data slots
             // read raw through a skip-decode sampler (or two copies without it).

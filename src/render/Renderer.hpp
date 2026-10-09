@@ -87,7 +87,7 @@ class Renderer {
         GLuint vao = 0, vbo = 0;
         GLsizei count = 0;
         unsigned material = 0, node = 0;
-        Vec3 center;
+        Vec3 center, lo, hi; // world-space bounds of the pre-transformed vertices
     };
     struct PendingUpload {
         struct Job {
@@ -124,7 +124,7 @@ class Renderer {
     GLuint scene_ = 0, tone_ = 0, quadVao_ = 0, quadVbo_ = 0, screenVao_ = 0, repeat_ = 0, clamp_ = 0;
     GLuint environment_ = 0, bloom_ = 0, sky_ = 0, native_ = 0, depthProgram_ = 0;
     GLuint inkComposite_ = 0, inkNormals_ = 0, inkProgram_ = 0, inkFbo_ = 0, inkNormal_ = 0, inkDepth_ = 0;
-    size_t submittedBatches_ = 0, culledBatches_ = 0;
+    size_t submittedBatches_ = 0, culledBatches_ = 0, frustumCulled_ = 0;
     int cubeLevels_ = 1;
     GLuint bloomFbo_[2]{}, bloomTexture_[2]{};
     GLuint msaa_ = 0, color_ = 0, depth_ = 0, resolve_ = 0, resolveTexture_ = 0;
