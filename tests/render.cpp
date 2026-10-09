@@ -731,6 +731,47 @@ int main(int argc, char **argv) {
         camera.position.z=4;renderer.transforms[2]=Mat4::identity();
         renderer.draw(fbo,320,180,camera,{},false);glFinish();
         check(renderer.timings()["visibility"]["submitted"]==2,"edited object wrongly culled");
+        {
+            // One image as base colour and occlusion: one sRGB upload, data slots
+            // read raw through a skip-decode sampler (or two copies without it).
+            // Must match separate colour/data images exactly.
+            auto shared = std::make_shared<world::World>();
+            world::Image image{2, 2, std::vector<uint8_t>(16, 100)};
+            for (int i = 3; i < 16; i += 4) image.rgba[i] = 255;
+            world::Material material;
+            material.slots[0].texture = material.slots[3].texture = 0;
+            material.baseTexture = 0;
+            material.doubleSided = true;
+            shared->materials = {material};
+            shared->images = {image};
+            shared->samplers = {world::Sampler{}};
+            world::Mesh quad = panel;
+            for (auto &v : quad.vertices) { v.uv[0] = v.position.x > 0; v.uv[1] = v.position.y > 2.8f; }
+            shared->meshes = {quad};
+            auto separate = std::make_shared<world::World>(*shared);
+            separate->images.push_back(image);
+            separate->samplers.push_back(world::Sampler{});
+            separate->materials[0].slots[3].texture = 1;
+            renderer.graphics["ambient_occlusion"] = true;
+            renderer.graphics["outline"] = false;
+            renderer.renderScale = 1;
+            camera.position = {0, 2.8f, 4};
+            auto frame = [&](std::shared_ptr<world::World> w, bool decode) {
+                renderer.srgbDecodeAllowed = decode;
+                renderer.prepare(w);
+                renderer.draw(fbo, 320, 180, camera, {}, false);
+                glFinish();
+                glReadPixels(160, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+                return std::array{int(pixel[0]), int(pixel[1]), int(pixel[2]), int(renderer.timings()["upload"]["gpuBytes"])};
+            };
+            auto reference = frame(separate, true), skip = frame(shared, true), copies = frame(shared, false);
+            for (int c = 0; c < 3; ++c)
+                check(std::abs(reference[c] - skip[c]) <= 1 && std::abs(reference[c] - copies[c]) <= 1,
+                      "shared colour/data image sampled with the wrong decode");
+            check(skip[3] < copies[3] && copies[3] == reference[3], "shared image GPU bytes not single-counted");
+            renderer.srgbDecodeAllowed = true;
+            renderer.prepare(orientationWorld);
+        }
         renderer.destroy();
         glDeleteTextures(1, &app);
         glDeleteTextures(1, &texture);

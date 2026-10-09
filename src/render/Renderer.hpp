@@ -36,6 +36,7 @@ class Renderer {
     // since the last rendered frame. draw() then re-presents the cached native
     // frame (one output pass) instead of rendering the world again.
     bool reuseFrame = false;
+    bool srgbDecodeAllowed = true; // Tests force the two-copy fallback.
     double updateMs = 0, captureMs = 0, ipcMs = 0, gpuCaptureMs = -1;
     struct Pixels {
         int width = 0, height = 0;
@@ -98,7 +99,8 @@ class Renderer {
         world::Json profile;
         decltype(world::World::environmentHigh) levels;
         std::vector<Batch> batches;
-        std::vector<GLuint> textures, colors, samplers;
+        std::vector<GLuint> textures, colors, samplers, dataSamplers;
+        size_t gpuBytes = 0;
         GLuint cube = 0;
         GLsync fence = nullptr;
         std::vector<Job> jobs;
@@ -110,7 +112,11 @@ class Renderer {
     size_t uploadBytes_ = 0, uploadSteps_ = 0;
     std::shared_ptr<const world::World> world_;
     std::vector<Batch> batches_;
-    std::vector<GLuint> textures_, colorTextures_, samplers_;
+    // textures_/colorTextures_ name the same texture unless an image needs two
+    // copies; dataSamplers_ differ from samplers_ only for sRGB skip-decode.
+    std::vector<GLuint> textures_, colorTextures_, samplers_, dataSamplers_;
+    bool srgbDecode_ = false;
+    size_t gpuBytes_ = 0;
     GLuint scene_ = 0, tone_ = 0, quadVao_ = 0, quadVbo_ = 0, screenVao_ = 0, repeat_ = 0, clamp_ = 0;
     GLuint environment_ = 0, bloom_ = 0, sky_ = 0, native_ = 0, depthProgram_ = 0;
     GLuint inkComposite_ = 0, inkNormals_ = 0, inkProgram_ = 0, inkFbo_ = 0, inkNormal_ = 0, inkDepth_ = 0;

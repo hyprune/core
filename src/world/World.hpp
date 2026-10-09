@@ -1,4 +1,5 @@
 #pragma once
+#include <span>
 #include "Playable.hpp"
 #include "sim/Camera.hpp"
 #include "sim/Climbing.hpp"
@@ -79,4 +80,15 @@ struct World {
 };
 std::filesystem::path safePath(const std::filesystem::path &root, const std::string &path);
 std::shared_ptr<World> load(const std::filesystem::path &package);
+// How materials sample each image: colour (sRGB base/emissive) and/or data
+// (normal, metal/rough, occlusion, lightmap). Shared by budget and uploader.
+struct ImageUse {
+    bool color = false, data = false;
+};
+std::vector<ImageUse> imageUses(const World &);
+// Conservative GPU bytes: vertex buffers, every image's full mip chain once
+// (twice only when it is both colour and data without sRGB-decode control)
+// and the given RGBA16F environment cube levels.
+size_t gpuBytes(const World &, bool srgbDecode, std::span<const CubeLevel> environment);
+constexpr size_t gpuBudget = 512 * 1024 * 1024;
 } // namespace hyprune::world

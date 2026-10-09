@@ -54,6 +54,37 @@ const Spawn &World::spawn(const std::string &id) const {
             return s;
     throw std::runtime_error("unknown spawn");
 }
+std::vector<ImageUse> imageUses(const World &world) {
+    std::vector<ImageUse> uses(world.images.size());
+    auto mark = [&](int image, bool color) {
+        if (image >= 0 && size_t(image) < uses.size())
+            (color ? uses[image].color : uses[image].data) = true;
+    };
+    for (const auto &m : world.materials) {
+        for (int slot = 0; slot < 5; ++slot)
+            mark(m.slots[slot].texture, slot == 0 || slot == 4);
+        mark(m.lightmap, false);
+    }
+    return uses;
+}
+size_t gpuBytes(const World &world, bool srgbDecode, std::span<const CubeLevel> environment) {
+    size_t bytes = 0;
+    for (const auto &mesh : world.meshes)
+        bytes += mesh.vertices.size() * sizeof(Vertex);
+    auto uses = imageUses(world);
+    for (size_t i = 0; i < world.images.size(); ++i) {
+        size_t chain = 0;
+        for (int w = world.images[i].width, h = world.images[i].height;; w = std::max(1, w / 2), h = std::max(1, h / 2)) {
+            chain += size_t(w) * h * 4;
+            if (w == 1 && h == 1)
+                break;
+        }
+        bytes += chain * (uses[i].color && uses[i].data && !srgbDecode ? 2 : 1);
+    }
+    for (const auto &level : environment)
+        bytes += size_t(level.size) * level.size * 6 * 8;
+    return bytes;
+}
 std::shared_ptr<World> load(const std::filesystem::path &root) {
     require(!std::filesystem::is_symlink(root), "package root is a symlink");
     auto manifestPath = safePath(root, "world.json");

@@ -278,6 +278,24 @@ void layout(GLuint &vao, GLuint &vbo) {
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(world::Vertex), (void *)offsetof(world::Vertex, uv));
     glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(world::Vertex), (void *)offsetof(world::Vertex, uv1));
 }
+bool extension(std::string_view name) {
+    GLint count = 0;
+    glGetIntegerv(GL_NUM_EXTENSIONS, &count);
+    for (int i = 0; i < count; ++i)
+        if (name == reinterpret_cast<const char *>(glGetStringi(GL_EXTENSIONS, i)))
+            return true;
+    return false;
+}
+// Deletes shared names once: second[i] is only deleted where it differs from first[i].
+template <class Delete> void release(std::vector<GLuint> &first, std::vector<GLuint> &second, Delete del) {
+    for (size_t i = 0; i < second.size(); ++i)
+        if (i < first.size() && second[i] == first[i])
+            second[i] = 0;
+    del(first.size(), first.data());
+    del(second.size(), second.data());
+    first.clear();
+    second.clear();
+}
 void uniform(GLuint p, const char *name, int value) {
     glUniform1i(glGetUniformLocation(p, name), value);
 }
@@ -324,12 +342,9 @@ void Renderer::freeWorld() {
         glDeleteVertexArrays(1, &b.vao);
     }
     batches_.clear();
-    glDeleteTextures(textures_.size(), textures_.data());
-    textures_.clear();
-    glDeleteTextures(colorTextures_.size(), colorTextures_.data());
-    colorTextures_.clear();
-    glDeleteSamplers(samplers_.size(), samplers_.data());
-    samplers_.clear();
+    release(textures_, colorTextures_, [](GLsizei n, const GLuint *ids) { glDeleteTextures(n, ids); });
+    release(samplers_, dataSamplers_, [](GLsizei n, const GLuint *ids) { glDeleteSamplers(n, ids); });
+    gpuBytes_ = 0;
     glDeleteTextures(1, &environment_);
     environment_ = 0;
     world_.reset();
@@ -339,23 +354,8 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
     cancelPrepare();
     warmStep_ = -1;
     // CPU decode and environment prefiltering already happen on the loader worker.
-    size_t gpuBytes = 0;
-    for (const auto &mesh : world->meshes)
-        gpuBytes += mesh.vertices.size() * sizeof(world::Vertex);
-    for (size_t i = 0; i < world->images.size(); ++i) {
-        bool color = false;
-        for (const auto &m : world->materials)
-            color |= m.slots[0].texture == int(i) || m.slots[4].texture == int(i);
-        int w = world->images[i].width, h = world->images[i].height;
-        for (;;) {
-            gpuBytes += size_t(w) * h * 4 * (color ? 2 : 1);
-            if (w == 1 && h == 1)
-                break;
-            w = std::max(1, w / 2);
-            h = std::max(1, h / 2);
-        }
-    }
-    if (gpuBytes > 512 * 1024 * 1024)
+    srgbDecode_ = srgbDecodeAllowed && extension("GL_EXT_texture_sRGB_decode");
+    if (world::gpuBytes(*world, srgbDecode_, {}) > world::gpuBudget)
         throw std::runtime_error("world GPU budget exceeded including material mip chains");
     pending_ = std::make_unique<PendingUpload>();
     auto p = pending_.get();
@@ -364,9 +364,8 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
     p->levels = intelQuality ? p->world->environmentLow : p->world->environmentHigh;
     if (p->levels.empty())
         p->levels = world::prefilterEnvironment(*p->world, intelQuality ? 64 : 128);
-    for (auto &level : p->levels)
-        gpuBytes += size_t(level.size) * level.size * 6 * 8;
-    if (gpuBytes > 512 * 1024 * 1024) {
+    p->gpuBytes = world::gpuBytes(*p->world, srgbDecode_, p->levels);
+    if (p->gpuBytes > world::gpuBudget) {
         cancelPrepare();
         throw std::runtime_error("environment exceeds world GPU budget");
     }
@@ -429,23 +428,32 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
     p->textures.resize(p->world->images.size());
     p->colors.resize(p->textures.size());
     p->samplers.resize(p->textures.size());
+    p->dataSamplers.resize(p->textures.size());
     constexpr size_t chunk = 256 * 1024;
+    auto uses = world::imageUses(*p->world);
     for (size_t i = 0; i < p->textures.size(); ++i) {
         const auto &image = p->world->images[i];
-        bool color = false;
-        for (const auto &m : p->world->materials)
-            color |= m.slots[0].texture == int(i) || m.slots[4].texture == int(i);
-        for (int pass = 0; pass < (color ? 2 : 1); ++pass) {
-            auto texture = [p, i, pass] { return pass ? p->colors[i] : p->textures[i]; };
-            add(0, [p, i, pass] {
+        // One upload per image. Colour images are sRGB (hardware decode before
+        // filtering); data images stay raw. An image used both ways keeps one sRGB
+        // copy plus a skip-decode data sampler, or two copies without the extension.
+        bool color = uses[i].color, data = uses[i].data || !color;
+        bool twoCopies = color && data && !srgbDecode_;
+        for (int pass = 0; pass < (twoCopies ? 2 : 1); ++pass) {
+            bool srgb = color && pass == (twoCopies ? 1 : 0);
+            auto texture = [p, i, srgb] { return srgb ? p->colors[i] : p->textures[i]; };
+            add(0, [p, i, srgb, color, twoCopies] {
                 const auto &im = p->world->images[i];
-                auto &id = pass ? p->colors[i] : p->textures[i];
+                auto &id = srgb ? p->colors[i] : p->textures[i];
                 glGenTextures(1, &id);
+                if (srgb && !twoCopies)
+                    p->textures[i] = id; // data slots sample the same texture
+                else if (!color)
+                    p->colors[i] = id;
                 glBindTexture(GL_TEXTURE_2D, id);
                 int levels = 1;
                 for (int dim = std::max(im.width, im.height); dim > 1; dim /= 2)
                     ++levels;
-                glTexStorage2D(GL_TEXTURE_2D, levels, pass ? GL_SRGB8_ALPHA8 : GL_RGBA8, im.width, im.height);
+                glTexStorage2D(GL_TEXTURE_2D, levels, srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8, im.width, im.height);
             });
             int rows = std::max(size_t(1), chunk / (size_t(image.width) * 4));
             for (int y = 0; y < image.height; y += rows) {
@@ -467,7 +475,8 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
         }
         bool lightmap = std::any_of(p->world->materials.begin(), p->world->materials.end(),
                                     [&](auto &m) { return m.lightmap == int(i); });
-        add(0, [this, p, i, lightmap] {
+        bool skipDecode = color && data && srgbDecode_;
+        add(0, [this, p, i, lightmap, skipDecode] {
             auto s = i < p->world->samplers.size() ? p->world->samplers[i] : world::Sampler{};
             auto &id = p->samplers[i];
             glGenSamplers(1, &id);
@@ -492,6 +501,24 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
                 float max = 1;
                 glGetFloatv(0x84FF, &max);
                 glSamplerParameterf(id, 0x84FE, std::min(graphics["anisotropy"].get<float>(), max));
+            }
+            p->dataSamplers[i] = id;
+            if (skipDecode) {
+                // Same filtering, raw texels: EXT_texture_sRGB_decode on the sampler.
+                glGenSamplers(1, &p->dataSamplers[i]);
+                for (GLenum name : {GL_TEXTURE_MIN_FILTER, GL_TEXTURE_MAG_FILTER, GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T}) {
+                    GLint value = 0;
+                    glGetSamplerParameteriv(id, name, &value);
+                    glSamplerParameteri(p->dataSamplers[i], name, value);
+                }
+                GLfloat lod = 0, aniso = 1;
+                glGetSamplerParameterfv(id, GL_TEXTURE_MAX_LOD, &lod);
+                glSamplerParameterf(p->dataSamplers[i], GL_TEXTURE_MAX_LOD, lod);
+                if (anisotropy) {
+                    glGetSamplerParameterfv(id, 0x84FE, &aniso);
+                    glSamplerParameterf(p->dataSamplers[i], 0x84FE, aniso);
+                }
+                glSamplerParameteri(p->dataSamplers[i], 0x8A48 /*SRGB_DECODE*/, 0x8A4A /*SKIP_DECODE*/);
             }
         });
     }
@@ -607,6 +634,8 @@ bool Renderer::continuePrepare(double milliseconds, size_t byteBudget) {
         textures_ = std::move(p->textures);
         colorTextures_ = std::move(p->colors);
         samplers_ = std::move(p->samplers);
+        dataSamplers_ = std::move(p->dataSamplers);
+        gpuBytes_ = p->gpuBytes;
         environment_ = p->cube;
         p->cube = 0;
         cubeLevels_ = p->levels.size();
@@ -686,9 +715,8 @@ void Renderer::cancelPrepare() {
         glDeleteVertexArrays(1, &b.vao);
     }
     glDeleteTextures(1, &p->cube);
-    glDeleteTextures(p->textures.size(), p->textures.data());
-    glDeleteTextures(p->colors.size(), p->colors.data());
-    glDeleteSamplers(p->samplers.size(), p->samplers.data());
+    release(p->textures, p->colors, [](GLsizei n, const GLuint *ids) { glDeleteTextures(n, ids); });
+    release(p->samplers, p->dataSamplers, [](GLsizei n, const GLuint *ids) { glDeleteSamplers(n, ids); });
     pending_.reset();
 }
 void Renderer::prepare(std::shared_ptr<const world::World> world) {
@@ -756,7 +784,9 @@ void Renderer::applyGraphics(const world::Json &config) {
     if (supported) {
         float maximum = 1;
         glGetFloatv(0x84FF, &maximum);
-        for (auto sampler : samplers_) {
+        auto all = samplers_;
+        all.insert(all.end(), dataSamplers_.begin(), dataSamplers_.end());
+        for (auto sampler : all) {
             GLint min = 0, mag = 0;
             glGetSamplerParameteriv(sampler, GL_TEXTURE_MIN_FILTER, &min);
             glGetSamplerParameteriv(sampler, GL_TEXTURE_MAG_FILTER, &mag);
@@ -1071,14 +1101,14 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             glActiveTexture(GL_TEXTURE0 + unit);
             glBindTexture(GL_TEXTURE_2D,
                           present[i] ? (i == 0 || i == 4 ? colorTextures_ : textures_)[slot.texture] : 0);
-            glBindSampler(unit, present[i] ? samplers_[slot.texture] : repeat_);
+            glBindSampler(unit, present[i] ? (i == 0 || i == 4 ? samplers_ : dataSamplers_)[slot.texture] : repeat_);
         }
         glUniformMatrix3fv(glGetUniformLocation(shader, "uvMatrix"), depthOnly ? 1 : 5, GL_FALSE, matrices);
         glUniform1iv(glGetUniformLocation(shader, "uvSet"), depthOnly ? 1 : 5, sets);
         glUniform1iv(glGetUniformLocation(shader, "present"), depthOnly ? 1 : 5, present);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m.lightmap >= 0 ? textures_[m.lightmap] : 0);
-        glBindSampler(1, m.lightmap >= 0 ? samplers_[m.lightmap] : clamp_);
+        glBindSampler(1, m.lightmap >= 0 ? dataSamplers_[m.lightmap] : clamp_);
         auto model = transforms.contains(b.node) ? transforms.at(b.node) : Mat4::identity();
         glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, model.v.data());
         glBindVertexArray(b.vao);
@@ -1882,6 +1912,8 @@ world::Json Renderer::timings() const {
              {{"pending", bool(pending_) || warmStep_ >= 0},
               {"steps", uploadSteps_},
               {"bytes", uploadBytes_},
+              {"gpuBytes", pending_ ? pending_->gpuBytes : gpuBytes_},
+              {"srgbDecode", srgbDecode_},
               {"cpuMs", uploadMs_},
               {"maxStepMs", uploadMaxMs_},
               {"maxJobMs", uploadMaxJobMs_},
