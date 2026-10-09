@@ -41,7 +41,12 @@ reduces resolution even when its own passes appear within budget. Disabling
 dynamic resolution freezes the current automatic scale. Native client surfaces,
 workspace screens, markers, labels and prompts retain output resolution.
 
-`sharpen` is 0–1 (default .35); zero disables the extra reconstruction taps.
+Upscaling below output size uses AMD FidelityFX FSR 1 (EASU + RCAS) by default;
+`sharpen` 0–1 maps to RCAS 2–0 stops. It needs GLSL ES 3.1; without it, or with
+`HYPRUNE_UPSCALER=bilinear`, core uses the bilinear + bounded unsharp path, where
+`sharpen` 0–1 (default .35) weights the extra taps and zero disables them.
+`timings.upscaler` reports requested/active/error. A graphics setting is drafted
+for IPC 0.16. Costs and stills: [PERF-2026-10.md](PERF-2026-10.md).
 `fov` is 30–110 degrees; `exposure` .01–16; `bloom_strength` 0–4;
 `reduced_motion` boolean. Absent exposure/bloom strength overrides preserve the
 world's authored atmosphere. SSR, runtime shadow maps and runtime contact

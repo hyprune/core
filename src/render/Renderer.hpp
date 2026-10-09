@@ -37,9 +37,10 @@ class Renderer {
     // frame (one output pass) instead of rendering the world again.
     bool reuseFrame = false;
     bool srgbDecodeAllowed = true; // Tests force the two-copy fallback.
-    // "fsr1" = AMD FSR 1 EASU+RCAS when the world renders below output size;
-    // "bilinear" = bilinear + bounded unsharp mask (also the fallback without ES 3.1).
-    std::string upscaler = getenv("HYPRUNE_UPSCALER") ? getenv("HYPRUNE_UPSCALER") : "bilinear";
+    // "fsr1" (default) = AMD FSR 1 EASU+RCAS when the world renders below output
+    // size; "bilinear" = bilinear + bounded unsharp mask, also used automatically
+    // without GLSL ES 3.1. HYPRUNE_UPSCALER overrides until IPC 0.16 adds a setting.
+    std::string upscaler = getenv("HYPRUNE_UPSCALER") ? getenv("HYPRUNE_UPSCALER") : "fsr1";
     double updateMs = 0, captureMs = 0, ipcMs = 0, gpuCaptureMs = -1;
     struct Pixels {
         int width = 0, height = 0;
