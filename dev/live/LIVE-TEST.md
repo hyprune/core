@@ -126,3 +126,20 @@ checks on every outgoing frame in hypruned. Validation runs on a separate
 worker, away from the compositor/render pass. A bad frame aborts the test helper
 and reports only method, field path and schema keyword. Ordinary Release live
 runs leave this off. `dev/nested/run.sh` enables it automatically.
+
+## Render on demand (perf/render-standard)
+
+Core now renders a world frame only when its inputs change (camera, windows'
+commits, overlays, settings); Hyprland repaints in between re-present the cached
+frame. No cursor/focus/workspace calls were added. Supervised checks:
+
+- [ ] Stand still in Lumen Reach with F3 closed: the world image stays correct and
+  stable; nothing freezes when you start moving or turning again.
+- [ ] A video (or `watch -n0.1 date`) on a room window and on a mounted workspace
+  wall keeps updating while the camera is still.
+- [ ] HUD animations, the TAB hold ring and the Director still animate while still.
+- [ ] Typing in a window (E): the virtual cursor and the text update while still.
+- [ ] U while idle saves the current frame; F3 shows live numbers (it forces
+  rendering) and closing it returns to idle.
+- [ ] Optional: `HYPRUNE_CONTINUOUS_RENDER=1` restores per-tick frames if
+  anything above fails; `HYPRUNE_UPSCALER=fsr1` tries the FSR 1 upscaler.
