@@ -1540,9 +1540,13 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         if (g == interaction::Gesture::Carry) {
             auto held = capture.find(id);
             std::optional<std::pair<int, float>> wall;
+            // Drop into a workspace wall only when the window was brought to it. A wall
+            // merely behind the held window (every area main wall is a home) keeps the
+            // release a normal placement instead of swallowing the window.
+            float heldDepth = dot(hands.pose.center - pointerCamera().position, pointerRay());
             for (auto &f : capture.workspaces)
                 if (auto h = surfaces::intersect(f.surface, pointerCamera().position, pointerRay());
-                    h && h->distance < 12 && (!wall || h->distance < wall->second))
+                    h && h->distance < 12 && h->distance <= heldDepth + .5f && (!wall || h->distance < wall->second))
                     wall = {{f.workspaceId, h->distance}};
             if (held && wall) {
                 auto w = held->window.lock();
