@@ -1,8 +1,8 @@
 {
   "nestedOnly": true,
   "status": "passed",
-  "outgoingFramesSchemaValidated": 515,
-  "clientFrames": "PASS IPC 0.15: 50 responses and 442 notifications",
+  "outgoingFramesSchemaValidated": 525,
+  "clientFrames": "PASS IPC 0.15: 50 responses and 452 notifications",
   "checks": [
     "unbound world workspace",
     "warp 1 after: mount instances present",

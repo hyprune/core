@@ -30,7 +30,7 @@
       "passed": true,
       "evidence": [
         0.0,
-        3.4988558292388916,
+        3.4989473819732666,
         4.0
       ]
     },
@@ -38,7 +38,7 @@
       "name": "noclip escapes box",
       "passed": true,
       "evidence": [
-        7.083311557769775,
+        6.999978542327881,
         1.7000000476837158,
         4.0
       ]
@@ -71,7 +71,7 @@
       "name": "fly returns gradually after noclip",
       "passed": true,
       "evidence": [
-        3.450000524520874,
+        3.40000057220459,
         1.7000000476837158,
         4.0
       ]
@@ -89,7 +89,7 @@
       "name": "walking remains collision driven outside playable volume",
       "passed": true,
       "evidence": [
-        3.849985122680664,
+        3.7916524410247803,
         1.7000000476837158,
         4.0
       ]
@@ -104,7 +104,7 @@
       "passed": true,
       "evidence": [
         0.0,
-        121.50045776367188,
+        121.41709899902344,
         0.0
       ]
     },
@@ -113,7 +113,7 @@
       "passed": true,
       "evidence": [
         0.0,
-        121.41709899902344,
+        121.50045776367188,
         0.0
       ]
     }
