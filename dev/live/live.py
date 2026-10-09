@@ -457,6 +457,8 @@ def down(args,path):
         state['phase']='recovery-pending';state['errors']=errors;atomic(path,state)
         raise RuntimeError('Recovery pending: '+'; '.join(errors)+'. Run down again after the compositor is available.')
     state['phase']='down';state.pop('errors',None);atomic(path,state)
+    # Each up copies its worlds and plugin into the runtime tmpfs; release them once restored.
+    shutil.rmtree(runroot/'worlds',ignore_errors=True);(runroot/'hyprune-core.so').unlink(missing_ok=True)
     print('DOWN: core stopped, runtime bind removed, old plugin/HUD restored; cursor reset was deferred.')
 
 

@@ -89,11 +89,22 @@ class Tests(unittest.TestCase):
             self.assertEqual(live.select(args)['signature'],'correct')
     def test_partial_state_without_compositor_keeps_recovery(self):
         with tempfile.TemporaryDirectory() as d,patch.object(live,'select',side_effect=RuntimeError('compositor down')):
-            p=pathlib.Path(d)/'state.json'
+            p=pathlib.Path(d)/'state.json';(pathlib.Path(d)/'worlds').mkdir()
             live.atomic(p,{'phase':'starting','runroot':d,'session':{},'processes':[]})
             for _ in range(2):
                 with self.assertRaisesRegex(RuntimeError,'Recovery pending'):live.down(types.SimpleNamespace(),p)
                 self.assertEqual(live.json.loads(p.read_text())['phase'],'recovery-pending')
+            self.assertTrue((pathlib.Path(d)/'worlds').is_dir())
+    def test_restored_down_releases_runtime_copies(self):
+        session={'signature':'nested','start':'1'}
+        with tempfile.TemporaryDirectory() as d,patch.object(live,'select',return_value=session),patch.object(live,'query',return_value=[]):
+            root=pathlib.Path(d);(root/'worlds/w').mkdir(parents=True);(root/'hyprune-core.so').write_text('');(root/'core.log').write_text('kept')
+            p=root/'state.json'
+            live.atomic(p,{'phase':'up','runroot':d,'session':session,'processes':[],'binds':[],'oldUnloaded':[],'qs':[],'restoredHUD':{}})
+            live.down(types.SimpleNamespace(),p)
+            self.assertEqual(live.json.loads(p.read_text())['phase'],'down')
+            self.assertFalse((root/'worlds').exists() or (root/'hyprune-core.so').exists())
+            self.assertTrue((root/'core.log').exists())
     def test_ABI_mismatch_refuses(self):
         with patch.object(live,'query',return_value={'commit':'wrong','tag':'v0.56.2','abiHash':'wrong'}),patch.object(live,'run',return_value='{"commit":"right","tag":"v0.56.2","abiHash":"right"}'):
             with self.assertRaisesRegex(RuntimeError,'ABI/version mismatch'):live.abi({})
