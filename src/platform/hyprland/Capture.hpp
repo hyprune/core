@@ -15,7 +15,7 @@ class Capture {
         SP<Render::ITexture> texture;
         surfaces::Surface surface;
         surfaces::Instance instance;
-        bool visible = true;
+        bool visible = true, queued = false;
         std::string parentId;
         bool parentKeyboard = false;
         std::shared_ptr<uint64_t> commits = std::make_shared<uint64_t>(0);

@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
         arrival.spawn(opened, &outside, spawnCamera, proposed);
         auto arrivalPlane = arrival.locate(opened, &outside, spawnCamera, 1600, 900);
         check(arrivalPlane && length(arrivalPlane->center - proposed.center) < .001f &&
-                  std::abs(arrivalPlane->width - proposed.width) < .001f && !arrival.events.empty(),
+                  std::abs(arrivalPlane->width - proposed.width) < .001f,
               "off-view home zone hid/shrank arriving client's fallback");
         surfaces::Layout layout;
         layout.bind(10, w->id, "sun-court", w.get());

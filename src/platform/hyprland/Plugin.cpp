@@ -1,5 +1,6 @@
 #include "control/Control.hpp"
 #include "interaction/Config.hpp"
+#include "interaction/Content.hpp"
 #include "interaction/Hands.hpp"
 #include "interaction/InputFile.hpp"
 #ifdef HYPRUNE_LIVE_BUILD
@@ -111,7 +112,7 @@ struct Runtime {
     void useAim(bool zoom);
     void leaveInteraction();
     void debugCapture();
-    void toolClick(bool secondary = false);
+    void toolClick(const std::string &action);
     void toolsTick();
     std::optional<interaction::WorldHit> worldHit();
     void saveEditor();
@@ -163,7 +164,40 @@ struct Runtime {
     float zoom = 1, baseFov = 60, lookX = 0, lookY = 0;
     sim::Intent smoothIntent;
     int tool = 1;
-    std::string tagged;
+    std::map<std::string, std::string> toolPressActions;
+    void toolInput(const std::string &, interaction::Action);
+    Json toolContext() const {
+        Json gestures = Json::array();
+        for (auto [action, label] : {std::pair{"carry", "Carry"},
+                                     {"resize", "Resize"},
+                                     {"distance", "Push / pull"},
+                                     {"rotate", "Rotate"},
+                                     {"content.scale", "Content scale"},
+                                     {"window.reset", "Reset"},
+                                     {"carry.facing", "Face player / keep orientation"}}) {
+            Json bindings = Json::array();
+            for (auto &binding : input.config["modes"]["world"][action]) {
+                auto t = interaction::parseBinding(binding);
+                bool carrying =
+                    std::string_view(action) == "carry.facing" && hands.gesture == interaction::Gesture::Carry;
+                if ((carrying && (modifiers == t.mods || (modifiers & ~interaction::Super) == t.mods)) ||
+                    (std::string_view(action) != "carry.facing" && (modifiers & interaction::Super) &&
+                     t.mods == modifiers))
+                    bindings.push_back(binding);
+            }
+            if (!bindings.empty())
+                gestures.push_back({{"action", action}, {"label", label}, {"bindings", bindings}});
+        }
+        return {{"modifiers", modifiers}, {"override", bool(modifiers & interaction::Super)}, {"gestures", gestures}};
+    }
+    Json contentFeedback = nullptr;
+    uint64_t contentSequence = 0;
+    void readyNotice();
+    std::string tagged, unplacedSelected;
+    std::optional<surfaces::Surface> placementPreview();
+    Json unplacedState();
+    void contentScale(bool reset, float steps);
+
     uint32_t gestureButton = 0;
     std::set<uint32_t> swallowedButtons, swallowedKeys, nativeButtons, nativeKeys, freeNativeButtons, freeNativeKeys;
     std::map<uint32_t, std::string> inputNames;
@@ -893,10 +927,11 @@ void Runtime::publish() {
     }
     Json publication = {
         {"interaction",
-         {{"mode", layerCursor ? "cursor" : !layout.desktop.is_null() ? "workspace"
-                   : fullscreen.phase == 2   ? "fullscreen"
-                   : typing                  ? "typing"
-                                             : "movement"},
+         {{"mode", layerCursor                 ? "cursor"
+                   : !layout.desktop.is_null() ? "workspace"
+                   : fullscreen.phase == 2     ? "fullscreen"
+                   : typing                    ? "typing"
+                                               : "movement"},
           {"tool", tool},
           {"tools", config["tools"]["slots"]},
           {"noclip", noclip},
@@ -911,7 +946,13 @@ void Runtime::publish() {
           {"holds", input.holds()},
           {"error", inputFile.error}}},
         {"editor",
-         {{"mode", inputMode()},
+         {{"unplaced", unplacedState()},
+          {"contentScale", contentFeedback},
+          {"toolInput", toolContext()},
+          {"toolSlots", editor.slots()},
+          {"toolDefinitions", editor.definitions()},
+          {"carryFacing", hands.gesture == interaction::Gesture::Carry ? Json(hands.facePlayer) : Json(nullptr)},
+          {"mode", inputMode()},
           {"tool", editor.slot},
           {"submode", editor.submode()},
           {"selectedId", editor.selected.empty() ? Json(nullptr) : Json(editor.selected)},
@@ -1024,6 +1065,7 @@ void Runtime::finishLoad() {
         capture.release();
         layout.invalidateCollision();
         layout.freePoses.clear();
+        layout.occupiedPoses.clear();
         layout.spawnAreas.clear();
         restoreFullscreenWindows();
         fullscreen = {};
@@ -1060,6 +1102,10 @@ void Runtime::finishLoad() {
         }
         publish();
         ipc->complete(Json{{"revision", ipc->revision()}});
+#ifndef HYPRUNE_LIVE_BUILD
+        if (!active && !toggleAfterLoad)
+            deferInput([] { runtime->readyNotice(); });
+#endif
         if (toggleAfterLoad) {
             toggleAfterLoad = false;
             toggle(pendingToggle);
@@ -1106,6 +1152,26 @@ void Runtime::returnToWorldWorkspace() {
     monitor->changeWorkspace(room, false, true);
 }
 
+void Runtime::readyNotice() {
+    if (active || loading)
+        return;
+    if (renderDepth)
+        throw std::runtime_error("ready notification inside render pass");
+    std::string chord;
+    for (const auto &b : g_pKeybindManager->m_keybinds) {
+        auto description = b->description;
+        std::transform(description.begin(), description.end(), description.begin(), [](unsigned char c) { return std::tolower(c); });
+        if (b->enabled && !b->key.empty() &&
+            (b->arg.find("hyprune.toggle") != std::string::npos ||
+             (description.find("hyprune") != std::string::npos && description.find("toggle") != std::string::npos))) {
+            chord = interaction::bindingName({b->key, b->modmask, false});
+            break;
+        }
+    }
+    std::string message =
+        "Hyprune ready · " + (chord.empty() ? "use your configured toggle to enter" : "press " + chord + " to enter");
+    HyprlandAPI::addNotification(handle, message, CHyprColor{.4f, .73f, .87f, 1.f}, 7000);
+}
 void Runtime::toggle(const std::string &output) {
     if (renderDepth)
         throw std::runtime_error("world toggle inside render pass");
@@ -1161,6 +1227,8 @@ void Runtime::toggle(const std::string &output) {
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
     refresh();
     capture.spawnNew = true;
+    unplacedState();
+    editor.slot = tool = layout.unplaced.empty() ? 1 : 5;
     cursor();
     publish();
 }
@@ -1415,6 +1483,12 @@ void Runtime::handTick(float dt) {
                     throw std::runtime_error("client resize rejected: " + result.error().message);
                 w->m_target->rememberFloatingSize({width, height});
                 w->sendWindowSize(true);
+                if (auto c = layout.contentFor(e->instance, world.get())) {
+                    auto sizing = *c;
+                    sizing["logicalSize"] = {int(std::round(width)), int(std::round(height))};
+                    sizing["worldSize"] = {hands.pose.width, hands.pose.height};
+                    layout.setContent(e->instance, world.get(), sizing);
+                }
             }
         }
     }
@@ -1537,36 +1611,16 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
             Fullscreen::controller()->setFullscreenMode(e->window.lock(), Fullscreen::FSMODE_NONE,
                                                         Fullscreen::FSMODE_NONE);
         hands.begin(g, e->surface, hit->second, camera);
-        layout.freePoses[e->surface.id] = e->surface;
-        gestureButton = event.button;
-        return;
-    }
-    if (down && !typing && config["tools"]["enabled"] == true && editor.slot == 2 && editor.windowMode == 0) {
-        if (hit && capture.find(hit->first)) {
-            tagged = hit->first;
-            layout.freePoses[tagged] = capture.find(tagged)->surface;
-            layout.carried.clear();
-            return;
+        if (g == interaction::Gesture::Carry) {
+            auto previous = hands.pose;
+            hands.facing(config["windows"]["carry_face_player"], camera);
+            if (!interaction::sweepSafe(previous, hands.pose, world->collision)) {
+                hands.pose = previous;
+                hands.facing(false, camera);
+            }
         }
-        if (!tagged.empty())
-            if (auto e = capture.find(tagged))
-                if (auto wall = worldHit()) {
-                    auto s = e->surface;
-                    s.yaw = 0;
-                    s.rotation = interaction::orientation(wall->normal);
-                    s.center = wall->point + wall->normal * .06f;
-                    if (surfaces::pushOut(s, world->collision)) {
-                        layout.mount(e->instance, world.get(), s);
-                        tagged.clear();
-                        refresh();
-                        publish();
-                    }
-                    return;
-                }
-        return;
-    }
-    if (down && editor.slot != 1) {
-        toolClick(event.button == 273);
+        layout.freePoses[e->surface.id] = hands.pose;
+        gestureButton = event.button;
         return;
     }
     if (down && hit)
@@ -2042,10 +2096,8 @@ void Runtime::action(interaction::Action a) {
         if (a.pressed && a.edge && !session.playing) sessionMethod(session.recording ? "recording.stop" : "recording.start", Json::object());
         return;
     }
-    if (a.name == "wheel") {
-        if (zoomHeld) zoom = std::clamp(zoom * std::pow(1.12f,a.value),1.f,20.f);
-        else if (editor.slot != 1) {editor.wheel(a.value>0?1:-1);editor.activeHandle=-1;publish();}
-        else axis({.timeMs=0,.axis=WL_POINTER_AXIS_VERTICAL_SCROLL,.delta=-a.value*20.,.deltaDiscrete=int32_t(-a.value*120)});
+    if (a.name == "primary" || a.name == "secondary" || a.name == "alternate" || a.name == "cycle") {
+        toolInput(a.name, a);
         return;
     }
     auto held = [&](uint32_t key) {
@@ -2054,6 +2106,23 @@ void Runtime::action(interaction::Action a) {
         else
             keys.erase(key);
     };
+    if (a.name == "carry.facing") {
+        if (a.pressed && a.edge && hands.gesture == interaction::Gesture::Carry) {
+            auto old = hands;
+            hands.facing(!hands.facePlayer, camera);
+            if (!interaction::sweepSafe(old.pose, hands.pose, world->collision))
+                hands = old;
+            layout.freePoses[hands.pose.id] = hands.pose;
+            refresh();
+            publish();
+        }
+        return;
+    }
+    if (a.name == "content.scale" || a.name == "window.reset") {
+        if (a.pressed)
+            contentScale(a.name == "window.reset", a.value);
+        return;
+    }
     if (a.name == "look")
         lookHeld = a.pressed;
     else if (a.name == "forward")
@@ -2097,22 +2166,6 @@ void Runtime::action(interaction::Action a) {
                 .button = code,
                 .state = a.pressed ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED},
                true);
-    } else if (a.name == "primary" || a.name == "secondary") {
-        if (editor.activeHandle >= 0 && !a.pressed) {
-            editor.activeHandle = -1;
-            saveEditor();
-            return;
-        }
-        if (editor.slot != 1) {
-            if (a.pressed)
-                toolClick(a.name == "secondary");
-            return;
-        }
-        uint32_t code = a.name == "primary" ? 272 : 273;
-        button({.timeMs = 0,
-                .button = code,
-                .state = a.pressed ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED},
-               false);
     } else if (a.name == "distance" || a.name == "rotate") {
         if (!a.pressed || !world)
             return;
@@ -2187,7 +2240,8 @@ void Runtime::action(interaction::Action a) {
                 layout.freePoses[e->surface.id] = next;
                 if (hands.gesture != interaction::Gesture::None) {
                     auto x = dot(hands.offset, old.right()), y = dot(hands.offset, old.up());
-                    hands.pose = next;
+                    hands.pose = hands.start = next;
+                    hands.grabYaw = camera.yaw;
                     hands.offset = next.right() * x + next.up() * y;
                 } else if (layout.binding(e->instance.workspaceId, world.get()))
                     layout.mount(e->instance, world.get(), next);
@@ -2372,32 +2426,262 @@ std::optional<interaction::WorldHit> Runtime::worldHit() {
         return mesh->second;
     return collision;
 }
-void Runtime::toolClick(bool secondary) {
-    if (!world)
+Json Runtime::unplacedState() {
+    Json windows = Json::array();
+    for (const auto &e : capture.entries)
+        if (layout.unplaced.contains(e.surface.id))
+            windows.push_back({{"surfaceId", e.surface.id},
+                               {"title", e.instance.title},
+                               {"appClass", e.instance.appClass},
+                               {"logicalSize", {e.surface.pixelWidth, e.surface.pixelHeight}}});
+    std::stable_sort(windows.begin(), windows.end(), [&](const Json &a, const Json &b) {
+        auto rank = [&](const Json &v) {
+            auto it =
+                std::find(layout.pocketOrder.begin(), layout.pocketOrder.end(), v["surfaceId"].get<std::string>());
+            return std::distance(layout.pocketOrder.begin(), it);
+        };
+        return rank(a) < rank(b);
+    });
+    if (!windows.empty() &&
+        std::none_of(windows.begin(), windows.end(), [&](auto &v) { return v["surfaceId"] == unplacedSelected; }))
+        unplacedSelected = windows[0]["surfaceId"];
+    if (windows.empty())
+        unplacedSelected.clear();
+    return {{"preview", active && editor.slot == 5 && !freeCursor && !windows.empty()},
+            {"count", windows.size()},
+            {"windows", windows},
+            {"selectedId", unplacedSelected.empty() ? Json(nullptr) : Json(unplacedSelected)}};
+}
+std::optional<surfaces::Surface> Runtime::placementPreview() {
+    auto e = capture.find(unplacedSelected);
+    if (!e || !world || !layout.unplaced.contains(e->surface.id))
+        return {};
+    auto s = e->surface;
+    s.yaw = -camera.yaw;
+    s.rotation = {0, 0, 0, 1};
+    s.center = camera.position + camera.forward() * config["windows"]["spawn_distance"].get<float>();
+    s.opacity = .35f;
+    return s;
+}
+void Runtime::contentScale(bool reset, float steps) {
+    if (!world || !monitor)
         return;
-    if (editor.slot == 2) {
-        if (editor.windowMode == 0) {
-            if (secondary) {
-                tagged.clear();
-                return;
-            }
-            button({.timeMs = 0, .button = 272, .state = WL_POINTER_BUTTON_STATE_PRESSED}, false);
+    auto hit = aim();
+    auto e = hands.gesture != interaction::Gesture::None ? capture.find(hands.pose.id)
+             : hit                                       ? capture.find(hit->first)
+                                                         : nullptr;
+    if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance) || !e->window || !e->window->m_target)
+        return;
+    auto w = e->window.lock();
+    auto s = e->surface;
+    auto existing = layout.contentFor(e->instance, world.get());
+    Json sizing = existing ? *existing
+                           : Json{{"logicalSize", {s.pixelWidth, s.pixelHeight}},
+                                  {"baseSize", {s.pixelWidth, s.pixelHeight}},
+                                  {"worldSize", {s.width, s.height}}};
+    auto dims = reset ? interaction::contentSize(sizing["baseSize"][0], sizing["baseSize"][1], 0, monitor->m_size.x,
+                                                 monitor->m_size.y)
+                      : interaction::contentSize(sizing["logicalSize"][0], sizing["logicalSize"][1], steps,
+                                                 monitor->m_size.x, monitor->m_size.y);
+    if (reset) {
+        s.yaw = -camera.yaw;
+        s.rotation = {0, 0, 0, 1};
+        s.center = camera.position + camera.forward() * config["windows"]["spawn_distance"].get<float>();
+        if (!surfaces::pushOut(s, world->collision) || !layout.vacant(s, s.id)) {
+            ipc->notify("runtime.notice", {{"level", "info"},
+                                           {"code", "placement.blocked"},
+                                           {"message", "Reset needs a free spawn spot. Aim into an open area."}});
             return;
         }
+    }
+    sizing["logicalSize"] = dims;
+    // Core size configuration is deferred via the input callback, never drawing.
+    auto floated = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_ENABLE, w);
+    if (!floated)
+        throw std::runtime_error("content scale float rejected: " + floated.error().message);
+    auto result = Config::Actions::resize({double(dims[0]), double(dims[1])}, false, w);
+    if (!result)
+        throw std::runtime_error("content scale configure rejected: " + result.error().message);
+    w->m_target->rememberFloatingSize({double(dims[0]), double(dims[1])});
+    w->sendWindowSize(true);
+    contentFeedback = {{"surfaceId", e->surface.id},
+                       {"scale", sizing["baseSize"][0].get<double>() / dims[0]},
+                       {"logicalSize", dims},
+                       {"sequence", ++contentSequence},
+                       {"reset", reset}};
+    layout.setContent(e->instance, world.get(), sizing);
+    layout.mount(e->instance, world.get(), s);
+    if (hands.gesture != interaction::Gesture::None) {
+        if (reset) {
+            hands.end();
+            gestureButton = 0;
+        } else {
+            hands.pose.pixelWidth = dims[0];
+            hands.pose.pixelHeight = dims[1];
+        }
+    }
+    refresh();
+    publish();
+}
+void Runtime::toolInput(const std::string &slot, interaction::Action event) {
+    if (slot == "cycle") {
+        if (!event.pressed || !event.edge) return;
+        // A key/button Cycle binding advances once; wheel bindings retain direction.
+        if (event.value == 0) event.value = 1;
+    }
+    std::string action = editor.slotAction(slot);
+    if (slot != "cycle") {
+        if (event.pressed && event.edge)
+            toolPressActions[slot] = action;
+        else if (!event.pressed) {
+            if (auto it = toolPressActions.find(slot); it != toolPressActions.end()) {
+                action = it->second;
+                toolPressActions.erase(it);
+            }
+        }
+    }
+    if (slot == "cycle" && zoomHeld) {
+        zoom = std::clamp(zoom * std::pow(1.12f, event.value), 1.f, 20.f);
+        return;
+    }
+    if (action.empty())
+        return;
+    if (action.starts_with("client.")) {
+        if (action == "client.scroll")
+            axis({.timeMs = 0,
+                  .axis = WL_POINTER_AXIS_VERTICAL_SCROLL,
+                  .delta = -event.value * 20.,
+                  .deltaDiscrete = int32_t(-event.value * 120)});
+        else
+            button({.timeMs = 0,
+                    .button = action == "client.primary"     ? 272u
+                              : action == "client.secondary" ? 273u
+                                                             : 274u,
+                    .state = event.pressed ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED},
+                   false);
+        return;
+    }
+    if (action == "gizmo.drag" && !event.pressed) {
+        editor.activeHandle = -1;
+        saveEditor();
+        return;
+    }
+    if (!event.pressed || !event.edge || !world)
+        return;
+    if (action == "placement.pocket") {
+        auto h = aim();
+        auto e = h ? capture.find(h->first) : nullptr;
+        if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance))
+            return;
+        cancelGrab();
+        layout.stash(e->instance, e->surface);
+        unplacedSelected = e->surface.id;
+        ipc->notify("runtime.notice",
+                    {{"level", "info"}, {"code", "placement.pocketed"}, {"message", "Pocketed " + e->instance.title}});
+        refresh();
+    } else if (action == "placement.cycle") {
+        auto list = unplacedState()["windows"];
+        if (!list.empty()) {
+            int at = 0;
+            for (size_t i = 0; i < list.size(); ++i)
+                if (list[i]["surfaceId"] == unplacedSelected)
+                    at = int(i);
+            at = (at + int(list.size()) + (event.value > 0 ? 1 : -1)) % int(list.size());
+            unplacedSelected = list[at]["surfaceId"];
+        }
+    } else if (action == "tool.cycle") {
+        editor.wheel(event.value > 0 ? 1 : -1);
+        editor.activeHandle = -1;
+    } else if (action == "window.lock") {
         if (auto h = aim())
             if (auto e = capture.find(h->first)) {
                 editor.toggleLock(world->id, e->instance);
                 saveEditor();
-                publish();
             }
+    } else if (action == "path.remove") {
+        editor.removePoint();
+        saveEditor();
+    } else if (action == "path.closed") {
+        editor.toggleClosed();
+        saveEditor();
+    } else if (action == "gizmo.space") {
+        editor.localAxes = !editor.localAxes;
+        editor.activeHandle = -1;
+    } else if (action == "gizmo.snap")
+        editor.snap = !editor.snap;
+    else if (action == "placement.ahead" || action == "placement.surface")
+        toolClick(action);
+    else if (action == "window.mount" || action == "path.add" || action == "gizmo.drag")
+        toolClick(action);
+    publish();
+}
+void Runtime::toolClick(const std::string &action) {
+    if (!world)
         return;
-    }
-    if (editor.slot == 3) {
-        if (secondary) {
-            editor.finishPath();
-            saveEditor();
+    if (action == "placement.ahead" || action == "placement.surface") {
+        auto preview = placementPreview();
+        if (!preview)
+            return;
+        auto e = capture.find(unplacedSelected);
+        auto placed = *preview;
+        placed.opacity = 1;
+        if (action == "placement.surface") {
+            auto hit = worldHit();
+            if (!hit)
+                return;
+            placed.yaw = 0;
+            placed.rotation = interaction::orientation(hit->normal);
+            placed.center = hit->point + hit->normal * .06f;
+        }
+        if (!surfaces::pushOut(placed, world->collision) || !layout.vacant(placed, placed.id)) {
+            ipc->notify("runtime.notice", {{"level", "info"},
+                                           {"code", "placement.blocked"},
+                                           {"message", "No free space here. Aim at another spot."}});
             return;
         }
+        auto w = e->window.lock();
+        auto floated = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_ENABLE, w);
+        if (!floated)
+            throw std::runtime_error("placement float rejected: " + floated.error().message);
+        if (w->m_target) {
+            auto resized = Config::Actions::resize({double(placed.pixelWidth), double(placed.pixelHeight)}, false, w);
+            if (!resized)
+                throw std::runtime_error("placement size rejected: " + resized.error().message);
+            w->m_target->rememberFloatingSize({double(placed.pixelWidth), double(placed.pixelHeight)});
+            w->sendWindowSize(true);
+        }
+        layout.mount(e->instance, world.get(), placed);
+        unplacedSelected.clear();
+        refresh();
+        publish();
+        return;
+    }
+    if (action == "window.mount") {
+        auto hit = aim();
+        if (hit && capture.find(hit->first)) {
+            tagged = hit->first;
+            layout.freePoses[tagged] = capture.find(tagged)->surface;
+            layout.carried.clear();
+            return;
+        }
+        if (!tagged.empty())
+            if (auto e = capture.find(tagged))
+                if (auto wall = worldHit()) {
+                    auto s = e->surface;
+                    s.yaw = 0;
+                    s.rotation = interaction::orientation(wall->normal);
+                    s.center = wall->point + wall->normal * .06f;
+                    if (surfaces::pushOut(s, world->collision)) {
+                        layout.mount(e->instance, world.get(), s);
+                        tagged.clear();
+                        refresh();
+                        publish();
+                    }
+                    return;
+                }
+        return;
+    }
+    if (action == "path.add") {
         if (auto h = worldHit()) {
             auto b =
                 layout.binding(monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
@@ -2407,7 +2691,7 @@ void Runtime::toolClick(bool secondary) {
         }
         return;
     }
-    if (editor.slot != 4)
+    if (action != "gizmo.drag")
         return;
     // A client configure can change the captured aspect after selection. Start
     // each gesture from the current surface, rather than the cached selection.
@@ -2419,7 +2703,7 @@ void Runtime::toolClick(bool secondary) {
                 e->surface.center, {e->surface.width, e->surface.height, 1}, normalized.start.rotation};
         }
     if (!editor.selected.empty()) {
-        auto handles = interaction::gizmo(selectedTransform.position, editor.submode());
+        auto handles = editor.handles(selectedTransform.position, selectedTransform.rotation);
         if (auto picked = interaction::pickHandle(handles, pointerCamera().position, pointerRay())) {
             if (editor.kind == "window")
                 if (auto e = capture.find(editor.selected))
@@ -2434,7 +2718,9 @@ void Runtime::toolClick(bool secondary) {
                 }
             auto h = handles[*picked];
             std::array<Vec3, 3> axes = {Vec3{1, 0, 0}, Vec3{0, 1, 0}, Vec3{0, 0, 1}};
-            dragNormal = h.axis < 3 ? axes[h.axis] : camera.forward();
+            dragNormal = h.axis < 3
+                             ? (editor.localAxes ? rotate(selectedTransform.rotation, axes[h.axis]) : axes[h.axis])
+                             : camera.forward();
             if (editor.positionMode == 1)
                 dragPoint =
                     planePoint(pointerCamera().position, pointerRay(), selectedTransform.position, dragNormal).value_or(h.end) -
@@ -2476,7 +2762,7 @@ void Runtime::toolsTick() {
         selectedTransform.position = camera.position + pointerRay() * objectDistance - dragPoint;
     }
     if (editor.activeHandle >= 0) {
-        auto handles = interaction::gizmo(dragStart.position, editor.submode());
+        auto handles = editor.handles(dragStart.position, dragStart.rotation);
         if (size_t(editor.activeHandle) >= handles.size()) {
             editor.activeHandle = -1;
             return;
@@ -2486,7 +2772,7 @@ void Runtime::toolsTick() {
         float delta = axisPoint(pointerCamera().position, pointerRay(), dragStart.position, dragNormal) - dragPoint.x;
         if (std::abs(dot(dragNormal, camera.forward())) > .95f)
             delta = (pointerX - .5f) * length(dragStart.position - camera.position) * 2;
-        if (keys.contains(KEY_LEFTSHIFT))
+        if (editor.snap || keys.contains(KEY_LEFTSHIFT))
             delta = std::round(delta / .1f) * .1f;
         if (editor.positionMode == 0)
             selectedTransform.position += dragNormal * delta;
@@ -2495,14 +2781,14 @@ void Runtime::toolsTick() {
             float angle = p ? std::atan2(dot(cross(dragPoint, *p - dragStart.position), dragNormal),
                                          dot(dragPoint, *p - dragStart.position))
                             : (pointerX - .5f) * 6.283185f;
-            if (keys.contains(KEY_LEFTSHIFT))
+            if (editor.snap || keys.contains(KEY_LEFTSHIFT))
                 angle = std::round(angle / .2617994f) * .2617994f;
             selectedTransform.rotation = turn(dragStart.rotation, dragNormal, angle);
         } else {
             float factor = std::clamp(1 + delta, .05f, 20.f);
             if (h.uniform)
                 factor = std::clamp(1 + (pointerX - .5f - pointerY + .5f) * 3, .05f, 20.f);
-            if (keys.contains(KEY_LEFTSHIFT))
+            if (editor.snap || keys.contains(KEY_LEFTSHIFT))
                 factor = std::max(.1f, std::round(factor / .1f) * .1f);
             if (h.uniform)
                 selectedTransform.scale = dragStart.scale * factor;
@@ -2535,10 +2821,16 @@ void Runtime::toolsTick() {
                         // Configure against the gesture baseline: the world pose
                         // updates before the client acknowledges its new pixels.
                         // Feeding those pending pixels back cancels the resize.
-                        auto width = std::clamp(double(next.width / dragStart.scale.x * dragPixelWidth), 160.,
-                                                monitor->m_size.x),
-                             height = std::clamp(double(next.height / dragStart.scale.y * dragPixelHeight), 100.,
-                                                 monitor->m_size.y);
+                        auto width = interaction::resizeExtent(double(next.width / dragStart.scale.x * dragPixelWidth),
+                                                               160., monitor->m_size.x),
+                             height = interaction::resizeExtent(
+                                 double(next.height / dragStart.scale.y * dragPixelHeight), 100., monitor->m_size.y);
+                        if (auto content = layout.contentFor(e->instance, world.get())) {
+                            auto sizing = *content;
+                            sizing["worldSize"] = {next.width, next.height};
+                            sizing["logicalSize"] = {int(width), int(height)};
+                            layout.setContent(e->instance, world.get(), sizing);
+                        }
                         if (std::abs(box.w - width) > 1 || std::abs(box.h - height) > 1) {
                             Fullscreen::controller()->setFullscreenMode(w, Fullscreen::FSMODE_NONE,
                                                                         Fullscreen::FSMODE_NONE);
@@ -2637,7 +2929,7 @@ void Runtime::toolsTick() {
             } else
                 selectedTransform = objectTransform(editor, *world, editor.selected);
         }
-        for (auto &h : interaction::gizmo(selectedTransform.position, editor.submode())) {
+        for (auto &h : editor.handles(selectedTransform.position, selectedTransform.rotation)) {
             Vec3 color = h.axis == 0   ? Vec3{1, .2f, .2f}
                          : h.axis == 1 ? Vec3{.2f, 1, .3f}
                          : h.axis == 2 ? Vec3{.2f, .5f, 1}
@@ -2744,6 +3036,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             throw ipc::Error(-32602, "unexpected params");
         auto response = Json{{"config", input.config}, {"path", inputFile.path.string()},
                              {"steals", steals(input.config)}, {"conflicts", interaction::inputConflicts(input.config)}};
+        if (!ipc::protocol::atLeast(protocol, "0.15"))
+            response = interaction::beforePlacementInput(response);
         return ipc::protocol::atLeast(protocol, "0.9") ? response : interaction::legacyInputNames(response);
     }
     if (method == "overlay.style") {
@@ -2765,12 +3059,18 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                     if(actions.contains("record.toggle")) throw std::runtime_error("record.toggle requires IPC 0.12");
                     if(input.config["modes"].contains(mode)) actions["record.toggle"]=input.config["modes"][mode]["record.toggle"];
                 }
+            if (!ipc::protocol::atLeast(protocol, "0.15") && requested.contains("modes") &&
+                requested["modes"].contains("world"))
+                for (auto key : {"tool5", "carry.facing", "content.scale", "window.reset", "alternate"})
+                    requested["modes"]["world"][key] = input.config["modes"]["world"][key];
             next = interaction::validateInput(requested);
         } catch (const std::exception &e) {
             throw ipc::Error(-32602, e.what());
         }
         if (method == "input.preview") {
             auto response = Json{{"config", next}, {"steals", steals(next)}, {"conflicts", interaction::inputConflicts(next)}};
+            if (!ipc::protocol::atLeast(protocol, "0.15"))
+                response = interaction::beforePlacementInput(response);
             return ipc::protocol::atLeast(protocol, "0.9") ? response : interaction::legacyInputNames(response);
         }
         if (!interaction::inputConflicts(next).empty())
@@ -2791,6 +3091,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             !control.uiVisible() || !directorSurface())
             throw ipc::Error(-32002, "capture requires the active verified Director lease");
         auto mode = params.at("mode").get<std::string>(), name = params.at("action").get<std::string>();
+        if (!ipc::protocol::atLeast(protocol, "0.15") && name == "wheel")
+            name = "cycle";
         if (!ipc::protocol::atLeast(protocol, "0.9") && name == "tool5")
             name = "hud.cycle";
         if (!input.config["modes"].contains(mode) || !input.config["modes"][mode].contains(name) ||
@@ -2842,6 +3144,9 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
         auto placements = layout.placements;
+        if (!ipc::protocol::atLeast(protocol, "0.15"))
+            for (auto &v : placements)
+                v.erase("content");
         if (!ipc::protocol::atLeast(protocol, "0.5"))
             std::erase_if(placements.get_ref<Json::array_t &>(), [](auto &p) { return p.contains("pose"); });
         return Json{{"placements", placements}};
@@ -3344,6 +3649,9 @@ class Pass final : public IPassElement {
                 return;
             }
             auto surfaces = runtime->capture.visible();
+            if (runtime->editor.slot == 5 && !runtime->freeCursor)
+                if (auto preview = runtime->placementPreview())
+                    surfaces.push_back(*preview);
             if (runtime->fullscreen.phase == 1 || runtime->fullscreen.phase == 3) {
                 auto fs = runtime->capture.find(runtime->fullscreen.id);
                 if (fs) {
@@ -3840,6 +4148,19 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     }
                     return;
                 }
+                // Escape without an application focus is always an adventure
+                // escape, even on another monitor. Balanced before keybind dispatch.
+                if (bindingScoped && key == "Escape" && !g_pSeatManager->m_state.keyboardFocus) {
+                    info.cancelled = true;
+                    if (down && !runtime->swallowedKeys.contains(event.keycode)) {
+                        runtime->swallowedKeys.insert(event.keycode);
+                        runtime->deferInput([] {
+                            runtime->cursorReturn = {};
+                            runtime->leaveInteraction();
+                        });
+                    }
+                    return;
+                }
                 if (runtime->layerCursor) {
                     runtime->session.event({{"type","key"},{"key",key},{"mods",runtime->modifiers},{"down",down},{"value",0},{"mode","cursor"}}, true);
                     auto target = g_pSeatManager->m_state.keyboardFocus.lock();
@@ -4100,17 +4421,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 info.cancelled = true;
                 runtime->deferInput([actions, event] {
                     for (auto a : actions) {
-                        if (a.name == "wheel") {
-                            if (runtime->zoomHeld) {
-                                runtime->zoom = std::clamp(runtime->zoom * std::pow(1.12f, a.value), 1.f, 20.f);
-                            } else if (runtime->editor.slot != 1) {
-                                runtime->editor.wheel(a.value > 0 ? 1 : -1);
-                                runtime->editor.activeHandle = -1;
-                                runtime->publish();
-                            } else
-                                runtime->axis(event);
-                        } else
-                            runtime->action(a);
+                        runtime->action(a);
                     }
                 });
                 return;
@@ -4161,6 +4472,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         }, nullptr);
     g_pEventLoopManager->addTimer(runtime->offloadTimer);
     runtime->publish();
+#ifndef HYPRUNE_LIVE_BUILD
+    runtime->deferInput([] { runtime->readyNotice(); });
+#endif
     return {"hyprune-core", "World-driven desktop runtime", "Hyprune contributors", "0.3.0"};
 }
 APICALL EXPORT void PLUGIN_EXIT() {

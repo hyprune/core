@@ -2,6 +2,14 @@
 void Runtime::toggleFreeCursor() {
     if (!active || loading) return;
     if (renderDepth) throw std::runtime_error("free cursor transition inside render pass");
+    // Use/focus exits are one-way back to adventure control. Never park their
+    // return target in the free-cursor state (the old two-state trap).
+    if (!layerCursor && inputMode() != "world") {
+        leaveInteraction();
+        if (handover.phase == 1) { camera = handover.before; handover = {}; }
+        cursorReturn = {};
+        return;
+    }
     if (layerCursor) {
         auto saved = cursorReturn;
         for (auto held : freeNativeButtons) {

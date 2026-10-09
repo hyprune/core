@@ -1,5 +1,6 @@
-#include "interaction/Config.hpp"
 #include "hud/Telemetry.hpp"
+#include "interaction/Config.hpp"
+#include "interaction/Content.hpp"
 #include "interaction/InputFile.hpp"
 #include "interaction/Resize.hpp"
 #include "interaction/Tools.hpp"
@@ -23,7 +24,7 @@ int main() {
     assert(!withoutRecordingAction(inputDefaults())["modes"]["world"].contains("exit"));
     Input hudInput;
     auto cycle = hudInput.event("world", "5", 0, true, 0);
-    assert(cycle.size() == 1 && cycle[0].name == "hud.cycle" && cycle[0].edge);
+    assert(cycle.size() == 1 && cycle[0].name == "tool5" && cycle[0].edge);
     auto repeat = hudInput.event("world", "5", 0, true, 10);
     assert(repeat.empty() || !repeat[0].edge);
     hudInput.event("world", "5", 0, false, 20);
@@ -32,6 +33,13 @@ int main() {
     auto legacyCycle = legacyInputNames(inputDefaults());
     assert(legacyCycle["modes"]["world"].contains("tool5"));
     assert(validateInput(legacyCycle) == validateInput(inputDefaults()));
+    auto migration = inputDefaults();
+    auto &oldWorld = migration["modes"]["world"];
+    oldWorld.erase("tool5");
+    oldWorld["hud.cycle"] = {"5"};
+    oldWorld.erase("content.scale");
+    oldWorld["rotate"] = {"Super+Shift+Wheel"};
+    assert(validateInput(migration) == validateInput(inputDefaults()));
     world::World testWorld;
     testWorld.id = "test"; testWorld.name = "Test world";
     testWorld.manifest = {{"zones", {{{"id", "home"}, {"name", "Room"},
@@ -44,6 +52,35 @@ int main() {
     assert(resizeExtent(200, 160, 80) == 80 && resizeExtent(150, 100, 60) == 60);
     assert(resizeExtent(200, 160, 0) == 1);
 
+    assert((contentSize(640, 480, 1, 1920, 1080) == std::array<int, 2>{571, 429}));
+    assert((contentSize(640, 480, -4, 640, 480) == std::array<int, 2>{640, 480}));
+    assert((contentSize(320, 200, 4, 160, 100) == std::array<int, 2>{160, 100}));
+    Input slots;
+    assert(slots.event("world", "MMB", 0, true, 1)[0].name == "alternate");
+    assert(!slots.event("world", "MMB", 0, false, 2)[0].pressed);
+    assert(slots.event("world", "LMB", Shift, true, 3).empty());
+    assert(slots.event("world", "WheelUp", Super | Shift, true, 4, 1)[0].name == "content.scale");
+    assert(slots.event("world", "LMB", Super, true, 5)[0].name == "carry");
+    slots.event("world", "LMB", 0, false, 6);
+    assert(slots.event("world", "r", Super, true, 6, 0, true)[0].name == "carry.facing");
+    slots.event("world", "r", 0, false, 7);
+    auto rebound = slots.config;
+    rebound["modes"]["world"]["primary"] = {"Super+MMB"};
+    slots.apply(rebound);
+    assert(slots.event("world", "MMB", Super, true, 7).empty());
+    rebound["modes"]["world"]["primary"] = {"Wheel"};
+    rebound["modes"]["world"]["cycle"] = Json::array();
+    rebound["modes"]["world"]["carry.facing"] = {"Super+r"};
+    slots.apply(rebound);
+    auto pulse = slots.event("world", "WheelUp", 0, true, 8, 1);
+    assert(pulse.size() == 2 && pulse[0].pressed && !pulse[1].pressed && pulse[0].name == "primary");
+    assert(slots.event("world", "r", Super, true, 9, 0, true)[0].name == "carry.facing");
+    interaction::Tools definitions;
+    assert(definitions.definitions().size() == 5);
+    definitions.slot = 2;
+    assert(definitions.slotAction("alternate").empty());
+    definitions.slot = 5;
+    assert(definitions.slotAction("alternate") == "placement.pocket");
     auto context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     xkb_rule_names names{};
     names.layout = "us";
@@ -257,7 +294,7 @@ int main() {
     assert(multi.event("world", "Return", Super, true, 2001).empty());
     for (auto key : {"WheelUp", "WheelDown"}) {
         Input i;
-        assert(i.event("world", key, Super | Shift, true, 0, 1)[0].name == "rotate");
+        assert(i.event("world", key, Super | Ctrl, true, 0, 1)[0].name == "rotate");
         assert(i.event("world", key, Super, true, 0, 1)[0].name == "distance");
     }
     next = defaults;
@@ -320,6 +357,11 @@ int main() {
         tools.point("org.test.world", "home", {float(i), 0, -2});
         auto lines = pathLines(tools.paths.back());
         assert(!lines.empty());
+        auto count = tools.paths.back()["points"].size();
+        tools.removePoint();
+        assert(tools.paths.back()["points"].size() == count - 1);
+        tools.toggleClosed();
+        assert(tools.paths.back()["closed"] == (tools.pathMode >= 3));
         tools.finishPath();
         tools.wheel(1);
     }

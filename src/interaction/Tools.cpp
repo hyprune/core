@@ -92,6 +92,59 @@ std::vector<Line> pathLines(const Json &p) {
     }
     return out;
 }
+Json Tools::definitions() const {
+    auto binding = [](const char *action, const char *label) { return Json{{"action", action}, {"label", label}}; };
+    auto def = [&](int n, const char *name, Json primary, Json secondary, Json alternate, Json cycle) {
+        return Json{
+            {"slot", n},
+            {"name", name},
+            {"slots", {{"primary", primary}, {"secondary", secondary}, {"alternate", alternate}, {"cycle", cycle}}}};
+    };
+    return Json::array(
+        {def(1, "Normal", binding("client.primary", "Click / interact"), binding("client.secondary", "Right-click"),
+             binding("client.alternate", "Middle-click"), binding("client.scroll", "Scroll")),
+         def(2, "Window",
+             binding(windowMode ? "window.lock" : "window.mount", windowMode ? "Lock / unlock" : "Tag / mount"),
+             binding("window.lock", "Lock / unlock"), nullptr, binding("tool.cycle", "Place / lock mode")),
+         def(3, "Path", binding("path.add", "Add point"), binding("path.remove", "Remove point"),
+             binding("path.closed", pathMode >= 3 ? "Open path" : "Close path"), binding("tool.cycle", "Segment type")),
+         def(4, "Position", binding("gizmo.drag", "Select / drag"),
+             binding("gizmo.space", localAxes ? "Use world axes" : "Use local axes"),
+             binding("gizmo.snap", snap ? "Disable snapping" : "Enable snapping"),
+             binding("tool.cycle", "Move / rotate / scale")),
+         def(5, "Placement", binding("placement.ahead", "Place ahead"),
+             binding("placement.surface", "Place on surface"), binding("placement.pocket", "Pocket window"),
+             binding("placement.cycle", "Choose pocketed window"))});
+}
+Json Tools::slots() const {
+    return definitions().at(std::clamp(slot, 1, 5) - 1).at("slots");
+}
+std::string Tools::slotAction(const std::string &name) const {
+    auto value = slots().value(name, Json(nullptr));
+    return value.is_object() ? value.at("action").get<std::string>() : "";
+}
+void Tools::removePoint() {
+    for (auto &path : paths)
+        if (path["id"] == activePath && !path["points"].empty()) {
+            path["points"].erase(path["points"].end() - 1);
+            break;
+        }
+}
+void Tools::toggleClosed() {
+    pathMode = (pathMode + 3) % 6;
+    for (auto &path : paths)
+        if (path["id"] == activePath)
+            path["closed"] = pathMode >= 3;
+}
+std::vector<Handle> Tools::handles(Vec3 center, const std::array<float, 4> &rotation) const {
+    auto result = gizmo(center, submode());
+    if (localAxes)
+        for (auto &handle : result) {
+            handle.start = center + rotate(rotation, handle.start - center);
+            handle.end = center + rotate(rotation, handle.end - center);
+        }
+    return result;
+}
 std::string Tools::submode() const {
     if (slot == 2)
         return windowMode ? "lock" : "place";
@@ -99,14 +152,16 @@ std::string Tools::submode() const {
         return std::string(pathMode >= 3 ? "closed " : "open ") + std::array{"line", "curve", "arc"}[pathMode % 3];
     if (slot == 4)
         return std::array{"move", "rotate", "scale"}[positionMode];
-    return slot == 1 ? "normal" : "reserved";
+    return slot == 1 ? "normal" : "placement";
 }
 void Tools::wheel(int steps) {
     auto cycle = [&](int &v, int n) { v = (v + steps % n + n) % n; };
     if (slot == 2)
         cycle(windowMode, 2);
-    if (slot == 3)
-        cycle(pathMode, 6);
+    if (slot == 3) {
+        int closed = pathMode / 3;
+        pathMode = (pathMode % 3 + steps % 3 + 3) % 3 + closed * 3;
+    }
     if (slot == 4)
         cycle(positionMode, 3);
 }

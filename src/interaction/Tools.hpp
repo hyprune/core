@@ -27,6 +27,16 @@ class Tools {
     std::string selected, kind, activePath;
     int activeHandle = -1;
     Json paths = Json::array(), objects = Json::array(), locks = Json::array();
+    bool localAxes = false, snap = false;
+    // Declarative slot dispatch: adapters resolve actions, never physical buttons.
+    // Future trusted extensions can register definitions and action handlers at
+    // this boundary without introducing another mouse/key routing path.
+    Json definitions() const;
+    Json slots() const;
+    std::string slotAction(const std::string &) const;
+    void removePoint();
+    void toggleClosed();
+    std::vector<Handle> handles(Vec3 center, const std::array<float, 4> &rotation) const;
     std::string submode() const;
     void wheel(int);
     void point(const std::string &world, const std::string &area, Vec3);

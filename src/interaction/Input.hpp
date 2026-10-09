@@ -21,6 +21,23 @@ Json inputDefaults();
 Json validateInput(const Json &);
 // Project canonical action names into frozen pre-0.9 responses (including capture/conflict metadata).
 Json legacyInputNames(Json);
+inline Json beforePlacementInput(Json j) {
+    if (j.is_object()) {
+        if (j.contains("cycle")) {
+            j["wheel"] = j["cycle"];
+            j.erase("cycle");
+        }
+        for (auto key : {"tool5", "carry.facing", "content.scale", "window.reset", "alternate"})
+            j.erase(key);
+        for (auto &v : j)
+            v = beforePlacementInput(std::move(v));
+    } else if (j.is_array())
+        for (auto &v : j)
+            v = beforePlacementInput(std::move(v));
+    if (j == "cycle")
+        j = "wheel";
+    return j;
+}
 inline Json withoutRecordingAction(Json j) {
     if (j.is_object()) {
         j.erase("record.toggle");

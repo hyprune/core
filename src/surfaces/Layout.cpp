@@ -187,10 +187,10 @@ const Json *Layout::anchor(const std::string &id, const world::World *w) const {
 }
 const Json *Layout::saved(const Instance &i, const world::World *w) const {
     auto b = binding(i.workspaceId, w);
-    if (!b || !w)
+    if (!w || (!b && i.workspaceId != roomWorkspace))
         return nullptr;
     for (const auto &p : placements)
-        if (p.at("worldId") == w->id && p.at("areaId") == b->at("areaId") && matches(p, i))
+        if (p.at("worldId") == w->id && (!b || p.at("areaId") == b->at("areaId")) && matches(p, i))
             return &p;
     return nullptr;
 }
@@ -217,8 +217,9 @@ void Layout::restore(const Json &data) {
                  homes.insert(v["worldId"].get<std::string>() + ":" + v["areaId"].get<std::string>()).second,
              -32602, "invalid saved binding");
     for (auto &v : p)
-        need((v.size() == 4 || v.size() == 6) && v.at("worldId").is_string() && v.at("areaId").is_string() &&
-                 v.at("anchorId").is_string() && v.at("rule").size() == 2 && v["rule"]["appClass"].is_string() &&
+        need((v.size() == 4 || v.size() == 6 || (v.contains("content") && (v.size() == 5 || v.size() == 7))) &&
+                 v.at("worldId").is_string() && v.at("areaId").is_string() && v.at("anchorId").is_string() &&
+                 v.at("rule").size() == 2 && v["rule"]["appClass"].is_string() &&
                  !v["rule"]["appClass"].get<std::string>().empty() && v["rule"]["title"].is_string(),
              -32602, "invalid saved placement");
     for (auto &v : p)
@@ -240,6 +241,17 @@ void Layout::restore(const Json &data) {
                      size[0].get<float>() <= 12 && size[1].get<float>() <= 8,
                  -32602, "invalid user mount pose/size");
         }
+    for (auto &v : p)
+        if (v.contains("content")) {
+            auto &c = v["content"];
+            need(c.is_object() && c.size() == 3, -32602, "invalid content sizing");
+            for (auto key : {"logicalSize", "baseSize", "worldSize"}) {
+                need(c.contains(key) && c[key].is_array() && c[key].size() == 2, -32602, "invalid content dimensions");
+                for (auto &n : c[key])
+                    need(n.is_number() && std::isfinite(n.get<double>()) && n > 0 && n <= 32768, -32602,
+                         "invalid content extent");
+            }
+        }
     bindings = b;
     placements = p;
     temporaryAnchors.clear();
@@ -253,7 +265,8 @@ void Layout::pull(const Instance &i, const world::World *w) {
     temporaryAnchors.erase(i.id);
 }
 bool Layout::pulled(const Instance &i, const world::World *w) const {
-    if (freePoses.contains(i.id) || carried == i.id || recalled.contains(i.id) || saved(i, w))
+    if (unplaced.contains(i.id) || freePoses.contains(i.id) || carried == i.id || recalled.contains(i.id) ||
+        saved(i, w))
         return true;
     if (!w)
         if (auto b = binding(i.workspaceId, nullptr))
@@ -264,6 +277,7 @@ bool Layout::pulled(const Instance &i, const world::World *w) const {
 }
 std::string Layout::place(const Instance &i, const std::string &requested, const world::World *w) {
     freePoses.erase(i.id);
+    occupiedPoses.erase(i.id);
     auto b = binding(i.workspaceId, w);
     need(b, -32003, "window has no area home");
     const Json *chosen = nullptr;
@@ -294,7 +308,11 @@ std::string Layout::place(const Instance &i, const std::string &requested, const
 }
 void Layout::release(const Instance &i, const world::World *w) {
     freePoses.erase(i.id);
+    occupiedPoses.erase(i.id);
     auto b = binding(i.workspaceId, w);
+    unplaced.erase(i.id);
+    content.erase(i.id);
+    std::erase(pocketOrder, i.id);
     if (b)
         std::erase_if(placements.get_ref<Json::array_t &>(), [&](auto &p) {
             return p.at("worldId") == w->id && p.at("areaId") == b->at("areaId") && matches(p, i);
@@ -306,15 +324,67 @@ void Layout::release(const Instance &i, const world::World *w) {
 }
 void Layout::recall(std::span<const Instance> live) {
     freePoses.clear();
+    occupiedPoses.clear();
+    unplaced.clear();
     int n = 0;
     for (auto &i : live)
         recalled[i.id] = n++;
     carried.clear();
 }
-void Layout::spawn(const Instance &i, const world::World *w, const sim::Camera &camera, Surface s, float aspect) {
+void Layout::stash(const Instance &i, Surface s) {
+    // Durable placement remains remembered, but pocket state suppresses drawing.
+    (void)s;
+    unplaced.insert(i.id);
+    std::erase(pocketOrder, i.id);
+    pocketOrder.insert(pocketOrder.begin(), i.id);
+    freePoses.erase(i.id);
+    occupiedPoses.erase(i.id);
+    if (carried == i.id)
+        carried.clear();
+}
+bool Layout::vacant(const Surface &candidate, const std::string &except) const {
+    for (const auto *poses : {&freePoses, &occupiedPoses})
+        for (const auto &[id, placed] : *poses) {
+            if (poses == &occupiedPoses && freePoses.contains(id))
+                continue;
+            if (id == except || unplaced.contains(id))
+                continue;
+            auto d = placed.center - candidate.center;
+            // Conservative OBB projection, with enough depth clearance for borders.
+            bool separated = false;
+            for (auto axis : {candidate.right(), candidate.up(), candidate.normal(), placed.right(), placed.up(),
+                              placed.normal()}) {
+                auto extent = [&](const Surface &s) {
+                    return std::abs(dot(s.right(), axis)) * s.width * .5f +
+                           std::abs(dot(s.up(), axis)) * s.height * .5f + std::abs(dot(s.normal(), axis)) * .15f;
+                };
+                if (std::abs(dot(d, axis)) > extent(candidate) + extent(placed) + .08f) {
+                    separated = true;
+                    break;
+                }
+            }
+            if (!separated)
+                return false;
+        }
+    return true;
+}
+const Json *Layout::contentFor(const Instance &i, const world::World *w) const {
+    if (auto it = content.find(i.id); it != content.end())
+        return &it->second;
+    if (auto p = saved(i, w); p && p->contains("content"))
+        return &p->at("content");
+    return nullptr;
+}
+void Layout::setContent(const Instance &i, const world::World *w, const Json &value) {
+    content[i.id] = value;
+    for (auto &p : placements)
+        if (&p == saved(i, w))
+            p["content"] = value;
+}
+bool Layout::spawn(const Instance &i, const world::World *w, const sim::Camera &camera, Surface s, float aspect) {
     auto desired = s;
     if (!w || hasPlacement(i, w))
-        return;
+        return true;
     const Json *home = nullptr;
     if (auto b = binding(i.workspaceId, w))
         for (auto &a : w->areas)
@@ -340,13 +410,14 @@ void Layout::spawn(const Instance &i, const world::World *w, const sim::Camera &
                 auto lo = vec(zone.at("bounds").at("min")), hi = vec(zone.at("bounds").at("max"));
                 float margin = zone.at("clearance");
                 s = desired;
-                for (int attempt = 0; attempt < 14; ++attempt) {
+                for (int attempt = 0; attempt < 1; ++attempt) {
                     for (int fan = 0; fan < 49; ++fan) {
                         auto candidate = s;
                         // Small screen-plane offsets fan arrivals without changing the
                         // collision-safe depth chosen by the spawn recovery.
                         int column = fan == 0 ? 0 : ((fan + 1) / 2) * (fan % 2 ? 1 : -1);
-                        candidate.center += candidate.right() * (column * .28f) + candidate.up() * ((fan / 7) * .18f);
+                        candidate.center += candidate.right() * (column * (s.width + .15f)) +
+                                            candidate.up() * ((fan / 7) * (s.height + .15f));
                         auto r = candidate.right(), u = candidate.up(), n = candidate.normal();
                         Vec3 half;
                         half.x = std::abs(r.x) * candidate.width * .5f + std::abs(u.x) * candidate.height * .5f +
@@ -359,11 +430,7 @@ void Layout::spawn(const Instance &i, const world::World *w, const sim::Camera &
                             candidate.center = {std::clamp(candidate.center.x, lo.x + half.x, hi.x - half.x),
                                                 std::clamp(candidate.center.y, lo.y + half.y, hi.y - half.y),
                                                 std::clamp(candidate.center.z, lo.z + half.z, hi.z - half.z)};
-                            bool occupied = false;
-                            for (const auto &[id, placed] : freePoses)
-                                if (id != i.id && length(placed.center - candidate.center) < .18f)
-                                    occupied = true;
-                            if (occupied)
+                            if (!vacant(candidate, i.id))
                                 continue;
                             if (pushOut(candidate, w->collision) && candidate.center.x >= lo.x + half.x &&
                                 candidate.center.x <= hi.x - half.x && candidate.center.y >= lo.y + half.y &&
@@ -380,41 +447,48 @@ void Layout::spawn(const Instance &i, const world::World *w, const sim::Camera &
                                     std::abs(dot(delta, up)) > depth * tangent) {
                                     continue;
                                 }
-                                for (const auto &[id, placed] : freePoses)
-                                    if (id != i.id && length(placed.center - candidate.center) < .18f)
-                                        occupied = true;
-                                if (occupied)
+                                if (!vacant(candidate, i.id))
                                     continue;
                                 freePoses[i.id] = candidate;
                                 spawnAreas[i.id] = home->at("id");
-                                return;
+                                unplaced.erase(i.id);
+                                return true;
                             }
                         }
                     }
-                    s.width *= .8f;
-                    s.height *= .8f;
                 }
             }
         spawnAreas[i.id] = home->at("id");
-        events.push_back({"runtime.notice",
-                          {{"level", "warning"},
-                           {"code", "placement.recalled"},
-                           {"message", "No visible safe home free zone; spawned " + i.title + " in front of player"}}});
     }
-    s = desired;
-    if (overlaps(s, w->collision)) {
-        auto fallback = carryPlane(camera, s.width, s.height, w->collision);
-        fallback.id = s.id;
-        s = fallback;
+    // Bounded fan in the camera plane. Never shrink a client into a postage stamp
+    // or stack a fallback over another window when the home is full.
+    for (int fan = 0; fan < 9; ++fan) {
+        s = desired;
+        int column = fan == 0 ? 0 : ((fan + 1) / 2) * (fan % 2 ? 1 : -1);
+        s.center += s.right() * (column * (s.width + .15f));
+        auto delta = s.center - camera.position;
+        float depth = dot(delta, camera.forward());
+        if (depth <= .05f ||
+            std::abs(dot(delta, s.right())) > depth * std::tan(camera.fov * float(M_PI) / 360.f) * aspect)
+            continue;
+        if (!overlaps(s, w->collision) && vacant(s, i.id)) {
+            freePoses[i.id] = s;
+            unplaced.erase(i.id);
+            return true;
+        }
     }
-    freePoses[i.id] = s;
+    freePoses.erase(i.id);
+    unplaced.insert(i.id);
+    return false;
 }
 std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, const sim::Camera &camera, int pw,
                                       int ph) {
+    if (unplaced.contains(i.id))
+        return {};
     auto b = binding(i.workspaceId, w);
     if (!b && recalled.contains(i.id))
         b = binding(i.workspaceId, nullptr);
-    if (!b && !freePoses.contains(i.id))
+    if (!b && !freePoses.contains(i.id) && !saved(i, w))
         return {};
     Surface s;
     s.id = i.id;
@@ -426,7 +500,11 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
     if (freePoses.contains(i.id)) {
         s = freePoses.at(i.id);
         auto old = s;
-        s.logicalSize(pw, ph, windowScale);
+        if (auto c = contentFor(i, w)) {
+            s.width = (*c)["worldSize"][0];
+            s.height = (*c)["worldSize"][1];
+        } else
+            s.logicalSize(pw, ph, windowScale);
         if ((s.width != old.width || s.height != old.height) && !pushOut(s, w->collision))
             return {}; // Never publish a newly resized quad through geometry.
         freePoses[i.id] = s;
@@ -436,7 +514,11 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
     else if (p && p->contains("pose")) {
         s.center = vec(p->at("pose").at("position"));
         s.rotation = p->at("pose").at("rotation").get<std::array<float, 4>>();
-        s.logicalSize(pw, ph, windowScale);
+        if (auto c = contentFor(i, w)) {
+            s.width = (*c)["worldSize"][0];
+            s.height = (*c)["worldSize"][1];
+        } else
+            s.logicalSize(pw, ph, windowScale);
         auto found = recovered.find(i.id);
         if (found != recovered.end() && found->second.world == w && found->second.pose == p->at("pose") &&
             found->second.width == s.width && found->second.height == s.height) {
@@ -563,9 +645,10 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
     s.title = i.title;
     s.pixelWidth = pw;
     s.pixelHeight = ph;
+    occupiedPoses[i.id] = s;
     instances.push_back({{"surfaceId", i.id},
                          {"workspaceId", i.workspaceId},
-                         {"areaId", b ? b->at("areaId") : Json(spawnAreas.at(i.id))},
+                         {"areaId", b ? b->at("areaId") : Json(spawnAreas.contains(i.id) ? spawnAreas.at(i.id) : "")},
                          {"anchorId", anchorId},
                          {"status", carried == i.id           ? "carried"
                                     : recalled.contains(i.id) ? "recalled"
@@ -573,20 +656,27 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
     return s;
 }
 void Layout::mount(const Instance &i, const world::World *w, Surface s) {
+    s.rotation = quaternionProduct(s.rotation, {0, std::sin(s.yaw / 2), 0, std::cos(s.yaw / 2)});
+    s.yaw = 0;
     need(w && !overlaps(s, w->collision), -32005, "mount intersects geometry");
     auto b = binding(i.workspaceId, w);
-    need(b, -32003, "window has no area home");
-    std::erase_if(placements.get_ref<Json::array_t &>(), [&](auto &p) {
-        return p.at("worldId") == w->id && p.at("areaId") == b->at("areaId") && matches(p, i);
-    });
+    Json area = b ? b->at("areaId") : Json(spawnAreas.contains(i.id) ? spawnAreas.at(i.id) : "");
+    if (area == "" && !w->areas.empty())
+        area = w->areas.front().at("id");
+    std::erase_if(placements.get_ref<Json::array_t &>(),
+                  [&](auto &p) { return p.at("worldId") == w->id && p.at("areaId") == area && matches(p, i); });
     need(placements.size() < 128, -32008, "placement budget");
     placements.push_back({{"worldId", w->id},
-                          {"areaId", b->at("areaId")},
+                          {"areaId", area},
                           {"rule", rule(i)},
                           {"anchorId", ""},
                           {"pose", {{"position", {s.center.x, s.center.y, s.center.z}}, {"rotation", s.rotation}}},
                           {"size", {s.width, s.height}}});
-    freePoses.erase(i.id);
+    if (content.contains(i.id))
+        placements.back()["content"] = content.at(i.id);
+    unplaced.erase(i.id);
+    freePoses[i.id] = s;
+    spawnAreas[i.id] = area;
     recalled.erase(i.id);
     temporaryAnchors.erase(i.id);
     if (carried == i.id)

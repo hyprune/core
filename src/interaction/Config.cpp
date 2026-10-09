@@ -5,42 +5,44 @@
 namespace hyprune::interaction {
 using Json = world::Json;
 Json defaultConfig() {
-    return {{"input",
-             {{"typing_button", 275},
-              {"carry_button", 272},
-              {"resize_button", 273},
-              {"roll_button", 274},
-              {"typing_cursor", true},
-              {"bindings",
-               {{"forward", "w"},
-                {"back", "s"},
-                {"left", "a"},
-                {"right", "d"},
-                {"jump", "space"},
-                {"down", "Control_L"},
-                {"focus", "f"},
-                {"noclip", "v"},
-                {"fly", "F4"},
-                {"zoom", "c"}}}}},
-            {"movement", {{"climb_mode", "grab"}}},
-            {"player",
-             {{"walk_speed", 3.5},
-              {"fly_speed", 5.0},
-              {"run_multiplier", 1.8},
-              {"jump_speed", 5.0},
-              {"look_sensitivity", .0025},
-              {"look_inertia", .03},
-              {"move_inertia", .05},
-              {"step_height", .35},
-              {"respawn_below", 30.0}}},
-            {"windows",
-             {{"world_workspace", 8},
-              {"spawn_distance", 5.0},
-              {"scale", .002},
-              {"wheel_factor", 1.06},
-              {"transition_seconds", .35}}},
-            {"tools", {{"enabled", true}, {"slots", Json::array({"pointer", "mount", "path", "path", "path"})}}},
-            {"graphics", render::graphicsDefaults()}};
+    return {
+        {"input",
+         {{"typing_button", 275},
+          {"carry_button", 272},
+          {"resize_button", 273},
+          {"roll_button", 274},
+          {"typing_cursor", true},
+          {"bindings",
+           {{"forward", "w"},
+            {"back", "s"},
+            {"left", "a"},
+            {"right", "d"},
+            {"jump", "space"},
+            {"down", "Control_L"},
+            {"focus", "f"},
+            {"noclip", "v"},
+            {"fly", "F4"},
+            {"zoom", "c"}}}}},
+        {"movement", {{"climb_mode", "grab"}}},
+        {"player",
+         {{"walk_speed", 3.5},
+          {"fly_speed", 5.0},
+          {"run_multiplier", 1.8},
+          {"jump_speed", 5.0},
+          {"look_sensitivity", .0025},
+          {"look_inertia", .03},
+          {"move_inertia", .05},
+          {"step_height", .35},
+          {"respawn_below", 30.0}}},
+        {"windows",
+         {{"world_workspace", 8},
+          {"carry_face_player", true},
+          {"spawn_distance", 5.0},
+          {"scale", .002},
+          {"wheel_factor", 1.06},
+          {"transition_seconds", .35}}},
+        {"tools", {{"enabled", true}, {"slots", Json::array({"pointer", "mount", "path", "position", "placement"})}}},
+        {"graphics", render::graphicsDefaults()}};
 }
 Json configPatch(const Json &current, const Json &patch) {
     if (!patch.is_object())
@@ -183,8 +185,8 @@ Json configPatch(const Json &current, const Json &patch) {
                 if (!v.is_array() || v.size() != 5)
                     throw std::runtime_error("tools.slots needs five entries");
                 for (auto &s : v)
-                    if (s != "pointer" && s != "mount" && s != "path")
-                        throw std::runtime_error("tool must be pointer, mount or path");
+                    if (s != "pointer" && s != "mount" && s != "path" && s != "position" && s != "placement")
+                        throw std::runtime_error("unknown tool slot");
             }
             result[section][key] = v;
         }

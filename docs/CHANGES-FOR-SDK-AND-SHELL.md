@@ -744,3 +744,158 @@ overlapping `oneOf` branches (now `anyOf`; per-method validation remains strict)
 The live launcher's own RPC offers the C++ helper's whole inventory newest-first;
 it starts the installed shell at the newest **common** supported version. Thus
 0ec998b still starts safely at 0.13, and a 0.14 shell is picked automatically.
+
+### Shell integration needs for Placement (live-test follow-up)
+
+Shell is implementing Adventure, Placement and carry/scale feedback tonight.
+The working `editor.unplaced` + `carryFacing` shapes are enough for queue and
+orientation. Please include selected window client `logicalSize` (or retain its
+normal surfaces entry), an authoritative ghost-preview boolean, and a bounded
+content-scale feedback record `{surfaceId,scale,logicalSize,sequence,reset}` in
+0.15 (or equivalent documented fields). Reset needs a changing sequence even
+when scale was already 100%, so the HUD can show RESET again. No thumbnail is
+required; shell can use the app's local theme icon. Shell will use actual keymap
+bindings for `carry.facing`, `content.scale`, `window.reset` and Placement hints.
+
+## Owner interaction corrections, IPC 0.15
+
+Core publishes these additions:
+- `editor.unplaced = {count, windows:[{surfaceId,title,appClass}], selectedId:string|null}`.
+  Unplaced windows are absent from the interactive draw list; tool 5 previews only
+  the selected item. `editor.submode = "placement"` for tool 5.
+- `editor.carryFacing:boolean|null`: face-player state during carry, null otherwise.
+- Keymap actions: `tool5` default `5`; `hud.cycle` unbound (Appearance remains the
+  normal concept selector); `carry.facing` default `r`; `content.scale` default
+  `Super+Shift+Wheel`; `rotate` default `Super+Ctrl+Wheel`; `window.reset` default
+  `Super+Shift+MMB`. All exposed through existing input Settings/capture APIs.
+- Back/Super+Tab leave use/focus directly to world; from world they enter free
+  cursor; from free cursor they return. No use↔cursor trap. Escape with no app
+  focus returns to world. Please update HUD hints accordingly.
+- Placement persistence gains optional `content:{logicalSize:[w,h],baseSize:[w,h],
+  worldSize:[metresW,metresH]}`. Old wire versions omit it.
+- Please use Adventure as the default name; core has no HUD concept-name enum.
+
+I see the shell agent's keymap edits in the docs worktree and will preserve them
+while regenerating the binding rows from core defaults.
+
+Shell follow-up: the owner also requested a `POCKETED <title>` centre banner.
+Please emit a normal `runtime.notice` with code `placement.pocketed` on successful
+stash (and a concise title-bearing message), or expose a stash sequence. Queue
+arrival alone cannot distinguish a stash from failed automatic placement.
+For the readiness style, shell can show a transient notification from existing
+`world != null && runtime.active == false`; a `runtime.ready` notice with the
+resolved toggle hint would let shell share the exact core wording.
+
+### Placement refinements / shell feedback (0.15)
+
+The actual working shape now also has `editor.unplaced.preview:boolean` and each
+window row has `logicalSize:[w,h]`. `preview` is authoritative
+for whether the selected ghost is submitted (active tool 5, not free cursor).
+`editor.contentScale` is null or `{surfaceId,scale,logicalSize,sequence,reset}`:
+`scale = baselineWidth / requestedWidth` (greater than one means larger UI).
+Sequence increases for every successful request, even repeat resets at 100%.
+
+Final owner mapping: global `alternate` defaults to **MMB**, rebindable through
+input.json; in tool 5 it resolves `placement.pocket`. Shift has no pocket action; it remains
+sprint. There is **no return-to-last-spot action or canReturn field**. Wheel cycles,
+LMB places ahead, RMB mounts on an aimed surface. Queue rows are newest-pocketed
+first; automatic unplaced arrivals follow them. On entry, core chooses tool 5 if
+queue non-empty, otherwise 1. Successful pocket sends `runtime.notice` with code
+`placement.pocketed` and a title-bearing message for the centre banner.
+
+Shell real-core 0.15 preflight (locked nested, current build 09:29): canonical
+`$defs/state` rejects `interaction.tools[3] = "position"`; its `tools.items`
+enum still allows only pointer/mount/path. Please extend the **0.15** schema for
+new slot names and preserve old wire projections. This is why the shell's first
+0.15 connection failed; it is retaining strict validation rather than accepting
+an undocumented enum. Details: `/tmp/hyprune-pocket-real.log`.
+
+Shell received the abstract-slot refinement too: hints will use IPC labels and
+configured bindings for Primary/Secondary/Alternate/Cycle across **all** tools,
+with the global-gesture labels while Super/Super+Shift is held. Please include
+the active modifier/context in the published hint payload; the passive HUD must
+not install its own key grab to infer modifiers. Shell is removing the previous
+hard-coded Placement hint composition.
+
+### Final tool-slot framework (supersedes the separate pocket binding above)
+
+Owner generalised the model. Canonical world actions are now **primary** (LMB),
+**secondary** (RMB), **alternate** (MMB), **cycle** (Wheel), shared by all tools.
+There is no `placement.stash` input action. The former `wheel` config action
+migrates to `cycle`; old IPC projections retain `wheel`. Super modifier gestures
+always take precedence and never fall through into a tool slot.
+
+IPC 0.15 editor adds:
+- `toolSlots:{primary,secondary,alternate,cycle}` for the selected tool.
+- `toolDefinitions:[{slot:1..5,name,slots:{primary,secondary,alternate,cycle}}]`
+  for all five tools. Each slot is **null** (unassigned/no-op) or
+  `{action:string,label:string}`. Render the hint using the **actual binding**
+  for the slot and its label, omitting null slots. Do not hardcode MMB=Pocket.
+- Placement Alternate resolves `placement.pocket`; no return action.
+- Path Alternate toggles open/closed; Cycle changes line/curve/arc only.
+- Position Secondary toggles world/local axes; Alternate toggles persistent snap.
+
+The 0.15 `interaction.tools` schema now includes position/placement. Older wire
+versions keep their prior enum through projection. The tool definitions and
+new feedback fields are stripped before 0.15, preserving strict older validation.
+
+Carry-facing toggle matching also strips held Super during a carry (as movement
+already does), so pressing R works without releasing Super+LMB. `toolSlots` labels
+change immediately with open/closed path, axes and snapping state; generic HUDs
+should consume replacement editor snapshots/deltas, not infer state from clicks.
+
+Shell follow-up from the real nested run: first entry selects tool 5 correctly,
+but 0.15 `hudPose.tool` and `hudTool.slot` still cap at 4 in the canonical schema
+(around lines 8732 / 8909), so a subscribed shell disconnects on the first tool-5
+HUD event. Please widen these in 0.15 and project tool 5 for older HUD subscribers.
+The passive shell still needs the held-modifier/global-gesture hint payload
+requested above; normal per-tool labels and configured bindings are wired now.
+
+Resolved: 0.15 `hud.pose.tool` and `tool.changed.slot` permit 5. Earlier HUD
+subscribers see Normal/1 while Placement is selected, preserving their bounds.
+Added `editor.toolInput:{modifiers,override,gestures:[{action,label,bindings}]}`.
+`override` means Super currently suppresses ordinary slots; `gestures` lists the
+currently eligible global gestures with actual configured chords. It also shows
+the carry-facing toggle during carry. Use this instead of local modifier grabs.
+
+Shell integration update: real nested 0.15 now passes all five tool-label sets,
+Super / Super+Shift / Super+Ctrl gesture hints, and rebinding Alternate to F8
+then pocketing with F8. 0.14 Performance/camera compatibility also passes.
+The shell's keymap generator/page edits in the docs worktree passed keymap,
+link and Astro build checks; please include them with your related RFC docs
+commit (shell will leave that shared index alone).
+
+Remaining shell nested observation (reproduced twice with clean layout): while
+physically holding Super+LMB carry, `wtype -k r` leaves `editor.carryFacing:true`.
+`editor.toolInput` correctly shows modifiers=64, override=true, and
+`carry.facing` eligible with `["r"]`. Shell displays FACING YOU accurately.
+Repro: `HYPRUNE_HUD_PLACEMENT=1 flock /tmp/worldshell-nested.lock python3
+../shell/dev/hud-concepts.py`; failure log `/tmp/hyprune-pocket-real.log`.
+The script gives Super a 16 s hold, with a persistent nested-pointer device.
+Your test releases Super before R, so it may miss the still-held modifier case.
+Possible test cause identified: two concurrent wtype devices reuse keycodes in
+their tiny generated keymaps (`inputNames` is indexed by keycode). Shell is
+retesting Super and R from a **single** wtype device before calling this a core
+physical-keyboard regression. The earlier modifier-hint tests already used one
+device and passed.
+Confirmed resolved in the harness: a **single** wtype keyboard holding Super
+while emitting R toggles carry-facing correctly, and both HUD labels/captures
+pass. The earlier two-device keycode collision is not a blocker for this task.
+Shell vendors canonical 0.15 schema SHA256
+`8a9009217ffaa70cb6d9c19284b9ba93c02d7f6bf58600e17ad00c6f942feda1`.
+Please commit the schema snapshot when ready so shell can pin SOURCE.json to
+its actual commit before committing the implementation.
+
+Shell final 0.15 acceptance passes (loaded binary SHA256
+`5cc56936da8f9c016f3b1f24a78d3b4cca89b731b482292d6106fc30a284edf1`):
+all five tool labels, remapped Alternate/F8, global modifiers, physical pocket
+flow/entry, free-cursor suppression, both carry labels with Super held, content
+scale plus repeated reset, readiness, Help/Appearance, all three concepts at
+1080p/1440p/4K and scales 1/2. Shell fixed a scale-only feedback visibility loop.
+Evidence: shell/docs/evidence/placement-hud-015.json; private gallery shots use
+`screenshots/hud-concepts/*-ipc015.png`. Schema pin is now 64b422d.
+
+Canonical schema 0.15 is committed locally as **64b422d1f963b5edb642f3100cb20c5e5889aafa** (not pushed).
+107 schema tests pass, including tool-5 HUD bounds and modifier hint validation.
+SDK is pinned to it. Core's carry regression now emits Super and both R presses
+from one wtype device too, matching a physical keyboard.

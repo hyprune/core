@@ -86,6 +86,7 @@ bool sweepSafe(const surfaces::Surface &a, const surfaces::Surface &b, std::span
     return true;
 }
 void Hands::begin(Gesture g, const surfaces::Surface &s, surfaces::Hit h, const sim::Camera &camera) {
+    facePlayer = true;
     grabYaw = camera.yaw;
     gesture = g;
     start = pose = s;
@@ -101,6 +102,20 @@ void Hands::begin(Gesture g, const surfaces::Surface &s, surfaces::Hit h, const 
         reference = s.right() * ((h.u >= .5f ? 1 : -1) * s.width * .5f) +
                     s.up() * ((h.v <= .5f ? 1 : -1) * s.height * .5f) - offset;
 }
+void Hands::facing(bool enabled, const sim::Camera &camera) {
+    // Preserve the material point under the grab as the orientation changes.
+    auto x = dot(offset, start.right()), y = dot(offset, start.up());
+    auto point = pose.center + pose.right() * x + pose.up() * y;
+    if (enabled) {
+        pose.rotation = {0, std::sin(-camera.yaw / 2), 0, std::cos(-camera.yaw / 2)};
+        pose.yaw = 0;
+    }
+    offset = pose.right() * x + pose.up() * y;
+    pose.center = point - offset;
+    start = pose;
+    grabYaw = camera.yaw;
+    facePlayer = enabled;
+}
 void Hands::wheel(float steps) {
     targetDistance = std::clamp(targetDistance * std::pow(1.06f, std::clamp(steps, -2.f, 2.f)), .08f, 100.f);
 }
@@ -110,7 +125,7 @@ bool Hands::update(const sim::Camera &camera, Vec3 ray, float dt, std::span<cons
     auto next = pose;
     if (gesture == Gesture::Carry) {
         distance += (targetDistance - distance) * (1 - std::exp(-dt / .06f));
-        float angle = (grabYaw - camera.yaw) * .5f;
+        float angle = facePlayer ? (grabYaw - camera.yaw) * .5f : 0;
         std::array<float, 4> delta{0, std::sin(angle), 0, std::cos(angle)};
         next.rotation = quaternionProduct(delta, start.rotation);
         next.yaw = 0;

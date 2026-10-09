@@ -1,6 +1,7 @@
 #pragma once
 #include "Surface.hpp"
 #include "world/World.hpp"
+#include <set>
 namespace hyprune::surfaces {
 using Json = world::Json;
 struct Instance {
@@ -11,11 +12,19 @@ struct Instance {
 class Layout {
   public:
     Json bindings = Json::array(), placements = Json::array(), instances = Json::array();
+    int roomWorkspace = 8;
+    std::vector<std::string> pocketOrder;
+    void stash(const Instance &, Surface);
     float windowScale = .002f;
     std::string carried;
-    std::map<std::string, Surface> freePoses;
+    std::map<std::string, Surface> freePoses, occupiedPoses;
     std::map<std::string, std::string> spawnAreas;
-    void spawn(const Instance &, const world::World *, const sim::Camera &, Surface, float aspect = 16.f / 9);
+    std::set<std::string> unplaced;
+    std::map<std::string, Json> content;
+    bool vacant(const Surface &, const std::string &except = "") const;
+    void setContent(const Instance &, const world::World *, const Json &);
+    const Json *contentFor(const Instance &, const world::World *) const;
+    bool spawn(const Instance &, const world::World *, const sim::Camera &, Surface, float aspect = 16.f / 9);
     void mount(const Instance &, const world::World *, Surface);
     void invalidateCollision() { recovered.clear(); }
     Json desktop = nullptr;

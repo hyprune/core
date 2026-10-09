@@ -76,7 +76,8 @@ Json legacyInputNames(Json j) {
             v = legacyInputNames(std::move(v));
     } else if (j.is_object()) {
         if (j.contains("hud.cycle")) {
-            j["tool5"] = std::move(j["hud.cycle"]);
+            if (!j.contains("tool5"))
+                j["tool5"] = std::move(j["hud.cycle"]);
             j.erase("hud.cycle");
         }
         for (auto &v : j)
@@ -90,10 +91,22 @@ Json validateInput(const Json &raw) {
     if (j.is_object() && j.contains("modes") && j["modes"].is_object() &&
         j["modes"].contains("world") && j["modes"]["world"].is_object()) {
         auto &w = j["modes"]["world"];
-        if (w.contains("tool5") && !w.contains("hud.cycle")) {
-            w["hud.cycle"] = std::move(w["tool5"]);
-            w.erase("tool5");
+        if (w.contains("wheel")) {
+            if (!w.contains("cycle"))
+                w["cycle"] = w["wheel"];
+            w.erase("wheel");
         }
+        // Migrate the former factory binding, retaining explicitly customised HUD chords.
+        if (!w.contains("tool5")) {
+            w["tool5"] = Json::array({"5"});
+            if (w.value("hud.cycle", Json::array()) == Json::array({"5"}))
+                w["hud.cycle"] = Json::array();
+        }
+        if (w.value("rotate", Json::array()) == Json::array({"Super+Shift+Wheel"}) && !w.contains("content.scale"))
+            w["rotate"] = Json::array({"Super+Ctrl+Wheel"});
+        for (auto key : {"hud.cycle", "content.scale", "window.reset", "carry.facing", "alternate", "cycle"})
+            if (!w.contains(key))
+                w[key] = inputDefaults()["modes"]["world"][key];
     }
     if (j.is_object() && !j.contains("show_area_markers"))
         j["show_area_markers"] = false;
@@ -212,13 +225,17 @@ std::vector<Action> Input::event(const std::string &mode, const std::string &key
     for (int pass = 0; pass < (gestureMovement && mode == "world" ? 2 : 1); ++pass)
     for (auto &[action, bindings] : config["modes"][mode].items())
         for (auto &binding : bindings) {
+            // Modifier gestures are global and cannot be shadowed by tool slots.
+            if ((action == "primary" || action == "secondary" || action == "alternate" || action == "cycle") &&
+                (mods & Super))
+                continue;
             auto t = parseBinding(binding);
             bool move = action == "forward" || action == "back" || action == "left" || action == "right" ||
                         action == "up" || action == "down" || action == "sprint";
             bool gesturePass = gestureMovement && mode == "world" && pass == 0;
             if (gesturePass && !move)
                 continue;
-            unsigned matchMods = gesturePass ? mods & ~Super : mods;
+            unsigned matchMods = (gesturePass || (gestureMovement && action == "carry.facing" && !(t.mods & Super))) ? mods & ~Super : mods;
             unsigned own = t.key == "Shift_L" || t.key == "Shift_R"       ? Shift
                            : t.key == "Control_L" || t.key == "Control_R" ? Ctrl
                                                                           : 0;
@@ -227,6 +244,10 @@ std::vector<Action> Input::event(const std::string &mode, const std::string &key
                 continue;
             if (!key.starts_with("Wheel") && key != "MouseMove")
                 held[identity] = {action, bindingName(t), now, t.hold, false};
+            // Wheel notches are impulses: a button-like slot still owes its
+            // client/drag handler a release in this same deferred input batch.
+            if (key.starts_with("Wheel") && (action == "primary" || action == "secondary" || action == "alternate"))
+                return {{action, true, value}, {action, false, value, false}};
             return {{action, t.hold ? false : true, value}};
         }
     return {};

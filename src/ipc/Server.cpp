@@ -105,6 +105,23 @@ Json Server::snapshot() const {
 }
 Json Server::visibleState(const Peer &p) const {
     Json state = state_;
+    if (!protocol::atLeast(p.protocol, "0.15")) {
+        if (state.contains("editor")) {
+            for (auto key : {"unplaced", "carryFacing", "contentScale", "toolSlots", "toolDefinitions", "toolInput"})
+                state["editor"].erase(key);
+            if (state["editor"].value("submode", "") == "placement")
+                state["editor"]["submode"] = "reserved";
+        }
+        if (state.contains("interaction") && state["interaction"].contains("tools"))
+            for (auto &v : state["interaction"]["tools"])
+                if (v == "position" || v == "placement")
+                    v = "path";
+        if (state.contains("keymap"))
+            state["keymap"] = interaction::beforePlacementInput(state["keymap"]);
+        if (state.contains("mounts"))
+            for (auto &v : state["mounts"]["placements"])
+                v.erase("content");
+    }
     if (!protocol::atLeast(p.protocol,"0.13") && state.contains("presentation")) {
         auto &view=state["presentation"];
         if (view.contains("profile") && view["profile"].is_object()) view["profile"].erase("outline");
@@ -188,6 +205,17 @@ void Server::notify(const std::string &event, Json params, const std::string &ac
                 p.hudLast[event] = now;
             }
             auto payload = params;
+            if (!protocol::atLeast(p.protocol, "0.15")) {
+                if (event == "hud.pose" && payload.value("tool", 1) == 5) {
+                    payload["tool"] = 1;
+                    payload["subtype"] = "normal";
+                }
+                if (event == "tool.changed" && payload.value("slot", 1) == 5) {
+                    payload["slot"] = 1;
+                    payload["name"] = "pointer";
+                    payload["subtype"] = "normal";
+                }
+            }
             if (hud)
                 payload["subscriptionId"] = p.hudSubscription;
             queue(p, {{"jsonrpc", "2.0"}, {"method", event}, {"params", payload}});
@@ -198,6 +226,9 @@ void Server::notify(const std::string &event, Json params, const std::string &ac
         if (p.hello && !p.closing && protocol::atLeast(p.protocol, "0.2") && !p.subscription.empty() &&
             (protocol::atLeast(p.protocol, "0.4") || (event != "mounts.changed" && event != "presentation.changed"))) {
             auto projected = params;
+            if (!protocol::atLeast(p.protocol, "0.15") && event == "mounts.changed" && projected.contains("mounts"))
+                for (auto &v : projected["mounts"]["placements"])
+                    v.erase("content");
             if (!protocol::atLeast(p.protocol,"0.13") && event=="presentation.changed") {
                 auto &view=projected["presentation"];
                 if(view.contains("profile") && view["profile"].is_object())view["profile"].erase("outline");

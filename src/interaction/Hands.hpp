@@ -10,6 +10,8 @@ class Hands {
     float distance = 1, targetDistance = 1;
     Vec3 offset{}, reference{};
     float grabYaw = 0;
+    bool facePlayer = false;
+    void facing(bool, const sim::Camera &);
     void begin(Gesture, const surfaces::Surface &, surfaces::Hit, const sim::Camera & = {});
     bool update(const sim::Camera &, Vec3 ray, float dt, std::span<const Triangle>);
     void wheel(float steps);

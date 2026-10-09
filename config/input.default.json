@@ -72,7 +72,7 @@
         "Super+Wheel"
       ],
       "rotate": [
-        "Super+Shift+Wheel"
+        "Super+Ctrl+Wheel"
       ],
       "tool1": [
         "1"
@@ -86,9 +86,7 @@
       "tool4": [
         "4"
       ],
-      "hud.cycle": [
-        "5"
-      ],
+      "hud.cycle": [],
       "transport": [
         "z"
       ],
@@ -101,9 +99,6 @@
       "secondary": [
         "RMB"
       ],
-      "wheel": [
-        "Wheel"
-      ],
       "fly": [
         "F4"
       ],
@@ -111,6 +106,24 @@
       "exit": [
         "Super+Tab",
         "Back"
+      ],
+      "tool5": [
+        "5"
+      ],
+      "content.scale": [
+        "Super+Shift+Wheel"
+      ],
+      "window.reset": [
+        "Super+Shift+MMB"
+      ],
+      "carry.facing": [
+        "r"
+      ],
+      "alternate": [
+        "MMB"
+      ],
+      "cycle": [
+        "Wheel"
       ]
     },
     "interactive": {

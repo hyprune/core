@@ -8,6 +8,7 @@
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/Popup.hpp>
+#include <hyprland/src/layout/target/WindowTarget.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/protocols/core/Compositor.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
@@ -38,6 +39,13 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             identity.workspaceId = e.window->m_workspace->m_id;
             remove = !layout->binding(identity.workspaceId, world) && !layout->hasPlacement(identity, world);
         }
+        if (remove && layout) {
+            layout->occupiedPoses.erase(e.surface.id);
+            layout->freePoses.erase(e.surface.id);
+            layout->unplaced.erase(e.surface.id);
+            layout->content.erase(e.surface.id);
+            std::erase(layout->pocketOrder, e.surface.id);
+        }
         if (remove && e.window && e.window->m_isMapped) {
             auto ws = e.window->m_workspace;
             e.window->setSuspended(ws && !ws->isVisible());
@@ -47,6 +55,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
     if (layout) {
         layout->instances = world::Json::array();
         layout->windowScale = windowScale;
+        layout->roomWorkspace = worldWorkspace;
     }
     std::erase_if(knownWindows_, [](auto &w) { return !w || !w->m_isMapped; });
     std::erase_if(adoptedWindows_, [](auto &w) { return !w.window || !w.window->m_isMapped; });
@@ -105,35 +114,23 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                                                      &world->collisionIndex))
                     e.surface.center = camera->position + camera->forward() * interaction::limitSpawnDistance(
                                                                                   spawnDistance, wall->distance);
-                for (auto &other : entries)
-                    if (auto hit = surfaces::intersect(other.surface, camera->position, camera->forward());
-                        hit && hit->distance < spawnDistance)
-                        e.surface.center =
-                            camera->position +
-                            camera->forward() *
-                                interaction::limitSpawnDistance(
-                                    dot(e.surface.center - camera->position, camera->forward()), hit->distance);
-                if (!surfaces::pushOut(e.surface, world->collision)) {
-                    auto id = e.surface.id;
-                    e.surface = surfaces::carryPlane(*camera, e.surface.width, e.surface.height, world->collision);
-                    e.surface.id = id;
-                }
+                // Keep the full client size. Failed recovery is handled by the
+                // bounded spawn search, which queues the client if no spot fits.
+                surfaces::pushOut(e.surface, world->collision);
                 surfaces::Instance instance{e.surface.id, w->m_class, w->m_title,
                                             w->m_workspace ? int(w->m_workspace->m_id) : 0};
                 if (layout && !layout->hasPlacement(instance, world)) {
-                    layout->spawn(instance, world, *camera, e.surface, float(monitor->m_size.x) / monitor->m_size.y);
-                    // Placement may shrink to fit a safe home volume. Configure the
-                    // client to that logical size instead of stretching its texture.
-                    // This runs in the deferred refresh, never the render pass.
-                    const auto &placed = layout->freePoses.at(e.surface.id);
-                    Vector2D logical{std::max(160.f, std::floor(placed.width / windowScale)),
-                                     std::max(100.f, std::floor(placed.height / windowScale))};
-                    if (logical.x < surface->m_current.size.x - 1 || logical.y < surface->m_current.size.y - 1)
-                        configureRequests.push_back({w, logical});
-                    if (remembered == adoptedWindows_.end())
-                        adoptedWindows_.push_back({w, e.surface.id, world->id});
+                    // Existing unplaced room clients wait for explicit placement. New
+                    // clients may auto-spawn only when a free full-sized spot exists.
+                    if (!spawnNew || layout->unplaced.contains(e.surface.id))
+                        layout->unplaced.insert(e.surface.id);
+                    else
+                        layout->spawn(instance, world, *camera, e.surface,
+                                      float(monitor->m_size.x) / monitor->m_size.y);
                 }
             }
+            if (world && remembered == adoptedWindows_.end())
+                adoptedWindows_.push_back({w, e.surface.id, world->id});
             e.commitListener = surface->m_events.commit.listen([count = e.commits] { ++*count; });
             entries.push_back(std::move(e));
             it = entries.end() - 1;
@@ -171,7 +168,11 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             it->surface.texture = pixels.texture;
             it->surface.pixelWidth = pixels.pixelWidth;
             it->surface.pixelHeight = pixels.pixelHeight;
-            it->surface.logicalSize(pixels.pixelWidth, pixels.pixelHeight, windowScale);
+            if (auto c = layout->contentFor(it->instance, world)) {
+                it->surface.width = (*c)["worldSize"][0];
+                it->surface.height = (*c)["worldSize"][1];
+            } else
+                it->surface.logicalSize(pixels.pixelWidth, pixels.pixelHeight, windowScale);
             if (!surfaces::pushOut(it->surface, world->collision))
                 it->visible = false;
         }
@@ -184,6 +185,19 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 it->visible = true;
             }
         }
+        it->queued = layout && layout->unplaced.contains(it->surface.id);
+        if (it->queued)
+            it->visible = false;
+        if (!attached && layout)
+            if (auto c = layout->contentFor(it->instance, world)) {
+                Vector2D logical{(*c)["logicalSize"][0].get<double>(), (*c)["logicalSize"][1].get<double>()};
+                if ((std::abs(logical.x - surface->m_current.size.x) > 1 ||
+                     std::abs(logical.y - surface->m_current.size.y) > 1) &&
+                    w->m_target &&
+                    (std::abs(w->m_target->position().w - logical.x) > 1 ||
+                     std::abs(w->m_target->position().h - logical.y) > 1))
+                    configureRequests.push_back({w, logical});
+            }
         if (attached && layout) {
             layout->freePoses.erase(it->surface.id);
             layout->spawnAreas.erase(it->surface.id);
@@ -200,6 +214,8 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         }
         return true;
     });
+    if (layout)
+        std::erase_if(layout->unplaced, [&](const auto &id) { return !refreshed.contains(id); });
     attach();
     if (layout && world && !world->areas.empty())
         compose(monitor, world, *layout);
@@ -266,7 +282,7 @@ std::optional<Capture::Target> Capture::target(const std::string &id, float u, f
             return {};
         Vector2D global{mon->m_position.x + u * mon->m_size.x, mon->m_position.y + v * mon->m_size.y};
         for (auto it = entries.rbegin(); it != entries.rend(); ++it)
-            if (it->instance.workspaceId == wall->workspaceId && !it->visible) {
+            if (it->instance.workspaceId == wall->workspaceId && !it->visible && !it->queued) {
                 auto box = it->window->surfaceLogicalBox();
                 if (!box)
                     continue;

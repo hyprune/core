@@ -596,6 +596,9 @@ no owner-session mutation or gallery watcher control occurred.
 
 ### Supervised live test checklist — free cursor toggle
 
+Historical 0.12 entry/return semantics below are superseded by the IPC 0.15
+checklist at the end of this page. Use/focus now exits directly to world.
+
 Nested testing uses a software cursor; the owner must verify hardware cursors:
 
 - [ ] Walking → Back and Super+Tab: reticle hidden, native cursor visible, camera
@@ -619,3 +622,33 @@ Nested testing uses a software cursor; the owner must verify hardware cursors:
 
 Every transition runs via `deferInput`/the deferred tick. Native pointer motion
 passes through Hyprland; core never warps, focuses or hides a cursor in a pass.
+
+### Supervised live test checklist — IPC 0.15 interaction corrections
+
+- [ ] `dev/live/up` finishes on the original desktop. The Hyprland notification
+  names the actual selected toggle chord. No cursor is hidden before activation.
+- [ ] Enter with the toggle: room workspace activates; a queued client selects
+  Placement (5), otherwise Normal (1); real cursor changes to reticle after frame.
+- [ ] E on a window and a workspace wall: virtual cursor; Back and Super+Tab each
+  return directly to world/reticle. Neither path cycles between use and cursor.
+- [ ] F on a window and workspace wall: real native focus cursor; Back and
+  Super+Tab each complete the focus exit/animation and restore world/reticle.
+- [ ] Back/Super+Tab from world: real free cursor; camera freezes. Repeat returns
+  to world/reticle. If restoring a legacy use/focus target, another press exits to
+  world. Escape with no app focus also returns to world; app Escape stays native.
+- [ ] Enter free cursor during carry: finish/balance the carry before showing the
+  real cursor. Move across outputs and click a native bar/launcher, then return.
+- [ ] Placement ghost has no pointer target. Pocketed clients/popups cannot receive
+  crosshair clicks and do not appear in workspace-wall snapshots. MMB pockets,
+  wheel selects, LMB places ahead and RMB mounts; Shift stays sprint.
+- [ ] Four slot rebindings work for every tool; unassigned slots do nothing.
+  Super gestures override slots; releases balance across tool/mode switches.
+- [ ] Carry starts facing the player; R toggles with Super held; yaw follows while
+  pitch/roll stay fixed. Content scaling preserves quad size. Reset reports again
+  even at 100%. These operations introduce no new cursor shapes/visibility states.
+- [ ] Toggle out from use/focus/free/carry restores the original desktop workspace
+  and cursor visibility. `down` remains the final recovery path.
+
+All visibility/focus/workspace changes above occur on deferred input/tick paths,
+never inside a render pass. Nested software cursors cannot validate hardware cursor
+behaviour; the checklist still requires the owner's supervised DRM session.

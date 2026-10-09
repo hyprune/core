@@ -163,7 +163,8 @@ const char *nativeFragment = R"(#version 300 es
 precision highp float;
 in vec2 uv;uniform sampler2D albedo;uniform int hasTexture;uniform vec3 color;out vec4 result;
 vec3 encode(vec3 x){return mix(12.92*x,1.055*pow(max(x,vec3(0)),vec3(1./2.4))-.055,step(vec3(.0031308),x));}
-void main(){result=hasTexture!=0?texture(albedo,uv):vec4(encode(color),1);if(result.a<=0.)discard;}
+uniform float opacity;
+void main(){result=(hasTexture!=0?texture(albedo,uv):vec4(encode(color),1))*opacity;if(result.a<=0.)discard;}
 )";
 const char *screenVertex = R"(#version 300 es
 precision highp float;
@@ -1248,6 +1249,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         }
         const auto &s = surfaces[item.index];
         glUseProgram(native_);
+        glUniform1f(glGetUniformLocation(native_, "opacity"), s.opacity);
         glDisable(GL_CULL_FACE);
         glEnable(GL_BLEND);
         glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);

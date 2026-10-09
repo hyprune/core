@@ -19,6 +19,7 @@ struct Surface {
         width = pixelWidth * metresPerUnit;
         height = pixelHeight * metresPerUnit;
     }
+    float opacity = 1; // placement previews only; never part of client buffer alpha
     unsigned texture = 0;
     bool focused = false;
 };
