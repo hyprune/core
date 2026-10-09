@@ -47,8 +47,17 @@ def camera():
     ctl('eval',f'local f = assert(io.open({json.dumps(str(path))}, "w")); f:write(hl.plugin.hyprune.camera()); f:close()')
     return json.loads(path.read_text())
 
+def pin_mesa_egl():
+    """Nested Hyprland and its clients use Mesa (the iGPU), not the NVIDIA EGL
+    vendor glvnd prefers. Offload tests opt out (HYPRUNE_NESTED_ALLOW_DGPU=1)."""
+    if os.environ.get('HYPRUNE_NESTED_ALLOW_DGPU')=='1' or '__EGL_VENDOR_LIBRARY_FILENAMES' in os.environ:return
+    for d in ['/usr/share/glvnd/egl_vendor.d','/etc/glvnd/egl_vendor.d','/run/opengl-driver/share/glvnd/egl_vendor.d']:
+        if (pathlib.Path(d)/'50_mesa.json').is_file():
+            os.environ['__EGL_VENDOR_LIBRARY_FILENAMES']=str(pathlib.Path(d)/'50_mesa.json');return
+
 def run(args):
     global STATE
+    pin_mesa_egl()
     if getattr(args,'ipc_warp',False): args.m3b=True
     if getattr(args,'playable',False): args.m3b=True
     if getattr(args,'workspace_homes',False): args.m3b=True

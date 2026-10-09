@@ -30,7 +30,7 @@ def main():
                     if sample['watts']>50 or sample['celsius']>75:reason='power/temperature ceiling';break
                 if reason:break
             # Start only after the first valid telemetry sample and AC check.
-            if child is None and samples and online():child=subprocess.Popen(command,start_new_session=True,stdout=log,stderr=subprocess.STDOUT)
+            if child is None and samples and online():child=subprocess.Popen(command,start_new_session=True,stdout=log,stderr=subprocess.STDOUT,env={**os.environ,'HYPRUNE_NESTED_ALLOW_DGPU':'1'})
             if child is not None and child.poll() is not None:break
     finally:
         if child is not None and child.poll() is None:

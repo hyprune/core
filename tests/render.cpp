@@ -1,3 +1,4 @@
+#include <cstring>
 #include "render/GLState.hpp"
 #include "render/PNG.hpp"
 #include "render/Renderer.hpp"
@@ -117,6 +118,10 @@ int main(int argc, char **argv) {
         EGLint size[] = {EGL_WIDTH, 320, EGL_HEIGHT, 180, EGL_NONE};
         auto pbuffer = eglCreatePbufferSurface(display, config, size);
         check(eglMakeCurrent(display, pbuffer, pbuffer, context), "EGL context");
+        if (auto forbid = getenv("HYPRUNE_TEST_FORBID_RENDERER"))
+            check(!std::strstr(reinterpret_cast<const char *>(glGetString(GL_RENDERER)), forbid) &&
+                      !std::strstr(reinterpret_cast<const char *>(glGetString(GL_VENDOR)), forbid),
+                  "GL test ran on a forbidden (dGPU) renderer");
         GLuint texture, fbo;
         glGenTextures(1, &texture);
         glBindTexture(GL_TEXTURE_2D, texture);

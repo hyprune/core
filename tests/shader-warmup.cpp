@@ -1,3 +1,4 @@
+#include <cstring>
 #include "render/Renderer.hpp"
 #include "render/ProgramCache.hpp"
 #include <EGL/egl.h>
@@ -31,6 +32,9 @@ int main(int argc,char **argv) {
     EGLint ctx[]={EGL_CONTEXT_CLIENT_VERSION,3,EGL_NONE}, size[]={EGL_WIDTH,320,EGL_HEIGHT,180,EGL_NONE};
     auto context=eglCreateContext(display,config,EGL_NO_CONTEXT,ctx), surface=eglCreatePbufferSurface(display,config,size);
     assert(eglMakeCurrent(display,surface,surface,context));
+    if (auto forbid = getenv("HYPRUNE_TEST_FORBID_RENDERER"))
+        assert(!std::strstr(reinterpret_cast<const char *>(glGetString(GL_RENDERER)), forbid) &&
+               !std::strstr(reinterpret_cast<const char *>(glGetString(GL_VENDOR)), forbid));
     render::Renderer renderer; renderer.warmShaders=argc<3 || std::string(argv[2])!="cold";
     auto w=world::load(argv[1]);
     renderer.prepare(w);
