@@ -242,6 +242,9 @@ def run(args):
         (STATE/'session.json').unlink(missing_ok=True)
         for artifact in STATE.glob('*.so'):artifact.unlink()
         log.close()
+        if getattr(args,'ipc_warp',False):
+            from ipc_warp import finish
+            finish()
 
 def smoke(client,children,args):
     assert 'state.subscribe' in client.hello['methods']

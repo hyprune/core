@@ -1,15 +1,36 @@
 {
   "nestedOnly": true,
-  "status": "incomplete",
-  "completed": {
-    "repeatedStyledVisibilityWarp": true,
-    "outgoingFramesSchemaValidated": 310,
-    "authenticationRetained": true
-  },
-  "limitation": "The initial passing warp run had no mount instances, so it did not exercise the unzoned-instance regression.",
-  "strongerRegression": {
-    "status": "failed",
-    "assertion": "live instances present after warp",
-    "nextStep": "Establish a real adopted window on the nested world workspace before warping; then repeat with nonempty unzoned instances."
-  }
+  "status": "passed",
+  "outgoingFramesSchemaValidated": 515,
+  "clientFrames": "PASS IPC 0.15: 50 responses and 442 notifications",
+  "checks": [
+    "unbound world workspace",
+    "warp 1 after: mount instances present",
+    "warp 1 after: no empty instance areaId",
+    "warp 1 after: unzoned instance omits areaId",
+    "warp 1 before next: mount instances present",
+    "warp 1 before next: no empty instance areaId",
+    "warp 1 before next: unzoned instance omits areaId",
+    "warp 2 after: mount instances present",
+    "warp 2 after: no empty instance areaId",
+    "warp 2 after: unzoned instance omits areaId",
+    "warp 2 before next: mount instances present",
+    "warp 2 before next: no empty instance areaId",
+    "warp 2 before next: unzoned instance omits areaId",
+    "warp 3 after: mount instances present",
+    "warp 3 after: no empty instance areaId",
+    "warp 3 after: unzoned instance omits areaId",
+    "warp 3 before next: mount instances present",
+    "warp 3 before next: no empty instance areaId",
+    "warp 3 before next: unzoned instance omits areaId",
+    "warp 4 after: mount instances present",
+    "warp 4 after: no empty instance areaId",
+    "warp 4 after: unzoned instance omits areaId",
+    "warp 4 before next: mount instances present",
+    "warp 4 before next: no empty instance areaId",
+    "warp 4 before next: unzoned instance omits areaId",
+    "same IPC connection, no reconnect through warps",
+    "client-side 0.15 responses and notifications valid",
+    "core wire audit validated every outgoing frame"
+  ]
 }
