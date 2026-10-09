@@ -1,0 +1,324 @@
+{
+  "nestedOnly": true,
+  "protocol": "0.15",
+  "checks": [
+    "default_off",
+    "config_off",
+    "sun-court-stone-a off recorded",
+    "config_on",
+    "sun-court-stone-a on applied",
+    "sun-court-stone-a bottom-right with clear space",
+    "sun-court-stone-a changes only inside the mark rect",
+    "sun-court-stone-a live output has no mark",
+    "config_off",
+    "sun-court-stone-b off recorded",
+    "config_on",
+    "sun-court-stone-b on applied",
+    "sun-court-stone-b bottom-right with clear space",
+    "sun-court-stone-b changes only inside the mark rect",
+    "sun-court-stone-b live output has no mark",
+    "config_off",
+    "sun-court-stone-c off recorded",
+    "config_on",
+    "sun-court-stone-c on applied",
+    "sun-court-stone-c bottom-right with clear space",
+    "sun-court-stone-c changes only inside the mark rect",
+    "sun-court-stone-c live output has no mark",
+    "config_off",
+    "sun-court-stone-d off recorded",
+    "config_on",
+    "sun-court-stone-d on applied",
+    "sun-court-stone-d bottom-right with clear space",
+    "sun-court-stone-d changes only inside the mark rect",
+    "sun-court-stone-d live output has no mark",
+    "config_off",
+    "sun-court-view off recorded",
+    "config_on",
+    "sun-court-view on applied",
+    "sun-court-view bottom-right with clear space",
+    "sun-court-view changes only inside the mark rect",
+    "sun-court-view live output has no mark",
+    "config_off",
+    "array-hall-a off recorded",
+    "config_on",
+    "array-hall-a on applied",
+    "array-hall-a bottom-right with clear space",
+    "array-hall-a changes only inside the mark rect",
+    "array-hall-a live output has no mark",
+    "config_off",
+    "array-hall-b off recorded",
+    "config_on",
+    "array-hall-b on applied",
+    "array-hall-b bottom-right with clear space",
+    "array-hall-b changes only inside the mark rect",
+    "array-hall-b live output has no mark",
+    "config_off",
+    "rime-vault-a off recorded",
+    "config_on",
+    "rime-vault-a on applied",
+    "rime-vault-a bottom-right with clear space",
+    "rime-vault-a changes only inside the mark rect",
+    "rime-vault-a live output has no mark",
+    "config_off",
+    "rime-vault-b off recorded",
+    "config_on",
+    "rime-vault-b on applied",
+    "rime-vault-b bottom-right with clear space",
+    "rime-vault-b changes only inside the mark rect",
+    "rime-vault-b live output has no mark",
+    "config_off",
+    "rime-vault-c off recorded",
+    "config_on",
+    "rime-vault-c on applied",
+    "rime-vault-c bottom-right with clear space",
+    "rime-vault-c changes only inside the mark rect",
+    "rime-vault-c live output has no mark",
+    "config_off",
+    "sun-court-stone-a ink is the higher-contrast one",
+    "sun-court-stone-b ink is the higher-contrast one",
+    "sun-court-stone-c ink is the higher-contrast one",
+    "sun-court-stone-d ink is the higher-contrast one",
+    "sun-court-view ink is the higher-contrast one",
+    "array-hall-a ink is the higher-contrast one",
+    "array-hall-b ink is the higher-contrast one",
+    "rime-vault-a ink is the higher-contrast one",
+    "rime-vault-b ink is the higher-contrast one",
+    "rime-vault-c ink is the higher-contrast one",
+    "bright stone gets navy",
+    "dark area gets white"
+  ],
+  "captures": [
+    {
+      "pose": "sun-court-stone-a",
+      "size": [
+        1920,
+        1080
+      ],
+      "ink": "#0f1a27",
+      "regionLuminance": 0.3477282153002558,
+      "contrast": {
+        "navy": 2.812814391665051,
+        "white": 1.7792207086797054
+      },
+      "rect": [
+        1682,
+        1014,
+        228,
+        56
+      ],
+      "variant": "lockup-bold-horizontal-mono",
+      "lockupWidthPx": 250,
+      "opacity": 0.550000011920929,
+      "watermarkMs": 1.620025
+    },
+    {
+      "pose": "sun-court-stone-b",
+      "size": [
+        1920,
+        1080
+      ],
+      "ink": "#0f1a27",
+      "regionLuminance": 0.27610785312539254,
+      "contrast": {
+        "navy": 2.579646355333308,
+        "white": 2.020329310046296
+      },
+      "rect": [
+        1682,
+        1014,
+        228,
+        56
+      ],
+      "variant": "lockup-bold-horizontal-mono",
+      "lockupWidthPx": 250,
+      "opacity": 0.550000011920929,
+      "watermarkMs": 0.59685
+    },
+    {
+      "pose": "sun-court-stone-c",
+      "size": [
+        1920,
+        1080
+      ],
+      "ink": "#0f1a27",
+      "regionLuminance": 0.3579125478184495,
+      "contrast": {
+        "navy": 2.8426898679887715,
+        "white": 1.751002763206882
+      },
+      "rect": [
+        1682,
+        1014,
+        228,
+        56
+      ],
+      "variant": "lockup-bold-horizontal-mono",
+      "lockupWidthPx": 250,
+      "opacity": 0.550000011920929,
+      "watermarkMs": 0.611821
+    },
+    {
+      "pose": "sun-court-stone-d",
+      "size": [
+        1920,
+        1080
+      ],
+      "ink": "#0f1a27",
+      "regionLuminance": 0.3377788695715113,
+      "contrast": {
+        "navy": 2.7829085597119834,
+        "white": 1.8080336748214223
+      },
+      "rect": [
+        1682,
+        1014,
+        228,
+        56
+      ],
+      "variant": "lockup-bold-horizontal-mono",
+      "lockupWidthPx": 250,
+      "opacity": 0.550000011920929,
+      "watermarkMs": 0.597225
+    },
+    {
+      "pose": "sun-court-view",
+      "size": [
+        1920,
+        1080
+      ],
+      "ink": "#0f1a27",
+      "regionLuminance": 0.3220248512130399,
+      "contrast": {
+        "navy": 2.7340247332244667,
+        "white": 1.8563972114100926
+      },
+      "rect": [
+        1682,
+        1014,
+        228,
+        56
+      ],
+      "variant": "lockup-bold-horizontal-mono",
+      "lockupWidthPx": 250,
+      "opacity": 0.550000011920929,
+      "watermarkMs": 0.622191
+    },
+    {
+      "pose": "array-hall-a",
+      "size": [
+        1920,
+        1080
+      ],
+      "ink": "#0f1a27",
+      "regionLuminance": 0.2447303283573826,
+      "contrast": {
+        "navy": 2.462375288249757,
+        "white": 2.1576203651484973
+      },
+      "rect": [
+        1682,
+        1014,
+        228,
+        56
+      ],
+      "variant": "lockup-bold-horizontal-mono",
+      "lockupWidthPx": 250,
+      "opacity": 0.550000011920929,
+      "watermarkMs": 0.63326
+    },
+    {
+      "pose": "array-hall-b",
+      "size": [
+        1920,
+        1080
+      ],
+      "ink": "#0f1a27",
+      "regionLuminance": 0.3495286930301252,
+      "contrast": {
+        "navy": 2.818149395618114,
+        "white": 1.7741407159709017
+      },
+      "rect": [
+        1682,
+        1014,
+        228,
+        56
+      ],
+      "variant": "lockup-bold-horizontal-mono",
+      "lockupWidthPx": 250,
+      "opacity": 0.550000011920929,
+      "watermarkMs": 0.632539
+    },
+    {
+      "pose": "rime-vault-a",
+      "size": [
+        1920,
+        1080
+      ],
+      "ink": "#ffffff",
+      "regionLuminance": 0.07417321040541526,
+      "contrast": {
+        "navy": 1.5542411234248052,
+        "white": 3.850234077565351
+      },
+      "rect": [
+        1682,
+        1014,
+        228,
+        56
+      ],
+      "variant": "lockup-bold-horizontal-mono",
+      "lockupWidthPx": 250,
+      "opacity": 0.550000011920929,
+      "watermarkMs": 0.61209
+    },
+    {
+      "pose": "rime-vault-b",
+      "size": [
+        1920,
+        1080
+      ],
+      "ink": "#ffffff",
+      "regionLuminance": 0.035990721034678555,
+      "contrast": {
+        "navy": 1.244730048207546,
+        "white": 4.912449115682706
+      },
+      "rect": [
+        1682,
+        1014,
+        228,
+        56
+      ],
+      "variant": "lockup-bold-horizontal-mono",
+      "lockupWidthPx": 250,
+      "opacity": 0.550000011920929,
+      "watermarkMs": 0.616194
+    },
+    {
+      "pose": "rime-vault-c",
+      "size": [
+        1920,
+        1080
+      ],
+      "ink": "#ffffff",
+      "regionLuminance": 0.02728005054777738,
+      "contrast": {
+        "navy": 1.1657111750360123,
+        "white": 5.2545725537361845
+      },
+      "rect": [
+        1682,
+        1014,
+        228,
+        56
+      ],
+      "variant": "lockup-bold-horizontal-mono",
+      "lockupWidthPx": 250,
+      "opacity": 0.550000011920929,
+      "watermarkMs": 0.637926
+    }
+  ],
+  "bright": "sun-court-stone-c",
+  "dark": "rime-vault-c"
+}
