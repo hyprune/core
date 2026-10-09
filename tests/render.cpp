@@ -441,14 +441,18 @@ int main(int argc, char **argv) {
         renderer.draw(fbo, 320, 180, camera, {}, false);
         check(renderer.overlayDiagnostics["heading"] == camera.yaw, "overlay camera lags renderer");
         camera.yaw = 0;
+        // Each checked draw must be fresh: two pending fences re-present the last frame.
+        glFinish();
         renderer.toolPrompt = {{"position", {0, 1.7, -3}}, {"text", "W/S CLIMB"}};
         renderer.draw(fbo, 320, 180, camera, {}, false);
         check(renderer.overlayDiagnostics["labels"].size() == 3, "climbing prompt missing in world control");
         auto promptSurface = surface;
         promptSurface.height = .8f;
+        glFinish();
         renderer.draw(fbo, 320, 180, camera, std::span(&promptSurface, 1), false);
         check(renderer.overlayDiagnostics["labels"].size() == 4, "aimed-window hint missing in world control");
         renderer.showInteractionHints = false;
+        glFinish();
         renderer.draw(fbo, 320, 180, camera, std::span(&promptSurface, 1), false);
         check(renderer.overlayDiagnostics["labels"].size() == 2, "free cursor leaked interaction hints");
         check(renderer.overlayDiagnostics["routeSegments"] == 1, "free cursor removed waypoint route");
