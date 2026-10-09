@@ -41,7 +41,7 @@ class Capture {
     surfaces::Surface *plane(const std::string &);
     float spawnDistance = 5, windowScale = .002;
     bool spawnNew = false;
-    int worldWorkspace = 8;
+    int worldWorkspace = 20;
     void attach();
     struct WorkspaceFrame {
         unsigned fbo = 0, texture = 0;

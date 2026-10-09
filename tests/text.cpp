@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
                                           {"focused", false}}}}};
                 if (minor >= 5)
                     changes["apps"] = {{{"surfaceId", "surface-1"},
-                                        {"workspaceId", 8},
+                                        {"workspaceId", 20},
                                         {"title", boundedText(title, ipc::TitleLimit)},
                                         {"appClass", boundedText(title, ipc::ClassLimit)},
                                         {"icon", boundedText(title, ipc::ClassLimit)}}};
@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
 
         // Placement rules hold the bounded identity and still match the live window.
         surfaces::Layout layout;
-        surfaces::Instance window{"surface-1", hostile(), hostile(), 8};
+        surfaces::Instance window{"surface-1", hostile(), hostile(), 20};
         window.title = boundedText(window.title, ipc::TitleLimit); // as Capture ingests it
         window.appClass = boundedText(window.appClass, ipc::ClassLimit);
         world::World w;

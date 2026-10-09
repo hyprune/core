@@ -14,7 +14,7 @@ class Layout {
     // `bindings` are explicit user homes (durable). `defaults` are derived from the
     // loaded world (workspaceBase + workspaceSlot) and never persisted.
     Json bindings = Json::array(), defaults = Json::array(), placements = Json::array(), instances = Json::array();
-    int roomWorkspace = 8, workspaceBase = 0;
+    int roomWorkspace = 20, workspaceBase = 0;
     std::set<int> reservedWorkspaces;
     void deriveDefaults(const world::World *);
     Json effectiveBindings() const;

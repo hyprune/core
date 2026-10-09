@@ -163,8 +163,9 @@ pair into gallery/videos. The gallery autocommit watcher is never signalled.
 
 ## Supervised live follow-up (2026-10-08)
 
-The world uses dedicated workspace **8** on its output (configurable through
-`hl.plugin.hyprune.config({windows={world_workspace=8}})`, integer 1–999999).
+The world uses dedicated workspace **20** on its output (default 8 before
+2026-10-09; configurable through
+`hl.plugin.hyprune.config({windows={world_workspace=20}})`, integer 1–999999).
 Activation remembers the output's prior workspace and enters the room; exit
 restores the prior workspace. Workspace switches run outside rendering in the
 existing deferred input/tick path. Direct plugin unload completes restoration
@@ -529,12 +530,12 @@ still requires the owner's supervised test; no live session was changed.
 Supervised live test checklist — dedicated workspace and IPC 0.8:
 
 - [ ] Enter from the usual desktop: only the world output switches to workspace
-  8 (or the configured ID); desktop cursor becomes the world reticle after the
+  20 (or the configured ID); desktop cursor becomes the world reticle after the
   frame. The previous desktop's tiled clients retain their layout.
-- [ ] Super+Enter opens a floating terminal on workspace 8, visible in front of
+- [ ] Super+Enter opens a floating terminal on workspace 20, visible in front of
   the player and clear of geometry. Launching on another workspace stays tiled.
 - [ ] E/F into a workspace wall: native focus/cursor handover as before;
-  Super+Tab/Back restores workspace 8 and the world reticle after the frame.
+  Super+Tab/Back restores workspace 20 and the world reticle after the frame.
 - [ ] TAB hold animates the ring and opens the Director with exclusive input;
   Escape closes it and restores the world reticle. Graphics Settings persists.
 - [ ] Toggle off from the world or workspace fullscreen: restore the remembered

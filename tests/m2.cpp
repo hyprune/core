@@ -1,5 +1,6 @@
 #include "control/Control.hpp"
 #include "daemon/LayoutStore.hpp"
+#include "interaction/Config.hpp"
 #include "surfaces/Layout.hpp"
 #include "world/Mounts.hpp"
 #include "world/Spatial.hpp"
@@ -115,6 +116,17 @@ int main(int argc, char **argv) {
             shared.restore({{"bindings", world::Json::array()}, {"placements", world::Json::array()}});
             shared.deriveDefaults(w.get());
             check(shared.defaults.size() == 2, "defaults after restore");
+            // Owner numbering (defaults): room 20, homes from 21; slot "00" would hit the room.
+            {
+                auto config = interaction::defaultConfig();
+                surfaces::Layout owner;
+                owner.workspaceBase = config["windows"]["workspace_base"];
+                owner.reservedWorkspaces = {config["windows"]["world_workspace"].get<int>()};
+                owner.deriveDefaults(w.get());
+                check(owner.binding(21, w.get())->at("areaId") == "sun-court" &&
+                          owner.binding(22, w.get())->at("areaId") == "array-hall" && !owner.binding(20, w.get()),
+                      "default numbering is not room 20 / homes 21+");
+            }
             // Reserved IDs (room workspace, configured locations) are never defaults; base 0 disables.
             shared.workspaceBase = 7;
             shared.reservedWorkspaces = {8};
