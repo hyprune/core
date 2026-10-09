@@ -90,7 +90,7 @@ def acceptance(client,children,args,shell_token,socketpath):
                           'cpuRenderMs':statistics.median(v['cpuRenderMs'] for v in samples),'cpuUpdateMs':statistics.median(v['cpuUpdateMs'] for v in samples),
                           'fps':(last['renderedFrames']-first['renderedFrames'])/elapsed,'reused':last['reusedFrames']-first['reusedFrames'],'visibility':last['visibility']}
                     report['poses'].append(item);print('MEASURE pose',json.dumps(item),flush=True)
-                    if round==0 and scale==scales[0]:
+                    if round==0:
                         subprocess.run([str(s.HERE/'ctl.py'),'shot',str(out/f'{variant}-{name}-{scale}.png')],check=True)
     if len(variants)>1:enter(LUMEN)
     if os.environ.get('HYPRUNE_PERF_POSES_ONLY')=='1':
