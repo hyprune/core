@@ -78,6 +78,7 @@ class Renderer {
     std::vector<interaction::Line> lines;
     std::map<unsigned, Mat4> transforms;
     bool materialDetails = true; // Also permits like-for-like benchmark comparisons.
+    static constexpr int lightmapMipLevels = 2; // Deepest lightmap mip sampled (4 px bake gutters).
     uint64_t frames = 0;
 
   private:

@@ -465,14 +465,22 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
                 },
                 "mipmap");
         }
-        add(0, [this, p, i] {
+        bool lightmap = std::any_of(p->world->materials.begin(), p->world->materials.end(),
+                                    [&](auto &m) { return m.lightmap == int(i); });
+        add(0, [this, p, i, lightmap] {
             auto s = i < p->world->samplers.size() ? p->world->samplers[i] : world::Sampler{};
             auto &id = p->samplers[i];
             glGenSamplers(1, &id);
             glSamplerParameteri(id, GL_TEXTURE_MIN_FILTER, s.minFilter);
             glSamplerParameteri(id, GL_TEXTURE_MAG_FILTER, s.magFilter);
-            glSamplerParameteri(id, GL_TEXTURE_WRAP_S, s.wrapS);
-            glSamplerParameteri(id, GL_TEXTURE_WRAP_T, s.wrapT);
+            glSamplerParameteri(id, GL_TEXTURE_WRAP_S, lightmap ? GL_CLAMP_TO_EDGE : s.wrapS);
+            glSamplerParameteri(id, GL_TEXTURE_WRAP_T, lightmap ? GL_CLAMP_TO_EDGE : s.wrapT);
+            // Lightmaps use their package sampler: a mipmapped filter opts in to
+            // trilinear irradiance (RFC-0004 mip-safe gutters). The bake pipeline's
+            // 4 px gutters cover two levels; deeper levels would pull in black
+            // atlas background or neighbouring islands.
+            if (lightmap)
+                glSamplerParameterf(id, GL_TEXTURE_MAX_LOD, float(lightmapMipLevels));
             GLint count = 0;
             glGetIntegerv(GL_NUM_EXTENSIONS, &count);
             bool anisotropy = false;
@@ -1070,6 +1078,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glUniform1iv(glGetUniformLocation(shader, "present"), depthOnly ? 1 : 5, present);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m.lightmap >= 0 ? textures_[m.lightmap] : 0);
+        glBindSampler(1, m.lightmap >= 0 ? samplers_[m.lightmap] : clamp_);
         auto model = transforms.contains(b.node) ? transforms.at(b.node) : Mat4::identity();
         glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, model.v.data());
         glBindVertexArray(b.vao);
