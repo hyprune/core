@@ -102,6 +102,7 @@ class Renderer {
             size_t bytes;
             std::function<void()> run;
             std::string kind;
+            std::function<bool()> ready = {}; // optional: false defers the job to a later tick
         };
         std::shared_ptr<const world::World> world;
         world::Json profile;

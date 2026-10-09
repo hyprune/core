@@ -1,4 +1,5 @@
 #include "Renderer.hpp"
+#include <EGL/egl.h>
 #include "GLState.hpp"
 #include "PNG.hpp"
 #include "ProgramCache.hpp"
@@ -32,29 +33,7 @@ GLuint shader(GLenum type, const char *source) {
     }
     return s;
 }
-GLuint program(const char *vertex, const char *fragment) {
-    auto cache = ProgramCache::path(vertex, fragment);
-    if (auto p = ProgramCache::load(cache)) return p;
-    auto started = std::chrono::steady_clock::now();
-    GLuint v = shader(GL_VERTEX_SHADER, vertex), f = shader(GL_FRAGMENT_SHADER, fragment), p = glCreateProgram();
-    glProgramParameteri(p, GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE);
-    glAttachShader(p, v);
-    glAttachShader(p, f);
-    glLinkProgram(p);
-    glDeleteShader(v);
-    glDeleteShader(f);
-    GLint ok = 0;
-    glGetProgramiv(p, GL_LINK_STATUS, &ok);
-    if (!ok) {
-        char log[2048];
-        glGetProgramInfoLog(p, sizeof log, nullptr, log);
-        glDeleteProgram(p);
-        throw std::runtime_error(log);
-    }
-    ProgramCache::compileMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now()-started).count();
-    ProgramCache::save(p, cache);
-    return p;
-}
+GLuint program(const char *vertex, const char *fragment);
 const char *vertex = R"(#version 300 es
 precision highp float;
 layout(location=0) in vec3 position;
@@ -345,6 +324,91 @@ bool extension(std::string_view name) {
             return true;
     return false;
 }
+// KHR_parallel_shader_compile: compiles start early and run on driver threads
+// while textures stream; a later upload job finishes each once the driver
+// reports completion. Without the extension, start+finish is the old blocking path.
+struct PendingProgram {
+    GLuint program = 0, vertex = 0, fragment = 0;
+    std::filesystem::path cache;
+    std::chrono::steady_clock::time_point started;
+    bool cached = false;
+};
+bool parallelCompile() {
+    static int available = -1;
+    if (available < 0) {
+        available = extension("GL_KHR_parallel_shader_compile");
+        if (available)
+            if (auto threads = reinterpret_cast<void (*)(GLuint)>(eglGetProcAddress("glMaxShaderCompilerThreadsKHR")))
+                threads(0xffffffffu); // implementation-chosen thread count
+    }
+    return available;
+}
+PendingProgram startProgram(const char *vertex, const char *fragment) {
+    PendingProgram p;
+    p.cache = ProgramCache::path(vertex, fragment);
+    if ((p.program = ProgramCache::load(p.cache))) {
+        p.cached = true;
+        return p;
+    }
+    parallelCompile();
+    p.started = std::chrono::steady_clock::now();
+    auto stage = [](GLenum type, const char *source) {
+        GLuint s = glCreateShader(type);
+        glShaderSource(s, 1, &source, nullptr);
+        glCompileShader(s);
+        return s;
+    };
+    p.vertex = stage(GL_VERTEX_SHADER, vertex);
+    p.fragment = stage(GL_FRAGMENT_SHADER, fragment);
+    p.program = glCreateProgram();
+    glProgramParameteri(p.program, GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE);
+    glAttachShader(p.program, p.vertex);
+    glAttachShader(p.program, p.fragment);
+    glLinkProgram(p.program);
+    return p;
+}
+bool programReady(const PendingProgram &p) {
+    if (p.cached || !p.program || !parallelCompile())
+        return true;
+    GLint done = 0;
+    glGetProgramiv(p.program, 0x91B1 /*COMPLETION_STATUS_KHR*/, &done);
+    return done;
+}
+GLuint finishProgram(PendingProgram &p) {
+    if (p.cached)
+        return p.program;
+    auto fail = [&](const char *log) {
+        glDeleteShader(p.vertex);
+        glDeleteShader(p.fragment);
+        glDeleteProgram(p.program);
+        p = {};
+        throw std::runtime_error(log);
+    };
+    char log[2048];
+    for (GLuint s : {p.vertex, p.fragment}) {
+        GLint ok = 0;
+        glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
+        if (!ok) {
+            glGetShaderInfoLog(s, sizeof log, nullptr, log);
+            fail(log);
+        }
+    }
+    GLint ok = 0;
+    glGetProgramiv(p.program, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        glGetProgramInfoLog(p.program, sizeof log, nullptr, log);
+        fail(log);
+    }
+    glDeleteShader(p.vertex);
+    glDeleteShader(p.fragment);
+    ProgramCache::compileMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - p.started).count();
+    ProgramCache::save(p.program, p.cache);
+    return std::exchange(p, {}).program;
+}
+GLuint program(const char *vertex, const char *fragment) {
+    auto p = startProgram(vertex, fragment);
+    return finishProgram(p);
+}
 // Deletes shared names once: second[i] is only deleted where it differs from first[i].
 template <class Delete> void release(std::vector<GLuint> &first, std::vector<GLuint> &second, Delete del) {
     for (size_t i = 0; i < second.size(); ++i)
@@ -514,60 +578,47 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
     auto add = [&](size_t bytes, std::function<void()> run, std::string kind = "resource upload") {
         p->jobs.push_back({bytes, std::move(run), std::move(kind)});
     };
-    add(
-        0,
-        [this] {
-            if (!scene_)
-                materialBlock(scene_ = program(vertex, fragment));
-        },
-        "shader scene_");
-    add(
-        0,
-        [this] {
-            if (!native_)
-                native_ = program(vertex, nativeFragment);
-        },
-        "shader native_");
-    add(
-        0,
-        [this] {
-            if (!tone_)
-                tone_ = program(screenVertex, toneFragment);
-        },
-        "shader tone_");
-    add(
-        0,
-        [this] {
-            if (!upscale_)
-                upscale_ = program(screenVertex, upscaleFragment);
-        },
-        "shader upscale_");
-    add(
-        0,
-        [this] {
-            if (!bloom_)
-                bloom_ = program(screenVertex, bloomFragment);
-        },
-        "shader bloom_");
-    add(
-        0,
-        [this] {
-            if (!sky_)
-                sky_ = program(screenVertex, skyFragment);
-        },
-        "shader sky_");
-    add(0, [this] { if (!inkNormals_) inkNormals_ = program(screenVertex, inkPackFragment); }, "shader ink packed depth-normal");
-    add(0, [this] { if (!inkProgram_) inkProgram_ = program(screenVertex, inkFragment); }, "shader ink edges");
-    add(0, [this] { if (!inkComposite_) inkComposite_ = program(screenVertex, inkCompositeFragment); }, "shader ink composite");
-    add(0, [this] { if (!depthProgram_) materialBlock(depthProgram_ = program(vertex, depthFragment)); }, "shader depth");
-    add(0, [this] { if (upscaler == "fsr1") fsrPrograms(); }, "shader fsr1");
-    add(
-        0,
-        [this] {
-            init();
-            textAtlas();
-        },
-        "font/setup");
+    // Every missing program starts compiling now; finish jobs run after the
+    // texture and mesh uploads, by when parallel compiles have usually completed.
+    std::vector<std::function<void()>> finishers;
+    auto compile = [&](GLuint *target, const char *vs, const char *fs, std::string kind, bool block = false,
+                       bool optional = false) {
+        auto pending = std::make_shared<PendingProgram>();
+        add(0, [target, vs, fs, pending] { if (!*target) *pending = startProgram(vs, fs); }, "start " + kind);
+        finishers.push_back([this, p, target, pending, kind, block, optional] {
+            p->jobs.push_back({0,
+                               [this, target, pending, block, optional] {
+                                   if (*target || !pending->program)
+                                       return;
+                                   try {
+                                       *target = finishProgram(*pending);
+                                   } catch (const std::exception &e) {
+                                       if (!optional)
+                                           throw;
+                                       fsrFailed_ = true; // FSR needs GLSL ES 3.1; bilinear stays
+                                       fsrError_ = e.what();
+                                       return;
+                                   }
+                                   if (block)
+                                       materialBlock(*target);
+                               },
+                               kind, [pending] { return programReady(*pending); }});
+        });
+    };
+    compile(&scene_, vertex, fragment, "shader scene_", true);
+    compile(&native_, vertex, nativeFragment, "shader native_");
+    compile(&tone_, screenVertex, toneFragment, "shader tone_");
+    compile(&upscale_, screenVertex, upscaleFragment, "shader upscale_");
+    compile(&bloom_, screenVertex, bloomFragment, "shader bloom_");
+    compile(&sky_, screenVertex, skyFragment, "shader sky_");
+    compile(&inkNormals_, screenVertex, inkPackFragment, "shader ink packed depth-normal");
+    compile(&inkProgram_, screenVertex, inkFragment, "shader ink edges");
+    compile(&inkComposite_, screenVertex, inkCompositeFragment, "shader ink composite");
+    compile(&depthProgram_, vertex, depthFragment, "shader depth", true);
+    if (upscaler == "fsr1" && !fsrFailed_) {
+        compile(&easu_, fsrVertex.c_str(), easuFragment.c_str(), "shader fsr1 easu", false, true);
+        compile(&rcas_, fsrVertex.c_str(), rcasFragment.c_str(), "shader fsr1 rcas", false, true);
+    }
     p->textures.resize(p->world->images.size());
     p->colors.resize(p->textures.size());
     p->samplers.resize(p->textures.size());
@@ -774,6 +825,15 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
             });
         }
     }
+    for (auto &finish : finishers)
+        finish();
+    add(
+        0,
+        [this] {
+            init();
+            textAtlas();
+        },
+        "font/setup");
     uploadMs_ = uploadMaxMs_ = uploadMaxJobMs_ = 0;
     uploadSlowestJob_.clear();
     uploadBytes_ = uploadSteps_ = 0;
@@ -804,10 +864,15 @@ bool Renderer::continuePrepare(double milliseconds, size_t byteBudget) {
     glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
     glActiveTexture(GL_TEXTURE0);
     try {
+        bool waiting = false;
         while (p->next < p->jobs.size()) {
             auto &job = p->jobs[p->next];
             if (jobs && bytes + job.bytes > byteBudget)
                 break;
+            if (job.ready && !job.ready()) {
+                waiting = true; // a parallel compile is still running: try next tick
+                break;
+            }
             // Shader setup or another job may change the active texture unit.
             glActiveTexture(GL_TEXTURE0);
             auto jobStart = std::chrono::steady_clock::now();
@@ -837,6 +902,8 @@ bool Renderer::continuePrepare(double milliseconds, size_t byteBudget) {
             glFlush();
             return false;
         }
+        if (waiting)
+            return false;
         freeWorld();
         world_ = p->world;
         batches_ = std::move(p->batches);
