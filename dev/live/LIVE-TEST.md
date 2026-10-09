@@ -17,7 +17,9 @@ dev/live/status
 `$XDG_STATE_HOME/hyprune/live/state.json` (default `~/.local/state/hyprune/live/state.json`).
 It unloads hypr3d, stops only `qs -p .../quickshell/hypr3d`, and preserves
 `qs -c rick`/other instances. Core loads from a unique copy, starts its helper
-and detached IPC 0.12 shell, then activates an unchanged copy of Lumen Reach.
+and detached shell at the newest common IPC version, then loads Lumen Reach
+without activating it. A Hyprland notification names the actual toggle chord;
+press it to enter when ready.
 Tokens stay in memory/pipes; logs are `launcher.log`, `hypruned.log`, `shell.log`.
 Default input/editor/layout state belongs to this test's private runtime directory;
 Settings edits only that copy. Bootstrap environment is restored before init returns.
@@ -37,13 +39,15 @@ Walking checklist ([full M3B detail](../../docs/M3B.md#supervised-live-test-chec
 - [ ] Free cursor hides core ladder/window/tool interaction hints; the active waypoint and route remain visible. Returning restores the applicable hints.
 - [ ] E window: stationary camera, relative cursor, hover/click/scroll/typing reach root and popup.
 - [ ] Cursor off world output: deferred warp/show gives free native cursor; returning hides it and restores relative pointer.
-- [ ] E → Super+Tab/Back: native free cursor and frozen camera; toggle again restores E-use. Repeat from a neighbouring output.
-- [ ] F window: cursor hidden through zoom, visible/centred at 2D handover; Super+Tab/Back shows world with a free cursor; a second toggle restores fullscreen.
+- [ ] E → Super+Tab/Back: direct return to world control/reticle. Press again to enter free cursor; press once more to return.
+- [ ] F window: cursor hidden through zoom, visible/centred at 2D handover; Super+Tab/Back exits fullscreen to world/reticle.
 - [ ] E wall: stationary camera, deferred workspace/focus switch, relative clicks/typing. Test both exits.
-- [ ] F wall: hidden through fly-in, visible at handover; free-cursor toggle shows the world and the return toggle restores focus.
-- [ ] Super+Tab never opens native overview while world/use/focus/free cursor is active, including release; it does when inactive. Other native binds keep working; free cursor intercepts only Back/Super+Tab.
+- [ ] F wall: hidden through fly-in, visible at handover; Back/Super+Tab flies out to world/reticle.
+- [ ] Super+Tab never opens native overview while world/use/focus/free cursor is active, including release; it does when inactive. Other native binds keep working; free cursor intercepts Back/Super+Tab and Escape when no app has keyboard focus.
 - [ ] TAB hold → Map: release grabs, show cursor/focus Director after frame. Settings captures chords/buttons/wheel; Esc cancels/leaves menu, clears focus, restores reticle.
 - [ ] Workspaces lists real desktops/apps even without configured homes. Click Help; alternate Help/Workspaces/Settings several times and keep the menu open.
+- [ ] Placement (5): wheel selects, LMB places ahead, RMB mounts, MMB pockets. Queue remains invisible except the selected ghost. Generic HUD hints follow slot rebindings.
+- [ ] R during carry toggles facing, including with Super held; Super+Shift+Wheel changes client resolution while quad size stays fixed; Super+Ctrl+Wheel rotates; Super+Shift+MMB resets.
 - [ ] Q scope/vignette, tool/submodes, lock and gizmo: overlays only, no cursor shape/visibility changes. Try carry/resize and Shift snap.
 - [ ] Reload test input during hold/grab: balanced releases; settings-only edits preserve hold. Esc leaves Settings.
 - [ ] Lock/unlock: clear owned input, restore cursor policy, resume safely.

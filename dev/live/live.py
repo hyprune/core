@@ -197,7 +197,7 @@ def preflight(args):
     print('Quickshell instances:', [(r['pid'], r['argv'], 'STOP old HUD' if r['oldHUD'] else 'KEEP') for r in qs_processes(s)])
     print('Toggle candidate:', choose_bind(query(s, 'binds')), '(rechecked after old-plugin unload)')
     print('up will: record private recovery state; unload only hypr3d; stop only its -p .../quickshell/hypr3d HUD; copy/load core from a unique path;\n'
-          'start its private helper and detached logged shell with in-memory grants; load/activate Lumen Reach; add one free runtime toggle.\n'
+          'start its private helper and detached logged shell with in-memory grants; load Lumen Reach without activating it; add one free runtime toggle.\n'
           'Core switches the chosen output to its configured world workspace (default 8), floating new room clients before layout; exit restores the prior workspace.\n'
           'Core materializes default input.json in a private runtime test directory. No installed config is edited.\n'
           'Hyprland itself re-evaluates Lua on plugin load/unload; no explicit reload command is issued.\n'
@@ -212,6 +212,24 @@ def camera(s, root):
 
 def state_path(args):
     return pathlib.Path(args.state_dir or pathlib.Path(os.environ.get('XDG_STATE_HOME', str(pathlib.Path.home()/'.local/state'))) / 'hyprune/live') / 'state.json'
+
+
+def shell_bootstrapped(text):
+    connection=None
+    presentation=False
+    for line in text.splitlines():
+        try: event=json.loads(line)
+        except ValueError: continue
+        if not isinstance(event,dict): continue
+        if event.get('type')=='connection': connection=event.get('status')
+        if event.get('type')=='presentation.peer': presentation=True
+    return connection=='live' and presentation
+
+
+def ready_message(chord):
+    labels = {'SUPER':'Super', 'SHIFT':'Shift', 'CTRL':'Ctrl', 'ALT':'Alt'}
+    display = '+'.join(labels.get(part.strip().upper(), part.strip()) for part in chord.split('+'))
+    return 'Hyprune ready · press '+display+' to enter'
 
 
 def up(args, path):
@@ -254,6 +272,9 @@ def up(args, path):
         state['binds']=[{'chord':choose_bind(query(s,'binds')), 'description':'Hyprune supervised live toggle'}];atomic(path,state)
         bind=state['binds'][0]
         lua(s,'hl.bind('+q(bind['chord'])+', hl.plugin.hyprune.toggle, {description='+q(bind['description'])+'})')
+        message = ready_message(bind['chord'])
+        ctl(s, 'notify', '-1', '7000', 'rgb(66bbdd)', message)
+        print(message)
         print('UP:',s['signature'],'Lumen Reach; toggle',bind['chord'],'\nRecovery state:',path,'\nLogs:',logs)
     except BaseException:
         print('up failed; attempting recorded rollback',file=sys.stderr)
@@ -303,26 +324,29 @@ def bootstrap(args,path):
     finally:server.close();sockpath.unlink(missing_ok=True)
     sock=pathlib.Path(s['runtime'])/'hyprune'/s['signature']/'control.sock';wait(sock.is_socket)
     rpc=RPC(sock,tokens['org.hyprune.live']);rpc.call('world.load',{'worldId':WORLD_ID})
-    lua(s,'hl.plugin.hyprune.toggle()');wait(lambda:camera(s,runroot)['active'])
     read,write=os.pipe();os.write(write,(tokens['com.hyprune.shell']+'\n').encode());os.close(write)
     protocol=shell_protocol(maximum=rpc.hello["protocol"])
     print(f'IPC: launcher {rpc.hello["protocol"]}; shell {protocol}',flush=True)
     env=env_for(s);env.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_PROTOCOL=protocol,HYPRUNE_SOCKET=str(sock))
     log=open(path.parent/'shell.log','a')
+    log_start=log.tell()
     child=subprocess.Popen([sys.executable,str(SHELL/'bridge/launch.py'),'--protocol',protocol,'--world-package',str(world()/'world.json')],env=env,pass_fds=(read,),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT);os.close(read)
     # Persist identity immediately: down can recover even before ready.
     atomic(runroot/'processes.json',[{'record':process(child.pid),'group':True}])
-    sub=rpc.call('state.subscribe',{'topics':['state']})['subscriptionId']
     def shell_ready():
         if child.poll() is not None:raise RuntimeError('Hyprune shell exited; see shell.log')
-        return rpc.call('state.snapshot',{'subscriptionId':sub})['snapshot']['state']['shell']['leases']
+        # Inactive shells intentionally hold no output lease. Verify this launch's
+        # authenticated subscription and presentation connection without entering.
+        with (path.parent/'shell.log').open() as stream:
+            stream.seek(log_start)
+            return shell_bootstrapped(stream.read())
     wait(shell_ready,15)
     procs=json.loads((runroot/'processes.json').read_text())
     childpids=pathlib.Path(f'/proc/{child.pid}/task/{child.pid}/children').read_text().split()
     procs += [{'record':process(int(pid)),'group':False} for pid in childpids if process(int(pid))]
     atomic(runroot/'processes.json',procs)
     atomic(runroot/'ready.json',{'processes':procs});rpc.s.close()
-    print('Bootstrap ready; shell lease verified',flush=True)
+    print('Bootstrap ready; authenticated shell and presentation verified',flush=True)
 
 
 def daemon():

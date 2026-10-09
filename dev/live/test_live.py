@@ -4,6 +4,12 @@ from unittest.mock import patch
 spec=importlib.util.spec_from_file_location('live',pathlib.Path(__file__).with_name('live.py'));live=importlib.util.module_from_spec(spec);spec.loader.exec_module(live)
 
 class Tests(unittest.TestCase):
+    def test_inactive_shell_ready_without_lease(self):
+        self.assertFalse(live.shell_bootstrapped('old log text'))
+        self.assertFalse(live.shell_bootstrapped('{"type":"connection","status":"live"}\n{"type":"presentation.peer","pid":42}\n{"type":"connection","status":"disconnected"}'))
+        self.assertFalse(live.shell_bootstrapped('{"type":"connection","status":"live"}'))
+        self.assertTrue(live.shell_bootstrapped('{"type":"connection","status":"live"}\n{"type":"presentation.peer","pid":42}'))
+
     def test_live_protocol_follows_cpp_inventory(self):
         protocols=live.core_protocols()
         with patch.object(live.socket, 'socket'), patch.object(live.RPC, 'call', return_value={'protocol':protocols[0]}) as call:
@@ -29,6 +35,10 @@ class Tests(unittest.TestCase):
         self.assertEqual(live.choose_bind([{'key':'h','modmask':65},{'keycode':49,'modmask':65}]),'SUPER + SHIFT + F10')
         self.assertEqual(live.choose_bind([{'key':'h','modmask':65},{'keycode':57,'modmask':65}]),'SUPER + SHIFT + F10')
         self.assertEqual(live.choose_bind([{'key':'h','modmask':65},{'key':'code:49','modmask':65}]),'SUPER + SHIFT + F10')
+    def test_ready_message_uses_actual_chord(self):
+        self.assertEqual(live.ready_message('SUPER + SHIFT + F10'), 'Hyprune ready · press Super+Shift+F10 to enter')
+        self.assertEqual(live.ready_message('SUPER + SHIFT + H'), 'Hyprune ready · press Super+Shift+H to enter')
+
     def test_owner_H_preferred(self):
         self.assertEqual(live.choose_bind([]),'SUPER + SHIFT + H')
         self.assertEqual(live.choose_bind([{'key':'H','modmask':65}]),'SUPER + SHIFT + N')
