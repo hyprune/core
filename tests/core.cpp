@@ -2,6 +2,7 @@
 #include "world/Schema.hpp"
 #include "world/Spatial.hpp"
 #include "world/World.hpp"
+#include "world/Format.hpp"
 #include <cgltf.h>
 #include <meshoptimizer/meshoptimizer.h>
 #include <cstring>
@@ -124,6 +125,35 @@ int main(int argc, char **argv) {
             view.data = nullptr;
             view.meshopt_compression.size = 4;
             rejects([&] { world::decodeMeshopt(&data); }, "corrupt meshopt view accepted");
+        }
+        {
+            // World-format inheritance: the same package loads under every supported
+            // format; 0.7's compressed-asset extensions are rejected below 0.7.
+            auto dir = std::filesystem::temp_directory_path() / ("hyprune-format-" + std::to_string(getpid()));
+            std::filesystem::remove_all(dir);
+            std::filesystem::copy(argv[1], dir, std::filesystem::copy_options::recursive);
+            auto relabel = [&](const std::string &version) {
+                auto j = world::Json::parse(std::ifstream(dir / "world.json"));
+                j["formatVersion"] = version;
+                std::ofstream(dir / "world.json") << j.dump();
+            };
+            for (auto version : world::format::supported) {
+                relabel(std::string(version));
+                assert(world::load(dir)->id == "org.hyprune.atrium");
+            }
+            // Numeric comparison; formats this core does not know never pass a gate.
+            assert(world::format::atLeast("0.7", "0.6") && !world::format::atLeast("0.6", "0.7") &&
+                   !world::format::atLeast("0.8", "0.7"));
+            relabel("0.8");
+            rejects([&] { world::load(dir); }, "unknown world format accepted");
+            auto scene = world::Json::parse(std::ifstream(dir / "scene.gltf"));
+            scene["extensionsUsed"] = scene["extensionsRequired"] = {"KHR_mesh_quantization"};
+            std::ofstream(dir / "scene.gltf") << scene.dump();
+            relabel("0.7");
+            world::load(dir);
+            relabel("0.6");
+            rejects([&] { world::load(dir); }, "0.7 glTF extension accepted in a 0.6 world");
+            std::filesystem::remove_all(dir);
         }
         world::validateMapSvg("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><path d=\"M 0 0 L 10 "
                               "10\" stroke=\"#fff\"/></svg>");

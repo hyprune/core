@@ -1,4 +1,5 @@
 #include "World.hpp"
+#include "Format.hpp"
 #include <meshoptimizer/meshoptimizer.h>
 #include <basisu/transcoder/basisu_transcoder.h>
 #include <mutex>
@@ -206,9 +207,8 @@ std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions optio
         return true;
     });
     validateManifest(j);
-    require((j.at("formatVersion") == "0.1" || j.at("formatVersion") == "0.2" || j.at("formatVersion") == "0.3" ||
-             j.at("formatVersion") == "0.4" || j.at("formatVersion") == "0.5" || j.at("formatVersion") == "0.6"),
-            "unsupported world format");
+    const std::string formatVersion = j.at("formatVersion");
+    require(format::known(formatVersion), "unsupported world format");
     require(std::regex_match(j.at("id").get<std::string>(), std::regex("[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+")),
             "invalid world ID");
     for (auto &field : {"version", "name", "license", "scene", "defaultSpawn"})
@@ -283,14 +283,18 @@ std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions optio
     require(cgltf_parse_file(&opts, scene.c_str(), &raw) == cgltf_result_success, "glTF parse failed");
     std::unique_ptr<cgltf_data, decltype(&cgltf_free)> data(raw, cgltf_free);
     require(raw->nodes_count < 10000 && raw->meshes_count < 10000, "scene too complex");
+    // RFC-0004: world 0.7 adds compressed/optimised assets; earlier formats keep the base set.
+    auto allowedExtension = [&](std::string_view id) {
+        for (auto base : {"KHR_materials_unlit", "KHR_texture_transform", "KHR_materials_emissive_strength"})
+            if (id == base)
+                return true;
+        for (auto compressed : {"KHR_texture_basisu", "EXT_meshopt_compression", "KHR_mesh_quantization"})
+            if (id == compressed)
+                return format::atLeast(formatVersion, "0.7");
+        return false;
+    };
     for (size_t i = 0; i < raw->extensions_required_count; i++)
-        require((std::string(raw->extensions_required[i]) == "KHR_materials_unlit" ||
-                 std::string(raw->extensions_required[i]) == "KHR_texture_transform" ||
-                 std::string(raw->extensions_required[i]) == "KHR_materials_emissive_strength" ||
-                 std::string(raw->extensions_required[i]) == "KHR_texture_basisu" ||
-                 std::string(raw->extensions_required[i]) == "EXT_meshopt_compression" ||
-                 std::string(raw->extensions_required[i]) == "KHR_mesh_quantization"),
-                "unsupported required glTF extension");
+        require(allowedExtension(raw->extensions_required[i]), "unsupported required glTF extension for this world format");
     auto relative = std::filesystem::relative(scene.parent_path(), root);
     auto asset = [&](const char *uri) {
         std::string p = relative == "." ? uri : (relative / std::string(uri)).generic_string();
@@ -315,6 +319,9 @@ std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions optio
         for (size_t c = 0; c < raw->nodes[i].children_count; c++)
             require(++parents[raw->nodes[i].children[c] - raw->nodes] <= 1, "multiple node parents");
     require(cgltf_load_buffers(&opts, raw, scene.c_str()) == cgltf_result_success, "glTF buffers failed");
+    for (size_t i = 0; i < raw->buffer_views_count; i++)
+        require(!raw->buffer_views[i].has_meshopt_compression || format::atLeast(formatVersion, "0.7"),
+                "EXT_meshopt_compression needs world format 0.7");
     decodeMeshopt(raw);
     require(cgltf_validate(raw) == cgltf_result_success, "invalid glTF");
     size_t memory = 0;
@@ -330,6 +337,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions optio
             if (l.at("texture").get<size_t>() == i)
                 irradiance = true;
         if (raw->textures[i].has_basisu && raw->textures[i].basisu_image) {
+            require(format::atLeast(formatVersion, "0.7"), "KHR_texture_basisu needs world format 0.7");
             // v0 lightmaps stay PNG; material textures may be KTX2.
             require(!irradiance, "lightmap must be PNG");
             auto *ktx = raw->textures[i].basisu_image;

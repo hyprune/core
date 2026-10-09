@@ -1,4 +1,5 @@
 #include "Mounts.hpp"
+#include "Format.hpp"
 #include "Schema.hpp"
 #include <set>
 namespace hyprune::world {
@@ -204,7 +205,9 @@ void loadMounts(World &w, size_t nodes) {
             need(id.is_string(), "areas.freePlacementZones must contain zone IDs, not objects");
             need(zoneIds.contains(id), "area references unknown placement zone");
         }
-    normalized["formatVersion"] = j.at("formatVersion") == "0.6" ? "0.6" : j.at("formatVersion") == "0.5" ? "0.5" : j.at("formatVersion") == "0.4" ? "0.4" : "0.3";
+    // Earlier formats normalise to 0.3 (the first with areas); newer keep their own schema.
+    const std::string version = j.at("formatVersion");
+    normalized["formatVersion"] = format::atLeast(version, "0.4") ? version : "0.3";
     normalized["areas"] = w.areas;
     normalized["anchors"] = Json::array();
     for (auto &[id, a] : anchors) {

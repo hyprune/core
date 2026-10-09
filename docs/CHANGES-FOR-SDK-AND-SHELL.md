@@ -1098,3 +1098,28 @@ only when the wall is no farther than the held window plus 0.5 m, i.e. the
 window was brought to the wall (pushed against it, or pulled off and released
 at once). Otherwise the release is a normal placement. No IPC change. The
 shell needs no change.
+
+## Render on demand and FSR 1 (2026-10-09, IPC 0.15 unchanged)
+
+Core renders a world frame only when its inputs change (camera, client
+commits, wall layout, overlays, settings). While idle, `deliveredFPS` falls
+toward zero and `frameMs` is the time since the last frame; `timings` gains
+`idleFrames` (cached re-presentations) and `upscaler {requested, active,
+error}`. Timings is an extensible object, so no schema change. Shell `043e115`
+shows "IDLE" instead of a near-zero FPS when successive `graphics.get` samples
+show no new rendered frame. FSR 1 is the default upscaler; an IPC 0.16
+`upscaler` setting is only a draft (`docs/drafts/ipc-0.16-upscaler.md`).
+
+## World format 0.7: compressed and optimised assets (2026-10-09)
+
+RFC-0004 amendment (docs `60f8dac`), schema `6250450` (v0.7 world/common,
+`scene` validation kind, `atLeast()`), SDK `2a0742d` (`World07_Document`,
+`validateWorld` scene rules). A 0.7 package keeps the 0.6 world.json shape
+and may require `KHR_texture_basisu` (KTX2 material textures),
+`EXT_meshopt_compression` and `KHR_mesh_quantization` in `scene.gltf`.
+Lightmaps stay PNG. Core pins the 0.7 schema (`third_party/hyprune-schema/v0.7`,
+`WORLD-SOURCE.json`, CTest `schema-pin`), gates the extensions with
+`world::format::atLeast(version, "0.7")`, and transcodes KTX2 to
+BC7/BC1-BC3/ASTC/RGBA on the loader. Shell: no change (IPC unchanged).
+Worlds tooling: keep world.json-only lightmap textures and node/material
+indices when adding glTF-Transform/basisu (see the RFC tooling notes).

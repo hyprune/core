@@ -1,4 +1,6 @@
 #include "Schema.hpp"
+#include <map>
+#include <mutex>
 #include "SchemaData.hpp"
 #include <regex>
 #include <stdexcept>
@@ -97,29 +99,27 @@ void validate(const Json &value, const Json &schema, const Json &common, const s
 }
 } // namespace
 void validateManifest(const Json &value) {
+    // Each pinned world format validates with its own schema (and common defs).
+    struct Pinned {
+        const char *version, *world, *common;
+    };
+    static constexpr Pinned pinned[]{{"0.7", worldSchema07, commonSchema07}, {"0.6", worldSchema06, commonSchema06},
+                                     {"0.5", worldSchema05, commonSchema04}, {"0.4", worldSchema04, commonSchema04},
+                                     {"0.3", worldSchema03, commonSchema03}, {"0.2", worldSchema02, commonSchema02}};
+    static std::map<std::string, std::pair<Json, Json>> parsed;
+    static std::mutex lock;
+    auto version = value.value("formatVersion", "");
+    for (auto &p : pinned)
+        if (version == p.version) {
+            std::unique_lock guard(lock);
+            auto it = parsed.find(version);
+            if (it == parsed.end())
+                it = parsed.emplace(version, std::pair{Json::parse(p.world), Json::parse(p.common)}).first;
+            guard.unlock();
+            validate(value, it->second.first, it->second.second, "world");
+            return;
+        }
     static const auto common = Json::parse(commonSchema), schema = Json::parse(worldSchema);
-    if (value.value("formatVersion", "") == "0.6") {
-        static const auto common06 = Json::parse(commonSchema06), schema06 = Json::parse(worldSchema06);
-        validate(value, schema06, common06, "world"); return;
-    }
-    if (value.value("formatVersion", "") == "0.5") {
-        static const auto common05 = Json::parse(commonSchema04), schema05 = Json::parse(worldSchema05);
-        validate(value, schema05, common05, "world"); return;
-    }
-    if (value.value("formatVersion", "") == "0.4") {
-        static const auto common04 = Json::parse(commonSchema04), schema04 = Json::parse(worldSchema04);
-        validate(value, schema04, common04, "world");
-        return;
-    }
-    static const auto common03 = Json::parse(commonSchema03), schema03 = Json::parse(worldSchema03);
-    if (value.value("formatVersion", "") == "0.3") {
-        validate(value, schema03, common03, "world");
-        return;
-    }
-    static const auto common02 = Json::parse(commonSchema02), schema02 = Json::parse(worldSchema02);
-    if (value.value("formatVersion", "") == "0.2")
-        validate(value, schema02, common02, "world");
-    else
-        validate(value, schema, common, "world");
+    validate(value, schema, common, "world");
 }
 } // namespace hyprune::world

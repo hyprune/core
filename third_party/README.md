@@ -33,3 +33,8 @@ IPC/input schema 0.6 is vendored from schema commit `a1e2f84` under `hyprune-sch
 World 0.4's schema is vendored from schema `569e92d` (feature/climbing, MIT).
 Its common definitions are byte-identical to the already pinned 0.4 common
 schema. `dev/embed-schema.py` embeds both for offline climbable validation.
+
+World format 0.7's schema is vendored from schema `6250450` under
+`hyprune-schema/v0.7` (`world.schema.json`, `common.schema.json`), byte-for-byte;
+`WORLD-SOURCE.json` records the commit and SHA-256s and CTest `schema-pin`
+verifies them and that `src/world/SchemaData.hpp` is regenerated.
