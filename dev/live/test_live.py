@@ -4,6 +4,33 @@ from unittest.mock import patch
 spec=importlib.util.spec_from_file_location('live',pathlib.Path(__file__).with_name('live.py'));live=importlib.util.module_from_spec(spec);spec.loader.exec_module(live)
 
 class Tests(unittest.TestCase):
+    def test_world_selection_is_generic_ordered_and_read_only(self):
+        self.assertEqual(live.world().name,'com.hyprune.lumen-reach')
+        with tempfile.TemporaryDirectory() as d,patch.object(live,'run',return_value='{}') as checker:
+            dirs=[pathlib.Path(d)/'second package',pathlib.Path(d)/'first']
+            for p,ident in zip(dirs,['org.example.second','org.example.first']):
+                p.mkdir();(p/'world.json').write_text(live.json.dumps({'id':ident,'name':ident}))
+            before=sorted(str(p.relative_to(d)) for p in pathlib.Path(d).rglob('*'))
+            result=live.world_packages(dirs)
+            self.assertEqual([v['id'] for v in result],['org.example.second','org.example.first'])
+            self.assertEqual(checker.call_count,2)
+            self.assertEqual(before,sorted(str(p.relative_to(d)) for p in pathlib.Path(d).rglob('*')))
+            with patch.object(live,'world',return_value=dirs[1]):self.assertEqual(live.world_packages()[0]['id'],'org.example.first')
+            result[0]['installed']=str(dirs[0]);result[1]['installed']=str(dirs[1])
+            self.assertEqual(live.shell_world_args(result),['--world-package',str(dirs[0]/'world.json'),'--world-package',str(dirs[1]/'world.json')])
+
+    def test_world_selection_rejects_duplicates_and_invalid_packages(self):
+        with tempfile.TemporaryDirectory() as d,patch.object(live,'run',return_value='{}'):
+            p=pathlib.Path(d);manifest=p/'world.json'
+            with self.assertRaisesRegex(RuntimeError,'Missing world'):live.world_packages([p])
+            for ident in ['../escape','/absolute','..',None]:
+                manifest.write_text(live.json.dumps({'id':ident}))
+                with self.assertRaisesRegex(RuntimeError,'Invalid world package ID'):live.world_packages([p])
+            manifest.write_text('{"id":"org.example.valid"}')
+            with self.assertRaisesRegex(RuntimeError,'Duplicate world ID'):live.world_packages([p,p])
+            with patch.object(live,'run',side_effect=live.subprocess.CalledProcessError(1,['check'],output='missing mesh')):
+                with self.assertRaisesRegex(RuntimeError,'missing mesh'):live.world_packages([p])
+
     def test_inactive_shell_ready_without_lease(self):
         self.assertFalse(live.shell_bootstrapped('old log text'))
         self.assertFalse(live.shell_bootstrapped('{"type":"connection","status":"live"}\n{"type":"presentation.peer","pid":42}\n{"type":"connection","status":"disconnected"}'))

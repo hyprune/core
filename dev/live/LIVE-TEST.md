@@ -13,11 +13,27 @@ dev/live/up                 # Note the printed toggle and Recovery state path.
 dev/live/status
 ```
 
+To install multiple packages for this test, repeat `--world PACKAGE_DIR` on both
+preflight and up. The first starts; every selected world appears in Director →
+Places and can be loaded through its destination button. Directories need not
+match their manifest IDs; duplicate IDs and invalid packages are rejected before
+the session swap. Preflight only validates/builds/queries; it does not install
+packages or change the session. `status` shows the recorded selection.
+
+```bash
+dev/live/preflight --world ../worlds/dist/com.hyprune.lumen-reach --world ../worlds/dist/com.hyprune.switchyard
+dev/live/up --world ../worlds/dist/com.hyprune.lumen-reach --world ../worlds/dist/com.hyprune.switchyard
+```
+
+Packages are copied into the private runtime, and all copied manifests are passed
+to the shell. Each world's optional HUD style follows the active world when the
+shell's World Styles preference is enabled. `down` needs no world arguments.
+
 `up` records plugin paths and old HUD argv/environment/cwd/PID identities in
 `$XDG_STATE_HOME/hyprune/live/state.json` (default `~/.local/state/hyprune/live/state.json`).
 It unloads hypr3d, stops only `qs -p .../quickshell/hypr3d`, and preserves
 `qs -c rick`/other instances. Core loads from a unique copy, starts its helper
-and detached shell at the newest common IPC version, then loads Lumen Reach
+and detached shell at the newest common IPC version, then loads the first selected world (Lumen Reach by default)
 without activating it. A Hyprland notification names the actual toggle chord;
 press it to enter when ready.
 Tokens stay in memory/pipes; logs are `launcher.log`, `hypruned.log`, `shell.log`.
@@ -89,3 +105,10 @@ exclusive Director; test Graphics Settings and Escape. `down` disables that poli
 and restores the workspace before unloading. To choose a different room manually,
 use `hl.plugin.hyprune.config({windows={world_workspace=18}})`; the change applies
 on the next activation. Follow the cursor checks in `docs/M3B.md`.
+
+Multiworld regression: `python3 dev/live/test_live.py` and
+`HYPRUNE_LIVE_WORLDS=1 dev/nested/run.sh --live` (the wrapper owns the flock).
+The nested test uses temporary Lumen Reach/Switchyard copies with distinct HUD
+styles, starts with the non-default world, and clicks the actual Places buttons
+in both directions. It uses grim/tesseract to locate the visible controls.
+Evidence: [live-worlds.json](../../docs/evidence/live-worlds.json).

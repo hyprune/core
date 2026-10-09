@@ -6,6 +6,11 @@ from ctl import verified
 
 def acceptance(identity,children):
     _,env=verified(); tools=s.ROOT/'dev/live';state=s.STATE/'live';state.mkdir(exist_ok=True)
+    multiworld=os.environ.get('HYPRUNE_LIVE_WORLDS')=='1'
+    packages=[]
+    if multiworld:
+        from live_worlds import fixtures
+        packages=fixtures(state)
     def command(name,tty=False):
         environment=env.copy()
         environment['HYPRUNE_DEV_AUTOMATION']='1'
@@ -16,6 +21,8 @@ def acceptance(identity,children):
             environment.pop('WAYLAND_DISPLAY',None);environment.pop('HYPRLAND_INSTANCE_SIGNATURE',None)
         args=[str(tools/name),'--state-dir',str(state)]
         if not tty:args+=['--instance',identity['signature']]
+        if name in ('preflight','up'):
+            for package in packages:args+=['--world',str(package)]
         try:return subprocess.check_output(args,env=environment,text=True,stderr=subprocess.STDOUT,timeout=180)
         except subprocess.CalledProcessError as e:print(e.output,flush=True);raise
     results=[]
@@ -63,7 +70,9 @@ APICALL EXPORT void PLUGIN_EXIT(){}
         check('latest_launcher_and_common_shell_protocol',f'IPC: launcher {module.core_protocols()[0]}; shell {module.shell_protocol()}' in (state/'launcher.log').read_text())
         check('isolated_default_input',json.loads((pathlib.Path(recorded['runroot'])/'input.json').read_text())==json.loads((s.ROOT/'config/input.default.json').read_text()))
         output=command('status');(state/'status.log').write_text(output);check('status_logs_and_reports','last 20 lines' in output and 'New crash reports' in output)
-        if os.environ.get('HYPRUNE_GRAPHICS_PROFILE')=='1':
+        if multiworld:
+            from live_worlds import acceptance as regressions
+        elif os.environ.get('HYPRUNE_GRAPHICS_PROFILE')=='1':
             from graphics_profile import acceptance as regressions
         else:
             from live_regressions import acceptance as regressions
@@ -71,7 +80,7 @@ APICALL EXPORT void PLUGIN_EXIT(){}
         # Toggle via the installed runtime callback, then recover from helper death.
         s.ctl('eval','hl.plugin.hyprune.toggle()');time.sleep(.3);check('toggle_deactivates',not s.camera()['active'])
         s.ctl('eval','hl.plugin.hyprune.toggle()');time.sleep(.3);check('toggle_reactivates',s.camera()['active'])
-        check('adopted_terminal_survives_toggle',any(e['title']=='Live-launch-regression' and e['visible'] and not e['collision'] for e in s.camera()['captures']))
+        if not multiworld:check('adopted_terminal_survives_toggle',any(e['title']=='Live-launch-regression' and e['visible'] and not e['collision'] for e in s.camera()['captures']))
         print(command('down',tty=True),flush=True)
         check('healthy_down',json.loads((state/'state.json').read_text())['phase']=='down' and main.poll() is None)
         print(command('up'),flush=True)

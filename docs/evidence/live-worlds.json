@@ -1,0 +1,58 @@
+{
+  "nestedOnly": true,
+  "worlds": [
+    "com.hyprune.switchyard",
+    "com.hyprune.lumen-reach"
+  ],
+  "styleFixtures": "temporary package copies",
+  "switches": [
+    {
+      "world": "com.hyprune.lumen-reach",
+      "worldStyle": "com.hyprune.lumen-reach",
+      "worldStyles": true,
+      "protocol": "0.15"
+    },
+    {
+      "world": "com.hyprune.switchyard",
+      "worldStyle": "com.hyprune.switchyard",
+      "worldStyles": true,
+      "protocol": "0.15"
+    }
+  ],
+  "checks": [
+    "old_fixture_loaded",
+    "fixture_HUD_and_main_running",
+    "preflight_ABI_and_plan",
+    "preflight_read_only",
+    "exact_old_path_recorded",
+    "old_HUD_stopped_main_preserved",
+    "free_toggle_fallback",
+    "exclusive_core",
+    "up_stays_on_desktop",
+    "ready_notice_has_actual_fallback_chord",
+    "toggle_activates_loaded_world",
+    "latest_launcher_and_common_shell_protocol",
+    "isolated_default_input",
+    "status_logs_and_reports",
+    "first_selected_world_starts",
+    "all_worlds_recorded_in_order",
+    "installed_com.hyprune.switchyard",
+    "installed_com.hyprune.lumen-reach",
+    "selected_worlds_in_preflight.log",
+    "selected_worlds_in_up.log",
+    "selected_worlds_in_status.log",
+    "Places_lists_both_worlds_1",
+    "Places_world_load_and_HUD_style_1",
+    "Places_lists_both_worlds_0",
+    "Places_world_load_and_HUD_style_0",
+    "toggle_deactivates",
+    "toggle_reactivates",
+    "healthy_down",
+    "second_up_unique_core_path",
+    "TTY_down_after_helper_crash",
+    "old_plugin_restored",
+    "runtime_bind_removed_original_kept",
+    "HUD_restarted_main_preserved",
+    "down_twice_no_duplicate_HUD"
+  ]
+}

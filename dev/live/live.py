@@ -5,7 +5,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 HERE = ROOT / 'dev/live'
 BUILD = ROOT / 'build/live'
 SHELL = pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR', ROOT.parent / 'shell'))
-WORLD_ID = 'com.hyprune.lumen-reach'
+DEFAULT_WORLD_ID = 'com.hyprune.lumen-reach'
 GRANTS = ['state.read', 'world.control', 'surface.control', 'movement.control', 'shell.control', 'runtime.control', 'input.control']
 
 
@@ -151,11 +151,36 @@ def choose_bind(binds):
 
 
 def world():
-    package = ROOT.parent / 'worlds/dist' / WORLD_ID
-    if not package.joinpath('world.json').is_file():
-        raise RuntimeError('Build worlds/lumen-reach first; expected '+str(package)+' (release archive may be under worlds/artifacts/releases)')
-    if json.loads(package.joinpath('world.json').read_text())['id'] != WORLD_ID: raise RuntimeError('Wrong world package')
-    return package
+    return ROOT.parent / 'worlds/dist' / DEFAULT_WORLD_ID
+
+
+def world_packages(paths=None):
+    """Validate all packages before any session changes; directory names need not match IDs."""
+    packages=[]
+    for raw in paths or [world()]:
+        package=pathlib.Path(raw).expanduser().resolve()
+        manifest=package/'world.json'
+        if not manifest.is_file(): raise RuntimeError('Missing world package manifest: '+str(manifest))
+        value=json.loads(manifest.read_text())
+        ident=value.get('id') if isinstance(value,dict) else None
+        if not isinstance(ident,str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,127}',ident) or ident in ('.','..'):
+            raise RuntimeError('Invalid world package ID: '+str(manifest))
+        if any(p['id']==ident for p in packages): raise RuntimeError('Duplicate world ID: '+ident)
+        try: run([str(BUILD/'hyprune-world-check'),str(package)],timeout=60,stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as error:
+            raise RuntimeError('Invalid world package '+str(package)+': '+error.output.strip()) from error
+        packages.append({'id':ident,'name':value.get('name',ident),'source':str(package)})
+    return packages
+
+
+def print_worlds(packages):
+    print('Selected worlds (first starts):')
+    for index,package in enumerate(packages):
+        print(' ', '[start]' if index==0 else '       ', package['id'], '—', package['name'], '—', package['source'])
+
+
+def shell_world_args(packages):
+    return [arg for package in packages for arg in ('--world-package',str(pathlib.Path(package['installed'])/'world.json'))]
 
 
 def abi(s):
@@ -166,17 +191,17 @@ def abi(s):
     return actual
 
 
-def verify(s):
-    for file in [BUILD/'hyprune-core.so', BUILD/'hypruned', BUILD/'hyprune-renderer', BUILD/'hyprune-live-abi', SHELL/'bridge/launch.py', SHELL/'qml/shell.qml']:
+def verify(s, paths=None):
+    for file in [BUILD/'hyprune-core.so', BUILD/'hypruned', BUILD/'hyprune-renderer', BUILD/'hyprune-live-abi', BUILD/'hyprune-world-check', SHELL/'bridge/launch.py', SHELL/'qml/shell.qml']:
         if not file.is_file(): raise RuntimeError('Missing '+str(file)+'; run preflight')
     if not shutil.which('qs'): raise RuntimeError('qs is missing')
-    package = world(); version = abi(s)
+    packages = world_packages(paths); version = abi(s)
     plugins = query(s, 'plugin', 'list')
     if any('hyprune' in x['name'].lower() for x in plugins): raise RuntimeError('Hyprune already loaded; run down for this test or unload it explicitly first')
     olds = [x for x in plugins if 'hypr3d' in x['name'].lower()]
     candidates = plugin_paths(s) if olds else []
     if olds and not candidates: raise RuntimeError('Cannot recover the old plugin path; refusing the swap')
-    return package, version, plugins, candidates
+    return packages, version, plugins, candidates
 
 
 def preflight(args):
@@ -186,18 +211,18 @@ def preflight(args):
     subprocess.run(['cmake', '-S', str(ROOT), '-B', str(BUILD), '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_TESTING=OFF', '-DHYPRUNE_LIVE_BUILD=ON',
                     '-DHYPRUNE_DAEMON_EXECUTABLE='+str(HERE/'daemon')], check=True)
     subprocess.run(['cmake', '--build', str(BUILD), '-j', '2'], check=True)
-    package, version, plugins, candidates = verify(s)
-    print(run([str(BUILD/'hyprune-world-check'),str(package)]))
+    packages, version, plugins, candidates = verify(s, args.world)
     run([sys.executable,'-c','import sys; sys.path.insert(0, sys.argv[1]); import launch',str(SHELL/'bridge')])
     print('IPC newest:', core_protocols()[0], '; installed shell:', shell_protocol())
     print('ABI/version matches:', version['tag'], version['abiHash'])
-    print('World:', package, '\nShell:', SHELL/'bridge/launch.py', '\nHelper:', BUILD/'hypruned')
+    print_worlds(packages)
+    print('Shell:', SHELL/'bridge/launch.py', '\nHelper:', BUILD/'hypruned')
     print('Loaded plugins:', json.dumps(plugins, indent=2))
     print('Old-plugin candidate paths:', candidates)
     print('Quickshell instances:', [(r['pid'], r['argv'], 'STOP old HUD' if r['oldHUD'] else 'KEEP') for r in qs_processes(s)])
     print('Toggle candidate:', choose_bind(query(s, 'binds')), '(rechecked after old-plugin unload)')
     print('up will: record private recovery state; unload only hypr3d; stop only its -p .../quickshell/hypr3d HUD; copy/load core from a unique path;\n'
-          'start its private helper and detached logged shell with in-memory grants; load Lumen Reach without activating it; add one free runtime toggle.\n'
+          'start its private helper and detached logged shell with in-memory grants; install all selected worlds and load the first without activating it; add one free runtime toggle.\n'
           'Core switches the chosen output to its configured world workspace (default 8), floating new room clients before layout; exit restores the prior workspace.\n'
           'Core materializes default input.json in a private runtime test directory. No installed config is edited.\n'
           'Hyprland itself re-evaluates Lua on plugin load/unload; no explicit reload command is issued.\n'
@@ -234,14 +259,17 @@ def ready_message(chord):
 
 def up(args, path):
     if path.exists() and json.loads(path.read_text()).get('phase') != 'down': raise RuntimeError('Unfinished live test; run down first')
-    s = select(args); package, version, plugins, candidates = verify(s)
+    s = select(args); packages, version, plugins, candidates = verify(s, args.world)
     root = pathlib.Path(s['runtime']) / 'hyprune-live' / s['signature']
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     logs = path.parent; logs.mkdir(parents=True, exist_ok=True, mode=0o700)
     runroot = root / str(time.time_ns()); runroot.mkdir(mode=0o700)
-    installed = runroot / 'worlds'; installed.mkdir(); shutil.copytree(package, installed / WORLD_ID)
+    installed = runroot / 'worlds'; installed.mkdir()
+    for package in packages:
+        target=installed/package['id']; shutil.copytree(package['source'],target)
+        package['installed']=str(target)
     copy = runroot / 'hyprune-core.so'; shutil.copy2(BUILD/'hyprune-core.so', copy)
-    state = {'phase':'starting', 'session':s, 'version':version, 'plugins':plugins, 'qs':qs_processes(s), 'oldCandidates':candidates, 'oldUnloaded':[],
+    state = {'phase':'starting', 'worlds':packages, 'session':s, 'version':version, 'plugins':plugins, 'qs':qs_processes(s), 'oldCandidates':candidates, 'oldUnloaded':[],
              'runroot':str(runroot), 'plugin':str(copy), 'binds':[], 'logs':str(logs), 'since':time.time(), 'processes':[], 'restoredHUD':{}, 'crashDirectory':str(pathlib.Path(os.environ.get('XDG_CACHE_HOME',str(pathlib.Path.home()/'.cache')))/'hyprland')}
     atomic(path, state)
     settings = {'pid':s['pid'], 'state':str(path), 'daemon':str(BUILD/'hypruned'), 'environment':{
@@ -275,7 +303,8 @@ def up(args, path):
         message = ready_message(bind['chord'])
         ctl(s, 'notify', '-1', '7000', 'rgb(66bbdd)', message)
         print(message)
-        print('UP:',s['signature'],'Lumen Reach; toggle',bind['chord'],'\nRecovery state:',path,'\nLogs:',logs)
+        print_worlds(packages)
+        print('UP:',s['signature'],'starting world',packages[0]['id'],'; toggle',bind['chord'],'\nRecovery state:',path,'\nLogs:',logs)
     except BaseException:
         print('up failed; attempting recorded rollback',file=sys.stderr)
         with contextlib.suppress(Exception): down(args,path)
@@ -323,14 +352,14 @@ def bootstrap(args,path):
         conn.send(json.dumps([{'token':token,'client':name,'capabilities':GRANTS} for name,token in tokens.items()]).encode());conn.close()
     finally:server.close();sockpath.unlink(missing_ok=True)
     sock=pathlib.Path(s['runtime'])/'hyprune'/s['signature']/'control.sock';wait(sock.is_socket)
-    rpc=RPC(sock,tokens['org.hyprune.live']);rpc.call('world.load',{'worldId':WORLD_ID})
+    rpc=RPC(sock,tokens['org.hyprune.live']);rpc.call('world.load',{'worldId':state['worlds'][0]['id']})
     read,write=os.pipe();os.write(write,(tokens['com.hyprune.shell']+'\n').encode());os.close(write)
     protocol=shell_protocol(maximum=rpc.hello["protocol"])
     print(f'IPC: launcher {rpc.hello["protocol"]}; shell {protocol}',flush=True)
     env=env_for(s);env.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_PROTOCOL=protocol,HYPRUNE_SOCKET=str(sock))
     log=open(path.parent/'shell.log','a')
     log_start=log.tell()
-    child=subprocess.Popen([sys.executable,str(SHELL/'bridge/launch.py'),'--protocol',protocol,'--world-package',str(world()/'world.json')],env=env,pass_fds=(read,),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT);os.close(read)
+    child=subprocess.Popen([sys.executable,str(SHELL/'bridge/launch.py'),'--protocol',protocol,*shell_world_args(state['worlds'])],env=env,pass_fds=(read,),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT);os.close(read)
     # Persist identity immediately: down can recover even before ready.
     atomic(runroot/'processes.json',[{'record':process(child.pid),'group':True}])
     def shell_ready():
@@ -430,6 +459,8 @@ def status(args,path):
         print('Quickshell:',[(r['pid'],r['argv']) for r in qs_processes(s)])
     except Exception as e:print('Session unavailable:',e)
     if state:
+        if state.get('worlds'): print_worlds(state['worlds'])
+        else: print('Selected worlds: not recorded by this older launcher')
         helper=path.parent/'helper.json'
         print('Helper:',alive(json.loads(helper.read_text())) if helper.exists() else False)
         for log in sorted(path.parent.glob('*.log')):
@@ -440,7 +471,9 @@ def status(args,path):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('command',choices=['preflight','up','down','status','bootstrap','daemon']);parser.add_argument('--instance');parser.add_argument('--state-dir')
+    parser.add_argument('--world',action='append',metavar='PACKAGE_DIR',help='world package directory; repeat to populate Places, first starts (default: Lumen Reach)')
     args=parser.parse_args()
+    if args.world and args.command not in ('preflight','up'): parser.error('--world is only valid with preflight/up')
     if args.command=='daemon':return daemon()
     path=state_path(args)
     if args.command=='bootstrap':return bootstrap(args,path)
