@@ -68,7 +68,8 @@ def acceptance(client,children,args,shell_token,socketpath):
         time.sleep(1.5)
     client.call('graphics.set',{'patch':{'quality':'low','offload':'off','dynamic_resolution':False,'render_scale':scales[0],'sharpen':.35}})
     enter(LUMEN)
-    report['device']=timings()['renderer']
+    report['device']=timings()['renderer'];report['upload']=timings()['upload']
+    report['plugin']=os.environ.get('HYPRUNE_NESTED_PLUGIN','build/hyprune-core.so')
     # 1. Fixed-scale GPU pass costs per pose. Camera moves a hair each sample so
     #    every sample is a newly rendered frame regardless of idle skipping.
     #    Variants alternate per round so GPU clock/thermal drift hits both.

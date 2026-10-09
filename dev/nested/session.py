@@ -188,7 +188,7 @@ def run(args):
             from live_check import acceptance
             acceptance(state, children)
             return
-        copy=STATE/f'hyprune-{time.time_ns()}.so';shutil.copy2(ROOT/'build/hyprune-core.so',copy)
+        copy=STATE/f'hyprune-{time.time_ns()}.so';shutil.copy2(os.environ.get('HYPRUNE_NESTED_PLUGIN',str(ROOT/'build/hyprune-core.so')),copy)
         result=ctl('plugin','load',str(copy));print('load:',result,flush=True)
         if result!='ok':raise RuntimeError(result)
         ctl('reload')
