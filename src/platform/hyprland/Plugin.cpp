@@ -3764,9 +3764,14 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
         for (auto q : s.rotation)
             h(q);
     }
-    // Client content: any commit, including hidden clients composed onto walls.
-    for (auto &e : capture.entries)
-        h(*e.commits)(e.visible);
+    // Client content: any commit, including hidden clients composed onto walls,
+    // and wall layout (a tiled swap recomposes a wall without a commit).
+    for (auto &e : capture.entries) {
+        h(*e.commits)(e.visible)(e.instance.workspaceId);
+        if (auto w = e.window.lock())
+            if (auto box = w->logicalBox())
+                h(box->x)(box->y)(box->w)(box->h);
+    }
     for (auto &c : capture.children)
         h(*c.commits);
     h(typing && !layerCursor)(r.debug)(r.showAreaMarkers)(r.showInteractionHints)(r.useDistance)(r.renderScale);
