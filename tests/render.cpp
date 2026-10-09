@@ -770,7 +770,54 @@ int main(int argc, char **argv) {
                       "shared colour/data image sampled with the wrong decode");
             check(skip[3] < copies[3] && copies[3] == reference[3], "shared image GPU bytes not single-counted");
             renderer.srgbDecodeAllowed = true;
+            // Edited objects: the CPU normal matrix must shade a rotated node like
+            // the same mesh rotated in the package (pre-transformed vertices).
+            auto rotated = std::make_shared<world::World>(*shared);
+            rotated->materials[0] = world::Material{};
+            rotated->materials[0].doubleSided = true;
+            rotated->images.clear();
+            rotated->samplers.clear();
+            float angle = .5f, c = std::cos(angle), s = std::sin(angle);
+            Mat4 turn = Mat4::identity();
+            turn.v[0] = c, turn.v[2] = -s, turn.v[8] = s, turn.v[10] = c;
+            auto baked = std::make_shared<world::World>(*rotated);
+            for (auto &v : baked->meshes[0].vertices) {
+                v.position = turn.point(v.position);
+                v.normal = {s, 0, c};
+            }
+            renderer.prepare(baked);
+            renderer.draw(fbo, 320, 180, camera, {}, false);
+            glFinish();
+            std::array<unsigned char, 4> expected{};
+            glReadPixels(160, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, expected.data());
+            renderer.prepare(rotated);
+            renderer.transforms[rotated->meshes[0].node] = turn;
+            renderer.draw(fbo, 320, 180, camera, {}, false);
+            glFinish();
+            glReadPixels(160, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+            renderer.transforms.clear();
+            for (int ch = 0; ch < 3; ++ch)
+                check(std::abs(int(pixel[ch]) - expected[ch]) <= 2, "edited object normal matrix shading");
             renderer.prepare(orientationWorld);
+        }
+        {
+            // Material constants use indexed uniform buffer binding 0; restore it.
+            GLuint buffer;
+            glGenBuffers(1, &buffer);
+            glBindBuffer(GL_UNIFORM_BUFFER, buffer);
+            glBufferData(GL_UNIFORM_BUFFER, 1024, nullptr, GL_STATIC_DRAW);
+            glBindBufferRange(GL_UNIFORM_BUFFER, 0, buffer, 256, 512);
+            glBindBuffer(GL_UNIFORM_BUFFER, 0);
+            renderer.draw(fbo, 320, 180, camera, {}, false);
+            GLint bound = 0, generic = -1;
+            GLint64 start = 0, size = 0;
+            glGetIntegeri_v(GL_UNIFORM_BUFFER_BINDING, 0, &bound);
+            glGetInteger64i_v(GL_UNIFORM_BUFFER_START, 0, &start);
+            glGetInteger64i_v(GL_UNIFORM_BUFFER_SIZE, 0, &size);
+            glGetIntegerv(GL_UNIFORM_BUFFER_BINDING, &generic);
+            check(bound == int(buffer) && start == 256 && size == 512 && generic == 0, "uniform buffer state leaked");
+            glBindBufferBase(GL_UNIFORM_BUFFER, 0, 0);
+            glDeleteBuffers(1, &buffer);
         }
         renderer.destroy();
         glDeleteTextures(1, &app);

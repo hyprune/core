@@ -101,6 +101,8 @@ class Renderer {
         std::vector<Batch> batches;
         std::vector<GLuint> textures, colors, samplers, dataSamplers;
         size_t gpuBytes = 0;
+        GLuint materialUbo = 0;
+        GLsizei materialStride = 0;
         GLuint cube = 0;
         GLsync fence = nullptr;
         std::vector<Job> jobs;
@@ -117,6 +119,8 @@ class Renderer {
     std::vector<GLuint> textures_, colorTextures_, samplers_, dataSamplers_;
     bool srgbDecode_ = false;
     size_t gpuBytes_ = 0;
+    GLuint materialUbo_ = 0; // one std140 Material range per world material
+    GLsizei materialStride_ = 0;
     GLuint scene_ = 0, tone_ = 0, quadVao_ = 0, quadVbo_ = 0, screenVao_ = 0, repeat_ = 0, clamp_ = 0;
     GLuint environment_ = 0, bloom_ = 0, sky_ = 0, native_ = 0, depthProgram_ = 0;
     GLuint inkComposite_ = 0, inkNormals_ = 0, inkProgram_ = 0, inkFbo_ = 0, inkNormal_ = 0, inkDepth_ = 0;

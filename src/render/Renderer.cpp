@@ -7,7 +7,9 @@
 #include "world/Visibility.hpp"
 #include <fontconfig/fontconfig.h>
 #include <ft2build.h>
+#include <cstring>
 #include <numeric>
+#include <unordered_map>
 #include <thread>
 #include FT_FREETYPE_H
 #include <iomanip>
@@ -58,30 +60,29 @@ layout(location=0) in vec3 position;
 layout(location=1) in vec3 normal;
 layout(location=2) in vec2 uv0;
 layout(location=3) in vec2 uv1;
-uniform mat4 vp,model;
+uniform mat4 vp,model;uniform mat3 normalMatrix;
 out vec3 n;out vec3 worldPosition;out vec2 uv;out vec2 lightUV;
-void main(){vec4 pos=model*vec4(position,1);gl_Position=vp*pos;n=mat3(transpose(inverse(model)))*normal;uv=uv0;lightUV=uv1;worldPosition=pos.xyz;}
+void main(){vec4 pos=model*vec4(position,1);gl_Position=vp*pos;n=normalMatrix*normal;uv=uv0;lightUV=uv1;worldPosition=pos.xyz;}
 )";
-const char *depthFragment = R"(#version 300 es
-precision highp float;in vec2 uv;in vec2 lightUV;
-uniform sampler2D albedo;uniform mat3 uvMatrix[5];uniform int uvSet[5],present[5];
-uniform float alpha,alphaCutoff;uniform int alphaMode;out vec4 result;
+// Per-material constants, one std140 range per material (MaterialStd140).
+#define MATERIAL_BLOCK "layout(std140) uniform Material{mat3 uvMatrix[5];int uvSet[5];int present[5];" \
+    "vec3 color;float alpha;vec3 emission;float alphaCutoff;float intensity,metallic,roughness,normalScale," \
+    "occlusionStrength;int alphaMode,hasTexture,baked,lightSrgb,unlit;};\n"
+const char *depthFragment = "#version 300 es\nprecision highp float;\n" MATERIAL_BLOCK R"(in vec2 uv;in vec2 lightUV;
+uniform sampler2D albedo;out vec4 result;
 void main(){if(alphaMode==1){vec2 st=(uvMatrix[0]*vec3(uvSet[0]==0?uv:lightUV,1)).xy;
 float a=alpha*(present[0]!=0?texture(albedo,st).a:1.);if(a<alphaCutoff)discard;}result=vec4(0);}
 )";
-const char *fragment = R"(#version 300 es
-precision highp float;precision highp int;
+const char *fragment = "#version 300 es\nprecision highp float;precision highp int;\n" MATERIAL_BLOCK R"(
 in vec3 n;in vec3 worldPosition;in vec2 uv;in vec2 lightUV;
 uniform sampler2D albedo,lightmap,normalMap,mrMap,aoMap,emissiveMap;
-uniform mat3 uvMatrix[5];uniform int uvSet[5];uniform int present[5];
-uniform vec3 color,emission,eye;
-uniform int hasTexture,baked,lightSrgb,unlit,surface,details,nativeOutput,nativeTone;
+uniform vec3 eye;
+uniform int details,nativeOutput,nativeTone;
 uniform float nativeExposure;
-uniform float intensity,metallic,roughness,normalScale,occlusionStrength;
 uniform int inkEnabled;
 uniform samplerCube environmentMap;
-uniform float cubeLevels,envRotation,envIntensity,alpha,alphaCutoff;
-uniform int alphaMode,excludeUnlit,effects,normalEnabled,specularEnabled,aoEnabled,reflectionEnabled,fogMode;
+uniform float cubeLevels,envRotation,envIntensity;
+uniform int excludeUnlit,effects,normalEnabled,specularEnabled,aoEnabled,reflectionEnabled,fogMode;
 uniform vec3 fogColor,sunDirection,sunColor;
 uniform float fogDensity,heightFalloff,baseHeight,sunIntensity;
 out vec4 result;
@@ -107,7 +108,6 @@ vec3 mappedNormal(vec3 N,vec2 st){
  return normalize(mat3(T*inversesqrt(magnitude),B*inversesqrt(magnitude),N)*map);
 }
 void main(){
- if(surface!=0){vec3 texel=hasTexture!=0?decode(texture(albedo,uv).rgb):vec3(1);result=vec4(color*texel,0);return;}
  vec4 baseSample=present[0]!=0?texture(albedo,coords(0)):vec4(1);
  float coverage=alpha*baseSample.a;if(alphaMode==1&&coverage<alphaCutoff)discard;
  vec3 base=color*baseSample.rgb;
@@ -296,11 +296,91 @@ template <class Delete> void release(std::vector<GLuint> &first, std::vector<GLu
     first.clear();
     second.clear();
 }
+// Uniform locations are looked up once per program and name, not per draw.
+struct NameHash {
+    using is_transparent = void;
+    size_t operator()(std::string_view s) const { return std::hash<std::string_view>{}(s); }
+};
+std::unordered_map<GLuint, std::unordered_map<std::string, GLint, NameHash, std::equal_to<>>> locations;
+GLint location(GLuint p, std::string_view name) {
+    auto &names = locations[p];
+    if (auto it = names.find(name); it != names.end())
+        return it->second;
+    return names.emplace(name, glGetUniformLocation(p, std::string(name).c_str())).first->second;
+}
+void deleteProgram(GLuint &p) {
+    locations.erase(p);
+    glDeleteProgram(p);
+    p = 0;
+}
 void uniform(GLuint p, const char *name, int value) {
-    glUniform1i(glGetUniformLocation(p, name), value);
+    glUniform1i(location(p, name), value);
 }
 void uniform(GLuint p, const char *name, Vec3 value) {
-    glUniform3f(glGetUniformLocation(p, name), value.x, value.y, value.z);
+    glUniform3f(location(p, name), value.x, value.y, value.z);
+}
+void uniform(GLuint p, const char *name, float value) {
+    glUniform1f(location(p, name), value);
+}
+// std140 image of MATERIAL_BLOCK; the size is checked against the linked block.
+struct MaterialStd140 {
+    float uvMatrix[5][3][4];
+    int32_t uvSet[5][4], present[5][4];
+    float color[3], alpha, emission[3], alphaCutoff;
+    float intensity, metallic, roughness, normalScale, occlusionStrength;
+    int32_t alphaMode, hasTexture, baked, lightSrgb, unlit, pad[2];
+};
+static_assert(sizeof(MaterialStd140) == 480);
+MaterialStd140 std140(const world::Material &m) {
+    MaterialStd140 out{};
+    for (int i = 0; i < 5; ++i) {
+        const auto &slot = m.slots[i];
+        float c = std::cos(slot.rotation), s = std::sin(slot.rotation);
+        float matrix[3][3]{{c * slot.scale[0], s * slot.scale[0], 0},
+                           {-s * slot.scale[1], c * slot.scale[1], 0},
+                           {slot.offset[0], slot.offset[1], 1}};
+        for (int column = 0; column < 3; ++column)
+            std::copy_n(matrix[column], 3, out.uvMatrix[i][column]);
+        out.uvSet[i][0] = slot.texCoord;
+        out.present[i][0] = slot.texture >= 0;
+    }
+    std::copy_n(&m.color.x, 3, out.color);
+    std::copy_n(&m.emissive.x, 3, out.emission);
+    out.alpha = m.alpha;
+    out.alphaCutoff = m.alphaCutoff;
+    out.intensity = m.intensity;
+    out.metallic = m.metallic;
+    out.roughness = m.roughness;
+    out.normalScale = m.normalScale;
+    out.occlusionStrength = m.occlusionStrength;
+    out.alphaMode = m.alphaMode;
+    out.hasTexture = m.baseTexture >= 0;
+    out.baked = m.lightmap >= 0;
+    out.lightSrgb = m.lightmapSrgb;
+    out.unlit = m.unlit;
+    return out;
+}
+constexpr GLuint materialBinding = 0;
+// Binds MATERIAL_BLOCK to its binding point; the program binary cache restores
+// the program but not this per-program block binding.
+void materialBlock(GLuint p) {
+    auto index = glGetUniformBlockIndex(p, "Material");
+    if (index == GL_INVALID_INDEX)
+        throw std::runtime_error("material uniform block missing");
+    GLint size = 0;
+    glGetActiveUniformBlockiv(p, index, GL_UNIFORM_BLOCK_DATA_SIZE, &size);
+    if (size > GLint(sizeof(MaterialStd140)))
+        throw std::runtime_error("material uniform block layout mismatch");
+    glUniformBlockBinding(p, index, materialBinding);
+}
+// Inverse-transpose of the model's upper 3x3 (cofactors / determinant).
+std::array<float, 9> normalMatrix(const Mat4 &m) {
+    Vec3 a{m.v[0], m.v[1], m.v[2]}, b{m.v[4], m.v[5], m.v[6]}, c{m.v[8], m.v[9], m.v[10]};
+    float det = dot(a, cross(b, c));
+    if (std::abs(det) < 1e-12f)
+        det = 1;
+    auto x = cross(b, c) / det, y = cross(c, a) / det, z = cross(a, b) / det;
+    return {x.x, x.y, x.z, y.x, y.y, y.z, z.x, z.y, z.z};
 }
 } // namespace
 void Renderer::init() {
@@ -308,12 +388,12 @@ void Renderer::init() {
         return;
     device = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
     if (!depthProgram_)
-        depthProgram_ = program(vertex, depthFragment);
+        materialBlock(depthProgram_ = program(vertex, depthFragment));
     if (!inkNormals_) inkNormals_ = program(screenVertex, inkPackFragment);
     if (!inkProgram_) inkProgram_ = program(screenVertex, inkFragment);
     if (!inkComposite_) inkComposite_ = program(screenVertex, inkCompositeFragment);
     if (!scene_)
-        scene_ = program(vertex, fragment);
+        materialBlock(scene_ = program(vertex, fragment));
     if (!native_)
         native_ = program(vertex, nativeFragment);
     if (!tone_)
@@ -344,6 +424,8 @@ void Renderer::freeWorld() {
     batches_.clear();
     release(textures_, colorTextures_, [](GLsizei n, const GLuint *ids) { glDeleteTextures(n, ids); });
     release(samplers_, dataSamplers_, [](GLsizei n, const GLuint *ids) { glDeleteSamplers(n, ids); });
+    glDeleteBuffers(1, &materialUbo_);
+    materialUbo_ = 0;
     gpuBytes_ = 0;
     glDeleteTextures(1, &environment_);
     environment_ = 0;
@@ -376,7 +458,7 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
         0,
         [this] {
             if (!scene_)
-                scene_ = program(vertex, fragment);
+                materialBlock(scene_ = program(vertex, fragment));
         },
         "shader scene_");
     add(
@@ -417,7 +499,7 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
     add(0, [this] { if (!inkNormals_) inkNormals_ = program(screenVertex, inkPackFragment); }, "shader ink packed depth-normal");
     add(0, [this] { if (!inkProgram_) inkProgram_ = program(screenVertex, inkFragment); }, "shader ink edges");
     add(0, [this] { if (!inkComposite_) inkComposite_ = program(screenVertex, inkCompositeFragment); }, "shader ink composite");
-    add(0, [this] { if (!depthProgram_) depthProgram_ = program(vertex, depthFragment); }, "shader depth");
+    add(0, [this] { if (!depthProgram_) materialBlock(depthProgram_ = program(vertex, depthFragment)); }, "shader depth");
     add(
         0,
         [this] {
@@ -522,6 +604,22 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
             }
         });
     }
+    add(
+        0,
+        [p] {
+            GLint align = 256;
+            glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &align);
+            p->materialStride = (sizeof(MaterialStd140) + align - 1) / align * align;
+            std::vector<unsigned char> data(size_t(p->materialStride) * p->world->materials.size());
+            for (size_t i = 0; i < p->world->materials.size(); ++i) {
+                auto block = std140(p->world->materials[i]);
+                std::memcpy(data.data() + i * p->materialStride, &block, sizeof block);
+            }
+            glGenBuffers(1, &p->materialUbo);
+            glBindBuffer(GL_UNIFORM_BUFFER, p->materialUbo);
+            glBufferData(GL_UNIFORM_BUFFER, data.size(), data.data(), GL_STATIC_DRAW);
+        },
+        "material constants");
     add(0, [p] {
         glGenTextures(1, &p->cube);
         glBindTexture(GL_TEXTURE_CUBE_MAP, p->cube);
@@ -635,6 +733,9 @@ bool Renderer::continuePrepare(double milliseconds, size_t byteBudget) {
         colorTextures_ = std::move(p->colors);
         samplers_ = std::move(p->samplers);
         dataSamplers_ = std::move(p->dataSamplers);
+        materialUbo_ = p->materialUbo;
+        materialStride_ = p->materialStride;
+        p->materialUbo = 0;
         gpuBytes_ = p->gpuBytes;
         environment_ = p->cube;
         p->cube = 0;
@@ -717,6 +818,7 @@ void Renderer::cancelPrepare() {
     glDeleteTextures(1, &p->cube);
     release(p->textures, p->colors, [](GLsizei n, const GLuint *ids) { glDeleteTextures(n, ids); });
     release(p->samplers, p->dataSamplers, [](GLsizei n, const GLuint *ids) { glDeleteSamplers(n, ids); });
+    glDeleteBuffers(1, &p->materialUbo);
     pending_.reset();
 }
 void Renderer::prepare(std::shared_ptr<const world::World> world) {
@@ -979,13 +1081,13 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     uniform(sky_, "horizon", vec(sky["horizon"]));
     uniform(sky_, "ground", vec(sky["ground"]));
     auto forward = camera.forward(), right = camera.right(), up = camera.up();
-    glUniform2f(glGetUniformLocation(sky_, "lensShift"), camera.shiftX, camera.shiftY);
+    glUniform2f(location(sky_, "lensShift"), camera.shiftX, camera.shiftY);
     uniform(sky_, "forward", forward);
     uniform(sky_, "right", right);
     uniform(sky_, "up", up);
-    glUniform1f(glGetUniformLocation(sky_, "tanFov"), std::tan(camera.fov * .01745329252f / 2));
-    glUniform1f(glGetUniformLocation(sky_, "aspect"), float(w) / h);
-    glUniform1f(glGetUniformLocation(sky_, "rotation"), rotation);
+    glUniform1f(location(sky_, "tanFov"), std::tan(camera.fov * .01745329252f / 2));
+    glUniform1f(location(sky_, "aspect"), float(w) / h);
+    glUniform1f(location(sky_, "rotation"), rotation);
     glBindVertexArray(screenVao_);
     if (!externalWorldFbo && graphics["sky"] != "off")
         glDrawArrays(GL_TRIANGLES, 0, 3);
@@ -994,10 +1096,9 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glEnable(GL_DEPTH_TEST);
     glUseProgram(scene_);
     auto vp = camera.projection(float(w) / h) * camera.view();
-    glUniformMatrix4fv(glGetUniformLocation(scene_, "vp"), 1, GL_FALSE, vp.v.data());
+    glUniformMatrix4fv(location(scene_, "vp"), 1, GL_FALSE, vp.v.data());
     uniform(scene_, "albedo", 0);
     uniform(scene_, "lightmap", 1);
-    uniform(scene_, "surface", 0);
     auto ink = effectiveOutline(profile, graphics);
     bool drawInk = !externalWorldFbo && graphics["outline"].get<bool>() && ink.value("enabled", false);
     uniform(scene_, "inkEnabled", drawInk);
@@ -1018,13 +1119,13 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     uniform(scene_, "fogColor", vec(fog["color"]));
     uniform(scene_, "sunDirection", vec(sun["direction"]));
     uniform(scene_, "sunColor", vec(sun["color"]));
-    glUniform1f(glGetUniformLocation(scene_, "fogDensity"), fog["density"].get<float>());
-    glUniform1f(glGetUniformLocation(scene_, "heightFalloff"), fog["heightFalloff"].get<float>());
-    glUniform1f(glGetUniformLocation(scene_, "baseHeight"), fog["baseHeight"].get<float>());
-    glUniform1f(glGetUniformLocation(scene_, "sunIntensity"), sun["intensity"].get<float>());
-    glUniform1f(glGetUniformLocation(scene_, "cubeLevels"), cubeLevels_);
-    glUniform1f(glGetUniformLocation(scene_, "envRotation"), rotation);
-    glUniform1f(glGetUniformLocation(scene_, "envIntensity"), 1);
+    glUniform1f(location(scene_, "fogDensity"), fog["density"].get<float>());
+    glUniform1f(location(scene_, "heightFalloff"), fog["heightFalloff"].get<float>());
+    glUniform1f(location(scene_, "baseHeight"), fog["baseHeight"].get<float>());
+    glUniform1f(location(scene_, "sunIntensity"), sun["intensity"].get<float>());
+    glUniform1f(location(scene_, "cubeLevels"), cubeLevels_);
+    glUniform1f(location(scene_, "envRotation"), rotation);
+    glUniform1f(location(scene_, "envIntensity"), 1);
     glBindSampler(0, repeat_);
     glBindSampler(1, clamp_);
     auto visible = world::visibleAreas(*world_, camera.position);
@@ -1041,24 +1142,34 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         return ta && length(batches_[a].center - camera.position) > length(batches_[b].center - camera.position);
     });
     bool depthOnly = false;
+    // Per-pass constants are set once per program; per batch only the material
+    // range, its textures and (for edited objects) the model/normal matrices.
+    struct ProgramState {
+        int native = -1;
+        bool identity = false;
+    };
+    std::array<std::pair<GLuint, ProgramState>, 2> programState{{{scene_, {}}, {depthProgram_, {}}}};
+    int tone = profile["toneMapping"] == "aces" ? 0 : profile["toneMapping"] == "reinhard" ? 1 : 2;
+    float exposure = profile["exposure"].get<float>();
+    bool haze = graphics["alpha_haze"].get<bool>();
     auto drawBatch = [&](size_t index, bool nativeOutput) {
-        auto shader = depthOnly ? depthProgram_ : scene_;
-        glUseProgram(shader);
-        if (depthOnly) {
-            glUniformMatrix4fv(glGetUniformLocation(shader,"vp"),1,GL_FALSE,vp.v.data());
-            uniform(shader,"albedo",0);
-        }
-        uniform(shader, "surface", 0);
-        uniform(shader, "nativeOutput", nativeOutput);
-        uniform(shader, "nativeTone",
-                profile["toneMapping"] == "aces"       ? 0
-                : profile["toneMapping"] == "reinhard" ? 1
-                                                       : 2);
-        glUniform1f(glGetUniformLocation(shader, "nativeExposure"), profile["exposure"].get<float>());
-        auto b = batches_[index];
+        const auto &b = batches_[index];
         const auto &m = world_->materials[b.material];
-        if (m.alphaMode == 2 && !graphics["alpha_haze"].get<bool>())
+        if (m.alphaMode == 2 && !haze)
             return;
+        auto shader = depthOnly ? depthProgram_ : scene_;
+        auto &state = programState[depthOnly].second;
+        glUseProgram(shader);
+        if (state.native < 0) {
+            glUniformMatrix4fv(location(shader, "vp"), 1, GL_FALSE, vp.v.data());
+            uniform(shader, "albedo", 0);
+            uniform(shader, "nativeTone", tone);
+            uniform(shader, "nativeExposure", exposure);
+        }
+        if (state.native != int(nativeOutput)) {
+            uniform(shader, "nativeOutput", nativeOutput);
+            state.native = nativeOutput;
+        }
         if (m.alphaMode == 2) {
             glEnable(GL_BLEND);
             glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
@@ -1073,44 +1184,30 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             glDisable(GL_CULL_FACE);
         else
             glEnable(GL_CULL_FACE);
-        glUniform1f(glGetUniformLocation(shader, "alpha"), m.alpha);
-        glUniform1f(glGetUniformLocation(shader, "alphaCutoff"), m.alphaCutoff);
-        uniform(shader, "alphaMode", m.alphaMode);
-        uniform(shader, "color", m.color);
-        uniform(shader, "emission", m.emissive);
-        uniform(shader, "hasTexture", m.baseTexture >= 0);
-        uniform(shader, "baked", m.lightmap >= 0);
-        uniform(shader, "lightSrgb", m.lightmapSrgb);
-        uniform(shader, "unlit", m.unlit);
-        glUniform1f(glGetUniformLocation(shader, "intensity"), m.intensity);
-        glUniform1f(glGetUniformLocation(shader, "metallic"), m.metallic);
-        glUniform1f(glGetUniformLocation(shader, "roughness"), m.roughness);
-        glUniform1f(glGetUniformLocation(shader, "normalScale"), m.normalScale);
-        glUniform1f(glGetUniformLocation(shader, "occlusionStrength"), m.occlusionStrength);
-        float matrices[45];
-        GLint sets[5], present[5];
-        for (int i = 0; i < 5; ++i) {
+        glBindBufferRange(GL_UNIFORM_BUFFER, materialBinding, materialUbo_, GLintptr(b.material) * materialStride_,
+                          sizeof(MaterialStd140));
+        for (int i = 0; i < (depthOnly ? 1 : 5); ++i) {
             const auto &slot = m.slots[i];
-            float c = std::cos(slot.rotation), s = std::sin(slot.rotation);
-            float matrix[9]{c * slot.scale[0], s * slot.scale[0], 0, -s * slot.scale[1], c * slot.scale[1], 0,
-                            slot.offset[0],    slot.offset[1],    1};
-            std::copy_n(matrix, 9, matrices + i * 9);
-            sets[i] = slot.texCoord;
-            present[i] = slot.texture >= 0;
+            bool present = slot.texture >= 0;
             int unit = i == 0 ? 0 : i + 1;
             glActiveTexture(GL_TEXTURE0 + unit);
-            glBindTexture(GL_TEXTURE_2D,
-                          present[i] ? (i == 0 || i == 4 ? colorTextures_ : textures_)[slot.texture] : 0);
-            glBindSampler(unit, present[i] ? (i == 0 || i == 4 ? samplers_ : dataSamplers_)[slot.texture] : repeat_);
+            glBindTexture(GL_TEXTURE_2D, present ? (i == 0 || i == 4 ? colorTextures_ : textures_)[slot.texture] : 0);
+            glBindSampler(unit, present ? (i == 0 || i == 4 ? samplers_ : dataSamplers_)[slot.texture] : repeat_);
         }
-        glUniformMatrix3fv(glGetUniformLocation(shader, "uvMatrix"), depthOnly ? 1 : 5, GL_FALSE, matrices);
-        glUniform1iv(glGetUniformLocation(shader, "uvSet"), depthOnly ? 1 : 5, sets);
-        glUniform1iv(glGetUniformLocation(shader, "present"), depthOnly ? 1 : 5, present);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m.lightmap >= 0 ? textures_[m.lightmap] : 0);
-        glBindSampler(1, m.lightmap >= 0 ? dataSamplers_[m.lightmap] : clamp_);
-        auto model = transforms.contains(b.node) ? transforms.at(b.node) : Mat4::identity();
-        glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, model.v.data());
+        if (!depthOnly) {
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, m.lightmap >= 0 ? textures_[m.lightmap] : 0);
+            glBindSampler(1, m.lightmap >= 0 ? dataSamplers_[m.lightmap] : clamp_);
+        }
+        // World vertices are pre-transformed; only edited objects carry a model.
+        auto edited = transforms.find(b.node);
+        if (edited != transforms.end() || !state.identity) {
+            auto model = edited != transforms.end() ? edited->second : Mat4::identity();
+            auto normals = normalMatrix(model);
+            glUniformMatrix4fv(location(shader, "model"), 1, GL_FALSE, model.v.data());
+            glUniformMatrix3fv(location(shader, "normalMatrix"), 1, GL_FALSE, normals.data());
+            state.identity = edited == transforms.end();
+        }
         glBindVertexArray(b.vao);
         glDrawArrays(GL_TRIANGLES, 0, b.count);
     };
@@ -1121,12 +1218,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
     glBindSampler(0, clamp_);
-    uniform(scene_, "baked", 0);
-    uniform(scene_, "unlit", 1);
-    uniform(scene_, "surface", 1);
-    uniform(scene_, "emission", Vec3{});
     auto identity = Mat4::identity();
-    glUniformMatrix4fv(glGetUniformLocation(scene_, "model"), 1, GL_FALSE, identity.v.data());
     cpu_[0] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
     gpu_[0].end();
     gpu_[2].begin();
@@ -1147,7 +1239,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glActiveTexture(GL_TEXTURE0);
         glBindSampler(0, clamp_);
         glViewport(0, 0, std::max(1, w / 2), std::max(1, h / 2));
-        glUniform1f(glGetUniformLocation(bloom_, "threshold"), effects ? bloom["threshold"].get<float>() : 1e20f);
+        glUniform1f(location(bloom_, "threshold"), effects ? bloom["threshold"].get<float>() : 1e20f);
         float radius = bloom["radius"];
         if (externalWorldFbo || !effects || graphics["bloom"] == "off" || bloom["strength"].get<float>() <= 0) {
             glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[0]);
@@ -1158,7 +1250,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
                 glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[pass == 1 ? 1 : 0]);
                 glBindTexture(GL_TEXTURE_2D, pass == 0 ? resolveTexture_ : bloomTexture_[pass == 1 ? 0 : 1]);
                 uniform(bloom_, "extract", pass == 0);
-                glUniform2f(glGetUniformLocation(bloom_, "stepSize"),
+                glUniform2f(location(bloom_, "stepSize"),
                             pass == 2   ? 0
                             : pass == 0 ? 1.f / w
                                         : radius / w,
@@ -1194,7 +1286,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,inkDepth_,0);
         glUseProgram(inkProgram_);uniform(inkProgram_,"packedData",0);
         uniform(inkProgram_,"radius",std::min(9,std::max(1,int(std::ceil(inkWidth*.5f)))));
-        for(auto name:{"depthThreshold","normalThreshold"}) glUniform1f(glGetUniformLocation(inkProgram_,name),ink.at(name).get<float>());
+        for(auto name:{"depthThreshold","normalThreshold"}) glUniform1f(location(inkProgram_,name),ink.at(name).get<float>());
         glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,inkNormal_);glBindSampler(0,0);
         glDrawArrays(GL_TRIANGLES,0,3);
     }
@@ -1226,13 +1318,13 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             profile["toneMapping"] == "aces"       ? 0
             : profile["toneMapping"] == "reinhard" ? 1
                                                    : 2);
-    glUniform1f(glGetUniformLocation(upscale_, "exposure"), profile["exposure"].get<float>());
-    glUniform1f(glGetUniformLocation(upscale_, "bloomStrength"),
+    glUniform1f(location(upscale_, "exposure"), profile["exposure"].get<float>());
+    glUniform1f(location(upscale_, "bloomStrength"),
                 effects && graphics["bloom"] != "off" ? profile["bloom"]["strength"].get<float>() : 0);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, bloomTexture_[0]);
     glBindSampler(2, clamp_);
-    glUniform1f(glGetUniformLocation(upscale_, "sharpness"),
+    glUniform1f(location(upscale_, "sharpness"),
                 resolution_.scale < 1 ? graphics["sharpen"].get<float>() : 0.f);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, resolveTexture_);
@@ -1249,9 +1341,9 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         glDisable(GL_DEPTH_TEST);glDepthMask(GL_FALSE);glEnable(GL_BLEND);
         glBlendEquation(GL_FUNC_ADD);glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ZERO,GL_ONE);
         glUseProgram(inkComposite_);uniform(inkComposite_,"edges",0);uniform(inkComposite_,"colour",vec(ink.at("colour")));
-        glUniform2f(glGetUniformLocation(inkComposite_,"internalPerOutput"),float(scaledWidth_)/w,float(scaledHeight_)/h);
-        glUniform1f(glGetUniformLocation(inkComposite_,"halfWidth"),inkWidth*.5f);
-        glUniform1f(glGetUniformLocation(inkComposite_,"outputPerInternal"),float(w)/scaledWidth_);
+        glUniform2f(location(inkComposite_,"internalPerOutput"),float(scaledWidth_)/w,float(scaledHeight_)/h);
+        glUniform1f(location(inkComposite_,"halfWidth"),inkWidth*.5f);
+        glUniform1f(location(inkComposite_,"outputPerInternal"),float(w)/scaledWidth_);
         glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,inkDepth_);glBindSampler(0,0);
         glBindVertexArray(screenVao_);glDrawArrays(GL_TRIANGLES,0,3);
         glDisable(GL_BLEND);glEnable(GL_DEPTH_TEST);glDepthMask(GL_TRUE);
@@ -1259,8 +1351,8 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     gpu_[8].end();
     glDepthFunc(GL_LESS);
     glUseProgram(native_);
-    glUniformMatrix4fv(glGetUniformLocation(native_, "vp"), 1, GL_FALSE, vp.v.data());
-    glUniformMatrix4fv(glGetUniformLocation(native_, "model"), 1, GL_FALSE, identity.v.data());
+    glUniformMatrix4fv(location(native_, "vp"), 1, GL_FALSE, vp.v.data());
+    glUniformMatrix4fv(location(native_, "model"), 1, GL_FALSE, identity.v.data());
     uniform(native_, "albedo", 0);
     glActiveTexture(GL_TEXTURE0);
     cpu_[2] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - bloomStarted).count();
@@ -1293,7 +1385,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         }
         const auto &s = surfaces[item.index];
         glUseProgram(native_);
-        glUniform1f(glGetUniformLocation(native_, "opacity"), s.opacity);
+        glUniform1f(location(native_, "opacity"), s.opacity);
         glDisable(GL_CULL_FACE);
         glEnable(GL_BLEND);
         glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
@@ -1423,15 +1515,15 @@ void Renderer::present(GLuint target, int w, int h, bool typing) {
     uniform(tone_, "bloomMap", 1);
     auto curve = profile["toneMapping"].get<std::string>();
     uniform(tone_, "toneMapping", curve == "aces" ? 0 : curve == "reinhard" ? 1 : 2);
-    glUniform1f(glGetUniformLocation(tone_, "exposure"), profile["exposure"].get<float>());
-    glUniform1f(glGetUniformLocation(tone_, "bloomStrength"),
+    glUniform1f(location(tone_, "exposure"), profile["exposure"].get<float>());
+    glUniform1f(location(tone_, "bloomStrength"),
                 effects && graphics["bloom"] != "off" ? profile["bloom"]["strength"].get<float>() : 0);
-    glUniform2f(glGetUniformLocation(tone_, "pointer"), pointerX, pointerY);
+    glUniform2f(location(tone_, "pointer"), pointerX, pointerY);
     uniform(tone_, "scope", scopeVignette ? 1 : 0);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, bloomTexture_[0]);
     glBindSampler(1, clamp_);
-    glUniform2f(glGetUniformLocation(tone_, "resolution"), w, h);
+    glUniform2f(location(tone_, "resolution"), w, h);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, nativeTexture_);
     glBindSampler(0, clamp_);
@@ -2002,7 +2094,7 @@ void Renderer::destroy() {
         timer.destroy();
     glDeleteTextures(1, &iconTexture_);
     iconTexture_ = 0;
-    glDeleteProgram(textProgram_);
+    deleteProgram(textProgram_);
     glDeleteTextures(1, &textTexture_);
     glDeleteVertexArrays(1, &textVao_);
     glDeleteBuffers(1, &textBuffer_);
@@ -2012,15 +2104,15 @@ void Renderer::destroy() {
     glDeleteBuffers(1, &collisionVbo_);
     collisionVao_ = collisionVbo_ = 0;
     collisionCount_ = 0;
-    glDeleteProgram(scene_);
-    glDeleteProgram(inkNormals_); glDeleteProgram(inkProgram_); glDeleteProgram(inkComposite_); inkNormals_=inkProgram_=inkComposite_=0;
-    glDeleteProgram(depthProgram_); depthProgram_ = 0;
-    glDeleteProgram(native_);
-    glDeleteProgram(tone_);
-    glDeleteProgram(upscale_);
+    deleteProgram(scene_);
+    deleteProgram(inkNormals_); deleteProgram(inkProgram_); deleteProgram(inkComposite_); inkNormals_=inkProgram_=inkComposite_=0;
+    deleteProgram(depthProgram_); depthProgram_ = 0;
+    deleteProgram(native_);
+    deleteProgram(tone_);
+    deleteProgram(upscale_);
     upscale_ = 0;
-    glDeleteProgram(bloom_);
-    glDeleteProgram(sky_);
+    deleteProgram(bloom_);
+    deleteProgram(sky_);
     glDeleteBuffers(1, &quadVbo_);
     glDeleteVertexArrays(1, &quadVao_);
     glDeleteVertexArrays(1, &screenVao_);

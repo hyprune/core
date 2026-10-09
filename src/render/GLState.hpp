@@ -5,6 +5,8 @@ namespace hyprune::render {
 // Every state changed by Renderer or its uploads is restored, even on exceptions.
 class GLState {
     GLint draw, read, program, vao, array, renderbuffer, active, unpack, pbo, pack, packPbo;
+    GLint uniformBuffer, materialBuffer; // generic and indexed binding 0 (world materials)
+    GLint64 materialStart, materialSize;
     GLint viewport[4], scissor[4], depthFunc, cullMode, frontFace, srcRGB, dstRGB, srcAlpha, dstAlpha, eqRGB, eqAlpha;
     GLfloat clearColor[4], clearDepth, depthRange[2], lineWidth;
     std::array<GLint, 6> pixelRows;
@@ -39,6 +41,10 @@ class GLState {
         glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &pbo);
         glGetIntegerv(GL_PACK_ALIGNMENT, &pack);
         glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &packPbo);
+        glGetIntegerv(GL_UNIFORM_BUFFER_BINDING, &uniformBuffer);
+        glGetIntegeri_v(GL_UNIFORM_BUFFER_BINDING, 0, &materialBuffer);
+        glGetInteger64i_v(GL_UNIFORM_BUFFER_START, 0, &materialStart);
+        glGetInteger64i_v(GL_UNIFORM_BUFFER_SIZE, 0, &materialSize);
         for (int i = 0; i < 7; i++) {
             glActiveTexture(GL_TEXTURE0 + i);
             glGetIntegerv(GL_TEXTURE_BINDING_2D, &units[i].texture);
@@ -86,6 +92,11 @@ class GLState {
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
         glPixelStorei(GL_PACK_ALIGNMENT, pack);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, packPbo);
+        if (materialBuffer && materialSize)
+            glBindBufferRange(GL_UNIFORM_BUFFER, 0, materialBuffer, materialStart, materialSize);
+        else
+            glBindBufferBase(GL_UNIFORM_BUFFER, 0, materialBuffer);
+        glBindBuffer(GL_UNIFORM_BUFFER, uniformBuffer);
         glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
         glScissor(scissor[0], scissor[1], scissor[2], scissor[3]);
         glDepthFunc(depthFunc);
