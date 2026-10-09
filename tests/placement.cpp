@@ -17,6 +17,8 @@ int main() {
     s.center = {0, 2, -2};
     s.logicalSize(1800, 1000, .002f);
     assert(layout.spawn(a, &world, camera, s, 1));
+    assert(layout.locate(a, &world, camera, 1800, 1000));
+    assert(!layout.instances.back().contains("areaId")); // Unzoned after warp: omit, never empty.
     s.id = b.id;
     assert(!layout.spawn(b, &world, camera, s, 1));
     assert(layout.unplaced.contains(b.id) && !layout.locate(b, &world, camera, 1800, 1000));

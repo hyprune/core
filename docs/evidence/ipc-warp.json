@@ -1,0 +1,15 @@
+{
+  "nestedOnly": true,
+  "status": "incomplete",
+  "completed": {
+    "repeatedStyledVisibilityWarp": true,
+    "outgoingFramesSchemaValidated": 310,
+    "authenticationRetained": true
+  },
+  "limitation": "The initial passing warp run had no mount instances, so it did not exercise the unzoned-instance regression.",
+  "strongerRegression": {
+    "status": "failed",
+    "assertion": "live instances present after warp",
+    "nextStep": "Establish a real adopted window on the nested world workspace before warping; then repeat with nonempty unzoned instances."
+  }
+}

@@ -49,6 +49,7 @@ def camera():
 
 def run(args):
     global STATE
+    if getattr(args,'ipc_warp',False): args.m3b=True
     if getattr(args,'placement',False): args.m3b=True
     if getattr(args,'ink',False): args.authoring=True
     if not hasattr(args,'authoring'): args.authoring=False
@@ -120,6 +121,9 @@ def run(args):
         subprocess.run([sys.executable,str(ROOT/'tests/fixtures/visibility.py')],check=True)
         shutil.copytree(ROOT/'tests/fixtures/visibility',installed/'org.hyprune.visibility',dirs_exist_ok=True)
     (STATE/"graphics.json").unlink(missing_ok=True)
+    if getattr(args,'ipc_warp',False):
+        from ipc_warp import prepare
+        prepare(installed)
     token=secrets.token_hex(32)
     grants=[{'token':token,'client':'org.hyprune.nested','capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}]
     if args.m1 or args.integration or args.m2 or args.m3a or args.m3b:grants[0]['capabilities']+=['shell.control','data.publish']
@@ -129,7 +133,7 @@ def run(args):
     if args.m3b:
         for grant in grants:grant['capabilities'].append('input.control')
     read,write=os.pipe();os.write(write,json.dumps(grants).encode());os.close(write)
-    environment=os.environ.copy();environment.update(AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read),HYPRUNE_LAYOUT_FILE=str(STATE/"layout.json"),HYPRUNE_INPUT_FILE=str(STATE/"input.json"),HYPRUNE_GRAPHICS_FILE=str(STATE/"graphics.json"),HYPRUNE_EDITOR_FILE=str(STATE/"editor.json"),XDG_STATE_HOME=str(STATE/"statehome"),XDG_CACHE_HOME=str(STATE/"cache"/secrets.token_hex(8)))
+    environment=os.environ.copy();environment.update(HYPRUNE_VALIDATE_IPC='1',AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read),HYPRUNE_LAYOUT_FILE=str(STATE/"layout.json"),HYPRUNE_INPUT_FILE=str(STATE/"input.json"),HYPRUNE_GRAPHICS_FILE=str(STATE/"graphics.json"),HYPRUNE_EDITOR_FILE=str(STATE/"editor.json"),XDG_STATE_HOME=str(STATE/"statehome"),XDG_CACHE_HOME=str(STATE/"cache"/secrets.token_hex(8)))
     if args.integration: environment['HYPRUNE_WORKSPACE_LOCATIONS']=str(STATE/'locations.json')
     config=str(HERE/'hyprland.lua')
     if os.environ.get('HYPRUNE_NESTED_4K')=='1':
@@ -175,8 +179,12 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,"0.15" if getattr(args,"placement",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.15" if getattr(args,"placement",False) or getattr(args,"ipc_warp",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
+        if getattr(args,"ipc_warp",False):
+            from ipc_warp import acceptance
+            acceptance(client,children,args,shell_token,socketpath)
+            return
         if getattr(args,"ink",False):
             from ink import acceptance
             acceptance(client,children,args,shell_token,socketpath)
@@ -420,6 +428,6 @@ def m1(client):
     print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--placement',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--ipc-warp',action='store_true');parser.add_argument('--placement',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
     try:run(args)
     except KeyboardInterrupt:print("Nested session stopped.",flush=True)

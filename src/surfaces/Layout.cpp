@@ -653,6 +653,7 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                          {"status", carried == i.id           ? "carried"
                                     : recalled.contains(i.id) ? "recalled"
                                                               : "placed"}});
+    if (instances.back()["areaId"] == "") instances.back().erase("areaId");
     return s;
 }
 void Layout::mount(const Instance &i, const world::World *w, Surface s) {

@@ -1,4 +1,5 @@
 #include "Server.hpp"
+#include "WireAudit.hpp"
 #include "Protocol.hpp"
 #include "interaction/Input.hpp"
 #include <cstring>
@@ -91,6 +92,14 @@ Server::Server(const std::string &runtime, const std::string &instance, std::vec
         throw std::runtime_error("IPC bind/listen failed");
     }
     session_ = randomId();
+    audit_ = std::make_unique<WireAudit>();
+}
+bool Server::reissue(const LaunchGrant &grant) {
+    std::erase_if(tokens_, [](const auto &g) { return g.expires <= Clock::now(); });
+    if (grant.recipientPid <= 0 || tokens_.size() >= 64 ||
+        !std::regex_match(grant.token, std::regex("[a-f0-9]{64}"))) return false;
+    tokens_.push_back(grant);
+    return true;
 }
 Server::~Server() {
     for (auto &p : peers_)
@@ -118,9 +127,11 @@ Json Server::visibleState(const Peer &p) const {
                     v = "path";
         if (state.contains("keymap"))
             state["keymap"] = interaction::beforePlacementInput(state["keymap"]);
-        if (state.contains("mounts"))
-            for (auto &v : state["mounts"]["placements"])
-                v.erase("content");
+        if (state.contains("mounts")) {
+            for (auto &v : state["mounts"]["placements"]) v.erase("content");
+            if (state["mounts"].contains("instances")) std::erase_if(state["mounts"]["instances"].get_ref<Json::array_t &>(),
+                [](const auto &v){ return !v.contains("areaId"); });
+        }
     }
     if (!protocol::atLeast(p.protocol,"0.13") && state.contains("presentation")) {
         auto &view=state["presentation"];
@@ -226,9 +237,11 @@ void Server::notify(const std::string &event, Json params, const std::string &ac
         if (p.hello && !p.closing && protocol::atLeast(p.protocol, "0.2") && !p.subscription.empty() &&
             (protocol::atLeast(p.protocol, "0.4") || (event != "mounts.changed" && event != "presentation.changed"))) {
             auto projected = params;
-            if (!protocol::atLeast(p.protocol, "0.15") && event == "mounts.changed" && projected.contains("mounts"))
-                for (auto &v : projected["mounts"]["placements"])
-                    v.erase("content");
+            if (!protocol::atLeast(p.protocol, "0.15") && event == "mounts.changed" && projected.contains("mounts")) {
+                for (auto &v : projected["mounts"]["placements"]) v.erase("content");
+                if (projected["mounts"].contains("instances")) std::erase_if(projected["mounts"]["instances"].get_ref<Json::array_t &>(),
+                    [](const auto &v){ return !v.contains("areaId"); });
+            }
             if (!protocol::atLeast(p.protocol,"0.13") && event=="presentation.changed") {
                 auto &view=projected["presentation"];
                 if(view.contains("profile") && view["profile"].is_object())view["profile"].erase("outline");
@@ -249,7 +262,8 @@ void Server::publish(Json state) {
     state_ = std::move(state);
     ++revision_;
 }
-void Server::queue(Peer &p, const Json &value) {
+void Server::queue(Peer &p, const Json &value, const std::string &method) {
+    audit_->check(p.protocol, value, method);
     auto s = value.dump();
     if (s.size() > MaxFrame || p.output.size() + s.size() + 4 > MaxQueue) {
         p.closing = true;
@@ -263,6 +277,7 @@ void Server::queue(Peer &p, const Json &value) {
 }
 void Server::frame(Peer &p, const std::string &bytes) {
     Json id = nullptr, request;
+    std::string method;
     try {
         std::vector<std::set<std::string>> stack;
         auto callback = [&](int depth, Json::parse_event_t event, Json &parsed) {
@@ -292,7 +307,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
               -32600, "invalid request profile");
         check(p.ids.insert(id.get<std::string>()).second, -32600, "request ID reused");
         check(p.ids.size() <= 65536, -32008, "connection request limit");
-        std::string method = request["method"];
+        method = request["method"];
         const auto &params = request["params"];
         Json result;
         if (!p.hello) {
@@ -336,7 +351,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
                       -32602, "invalid token format");
                 bool valid = false;
                 for (auto it = tokens_.begin(); it != tokens_.end(); ++it)
-                    if (it->expires > Clock::now() && it->token == params["token"].get<std::string>() &&
+                    if (it->expires > Clock::now() && (!it->recipientPid || it->recipientPid == p.pid) && it->token == params["token"].get<std::string>() &&
                         it->client == params["client"]["id"].get<std::string>()) {
                         for (auto &c : params["capabilities"])
                             if (it->capabilities.contains(c.get<std::string>()))
@@ -469,7 +484,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
             if (method.starts_with("input.") && !protocol::atLeast(p.protocol, "0.12"))
                 result = interaction::withoutRecordingAction(std::move(result));
         }
-        queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"result", result}});
+        queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"result", result}}, method);
     } catch (const Error &e) {
         queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"error", {{"code", e.code}, {"message", e.what()}}}});
         if (!p.hello)

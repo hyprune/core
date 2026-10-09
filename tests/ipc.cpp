@@ -1,6 +1,7 @@
 #include "control/Control.hpp"
 #include "ipc/Protocol.hpp"
 #include "ipc/Server.hpp"
+#include "ipc/GrantIssuer.hpp"
 #include <arpa/inet.h>
 #include <atomic>
 #include <filesystem>
@@ -68,6 +69,25 @@ Json hello(const std::string &token = "") {
     if (!token.empty())
         p["token"] = token;
     return req("hello", "session.hello", p);
+}
+void renewals(const std::string &runtime) {
+    std::vector<LaunchGrant> original{{randomId(), "org.hyprune.test", {"state.read"}}};
+    Server server(runtime, "renew", original, [](auto &,auto &){return Json{{"ok",true}};});
+    int pair[2];check(socketpair(AF_UNIX,SOCK_SEQPACKET,0,pair)==0,"renew socketpair");
+    GrantIssuer issuer(pair[0],original);
+    auto issue=[&](Json j){auto bytes=j.dump();send(pair[1],bytes.data(),bytes.size(),0);issuer.poll(server);char b[1024];auto n=recv(pair[1],b,sizeof b,0);check(n>0,"renew response");return Json::parse(b,b+n).at("ok").get<bool>();};
+    auto token=randomId();
+    check(!issue({{"client","org.hyprune.unknown"},{"token",token},{"pid",getpid()}}),"unknown identity renewal");
+    check(!issue({{"client","org.hyprune.test"},{"token",token},{"pid",getpid()},{"capabilities",{"world.control"}}}),"renewal escalation");
+    check(issue({{"client","org.hyprune.test"},{"token",token},{"pid",getpid()+1}}),"PID-bound token issuance");
+    auto attempt=[&](const std::string &t){Client c(server.path());c.sendJson(hello(t));for(int i=0;i<3;i++)server.poll();return c.receive();};
+    check(attempt(token).contains("error"),"wrong PID used renewal token");
+    token=randomId();check(issue({{"client","org.hyprune.test"},{"token",token},{"pid",getpid()}}),"fresh renewal");
+    check(attempt(token).contains("result"),"renewal authentication");
+    check(attempt(token).contains("error"),"renewal token reused");
+    auto expired=LaunchGrant{randomId(),"org.hyprune.test",{"state.read"},getpid()};expired.expires=std::chrono::steady_clock::now()-std::chrono::seconds(1);
+    check(server.reissue(expired),"expiry fixture");check(attempt(expired.token).contains("error"),"expired renewal accepted");
+    close(pair[1]);
 }
 void hudStreams(const std::string &runtime) {
     auto token = randomId();
@@ -138,7 +158,8 @@ void inheritance(const std::string &runtime) {
         grants.push_back({randomId(), "org.hyprune.test", allGrants});
     Server server(runtime, "inheritance", grants, [](auto &, auto &) { return Json{{"ok", true}}; });
     server.advertise(methods);
-    const Json mounts{{"placements", Json::array({Json{{"pose", true}}, Json{{"anchorId", "wall"}}})}};
+    const Json mounts{{"placements", Json::array({Json{{"pose", true}}, Json{{"anchorId", "wall"}}})},
+                      {"instances",Json::array({Json{{"surfaceId","free"}},Json{{"surfaceId","home"},{"areaId","room"}}})}};
     server.publish({{"movement", {{"state", "climbing"}, {"ladderId", "hatch"}, {"prompt", "W/S climb"}}},
                     {"runtime", Json::object()},
                     {"location", Json::object()},
@@ -196,6 +217,7 @@ void inheritance(const std::string &runtime) {
         for (auto it = previousState.begin(); it != previousState.end(); ++it)
             check(state.contains(it.key()), "inherited state section disappeared");
         if (atLeast(version, "0.4")) {
+            check(state["mounts"]["instances"].size() == (atLeast(version,"0.15") ? 2 : 1), "unzoned instance legacy projection");
             check(state["mounts"]["placements"].size() == (atLeast(version, "0.5") ? 2 : 1),
                   "snapshot pose projection");
             sendMounts = true;
@@ -233,6 +255,7 @@ int main() {
     try {
         inheritance(dir);
         hudStreams(dir);
+        renewals(dir);
         auto token = randomId(), token02 = randomId(), token03 = randomId(), token04 = randomId(), token05 = randomId();
         auto token06 = randomId(), token07 = randomId(), token08 = randomId();
         std::atomic<int> disconnected = 0;

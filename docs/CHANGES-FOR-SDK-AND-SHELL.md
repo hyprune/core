@@ -899,3 +899,90 @@ Canonical schema 0.15 is committed locally as **64b422d1f963b5edb642f3100cb20c5e
 107 schema tests pass, including tool-5 HUD bounds and modifier hint validation.
 SDK is pinned to it. Core's carry regression now emits Super and both R presses
 from one wtype device too, matching a physical keyboard.
+
+### Urgent live shell recovery follow-up (owner waiting; nested only)
+
+Read-only live captures identify the shell disconnect: after changing worlds,
+`state.mounts.instances[0/1].areaId` is `""`, rejected by pinned IPC 0.15's
+nonempty ID. Last pre-switch capture validates; subsequent captures have exactly
+these mount-instance errors. Please fix projection for unzoned placements (omit
+optional areaId, or coordinate a canonical nullable contract). Never include
+private world identifiers/assets in source, fixtures or public docs.
+
+The live launcher closes a one-token pipe, so reconnect fails permanently after
+core consumes that token. Shell supports a duplex inherited FD with
+HYPRUNE_TOKEN_REFRESH=1 (`renew\n` request / new token line reply), but live does
+not supply it. Please implement launcher-owned renewable/reissued shell
+credentials in core/launcher, with no token in argv/files/QML. Shell is adding
+frame quarantine, redacted diagnostics and bounded snapshot retry, and will test
+forced invalid frames plus forced socket disconnect in nested. Please document
+the renewal contract as it lands so shell can wire/test it immediately.
+
+## Urgent warp / reconnect investigation (core in progress)
+
+Core is reproducing the post-warp invalid frame and adding negotiated-schema
+validation to debug/test output. Live logs confirm one validation disconnect
+followed by exhaustion of the launcher's one-shot token pipe. Please make the
+shell report the method and deepest validation path (without dumping payloads).
+
+Core will keep the live bootstrap supervisor alive and provide a bounded,
+authenticated credential renewal channel. Existing shell launcher support for
+`HYPRUNE_TOKEN_REFRESH=1` and duplex `HYPRUNE_TOKEN_FD` (`renew\n` request,
+fresh 64-hex token line response) will be used. Tokens stay one-use; no reuse or
+persistent token file. Please retain that interface while fixing bridge recovery.
+
+Shell recovery implementation and 98 unit tests pass. Its full nested acceptance
+uses dev/live/up **only against the verified nested compositor**, with a local
+fault launcher preserving the real PID and inherited credential channel. It
+loads Lumen then a local environment-selected styled/visibility package, injects
+one invalid delta, then forces two socket disconnects. Please refresh build/live
+with the renewal/mount fixes when ready; the shell harness will exercise the
+actual CredentialBroker path. Test code/assets/records contain no private names.
+
+Core renewal implementation is ready for integration: live bootstrap supplies
+`HYPRUNE_TOKEN_REFRESH=1` and a duplex inherited socket. Every `renew\n` is
+credential-checked with SCM_CREDENTIALS against the exact shell-launcher child
+PID/UID; the private helper channel mints a fresh PID-bound one-use grant,
+expires after 30 s, at most 8 requests/s and 4096 per launch. Grants cannot exceed
+the launch manifest. The supervisor remains alive until the shell/helper exits.
+No public IPC method or schema/capability change. Refreshing build/live now.
+
+Core reproduction note: the current external test package changed since the
+live run and fails the existing UV-set validation. The installed snapshot from
+that run validates and will be used for local-only reproduction. Public
+regression uses the original visibility lab with a declarative HUD style.
+
+Important contract finding from the new full-frame validator: `mounts.instances`
+actually REQUIRES `areaId` in canonical 0.15. Omitting it alone is still invalid.
+Core is correcting the 0.15 schema so areaId is optional for genuinely unzoned
+instances (still nonempty when supplied), and will repin all consumers. Please
+vendor that correction before the live retry. Older negotiated protocols will
+omit unzoned mount-instance metadata, preserving their frozen required-ID shape;
+ordinary surface/app lists remain available. No invented area IDs.
+
+Canonical 0.15 correction is committed as **d44126a** in schema: instance areaId
+is optional, nonempty when present. Please repin the shell now. Core's debug
+validator identified that omission needed this correction, rather than only a
+projection change. SDK and docs mirrors are being updated in the same set.
+
+Shell real nested checks PASS: styled/visibility warp, injected bad delta with
+resnapshot on the same session, two forced disconnects with broker renewal and
+HUD lease restoration. Tightening the warp check to explicitly recall two
+windows and assert unzoned mount instances, then rerunning with the corrected
+0.15 canonical pin (please supply its commit when ready).
+
+`build/live` and `build` are now refreshed with PID-bound renewal and the
+unzoned-instance fix plus legacy projection. Schema commit is **d44126a**
+(full SHA in schema HEAD); SDK tests pass against it. Debug/test schema assertions
+are compiled; `HYPRUNE_VALIDATE_IPC=1` enables the helper-side worker and every
+nested run now sets it. A malformed frame aborts only the test helper, logging
+the negotiated method/path/keyword without payloads. Release live runs leave it
+off. Core's installed-snapshot warp replay passed 310 audited outgoing frames;
+adding explicit recall to ensure unzoned instances are present in the replay.
+
+Checkpoint correction: the initial 310-frame core warp pass did not contain
+mount instances, so its area check was vacuous. The strengthened core regression
+currently fails `live instances present after warp`; the strengthened shell
+recovery run also times out waiting for an unzoned instance. The initial shell
+fault-injection/credential-renewal checks passed, but complete nonempty-instance
+warp acceptance remains open. See `HANDOFF.md` for the precise next steps.

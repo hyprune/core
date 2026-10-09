@@ -112,3 +112,17 @@ The nested test uses temporary Lumen Reach/Switchyard copies with distinct HUD
 styles, starts with the non-default world, and clicks the actual Places buttons
 in both directions. It uses grim/tesseract to locate the visible controls.
 Evidence: [live-worlds.json](../../docs/evidence/live-worlds.json).
+
+The bootstrap supervisor now remains running to renew the shell bridge's
+credentials after a transient disconnect. The inherited duplex channel accepts
+`renew` lines only from the exact launcher child (kernel PID/UID credentials).
+Each fresh token is scoped to that launch's capabilities, PID-bound, one-use,
+and expires after 30 seconds. Limits are 8 renewals/second, 4096 per launch and
+64 outstanding grants. Tokens never enter argv, QML, state files or logs.
+`down` also stops this supervisor; no config-file changes are needed.
+
+For a nested debug run, `HYPRUNE_VALIDATE_IPC=1` enables full negotiated-schema
+checks on every outgoing frame in hypruned. Validation runs on a separate
+worker, away from the compositor/render pass. A bad frame aborts the test helper
+and reports only method, field path and schema keyword. Ordinary Release live
+runs leave this off. `dev/nested/run.sh` enables it automatically.

@@ -1,6 +1,7 @@
 #include "LayoutStore.hpp"
 #include "offload/Supervisor.hpp"
 #include "ipc/Server.hpp"
+#include "ipc/GrantIssuer.hpp"
 #include <csignal>
 #include <cstdio>
 #include <poll.h>
@@ -42,6 +43,7 @@ int main() {
         bool layoutSent = false, persistReady = false;
         uint64_t command = 0;
         Server *server = nullptr;
+        std::function<void()> renewGrants = [] {};
         auto receive = [&]() -> Json {
             char buffer[196609];
             auto n = recv(fd, buffer, sizeof buffer, 0);
@@ -101,6 +103,7 @@ int main() {
                 pollfd p{fd, POLLIN, 0};
                 ::poll(&p, 1, 50);
                 renderer.tick();
+                renewGrants();
                 send({{"type", "heartbeat"}});
                 if (!cancelled && method != "_connection.closed" && params.contains("_actor") &&
                     !server->connected(params.at("_actor"))) {
@@ -127,9 +130,14 @@ int main() {
         if (!dir || !sig)
             throw std::runtime_error("missing session environment");
         std::fprintf(stderr, "hypruned: starting session %s\n", sig);
-        Server endpoint(dir, sig, grants(), handler);
+        auto launchGrants = grants();
+        int renewalFd = getenv("HYPRUNE_GRANT_FD") ? std::stoi(getenv("HYPRUNE_GRANT_FD")) : -1;
+        unsetenv("HYPRUNE_GRANT_FD");
+        GrantIssuer issuer(renewalFd, launchGrants);
+        Server endpoint(dir, sig, launchGrants, handler);
         std::fprintf(stderr, "hypruned: IPC ready; private bridge connected\n");
         server = &endpoint;
+        renewGrants = [&] { issuer.poll(endpoint); };
         endpoint.contextual(true);
         auto heartbeat = std::chrono::steady_clock::now();
         while (running) {
@@ -146,6 +154,7 @@ int main() {
                 heartbeat = std::chrono::steady_clock::now();
             }
             renderer.tick();
+            issuer.poll(endpoint);
             endpoint.poll();
         }
         std::fprintf(stderr, "hypruned: stopping\n");

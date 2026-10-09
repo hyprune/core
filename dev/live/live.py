@@ -341,6 +341,7 @@ class RPC:
 
 
 def bootstrap(args,path):
+    from credentials import CredentialBroker
     state=json.loads(path.read_text());s=state['session']; root=pathlib.Path(s['runtime'])/'hyprune-live'/s['signature'];runroot=pathlib.Path(state['runroot'])
     tokens={name:secrets.token_hex(32) for name in ['org.hyprune.live','com.hyprune.shell']}
     server=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);sockpath=root/'grants.sock';sockpath.unlink(missing_ok=True);server.bind(str(sockpath));os.chmod(sockpath,0o600);server.listen(1);server.settimeout(20)
@@ -349,20 +350,24 @@ def bootstrap(args,path):
         pid,uid,_=struct.unpack('3i',conn.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))
         parent=int(pathlib.Path(f'/proc/{pid}/stat').read_text().rsplit(')',1)[1].split()[1])
         if uid!=os.getuid() or parent!=s['pid']:raise RuntimeError('Grant recipient is not this compositor helper')
-        conn.send(json.dumps([{'token':token,'client':name,'capabilities':GRANTS} for name,token in tokens.items()]).encode());conn.close()
+        conn.send(json.dumps([{'token':token,'client':name,'capabilities':GRANTS} for name,token in tokens.items()]).encode())
     finally:server.close();sockpath.unlink(missing_ok=True)
     sock=pathlib.Path(s['runtime'])/'hyprune'/s['signature']/'control.sock';wait(sock.is_socket)
     rpc=RPC(sock,tokens['org.hyprune.live']);rpc.call('world.load',{'worldId':state['worlds'][0]['id']})
-    read,write=os.pipe();os.write(write,(tokens['com.hyprune.shell']+'\n').encode());os.close(write)
+    renew,recipient=socket.socketpair(socket.AF_UNIX,socket.SOCK_STREAM)
+    renew.setsockopt(socket.SOL_SOCKET,socket.SO_PASSCRED,1)
+    read=recipient.fileno()
     protocol=shell_protocol(maximum=rpc.hello["protocol"])
     print(f'IPC: launcher {rpc.hello["protocol"]}; shell {protocol}',flush=True)
-    env=env_for(s);env.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_PROTOCOL=protocol,HYPRUNE_SOCKET=str(sock))
+    env=env_for(s);env.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_TOKEN_REFRESH="1",HYPRUNE_PROTOCOL=protocol,HYPRUNE_SOCKET=str(sock))
     log=open(path.parent/'shell.log','a')
     log_start=log.tell()
-    child=subprocess.Popen([sys.executable,str(SHELL/'bridge/launch.py'),'--protocol',protocol,*shell_world_args(state['worlds'])],env=env,pass_fds=(read,),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT);os.close(read)
+    child=subprocess.Popen([sys.executable,str(SHELL/'bridge/launch.py'),'--protocol',protocol,*shell_world_args(state['worlds'])],env=env,pass_fds=(read,),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT);recipient.close()
+    broker=CredentialBroker(renew,conn,child.pid)
     # Persist identity immediately: down can recover even before ready.
     atomic(runroot/'processes.json',[{'record':process(child.pid),'group':True}])
     def shell_ready():
+        if not broker.poll(.05):raise RuntimeError('Shell credential channel closed')
         if child.poll() is not None:raise RuntimeError('Hyprune shell exited; see shell.log')
         # Inactive shells intentionally hold no output lease. Verify this launch's
         # authenticated subscription and presentation connection without entering.
@@ -376,6 +381,11 @@ def bootstrap(args,path):
     atomic(runroot/'processes.json',procs)
     atomic(runroot/'ready.json',{'processes':procs});rpc.s.close()
     print('Bootstrap ready; authenticated shell and presentation verified',flush=True)
+    try:
+        while child.poll() is None and broker.poll():pass
+    finally:
+        renew.close();conn.close()
+        print('Credential supervisor stopped',flush=True)
 
 
 def daemon():
@@ -384,9 +394,9 @@ def daemon():
     root=pathlib.Path(os.environ['HYPRUNE_LIVE_ROOT']);settings=json.loads((root/'bootstrap.json').read_text())
     fd=os.open(pathlib.Path(settings['state']).parent/'hypruned.log',os.O_WRONLY|os.O_CREAT|os.O_APPEND,0o600)
     os.dup2(fd,1);os.dup2(fd,2);os.close(fd)
-    server=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);server.connect(str(root/'grants.sock'));data=server.recv(8192);server.close()
+    server=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);server.connect(str(root/'grants.sock'));data=server.recv(8192);os.set_inheritable(server.fileno(),True)
     read,write=os.pipe();os.write(write,data);os.close(write);os.set_inheritable(read,True)
-    env={**os.environ,'HYPRUNE_LAUNCH_FD':str(read)}
+    env={**os.environ,'HYPRUNE_LAUNCH_FD':str(read),'HYPRUNE_GRANT_FD':str(server.fileno())}
     rec=process(os.getpid());atomic(pathlib.Path(settings['state']).parent/'helper.json',rec)
     os.execve(settings['daemon'],[settings['daemon']],env)
 

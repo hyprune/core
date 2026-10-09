@@ -3,6 +3,7 @@
 #include <functional>
 #include <json.hpp>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -15,8 +16,10 @@ struct Error : std::runtime_error {
 struct LaunchGrant {
     std::string token, client;
     std::set<std::string> capabilities;
+    int recipientPid = 0; // Zero only for legacy initial one-shot grants.
     std::chrono::steady_clock::time_point expires = std::chrono::steady_clock::now() + std::chrono::seconds(30);
 };
+class WireAudit;
 class Server {
   public:
     using Handler = std::function<Json(const std::string &, const Json &)>;
@@ -24,6 +27,7 @@ class Server {
     ~Server();
     Server(const Server &) = delete;
     void flush();
+    bool reissue(const LaunchGrant &); // Private supervisor channel only; never a public IPC method.
     bool connected(const std::string &actor) const;
     void poll(); // Called only outside the render pass; bounded nonblocking I/O.
     void publish(Json state);
@@ -48,6 +52,7 @@ class Server {
         std::chrono::steady_clock::time_point accepted = std::chrono::steady_clock::now(), frameStart = accepted,
                                               lastDelta = accepted;
     };
+    std::unique_ptr<WireAudit> audit_;
     int fd_ = -1;
     std::string path_, session_;
     std::vector<Peer> peers_;
@@ -60,7 +65,7 @@ class Server {
     Json state_;
     uint64_t revision_ = 0, subscriptions_ = 0;
     void frame(Peer &, const std::string &);
-    void queue(Peer &, const Json &);
+    void queue(Peer &, const Json &, const std::string &method = "");
 };
 std::string randomId();
 } // namespace hyprune::ipc
