@@ -1,3 +1,51 @@
+# Core lead handoff — 2026-10-09 (workspace numbering)
+
+## Room 20, area homes 21+
+
+Owner decision: `windows.world_workspace` defaults to **20** and
+`windows.workspace_base` to **20**, so Lumen Reach is 21 sun-court,
+22 array-hall, 23 rime-vault, 24 signal-rise. Their Hyprland binds are
+group*10+N, so homes share the 21–29 group and the room is in 11–20, by
+choice. Explicit Lua config (including the old 8) and explicit binds/kit
+homes still win. Nested only, nothing pushed, `build/live` not rebuilt,
+core-render untouched.
+
+| Repo | Commit | What |
+| --- | --- | --- |
+| core | `3ec9bca` | Defaults + fallbacks, unit tests, live text, LIVE-TEST, M3A/M3B docs |
+| core | `d905b50` | Nested harnesses on 20 / 21–24 (room test's unrelated ws stays 30) |
+| core | this commit | CHANGES note, handoff |
+| docs | `5339098` | RFC-0005 default-homes text; generated keymap gains a Workspaces section |
+| shell | `7ffda21` | recovery-core / hud_placement_check / diagnostics fixture use room 20 |
+| sdk | `2d4d926` | ipc-warp fixture uses room 20 |
+
+The meta repo was not changed. Its kits bind explicit homes (the Lumen Reach
+kit uses workspaces 1–4, dev uses 10/11) and never set `world_workspace`, so
+they keep their numbers. Moving kits to 21+ is the owner's call.
+
+Validation (final tree):
+
+```sh
+flock /tmp/worldshell-nested.lock ctest --test-dir build   # 20/20
+dev/nested/run.sh --workspace-homes   # 29 checks (homes 21-24, room 20)
+dev/nested/run.sh --long-titles       # PASS, audit 173 frames
+dev/nested/run.sh --ipc-warp          # PASS, audit 523 frames
+dev/nested/run.sh --playable          # 15 PASS
+dev/nested/run.sh --m2                # PASS + IPC 0.4 wire (104/416)
+flock /tmp/worldshell-nested.lock python3 dev/nested/world_workspace.py   # 23 PASS
+python3 dev/live/test_live.py         # 16 OK (mocks)
+shell: python3 -m unittest discover -s tests   # 100 OK
+sdk: npm test                         # 63 pass, 2 skipped, 0 fail
+docs: npm run build, check:links, check:keymap  # OK
+```
+
+Pre-existing, not caused by this change: `dev/nested/run.sh --placement`
+fails at `placement.py:78` (aim at the released carried window times out
+after 15 passes). The unchanged HEAD `e7d6013` fails identically. Not
+investigated.
+
+---
+
 # Core lead handoff — 2026-10-09 (night)
 
 ## Follow-ups: schema-bounded strings, m2 harness

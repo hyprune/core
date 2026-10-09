@@ -1074,3 +1074,15 @@ Shell/SDK: no change needed. Do not expect full window titles past 512 code
 points, and treat a trailing `…` as a clamp marker. Placement rules from
 very long titles store the 256 code point form, and core matches windows in
 that same form. Nested proof: `dev/nested/run.sh --long-titles`.
+
+## Owner workspace numbering: room 20, homes 21+ (2026-10-09, IPC 0.15 unchanged)
+
+Defaults changed: `windows.world_workspace` 8 → **20**, `windows.workspace_base`
+10 → **20**. Lumen Reach is now 21 sun-court, 22 array-hall, 23 rime-vault,
+24 signal-rise. The owner's binds pick workspaces in groups of ten
+(Super+N = group*10+N), so homes 21–29 share one group and the room (20)
+sits in the 11–20 group, by their choice. An explicit Lua config value
+(including the old 8) and explicit `workspace.bind`/kit homes still win.
+Wire shape is unchanged. Shell (`7ffda21`) and SDK (`2d4d926`) only had
+nested harnesses/fixtures that used 8 as the room. No QML, bridge or mock
+code assumed a number. Docs `5339098`.
