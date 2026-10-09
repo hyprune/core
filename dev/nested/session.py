@@ -127,6 +127,12 @@ def run(args):
         # Frozen copy, so before/after runs measure identical package bytes.
         source=pathlib.Path(os.environ.get('HYPRUNE_PERF_WORLD','/tmp/hyprune-perf/com.hyprune.lumen-reach'))
         shutil.rmtree(installed/'com.hyprune.lumen-reach',ignore_errors=True);shutil.copytree(source,installed/'com.hyprune.lumen-reach')
+        # Optional B package for interleaved A/B rounds in one compositor.
+        shutil.rmtree(installed/'com.hyprune.lumen-reach.b',ignore_errors=True)
+        if os.environ.get('HYPRUNE_PERF_WORLD_B'):
+            shutil.copytree(os.environ['HYPRUNE_PERF_WORLD_B'],installed/'com.hyprune.lumen-reach.b')
+            manifest=json.loads((installed/'com.hyprune.lumen-reach.b/world.json').read_text());manifest['id']='com.hyprune.lumen-reach.b'
+            (installed/'com.hyprune.lumen-reach.b/world.json').write_text(json.dumps(manifest))
         (STATE/'layout.json').unlink(missing_ok=True)
     (STATE/"graphics.json").unlink(missing_ok=True)
     if getattr(args,'ipc_warp',False):

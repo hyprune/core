@@ -49,38 +49,51 @@ def acceptance(client,children,args,shell_token,socketpath):
     for title,command in terminals.items():
         children.append(s.envrun('kitty','--class','hyprune-perf','--title',title,*static,'sh','-c',command,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
         time.sleep(.6)
-    client.call('world.load',{'worldId':LUMEN})
-    client.call('workspace.bind',{'id':10,'worldId':LUMEN,'areaId':'sun-court'})
     timings=lambda:client.call('graphics.get',{})['timings']
+    variants=[('A',LUMEN)]+([('B',LUMEN+'.b')] if os.environ.get('HYPRUNE_PERF_WORLD_B') else [])
+    def enter(world):
+        """Same scene in every variant: wall binding, both mounted terminals, spawn pose."""
+        client.call('world.load',{'worldId':world})
+        client.call('workspace.bind',{'id':10,'worldId':world,'areaId':'sun-court'})
+        if not s.camera()['active']:
+            s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")')
+            wait(lambda:s.camera()['active'],timeout=20)
+        wait(lambda:not timings()['upload']['pending'],timeout=60)
+        for title,anchor in [('Perf-room','sun-court-slot-01-field-rig-02'),('Perf-video','sun-court-slot-01-field-rig-01')]:
+            surface=wait(lambda:next((v for v in s.camera()['captures'] if v['title']==title),None),timeout=20)
+            client.call('surface.place',{'surfaceId':surface['id'],'anchorId':anchor})
+        pose(client,POSES[0][1],POSES[0][2],POSES[0][3])
+        try:wait(lambda:sum(v['title'] in ('Perf-room','Perf-video') and v['visible'] for v in s.camera()['captures'])==2,timeout=20)
+        except AssertionError:print('captures',json.dumps(s.camera()['captures']),flush=True);raise
+        time.sleep(1.5)
     client.call('graphics.set',{'patch':{'quality':'low','offload':'off','dynamic_resolution':False,'render_scale':scales[0],'sharpen':.35}})
-    s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")')
-    wait(lambda:s.camera()['active'],timeout=20)
-    wait(lambda:not timings()['upload']['pending'],timeout=60)
-    for title,anchor in [('Perf-room','sun-court-slot-01-field-rig-02'),('Perf-video','sun-court-slot-01-field-rig-01')]:
-        surface=wait(lambda:next((v for v in s.camera()['captures'] if v['title']==title),None),timeout=20)
-        client.call('surface.place',{'surfaceId':surface['id'],'anchorId':anchor})
-    pose(client,POSES[0][1],POSES[0][2],POSES[0][3])
-    try:wait(lambda:sum(v['title'] in ('Perf-room','Perf-video') and v['visible'] for v in s.camera()['captures'])==2,timeout=20)
-    except AssertionError:print('captures',json.dumps(s.camera()['captures']),flush=True);raise
-    time.sleep(1.5)
+    enter(LUMEN)
     report['device']=timings()['renderer']
     # 1. Fixed-scale GPU pass costs per pose. Camera moves a hair each sample so
     #    every sample is a newly rendered frame regardless of idle skipping.
-    for scale in scales:
-        client.call('graphics.set',{'patch':{'render_scale':scale}});time.sleep(.5)
-        for name,position,yaw,pitch in POSES:
-            pose(client,position,yaw,pitch);time.sleep(1.2)
-            samples=[];first=timings();t0=time.monotonic()
-            for n in range(30):
-                pose(client,position,yaw+(n%2)*1e-4,pitch);time.sleep(.1);samples.append(timings())
-            elapsed=time.monotonic()-t0;last=samples[-1]
-            gpu={k:statistics.median(v['gpuEffectsMs'][k] for v in samples if v['gpuEffectsMs'][k] is not None) for k in last['gpuEffectsMs'] if any(v['gpuEffectsMs'][k] is not None for v in samples)}
-            item={'pose':name,'scale':scale,'internal':last['internalSize'],'gpuMs':gpu,'gpuTotalMs':statistics.median(sum(x for x in v['gpuPassMs'] if x) for v in samples),
-                  'cpuRenderMs':statistics.median(v['cpuRenderMs'] for v in samples),'cpuUpdateMs':statistics.median(v['cpuUpdateMs'] for v in samples),
-                  'fps':(last['renderedFrames']-first['renderedFrames'])/elapsed,'reused':last['reusedFrames']-first['reusedFrames'],'visibility':last['visibility']}
-            report['poses'].append(item);print('MEASURE pose',json.dumps(item),flush=True)
-            if scale==scales[0]:
-                subprocess.run([str(s.HERE/'ctl.py'),'shot',str(out/f'{name}-{scale}.png')],check=True)
+    #    Variants alternate per round so GPU clock/thermal drift hits both.
+    rounds=int(os.environ.get('HYPRUNE_PERF_ROUNDS','1'))
+    for round in range(rounds):
+        for variant,world in variants:
+            if len(variants)>1:enter(world)
+            for scale in scales:
+                client.call('graphics.set',{'patch':{'render_scale':scale}});time.sleep(.5)
+                for name,position,yaw,pitch in POSES:
+                    pose(client,position,yaw,pitch);time.sleep(1.2)
+                    samples=[];first=timings();t0=time.monotonic()
+                    for n in range(30):
+                        pose(client,position,yaw+(n%2)*1e-4,pitch);time.sleep(.1);samples.append(timings())
+                    elapsed=time.monotonic()-t0;last=samples[-1]
+                    gpu={k:statistics.median(v['gpuEffectsMs'][k] for v in samples if v['gpuEffectsMs'][k] is not None) for k in last['gpuEffectsMs'] if any(v['gpuEffectsMs'][k] is not None for v in samples)}
+                    item={'variant':variant,'round':round,'pose':name,'scale':scale,'internal':last['internalSize'],'gpuMs':gpu,'gpuTotalMs':statistics.median(sum(x for x in v['gpuPassMs'] if x) for v in samples),
+                          'cpuRenderMs':statistics.median(v['cpuRenderMs'] for v in samples),'cpuUpdateMs':statistics.median(v['cpuUpdateMs'] for v in samples),
+                          'fps':(last['renderedFrames']-first['renderedFrames'])/elapsed,'reused':last['reusedFrames']-first['reusedFrames'],'visibility':last['visibility']}
+                    report['poses'].append(item);print('MEASURE pose',json.dumps(item),flush=True)
+                    if round==0 and scale==scales[0]:
+                        subprocess.run([str(s.HERE/'ctl.py'),'shot',str(out/f'{variant}-{name}-{scale}.png')],check=True)
+    if len(variants)>1:enter(LUMEN)
+    if os.environ.get('HYPRUNE_PERF_POSES_ONLY')=='1':
+        (out/'report.json').write_text(json.dumps(report,indent=2)+'\n');print('PERF report',out/'report.json',flush=True);return
     # 2. Idle: static camera and static clients, no input. Before render-on-demand
     #    every 16 ms tick damaged the output; afterwards no new world frames.
     client.call('graphics.set',{'patch':{'render_scale':scales[0]}})
