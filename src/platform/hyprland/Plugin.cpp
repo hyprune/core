@@ -299,6 +299,7 @@ struct Runtime {
     std::map<std::string, Binding> bindings;
     Json locations = Json::array();
     void workspaceLocation();
+    void deriveHomes();
     SP<CWLSurfaceResource> directorSurface();
     void publish();
     void publishHUD();
@@ -662,11 +663,28 @@ void Runtime::unfocus() {
     pointerX = pointerY = .5f;
     publish();
 }
+void Runtime::deriveHomes() {
+    // Each loaded world's areas get default homes at workspace_base + slot.
+    // Explicit binds, configured locations and the room workspace win.
+    layout.workspaceBase = config["windows"]["workspace_base"];
+    layout.reservedWorkspaces = {config["windows"]["world_workspace"].get<int>()};
+    if (worldWorkspace)
+        layout.reservedWorkspaces.insert(worldWorkspace);
+    for (auto &entry : locations)
+        layout.reservedWorkspaces.insert(entry.at("id").get<int>());
+    layout.deriveDefaults(world.get());
+}
 void Runtime::workspaceLocation() {
     if (layerCursor) return;
     if (!active || !monitor || !monitor->m_activeWorkspace)
         return;
     auto id = monitor->m_activeWorkspace->m_id;
+    if (!layout.binding(id, nullptr) &&
+        std::none_of(locations.begin(), locations.end(), [&](auto &entry) { return entry.at("id") == id; })) {
+        // Leaving every home (e.g. back to the room) re-arms travel to the same one.
+        resolvedLocation.clear();
+        return;
+    }
     if (auto b = layout.binding(id, nullptr)) {
         std::string key =
             std::to_string(id) + ":" + b->at("worldId").get<std::string>() + ":" + b->at("areaId").get<std::string>();
@@ -858,7 +876,7 @@ void Runtime::publish() {
                                 {"focused", workspace->isVisible()}});
     }
     Json homes = locations;
-    for (auto &b : layout.bindings) {
+    for (auto &b : layout.effectiveBindings()) {
         std::erase_if(homes.get_ref<Json::array_t &>(), [&](auto &v) { return v.at("id") == b.at("id"); });
         std::string spawnId = "arrival";
         if (world && b.at("worldId") == world->id) {
@@ -998,7 +1016,10 @@ void Runtime::publish() {
         if (world && editor.locked(world->id, e.instance))
             publication["editor"]["locked"].push_back(e.surface.id);
     lastPublished = publication;
-    ipc->publish(publication);
+    Json derived = Json::array();
+    for (auto &b : layout.defaults)
+        derived.push_back(b.at("id"));
+    ipc->publish(publication, derived);
     for (auto &[event, params] : layout.events)
         ipc->notify(event, params);
     layout.events.clear();
@@ -1069,6 +1090,7 @@ void Runtime::finishLoad() {
         layout.freePoses.clear();
         layout.occupiedPoses.clear();
         layout.spawnAreas.clear();
+        deriveHomes();
         restoreFullscreenWindows();
         fullscreen = {};
         handover = {};
@@ -3107,6 +3129,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     }
     if (method == "_layout.restore") {
         layout.restore(params);
+        deriveHomes();
         publish();
         return Json::object();
     }
@@ -3807,6 +3830,7 @@ int luaConfig(lua_State *L) {
             runtime->tagged.clear();
         }
         runtime->config = next;
+        runtime->deriveHomes();
         runtime->applyGraphics(runtime->graphicsFile.current);
         runtime->cursor();
         runtime->publish();
@@ -3899,8 +3923,15 @@ int luaCamera(lua_State *state) {
              {"size", {e.surface.width, e.surface.height}},
              {"collision", runtime->world && e.visible && surfaces::overlaps(e.surface, runtime->world->collision)},
              {"rotation", e.surface.rotation},
+             {"workspaceId", e.instance.workspaceId},
              {"pixels", {e.surface.pixelWidth, e.surface.pixelHeight}},
              {"position", {e.surface.center.x, e.surface.center.y, e.surface.center.z}}});
+    j["workspaceFrames"] = Json::array();
+    for (auto &f : runtime->capture.workspaces)
+        j["workspaceFrames"].push_back({{"id", f.surface.id},
+                                        {"workspaceId", f.workspaceId},
+                                        {"title", f.surface.title},
+                                        {"position", {f.surface.center.x, f.surface.center.y, f.surface.center.z}}});
     lua_pushstring(state, j.dump().c_str());
     return 1;
 }

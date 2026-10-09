@@ -22,6 +22,18 @@ int main() {
         }
         assert(rejected);
     }
+    assert(c["windows"]["workspace_base"] == 10);
+    assert(interaction::configPatch(c, {{"windows", {{"workspace_base", 0}}}})["windows"]["workspace_base"] == 0);
+    assert(interaction::configPatch(c, {{"windows", {{"workspace_base", 100}}}})["windows"]["workspace_base"] == 100);
+    for (auto value : {world::Json(-1), world::Json(10.5), world::Json(990001), world::Json("10")}) {
+        bool rejected = false;
+        try {
+            interaction::configPatch(c, {{"windows", {{"workspace_base", value}}}});
+        } catch (...) {
+            rejected = true;
+        }
+        assert(rejected);
+    }
     assert(interaction::configPatch(c, {{"player", {{"walk_speed", 4.0}}}})["player"]["walk_speed"] == 4);
     for (auto patch :
          {world::Json{{"player", {{"walk_speed", -1}}}}, world::Json{{"player", {{"wat", 2}}}},

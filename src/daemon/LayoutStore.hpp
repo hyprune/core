@@ -1,11 +1,19 @@
 #pragma once
 #include "ipc/Server.hpp"
+#include <algorithm>
 #include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <sys/stat.h>
 #include <unistd.h>
 namespace hyprune::daemon {
+// World-derived default homes are published but never saved as user data.
+inline ipc::Json durableLayout(ipc::Json mounts, const ipc::Json &derived) {
+    std::erase_if(mounts.at("bindings").get_ref<ipc::Json::array_t &>(), [&](auto &b) {
+        return std::find(derived.begin(), derived.end(), b.at("id")) != derived.end();
+    });
+    return mounts;
+}
 // Only hypruned reads/writes state; packages and compositor callbacks never do.
 class LayoutStore {
     std::filesystem::path path;

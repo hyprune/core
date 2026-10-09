@@ -83,12 +83,15 @@ void Bridge::send(Json j) {
 void Bridge::advertise(std::map<std::string, std::string> methods) {
     send({{"type", "methods"}, {"methods", methods}});
 }
-void Bridge::publish(Json state) {
-    if (state == state_)
+void Bridge::publish(Json state, Json derived) {
+    if (state == state_ && derived == derived_)
         return;
-    state_ = std::move(state);
-    ++revision_;
-    send({{"type", "state"}, {"state", state_}});
+    if (state != state_) {
+        state_ = std::move(state);
+        ++revision_;
+    }
+    derived_ = std::move(derived);
+    send({{"type", "state"}, {"state", state_}, {"derivedBindings", derived_}});
 }
 void Bridge::complete(Json result) {
     if (pending_.empty())

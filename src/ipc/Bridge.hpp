@@ -11,7 +11,9 @@ class Bridge {
     Bridge(const std::string &helper, Handler);
     ~Bridge();
     void advertise(std::map<std::string, std::string>);
-    void publish(Json);
+    // `derived` lists binding IDs that are recomputed from the world; hypruned
+    // publishes them but never persists them as user layout.
+    void publish(Json state, Json derived = Json::array());
     void notify(const std::string &event, Json params, const std::string &actor = "") {
         send({{"type", "event"}, {"event", event}, {"params", std::move(params)}, {"actor", actor}});
     }
@@ -26,7 +28,7 @@ class Bridge {
     int fd_ = -1;
     pid_t child_ = -1;
     Handler handler_;
-    Json state_;
+    Json state_, derived_ = Json::array();
     uint64_t revision_ = 0;
     std::string pending_, epoch_;
     std::deque<std::string> output_;

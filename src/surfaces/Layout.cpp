@@ -173,10 +173,39 @@ bool Layout::matches(const Json &p, const Instance &i) const {
            (p.at("rule").at("title") == "" || p.at("rule").at("title") == i.title);
 }
 const Json *Layout::binding(int id, const world::World *w) const {
-    for (const auto &b : bindings)
-        if (b.at("id") == id && (!w || b.at("worldId") == w->id))
-            return &b;
+    for (const auto *list : {&bindings, &defaults})
+        for (const auto &b : *list)
+            if (b.at("id") == id && (!w || b.at("worldId") == w->id))
+                return &b;
     return nullptr;
+}
+void Layout::deriveDefaults(const world::World *w) {
+    // Explicit homes win by area and by workspace ID (IDs are global across worlds).
+    defaults = Json::array();
+    if (!w || workspaceBase <= 0)
+        return;
+    std::set<int> taken = reservedWorkspaces;
+    for (const auto &b : bindings)
+        taken.insert(b.at("id").get<int>());
+    for (const auto &a : w->areas) {
+        if (bindings.size() + defaults.size() >= 32)
+            break;
+        if (std::any_of(bindings.begin(), bindings.end(),
+                        [&](auto &b) { return b.at("worldId") == w->id && b.at("areaId") == a.at("id"); }))
+            continue;
+        auto slot = a.value("workspaceSlot", "");
+        if (slot.empty() || slot.find_first_not_of("0123456789") != std::string::npos || slot.size() > 4)
+            continue;
+        int id = workspaceBase + std::stoi(slot);
+        if (!taken.insert(id).second)
+            continue;
+        defaults.push_back({{"id", id}, {"worldId", w->id}, {"areaId", a.at("id")}});
+    }
+}
+Json Layout::effectiveBindings() const {
+    auto all = bindings;
+    all.insert(all.end(), defaults.begin(), defaults.end());
+    return all;
 }
 const Json *Layout::anchor(const std::string &id, const world::World *w) const {
     if (w)
@@ -203,6 +232,7 @@ void Layout::bind(int id, const std::string &worldId, const std::string &areaId,
     std::erase_if(bindings.get_ref<Json::array_t &>(), [&](auto &b) { return b.at("id") == id; });
     need(bindings.size() < 32, -32008, "binding budget");
     bindings.push_back({{"id", id}, {"worldId", worldId}, {"areaId", areaId}});
+    deriveDefaults(w);
 }
 void Layout::restore(const Json &data) {
     // Private daemon data; bounded and still validated before any handle/pose is resolved.
@@ -690,7 +720,7 @@ Json Layout::state(const world::World *w) const {
     return {{"areas", areas},
             {"anchors", w ? w->anchors : Json::array()},
             {"objects", w ? w->objects : Json::array()},
-            {"bindings", bindings},
+            {"bindings", effectiveBindings()},
             {"placements", placements},
             {"placementZones", w ? w->placementZones : Json::array()},
             {"instances", instances},

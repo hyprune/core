@@ -449,7 +449,7 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         sampler_ = render::createSurfaceSampler();
     }
     std::set<int> live;
-    for (const auto &b : layout.bindings) {
+    for (const auto &b : layout.effectiveBindings()) {
         if (b.at("worldId") != world->id)
             continue;
         auto area = std::find_if(world->areas.begin(), world->areas.end(),

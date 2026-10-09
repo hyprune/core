@@ -61,6 +61,69 @@ int main(int argc, char **argv) {
         check(arrivalPlane && length(arrivalPlane->center - proposed.center) < .001f &&
                   std::abs(arrivalPlane->width - proposed.width) < .001f,
               "off-view home zone hid/shrank arriving client's fallback");
+        {
+            // World-derived default homes: workspace_base + workspaceSlot.
+            surfaces::Layout homes;
+            homes.workspaceBase = 10;
+            homes.reservedWorkspaces = {8};
+            homes.deriveDefaults(nullptr);
+            check(homes.defaults.empty(), "defaults without a world");
+            homes.deriveDefaults(w.get());
+            check(homes.bindings.empty() && homes.defaults.size() == 2, "default homes not derived");
+            check(homes.binding(11, w.get()) && homes.binding(11, w.get())->at("areaId") == "sun-court" &&
+                      homes.binding(12, nullptr) && homes.binding(12, nullptr)->at("areaId") == "array-hall",
+                  "slot 01/02 not at 11/12");
+            check(!homes.binding(8, w.get()) && !homes.binding(10, w.get()), "default home on room/base");
+            auto mounts = homes.state(w.get());
+            check(mounts["bindings"].size() == 2 && mounts["bindings"][0].size() == 3, "defaults missing from state");
+            check(daemon::durableLayout(mounts, {11, 12})["bindings"].empty(), "defaults persisted as user data");
+            surfaces::Instance desk{"desk", "kitty", "desk", 11};
+            homes.pull(desk, w.get());
+            auto placedAt = homes.place(desk, "", w.get());
+            check(placedAt.starts_with("sun-court-") &&
+                      homes.placements[0]["areaId"] == "sun-court",
+                  "default home did not own its area tools");
+            // An explicit user bind wins by area and by workspace ID.
+            homes.bind(11, w->id, "array-hall", w.get());
+            check(homes.binding(11, w.get())->at("areaId") == "array-hall" && homes.defaults.empty() &&
+                      !homes.binding(12, w.get()),
+                  "explicit bind did not override defaults");
+            homes.bind(21, w->id, "sun-court", w.get());
+            check(homes.bindings.size() == 2 && homes.defaults.empty(), "explicit area bind kept a default");
+            mounts = homes.state(w.get());
+            check(daemon::durableLayout(mounts, {})["bindings"] == homes.bindings, "explicit bindings not durable");
+            // A default home can be rebound explicitly without an "area already bound" error.
+            surfaces::Layout rebound;
+            rebound.workspaceBase = 10;
+            rebound.deriveDefaults(w.get());
+            rebound.bind(15, w->id, "sun-court", w.get());
+            check(rebound.binding(15, w.get()) && !rebound.binding(11, w.get()) &&
+                      rebound.binding(12, w.get())->at("areaId") == "array-hall",
+                  "explicit rebind of a default home");
+            // IDs are global: another world's explicit 11 suppresses this world's slot 01 default.
+            auto other = *w;
+            other.id = "org.hyprune.other";
+            surfaces::Layout shared;
+            shared.workspaceBase = 10;
+            shared.deriveDefaults(&other);
+            shared.bind(11, other.id, "array-hall", &other);
+            shared.deriveDefaults(w.get());
+            check(shared.defaults.size() == 1 && shared.binding(12, w.get()) && !shared.binding(11, w.get()) &&
+                      shared.binding(11, nullptr)->at("worldId") == other.id,
+                  "cross-world explicit ID did not win");
+            // Restored user data replaces explicit homes; defaults are recomputed.
+            shared.restore({{"bindings", world::Json::array()}, {"placements", world::Json::array()}});
+            shared.deriveDefaults(w.get());
+            check(shared.defaults.size() == 2, "defaults after restore");
+            // Reserved IDs (room workspace, configured locations) are never defaults; base 0 disables.
+            shared.workspaceBase = 7;
+            shared.reservedWorkspaces = {8};
+            shared.deriveDefaults(w.get());
+            check(shared.defaults.size() == 1 && shared.binding(9, w.get()), "default on reserved workspace");
+            shared.workspaceBase = 0;
+            shared.deriveDefaults(w.get());
+            check(shared.defaults.empty(), "workspace_base 0 must disable defaults");
+        }
         surfaces::Layout layout;
         layout.bind(10, w->id, "sun-court", w.get());
         layout.bind(11, w->id, "array-hall", w.get());
