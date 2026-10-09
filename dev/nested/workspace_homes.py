@@ -1,7 +1,7 @@
 """Default area homes (windows.workspace_base + workspaceSlot): dev/nested/run.sh --workspace-homes.
 
 Nested only (run.sh holds /tmp/worldshell-nested.lock). Lumen Reach areas get
-workspaces 11-14 with no user binding; native dispatch/keybind and Director
+workspaces 21-24 with no user binding; native dispatch/keybind and Director
 activation travel to the same area; an explicit workspace.bind wins and is the
 only binding persisted by hypruned.
 """
@@ -10,7 +10,7 @@ import session as s
 from m2 import keys,wait
 
 LUMEN='com.hyprune.lumen-reach'
-HOMES=[(11,'sun-court'),(12,'array-hall'),(13,'rime-vault'),(14,'signal-rise')]
+HOMES=[(21,'sun-court'),(22,'array-hall'),(23,'rime-vault'),(24,'signal-rise')]
 
 def prepare(installed):
     for name in [LUMEN,'com.hyprune.switchyard']:
@@ -33,8 +33,8 @@ def acceptance(client,children,args,shell_token,socketpath):
         path=s.STATE/'layout.json'
         return json.loads(path.read_text())['bindings'] if path.exists() else []
     s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")');wait(lambda:s.camera()['active'])
-    check('room workspace stays 8',wait(lambda:workspace()==8),workspace())
-    check('world defines homes 11-14 with no user binding',homes()==HOMES,state()['mounts']['bindings'])
+    check('room workspace is 20',wait(lambda:workspace()==20),workspace())
+    check('world defines homes 21-24 with no user binding',homes()==HOMES,state()['mounts']['bindings'])
     check('bindings keep the 0.15 wire shape',all(set(b)=={'id','worldId','areaId'} for b in state()['mounts']['bindings']))
     located={l['id']:l['label'] for l in state()['workspaces']['locations']}
     check('Director lists default homes',all(located.get(i)==a for i,a in HOMES),located)
@@ -47,7 +47,7 @@ def acceptance(client,children,args,shell_token,socketpath):
         children.append(s.envrun('kitty','--title','Home-'+str(id),'--override','font_size=48','bash','--noprofile','--norc','-c',banner,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
     for id,_ in HOMES[:2]:
         w=wait(lambda:next((w for w in windows() if w['title']=='Home-'+str(id)),None))
-        check(f'client mapped on workspace {id}',w['workspace']['id']==id and workspace()==8,w['workspace'])
+        check(f'client mapped on workspace {id}',w['workspace']['id']==id and workspace()==20,w['workspace'])
         wait(lambda:any(e['title']=='Home-'+str(id) and e['workspaceId']==id for e in s.camera()['captures']))
     anchors={a['id']:a for a in state()['mounts']['anchors']}
     areas={a['id']:a for a in state()['mounts']['areas']}
@@ -65,7 +65,7 @@ def acceptance(client,children,args,shell_token,socketpath):
             s.ctl('eval',f'hl.plugin.hyprune.camera({p[0]+n[0]*d},{p[1]},{p[2]+n[2]*d},{yaw},0)');time.sleep(.35)
             if s.camera()['aim']=='workspace-'+str(id):return d
         return None
-    for (id,area),title in zip(HOMES[:2],['Home-11','Home-12']):
+    for (id,area),title in zip(HOMES[:2],['Home-21','Home-22']):
         ok,data=on_wall(id,area)
         check(f'workspace {id} renders on the {area} primary wall',ok,data)
         d=face(id,area)
@@ -88,46 +88,46 @@ def acceptance(client,children,args,shell_token,socketpath):
         c=s.camera();q=c['position']  # evidence still: arrival pose, looking up at the wall
         s.ctl('eval',f'hl.plugin.hyprune.camera({q[0]},{q[1]},{q[2]},{c["yaw"]},0.28)');time.sleep(.6)
         subprocess.run([str(s.HERE/'ctl.py'),'shot',str(s.STATE/f'home-{id}-{area}.png')],check=True)
-    native(8);wait(lambda:workspace()==8)
+    native(20);wait(lambda:workspace()==20)
     for id,area in HOMES[:3]:
-        p=arrive(lambda:native(id),director[14])
+        p=arrive(lambda:native(id),director[24])
         check(f'native dispatch workspace {id} travels to {area}',workspace()==id and math.dist(p,director[id])<.3,{'native':p,'director':director[id]})
-    native(8);wait(lambda:workspace()==8)
-    s.ctl('eval','hl.bind("SUPER + F9", hl.dsp.focus({workspace="14"}))')
-    p=arrive(lambda:keys('-M','logo','-P','Super_L','-s','40','-k','F9','-p','Super_L','-m','logo'),director[11])
+    native(20);wait(lambda:workspace()==20)
+    s.ctl('eval','hl.bind("SUPER + F9", hl.dsp.focus({workspace="24"}))')
+    p=arrive(lambda:keys('-M','logo','-P','Super_L','-s','40','-k','F9','-p','Super_L','-m','logo'),director[21])
     s.ctl('eval','hl.unbind("SUPER + F9")')
-    check('Hyprland keybind to workspace 14 travels to signal-rise',workspace()==14 and math.dist(p,director[14])<.3,p)
-    native(8);wait(lambda:workspace()==8)
-    p=arrive(lambda:native(14),director[11])
-    check('returning to the same home from the room travels again',math.dist(p,director[14])<.3,p)
-    native(8);wait(lambda:workspace()==8)
+    check('Hyprland keybind to workspace 24 travels to signal-rise',workspace()==24 and math.dist(p,director[24])<.3,p)
+    native(20);wait(lambda:workspace()==20)
+    p=arrive(lambda:native(24),director[21])
+    check('returning to the same home from the room travels again',math.dist(p,director[24])<.3,p)
+    native(20);wait(lambda:workspace()==20)
 
     # Focused into a wall (stock 2D), a native switch leaves the wall and travels (M2 behaviour).
-    client.call('workspace.focus',{'id':12});wait(lambda:workspace()==12 and state()['mounts']['desktopWorkspaceId']==12)
-    p=arrive(lambda:native(13))
-    check('native switch from a focused wall travels to rime-vault',math.dist(p,director[13])<.3 and state()['mounts']['desktopWorkspaceId'] is None,p)
-    native(8);wait(lambda:workspace()==8)
+    client.call('workspace.focus',{'id':22});wait(lambda:workspace()==22 and state()['mounts']['desktopWorkspaceId']==22)
+    p=arrive(lambda:native(23))
+    check('native switch from a focused wall travels to rime-vault',math.dist(p,director[23])<.3 and state()['mounts']['desktopWorkspaceId'] is None,p)
+    native(20);wait(lambda:workspace()==20)
 
     # An explicit user binding wins by area and by workspace ID, and persists alone.
-    client.call('workspace.bind',{'id':11,'worldId':LUMEN,'areaId':'signal-rise'})
-    check('explicit bind overrides defaults',homes()==[(11,'signal-rise'),(12,'array-hall'),(13,'rime-vault')],homes())
-    check('only the explicit bind is persisted',wait(lambda:saved()==[{'id':11,'worldId':LUMEN,'areaId':'signal-rise'}]),saved())
-    p=arrive(lambda:native(11),director[12])
-    check('workspace 11 now travels to signal-rise',math.dist(p,director[14])<.3,p)
-    ok,data=on_wall(11,'signal-rise')
-    check('workspace 11 windows move to the signal-rise wall',ok,data)
-    native(8);wait(lambda:workspace()==8)
+    client.call('workspace.bind',{'id':21,'worldId':LUMEN,'areaId':'signal-rise'})
+    check('explicit bind overrides defaults',homes()==[(21,'signal-rise'),(22,'array-hall'),(23,'rime-vault')],homes())
+    check('only the explicit bind is persisted',wait(lambda:saved()==[{'id':21,'worldId':LUMEN,'areaId':'signal-rise'}]),saved())
+    p=arrive(lambda:native(21),director[22])
+    check('workspace 21 now travels to signal-rise',math.dist(p,director[24])<.3,p)
+    ok,data=on_wall(21,'signal-rise')
+    check('workspace 21 windows move to the signal-rise wall',ok,data)
+    native(20);wait(lambda:workspace()==20)
 
     # A different base moves the derived homes; the explicit bind stays.
+    s.ctl('eval','hl.plugin.hyprune.config({windows={workspace_base=30}})')
+    check('workspace_base reapplies live',wait(lambda:homes()==[(21,'signal-rise'),(31,'sun-court'),(32,'array-hall'),(33,'rime-vault')]),homes())
     s.ctl('eval','hl.plugin.hyprune.config({windows={workspace_base=20}})')
-    check('workspace_base reapplies live',wait(lambda:homes()==[(11,'signal-rise'),(21,'sun-court'),(22,'array-hall'),(23,'rime-vault')]),homes())
-    s.ctl('eval','hl.plugin.hyprune.config({windows={workspace_base=10}})')
     # Defaults are per loaded world; a world without areas derives none.
     client.call('world.load',{'worldId':'com.hyprune.switchyard'})
-    check('area-less world derives no homes',wait(lambda:homes()==[(11,'signal-rise')]),homes())
+    check('area-less world derives no homes',wait(lambda:homes()==[(21,'signal-rise')]),homes())
     client.call('world.load',{'worldId':LUMEN})
-    check('reloading recomputes homes',wait(lambda:homes()==[(11,'signal-rise'),(12,'array-hall'),(13,'rime-vault')]),homes())
-    check('explicit bind still the only persisted home',saved()==[{'id':11,'worldId':LUMEN,'areaId':'signal-rise'}],saved())
+    check('reloading recomputes homes',wait(lambda:homes()==[(21,'signal-rise'),(22,'array-hall'),(23,'rime-vault')]),homes())
+    check('explicit bind still the only persisted home',saved()==[{'id':21,'worldId':LUMEN,'areaId':'signal-rise'}],saved())
     client.call('runtime.exit',{})
     evidence={'nestedOnly':True,'lock':'/tmp/worldshell-nested.lock','world':LUMEN,'checks':checks}
     (s.ROOT/'docs/evidence/workspace-homes.json').write_text(json.dumps(evidence,indent=2)+'\n')

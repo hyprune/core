@@ -4,32 +4,32 @@
   "world": "com.hyprune.lumen-reach",
   "checks": [
     {
-      "name": "room workspace stays 8",
+      "name": "room workspace is 20",
       "passed": true,
-      "evidence": 8
+      "evidence": 20
     },
     {
-      "name": "world defines homes 11-14 with no user binding",
+      "name": "world defines homes 21-24 with no user binding",
       "passed": true,
       "evidence": [
         {
           "areaId": "sun-court",
-          "id": 11,
+          "id": 21,
           "worldId": "com.hyprune.lumen-reach"
         },
         {
           "areaId": "array-hall",
-          "id": 12,
+          "id": 22,
           "worldId": "com.hyprune.lumen-reach"
         },
         {
           "areaId": "rime-vault",
-          "id": 13,
+          "id": 23,
           "worldId": "com.hyprune.lumen-reach"
         },
         {
           "areaId": "signal-rise",
-          "id": 14,
+          "id": 24,
           "worldId": "com.hyprune.lumen-reach"
         }
       ]
@@ -43,10 +43,10 @@
       "name": "Director lists default homes",
       "passed": true,
       "evidence": {
-        "11": "sun-court",
-        "12": "array-hall",
-        "13": "rime-vault",
-        "14": "signal-rise"
+        "21": "sun-court",
+        "22": "array-hall",
+        "23": "rime-vault",
+        "24": "signal-rise"
       }
     },
     {
@@ -55,34 +55,34 @@
       "evidence": []
     },
     {
-      "name": "client mapped on workspace 11",
+      "name": "client mapped on workspace 21",
       "passed": true,
       "evidence": {
-        "id": 11,
-        "name": "11"
+        "id": 21,
+        "name": "21"
       }
     },
     {
-      "name": "client mapped on workspace 12",
+      "name": "client mapped on workspace 22",
       "passed": true,
       "evidence": {
-        "id": 12,
-        "name": "12"
+        "id": 22,
+        "name": "22"
       }
     },
     {
-      "name": "workspace 11 renders on the sun-court primary wall",
+      "name": "workspace 21 renders on the sun-court primary wall",
       "passed": true,
       "evidence": {
         "frame": {
-          "id": "workspace-11",
+          "id": "workspace-21",
           "position": [
             8.0,
             10.100000381469727,
             -23.114999771118164
           ],
-          "title": "sun-court / workspace 11",
-          "workspaceId": 11
+          "title": "sun-court / workspace 21",
+          "workspaceId": 21
         },
         "anchor": "sun-court-slot-01-facade-wall-01"
       }
@@ -93,18 +93,18 @@
       "evidence": 2.5
     },
     {
-      "name": "workspace 12 renders on the array-hall primary wall",
+      "name": "workspace 22 renders on the array-hall primary wall",
       "passed": true,
       "evidence": {
         "frame": {
-          "id": "workspace-12",
+          "id": "workspace-22",
           "position": [
             8.0,
             10.0,
             -47.94499969482422
           ],
-          "title": "array-hall / workspace 12",
-          "workspaceId": 12
+          "title": "array-hall / workspace 22",
+          "workspaceId": 22
         },
         "anchor": "array-hall-slot-02-hanging-wall-01"
       }
@@ -115,7 +115,7 @@
       "evidence": 2.5
     },
     {
-      "name": "Director workspace 11 travels to sun-court",
+      "name": "Director workspace 21 travels to sun-court",
       "passed": true,
       "evidence": [
         -8.0,
@@ -124,7 +124,7 @@
       ]
     },
     {
-      "name": "Director workspace 12 travels to array-hall",
+      "name": "Director workspace 22 travels to array-hall",
       "passed": true,
       "evidence": [
         8.0,
@@ -133,7 +133,7 @@
       ]
     },
     {
-      "name": "Director workspace 13 travels to rime-vault",
+      "name": "Director workspace 23 travels to rime-vault",
       "passed": true,
       "evidence": [
         38.0,
@@ -142,7 +142,7 @@
       ]
     },
     {
-      "name": "Director workspace 14 travels to signal-rise",
+      "name": "Director workspace 24 travels to signal-rise",
       "passed": true,
       "evidence": [
         54.0,
@@ -151,7 +151,7 @@
       ]
     },
     {
-      "name": "native dispatch workspace 11 travels to sun-court",
+      "name": "native dispatch workspace 21 travels to sun-court",
       "passed": true,
       "evidence": {
         "native": [
@@ -167,7 +167,7 @@
       }
     },
     {
-      "name": "native dispatch workspace 12 travels to array-hall",
+      "name": "native dispatch workspace 22 travels to array-hall",
       "passed": true,
       "evidence": {
         "native": [
@@ -183,7 +183,7 @@
       }
     },
     {
-      "name": "native dispatch workspace 13 travels to rime-vault",
+      "name": "native dispatch workspace 23 travels to rime-vault",
       "passed": true,
       "evidence": {
         "native": [
@@ -199,7 +199,7 @@
       }
     },
     {
-      "name": "Hyprland keybind to workspace 14 travels to signal-rise",
+      "name": "Hyprland keybind to workspace 24 travels to signal-rise",
       "passed": true,
       "evidence": [
         54.0,
@@ -230,67 +230,8 @@
       "passed": true,
       "evidence": [
         [
-          11,
-          "signal-rise"
-        ],
-        [
-          12,
-          "array-hall"
-        ],
-        [
-          13,
-          "rime-vault"
-        ]
-      ]
-    },
-    {
-      "name": "only the explicit bind is persisted",
-      "passed": true,
-      "evidence": [
-        {
-          "areaId": "signal-rise",
-          "id": 11,
-          "worldId": "com.hyprune.lumen-reach"
-        }
-      ]
-    },
-    {
-      "name": "workspace 11 now travels to signal-rise",
-      "passed": true,
-      "evidence": [
-        54.0,
-        1.7095996141433716,
-        -124.99950408935547
-      ]
-    },
-    {
-      "name": "workspace 11 windows move to the signal-rise wall",
-      "passed": true,
-      "evidence": {
-        "frame": {
-          "id": "workspace-11",
-          "position": [
-            63.0,
-            10.699999809265137,
-            -147.09500122070312
-          ],
-          "title": "signal-rise / workspace 11",
-          "workspaceId": 11
-        },
-        "anchor": "signal-rise-slot-04-blast-door-screen-01"
-      }
-    },
-    {
-      "name": "workspace_base reapplies live",
-      "passed": true,
-      "evidence": [
-        [
-          11,
-          "signal-rise"
-        ],
-        [
           21,
-          "sun-court"
+          "signal-rise"
         ],
         [
           22,
@@ -303,11 +244,70 @@
       ]
     },
     {
+      "name": "only the explicit bind is persisted",
+      "passed": true,
+      "evidence": [
+        {
+          "areaId": "signal-rise",
+          "id": 21,
+          "worldId": "com.hyprune.lumen-reach"
+        }
+      ]
+    },
+    {
+      "name": "workspace 21 now travels to signal-rise",
+      "passed": true,
+      "evidence": [
+        54.0,
+        1.7095996141433716,
+        -124.99950408935547
+      ]
+    },
+    {
+      "name": "workspace 21 windows move to the signal-rise wall",
+      "passed": true,
+      "evidence": {
+        "frame": {
+          "id": "workspace-21",
+          "position": [
+            63.0,
+            10.699999809265137,
+            -147.09500122070312
+          ],
+          "title": "signal-rise / workspace 21",
+          "workspaceId": 21
+        },
+        "anchor": "signal-rise-slot-04-blast-door-screen-01"
+      }
+    },
+    {
+      "name": "workspace_base reapplies live",
+      "passed": true,
+      "evidence": [
+        [
+          21,
+          "signal-rise"
+        ],
+        [
+          31,
+          "sun-court"
+        ],
+        [
+          32,
+          "array-hall"
+        ],
+        [
+          33,
+          "rime-vault"
+        ]
+      ]
+    },
+    {
       "name": "area-less world derives no homes",
       "passed": true,
       "evidence": [
         [
-          11,
+          21,
           "signal-rise"
         ]
       ]
@@ -317,15 +317,15 @@
       "passed": true,
       "evidence": [
         [
-          11,
+          21,
           "signal-rise"
         ],
         [
-          12,
+          22,
           "array-hall"
         ],
         [
-          13,
+          23,
           "rime-vault"
         ]
       ]
@@ -336,7 +336,7 @@
       "evidence": [
         {
           "areaId": "signal-rise",
-          "id": 11,
+          "id": 21,
           "worldId": "com.hyprune.lumen-reach"
         }
       ]

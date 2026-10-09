@@ -27,13 +27,13 @@
     "IPC 0.8 snapshot titles clamped",
     "IPC 0.11 snapshot titles clamped",
     "IPC 0.14 snapshot titles clamped",
-    "IPC 0.15: 21 client frames valid",
-    "IPC 0.1: 13 client frames valid",
-    "IPC 0.3: 15 client frames valid",
+    "IPC 0.15: 19 client frames valid",
+    "IPC 0.1: 14 client frames valid",
+    "IPC 0.3: 16 client frames valid",
     "IPC 0.5: 14 client frames valid",
-    "IPC 0.8: 13 client frames valid",
-    "IPC 0.11: 13 client frames valid",
-    "IPC 0.14: 13 client frames valid",
-    "core wire audit validated 172 outgoing frames"
+    "IPC 0.8: 14 client frames valid",
+    "IPC 0.11: 14 client frames valid",
+    "IPC 0.14: 14 client frames valid",
+    "core wire audit validated 173 outgoing frames"
   ]
 }

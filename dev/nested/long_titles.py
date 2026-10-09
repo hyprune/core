@@ -57,8 +57,8 @@ def acceptance(client,children,args,shell_token,socketpath):
     bad=next(a for a in apps if a['appClass'].startswith('long-invalid'))
     check('malformed client bytes reach the wire only as valid UTF-8',bad['appClass'].isprintable(),repr(bad['appClass'][-4:]))
     homeWindow=next(w for w in windows() if w['class'].startswith('long-home'))
-    s.ctl('eval',f'hl.dispatch(hl.dsp.window.move({{workspace="11",follow=false,window="address:{homeWindow["address"]}"}}))')
-    home=wait(lambda:next((c for c in s.camera()['captures'] if c['workspaceId']==11 and c['title'].startswith('LONG-')),None),20)
+    s.ctl('eval',f'hl.dispatch(hl.dsp.window.move({{workspace="21",follow=false,window="address:{homeWindow["address"]}"}}))')
+    home=wait(lambda:next((c for c in s.camera()['captures'] if c['workspaceId']==21 and c['title'].startswith('LONG-')),None),20)
     client.call('surface.pull',{'surfaceId':home['id']});client.call('surface.place',{'surfaceId':home['id']})
     rules=[p['rule'] for p in state()['mounts']['placements']]
     check('placement rule clamped to 256 code points',any(len(r['title'])==256 for r in rules),[len(r['title']) for r in rules])

@@ -55,14 +55,14 @@ def acceptance(client,children,args,token,socketpath):
         check(label+': no empty instance areaId',all(v.get('areaId')!='' for v in instances))
         check(label+': unzoned instance omits areaId',any('areaId' not in v for v in instances))
     client.call('world.load',{'worldId':target})
-    # Leave world workspace 8 unbound; real clients adopted there are pocketed.
+    # Leave world workspace 20 unbound; real clients adopted there are pocketed.
     s.ctl('eval','hl.dispatch(hl.dsp.focus({monitor="HEADLESS-1"}))')
-    s.ctl('eval','hl.dispatch(hl.dsp.focus({workspace="8"}))')
+    s.ctl('eval','hl.dispatch(hl.dsp.focus({workspace="20"}))')
     launch('Warp-A');launch('Warp-B')
     s.ctl('eval','hl.dispatch(hl.dsp.focus({workspace="91"}))')
     s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")')
     wait(lambda:queue()['count']==2)
-    check('unbound world workspace',not any(b['id']==8 for b in state()['mounts']['bindings']))
+    check('unbound world workspace',not any(b['id']==20 for b in state()['mounts']['bindings']))
     client.call('movement.set',{'modeId':'com.hyprune.fly'})
     place()
     client.call('world.load',{'worldId':lumen});wait(lambda:state()['world']['id']==lumen);time.sleep(.4)

@@ -34,9 +34,9 @@ def acceptance(client,children,args,token,socket):
         child=s.envrun('kitty','--class','placement-'+title,'--title',title,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);children.append(child)
         wait(lambda:any(w['title']==title for w in json.loads(s.ctl('clients','-j'))));time.sleep(.4);return child
     client.call('world.load',{'worldId':'org.hyprune.m3b'})
-    client.call('workspace.bind',{'id':8,'worldId':'org.hyprune.m3b','areaId':'sun-court'})
+    client.call('workspace.bind',{'id':20,'worldId':'org.hyprune.m3b','areaId':'sun-court'})
     s.ctl('eval','hl.dispatch(hl.dsp.focus({monitor="HEADLESS-1"}))')
-    s.ctl('eval','hl.dispatch(hl.dsp.focus({workspace="8"}))')
+    s.ctl('eval','hl.dispatch(hl.dsp.focus({workspace="20"}))')
     launch('Pocket-A');launch('Pocket-B');launch('Pocket-C')
     s.ctl('eval','hl.dispatch(hl.dsp.focus({workspace="91"}))')
     s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")')
