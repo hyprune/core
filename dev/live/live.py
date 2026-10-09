@@ -19,13 +19,15 @@ def core_protocols(header=None):
     return sorted(versions, key=lambda value: tuple(map(int, value.split('.'))), reverse=True)
 
 
-def shell_protocol(supported=None):
+def shell_protocol(supported=None, maximum=None):
     # The installed shell may trail core. Read its actual validator inventory;
     # never start it with a protocol its bridge cannot parse.
     if supported is None:
         code = 'import sys,json;sys.path.insert(0,sys.argv[1]);from protocol import SUPPORTED_PROTOCOLS;print(json.dumps(SUPPORTED_PROTOCOLS))'
         supported = json.loads(run([sys.executable, '-c', code, str(SHELL / 'bridge')]))
-    match = next((version for version in core_protocols() if version in supported), None)
+    bound = tuple(map(int, maximum.split('.'))) if maximum else None
+    match = next((version for version in core_protocols() if version in supported and
+                  (bound is None or tuple(map(int, version.split('.'))) <= bound)), None)
     if not match: raise RuntimeError('Core and installed shell have no common protocol')
     return match
 
@@ -303,7 +305,7 @@ def bootstrap(args,path):
     rpc=RPC(sock,tokens['org.hyprune.live']);rpc.call('world.load',{'worldId':WORLD_ID})
     lua(s,'hl.plugin.hyprune.toggle()');wait(lambda:camera(s,runroot)['active'])
     read,write=os.pipe();os.write(write,(tokens['com.hyprune.shell']+'\n').encode());os.close(write)
-    protocol=shell_protocol()
+    protocol=shell_protocol(maximum=rpc.hello["protocol"])
     print(f'IPC: launcher {rpc.hello["protocol"]}; shell {protocol}',flush=True)
     env=env_for(s);env.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_PROTOCOL=protocol,HYPRUNE_SOCKET=str(sock))
     log=open(path.parent/'shell.log','a')

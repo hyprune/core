@@ -17,6 +17,7 @@ class Tests(unittest.TestCase):
             with patch.object(live,'core_protocols',return_value=live.core_protocols(header)):
                 self.assertEqual(live.shell_protocol(['0.9','0.10']), '0.10')
                 self.assertEqual(live.shell_protocol(['0.9','0.99']), '0.99')
+                self.assertEqual(live.shell_protocol(['0.9','0.10','0.99'], maximum='0.10'), '0.10')
                 with self.assertRaisesRegex(RuntimeError,'no common protocol'):live.shell_protocol(['1.0'])
             header.write_text('not an inventory')
             with self.assertRaises(RuntimeError):live.core_protocols(header)
