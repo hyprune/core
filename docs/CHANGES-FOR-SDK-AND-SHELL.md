@@ -1056,3 +1056,21 @@ Nested evidence: `dev/nested/run.sh --workspace-homes` (28 checks,
 `docs/evidence/workspace-homes.json`, stills `dev/nested/.m3b-state/home-*.png`).
 `dev/nested/world_workspace.py` now uses workspace 30 as its "unrelated"
 workspace, since 12 is a default home of Lumen Reach.
+
+## Client strings clamped to schema limits (2026-10-09, IPC 0.15 unchanged)
+
+Live bug: shell logged `protocol.invalid` for `state.delta`
+`/params/changes/surfaces/23/title` `maxLength`. Core (`881e91c`) now clamps
+every string it projects from outside its control to the schema `maxLength`,
+counted in code points as JSON Schema does, never splitting a code point.
+Malformed UTF-8 becomes U+FFFD. A clamped string keeps its prefix and ends
+with `…` (U+2026), which counts toward the limit. Covered: surface/app
+titles (512), app classes and icons (256), placement rules (256), native
+workspace names (512), output names (128), keymap steals (description 1024,
+submap 256), keymap/graphics paths and errors, recording status, error
+messages and runtime notices (4096). Limits are identical in 0.1–0.15.
+
+Shell/SDK: no change needed. Do not expect full window titles past 512 code
+points, and treat a trailing `…` as a clamp marker. Placement rules from
+very long titles store the 256 code point form, and core matches windows in
+that same form. Nested proof: `dev/nested/run.sh --long-titles`.

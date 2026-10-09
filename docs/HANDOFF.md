@@ -1,3 +1,66 @@
+# Core lead handoff — 2026-10-09 (night)
+
+## Follow-ups: schema-bounded strings, m2 harness
+
+Nested only and nothing pushed. `build/live` was not rebuilt, nothing ran
+from `dev/live/*`, the core-render worktree and gallery watcher were not
+touched.
+
+| Commit | What |
+| --- | --- |
+| `881e91c` | Clamp every client-supplied projected string to its schema limit (UTF-8 safe) |
+| `7b03711` | `dev/nested/run.sh --long-titles` hostile-title wire audit + X11 title fixture |
+| `8ee1e8d` | m2 harness fixed (E before typing, 1 s menu hold, OCR Recall) |
+| this commit | CHANGES note, handoff |
+
+**1. Invalid frame from a long title (real bug, fixed).** `ipc::boundedText`
+(`src/ipc/Text.hpp`) returns valid UTF-8 of at most N code points, counted as
+JSON Schema `maxLength` counts them, with U+FFFD for malformed bytes and a
+trailing `…`. It is applied at Capture ingress (title 512, class 256) and at
+every projection of outside strings (list in CHANGES). Placement rules store
+and match the 256 code point form. Last resort: Bridge/Server/daemon/audit
+serialization uses `error_handler_t::replace`. Limits are identical across
+IPC 0.1–0.15.
+The pre-fix plugin, run against the new nested case, reproduced the owner's
+exact failure (`/params/changes/surfaces/0/title: maxLength`) and two more
+bugs of the same class:
+- `keymap/steals/N/description` over 1024. On the owner's hyprlang config
+  that is any long `exec` bind colliding with a Hyprune key.
+- `json type_error.316`: a malformed-UTF-8 X11 class made every state
+  publish throw.
+Grep sweep: IPC-client inputs were already byte-bounded and world-package
+strings are bounded at load, so the remaining unbounded sources were the
+Wayland/X11, Hyprland and file-error strings above.
+
+**2. `--m2` typing failure: a stale harness, not a product bug.** The test
+clicked the mounted terminal and typed in movement mode, where keys drive the
+player by design: LMB clicks into the aimed window, E enters Use mode
+(NOTES.md). With E, keys reach a window on a hidden bound workspace: core
+selects its native workspace and routes the keyboard to it. The resulting
+`typing` mode and exact typed text were verified nested. Two more stale bits
+were fixed: the Director opens on a 1000 ms Tab hold (m2 used 450 ms), and the
+Recall button is now found by OCR. `--m2` passes end to end.
+
+Validation on the final tree:
+
+```sh
+flock /tmp/worldshell-nested.lock ctest --test-dir build --output-on-failure  # 20/20 (new: wire-text, wire-text-schema)
+dev/nested/run.sh --long-titles      # 24 PASS; 0.15 + 0.1/0.3/0.5/0.8/0.11/0.14 clients valid; core audit 172 frames
+dev/nested/run.sh --m2               # PASS M2 + IPC 0.4 wire conformance (105 responses, 417 notifications)
+dev/nested/run.sh --workspace-homes  # 29 checks
+dev/nested/run.sh --ipc-warp         # PASS; audit 525 frames
+dev/nested/run.sh --playable         # 15 PASS
+flock /tmp/worldshell-nested.lock python3 dev/nested/world_workspace.py   # 23 PASS
+```
+
+Owner live retest (after down → preflight → up): the shell log should show
+no `protocol.invalid`. Long titles end in `…` in the Director. Typing into a
+wall window is E then type; Back/Super+Tab leaves.
+
+The earlier "Known gaps" note that `--m2` fails is superseded by item 2.
+
+---
+
 # Core lead handoff — 2026-10-09 (late)
 
 ## Default workspace homes (owner request: "workspaces 11, 12, 13… per area")
