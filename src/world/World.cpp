@@ -1,5 +1,7 @@
 #include "World.hpp"
 #include <meshoptimizer/meshoptimizer.h>
+#include <basisu/transcoder/basisu_transcoder.h>
+#include <mutex>
 #include "Visibility.hpp"
 #include "Environment.hpp"
 #include "Mounts.hpp"
@@ -55,6 +57,87 @@ const Spawn &World::spawn(const std::string &id) const {
             return s;
     throw std::runtime_error("unknown spawn");
 }
+Image decodeKtx2(const unsigned char *data, size_t size, unsigned formats) {
+    static std::once_flag once;
+    std::call_once(once, [] { basist::basisu_transcoder_init(); });
+    basist::ktx2_transcoder ktx;
+    if (size > 0xffffffffu || !ktx.init(data, uint32_t(size)) || !ktx.start_transcoding())
+        throw std::runtime_error("invalid KTX2 texture");
+    if (ktx.get_faces() != 1 || ktx.get_layers() > 1 || ktx.is_hdr() || !(ktx.is_etc1s() || ktx.is_uastc()))
+        throw std::runtime_error("unsupported KTX2 texture (2D LDR ETC1S/UASTC only)");
+    Image image;
+    image.width = int(ktx.get_width());
+    image.height = int(ktx.get_height());
+    if (image.width < 1 || image.height < 1 || image.width > 8192 || image.height > 8192)
+        throw std::runtime_error("image dimensions exceed budget");
+    // GL internal formats (linear variants); BC1 cannot carry alpha.
+    struct Target {
+        basist::transcoder_texture_format format;
+        unsigned gl;
+    };
+    std::optional<Target> target;
+    if (formats & BC7)
+        target = Target{basist::transcoder_texture_format::cTFBC7_RGBA, 0x8E8C};
+    else if (formats & BC1BC3)
+        target = ktx.get_has_alpha() ? Target{basist::transcoder_texture_format::cTFBC3_RGBA, 0x83F3}
+                                     : Target{basist::transcoder_texture_format::cTFBC1_RGB, 0x83F0};
+    else if (formats & ASTC4x4)
+        target = Target{basist::transcoder_texture_format::cTFASTC_4x4_RGBA, 0x93B0};
+    uint32_t levels = std::max(1u, ktx.get_levels());
+    for (uint32_t level = 0; level < (target ? levels : 1); ++level) {
+        basist::ktx2_image_level_info info;
+        if (!ktx.get_image_level_info(info, level, 0, 0))
+            throw std::runtime_error("invalid KTX2 level");
+        auto bytesPerBlock = target ? basist::basis_get_bytes_per_block_or_pixel(target->format) : 4u;
+        auto units = target ? info.m_total_blocks : info.m_orig_width * info.m_orig_height;
+        std::vector<unsigned char> out(size_t(units) * bytesPerBlock);
+        if (!ktx.transcode_image_level(level, 0, 0, out.data(), units,
+                                       target ? target->format : basist::transcoder_texture_format::cTFRGBA32))
+            throw std::runtime_error("KTX2 transcode failed");
+        if (target)
+            image.levels.push_back(std::move(out));
+        else
+            image.rgba = std::move(out);
+    }
+    if (target)
+        image.compressedFormat = target->gl;
+    return image;
+}
+void decodeMeshopt(cgltf_data *raw) {
+    for (size_t i = 0; i < raw->buffer_views_count; ++i) {
+        auto &view = raw->buffer_views[i];
+        if (!view.has_meshopt_compression)
+            continue;
+        auto &mc = view.meshopt_compression;
+        if (!mc.buffer || !mc.buffer->data || mc.offset + mc.size > mc.buffer->size || mc.count * mc.stride > view.size ||
+            mc.stride == 0 || mc.stride > 256)
+            throw std::runtime_error("invalid meshopt buffer view");
+        auto *source = static_cast<const unsigned char *>(mc.buffer->data) + mc.offset;
+        void *target = malloc(mc.count * mc.stride);
+        if (!target)
+            throw std::bad_alloc();
+        int result = -1;
+        if (mc.mode == cgltf_meshopt_compression_mode_attributes)
+            result = meshopt_decodeVertexBuffer(target, mc.count, mc.stride, source, mc.size);
+        else if (mc.mode == cgltf_meshopt_compression_mode_triangles)
+            result = meshopt_decodeIndexBuffer(target, mc.count, mc.stride, source, mc.size);
+        else if (mc.mode == cgltf_meshopt_compression_mode_indices)
+            result = meshopt_decodeIndexSequence(target, mc.count, mc.stride, source, mc.size);
+        if (result == 0) {
+            if (mc.filter == cgltf_meshopt_compression_filter_octahedral)
+                meshopt_decodeFilterOct(target, mc.count, mc.stride);
+            else if (mc.filter == cgltf_meshopt_compression_filter_quaternion)
+                meshopt_decodeFilterQuat(target, mc.count, mc.stride);
+            else if (mc.filter == cgltf_meshopt_compression_filter_exponential)
+                meshopt_decodeFilterExp(target, mc.count, mc.stride);
+        }
+        if (result != 0) {
+            free(target);
+            throw std::runtime_error("meshopt decode failed");
+        }
+        view.data = target;
+    }
+}
 void buildGpuMesh(Mesh &mesh, std::span<const Vertex> unique, std::vector<uint32_t> indices, bool keepOrder) {
     // Exact duplicates merged, then meshoptimizer's vertex-cache and fetch
     // orders. Blended materials keep their authored triangle order (blending
@@ -92,7 +175,10 @@ size_t gpuBytes(const World &world, bool srgbDecode, std::span<const CubeLevel> 
     auto uses = imageUses(world);
     for (size_t i = 0; i < world.images.size(); ++i) {
         size_t chain = 0;
-        for (int w = world.images[i].width, h = world.images[i].height;; w = std::max(1, w / 2), h = std::max(1, h / 2)) {
+        for (auto &level : world.images[i].levels)
+            chain += level.size();
+        for (int w = world.images[i].width, h = world.images[i].height; world.images[i].levels.empty();
+             w = std::max(1, w / 2), h = std::max(1, h / 2)) {
             chain += size_t(w) * h * 4;
             if (w == 1 && h == 1)
                 break;
@@ -103,7 +189,7 @@ size_t gpuBytes(const World &world, bool srgbDecode, std::span<const CubeLevel> 
         bytes += size_t(level.size) * level.size * 6 * 8;
     return bytes;
 }
-std::shared_ptr<World> load(const std::filesystem::path &root) {
+std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions options) {
     require(!std::filesystem::is_symlink(root), "package root is a symlink");
     auto manifestPath = safePath(root, "world.json");
     require(std::filesystem::file_size(manifestPath) <= 1024 * 1024, "manifest too large");
@@ -200,7 +286,10 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
     for (size_t i = 0; i < raw->extensions_required_count; i++)
         require((std::string(raw->extensions_required[i]) == "KHR_materials_unlit" ||
                  std::string(raw->extensions_required[i]) == "KHR_texture_transform" ||
-                 std::string(raw->extensions_required[i]) == "KHR_materials_emissive_strength"),
+                 std::string(raw->extensions_required[i]) == "KHR_materials_emissive_strength" ||
+                 std::string(raw->extensions_required[i]) == "KHR_texture_basisu" ||
+                 std::string(raw->extensions_required[i]) == "EXT_meshopt_compression" ||
+                 std::string(raw->extensions_required[i]) == "KHR_mesh_quantization"),
                 "unsupported required glTF extension");
     auto relative = std::filesystem::relative(scene.parent_path(), root);
     auto asset = [&](const char *uri) {
@@ -226,6 +315,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
         for (size_t c = 0; c < raw->nodes[i].children_count; c++)
             require(++parents[raw->nodes[i].children[c] - raw->nodes] <= 1, "multiple node parents");
     require(cgltf_load_buffers(&opts, raw, scene.c_str()) == cgltf_result_success, "glTF buffers failed");
+    decodeMeshopt(raw);
     require(cgltf_validate(raw) == cgltf_result_success, "invalid glTF");
     size_t memory = 0;
     for (size_t i = 0; i < raw->textures_count; i++) {
@@ -235,12 +325,35 @@ std::shared_ptr<World> load(const std::filesystem::path &root) {
                        s->mag_filter ? int(s->mag_filter) : 9729};
         }
         result->samplers.push_back(sampler);
-        auto *img = raw->textures[i].image;
-        require(img, "missing texture image");
         bool irradiance = false;
         for (auto &l : j.value("lightmaps", Json::array()))
             if (l.at("texture").get<size_t>() == i)
                 irradiance = true;
+        if (raw->textures[i].has_basisu && raw->textures[i].basisu_image) {
+            // v0 lightmaps stay PNG; material textures may be KTX2.
+            require(!irradiance, "lightmap must be PNG");
+            auto *ktx = raw->textures[i].basisu_image;
+            std::vector<unsigned char> bytes;
+            if (ktx->uri) {
+                auto path = asset(ktx->uri);
+                require(std::filesystem::file_size(path) <= 128 * 1024 * 1024, "asset exceeds 128 MiB");
+                std::ifstream input(path, std::ios::binary);
+                bytes.assign(std::istreambuf_iterator<char>(input), {});
+            } else {
+                require(ktx->buffer_view && cgltf_buffer_view_data(ktx->buffer_view), "missing KTX2 data");
+                auto *b = cgltf_buffer_view_data(ktx->buffer_view);
+                bytes.assign(b, b + ktx->buffer_view->size);
+            }
+            auto image = decodeKtx2(bytes.data(), bytes.size(), options.compressedFormats);
+            memory += image.rgba.size();
+            for (auto &level : image.levels)
+                memory += level.size();
+            require(memory <= 512 * 1024 * 1024, "world GPU budget exceeded");
+            result->images.push_back(std::move(image));
+            continue;
+        }
+        auto *img = raw->textures[i].image;
+        require(img, "missing texture image");
         if (irradiance) {
             static const unsigned char png[8] = {137, 80, 78, 71, 13, 10, 26, 10};
             if (img->uri) {

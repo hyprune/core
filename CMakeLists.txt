@@ -26,10 +26,15 @@ pkg_check_modules(OVERLAY REQUIRED IMPORTED_TARGET libpng freetype2 fontconfig)
 # Vendored meshoptimizer v0.25 (MIT), unmodified; see third_party/README.md.
 file(GLOB MESHOPTIMIZER_SOURCES third_party/meshoptimizer/*.cpp)
 set_source_files_properties(${MESHOPTIMIZER_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
-add_library(hyprune_runtime STATIC ${MESHOPTIMIZER_SOURCES} src/interaction/Tools.cpp src/interaction/InputFile.cpp src/interaction/Input.cpp src/interaction/Hands.cpp src/interaction/Config.cpp src/world/Environment.cpp src/world/Mounts.cpp src/surfaces/Layout.cpp src/world/Spatial.cpp src/control/Control.cpp src/world/World.cpp src/world/Playable.cpp src/world/Schema.cpp src/render/PNG.cpp src/sim/Camera.cpp src/sim/Climbing.cpp src/surfaces/Surface.cpp src/ipc/Server.cpp src/ipc/WireAudit.cpp src/ipc/Bridge.cpp)
+# Vendored Basis Universal v2.1.0 transcoder (Apache-2.0) and its single-file
+# zstd decoder (BSD) for KHR_texture_basisu / KTX2; see third_party/README.md.
+set(BASISU_SOURCES third_party/basisu/transcoder/basisu_transcoder.cpp third_party/basisu/zstd/zstddeclib.c)
+set_source_files_properties(${BASISU_SOURCES} PROPERTIES COMPILE_OPTIONS "-w;-fno-strict-aliasing")
+add_library(hyprune_runtime STATIC ${MESHOPTIMIZER_SOURCES} ${BASISU_SOURCES} src/interaction/Tools.cpp src/interaction/InputFile.cpp src/interaction/Input.cpp src/interaction/Hands.cpp src/interaction/Config.cpp src/world/Environment.cpp src/world/Mounts.cpp src/surfaces/Layout.cpp src/world/Spatial.cpp src/control/Control.cpp src/world/World.cpp src/world/Playable.cpp src/world/Schema.cpp src/render/PNG.cpp src/sim/Camera.cpp src/sim/Climbing.cpp src/surfaces/Surface.cpp src/ipc/Server.cpp src/ipc/WireAudit.cpp src/ipc/Bridge.cpp)
 target_link_libraries(hyprune_runtime PUBLIC PkgConfig::SPATIAL PkgConfig::PLATFORM PkgConfig::OVERLAY)
 target_include_directories(hyprune_runtime PUBLIC src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_include_directories(hyprune_runtime SYSTEM PUBLIC third_party)
+target_compile_definitions(hyprune_runtime PUBLIC BASISD_SUPPORT_KTX2=1 BASISD_SUPPORT_KTX2_ZSTD=1)
 add_library(hyprune-core SHARED src/platform/hyprland/Plugin.cpp src/platform/hyprland/Capture.cpp src/render/Renderer.cpp)
 set_target_properties(hyprune-core PROPERTIES PREFIX "")
 target_link_libraries(hyprune-core PRIVATE hyprune_runtime PkgConfig::HYPRLAND PkgConfig::PLATFORM GLESv2 EGL)

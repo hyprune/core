@@ -1057,8 +1057,13 @@ void Runtime::load(const std::string &id, const std::string &spawnId) {
     pendingSpawn = spawnId;
     loadDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(28);
     auto package = installed / id;
+    // KTX2 textures transcode on the loader to what this GPU advertises.
+    static const unsigned formats = [] {
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        return render::Renderer::compressedFormats();
+    }();
     pendingWorld = std::async(std::launch::async, [package, id] {
-        auto candidate = world::load(package);
+        auto candidate = world::load(package, {formats});
         if (candidate->id != id)
             throw std::runtime_error("installed ID mismatch");
         return candidate;

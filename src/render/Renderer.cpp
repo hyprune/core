@@ -327,6 +327,16 @@ void layout(GLuint &vao, GLuint &vbo) {
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(world::Vertex), (void *)offsetof(world::Vertex, uv));
     glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(world::Vertex), (void *)offsetof(world::Vertex, uv1));
 }
+// sRGB twin of the linear block formats produced by world::load.
+GLenum srgbVariant(GLenum format) {
+    switch (format) {
+    case 0x8E8C: return 0x8E8D; // BPTC (BC7)
+    case 0x83F0: return 0x8C4C; // S3TC DXT1 (BC1)
+    case 0x83F3: return 0x8C4F; // S3TC DXT5 (BC3)
+    case 0x93B0: return 0x93D0; // ASTC 4x4
+    default: throw std::runtime_error("unknown compressed texture format");
+    }
+}
 bool extension(std::string_view name) {
     GLint count = 0;
     glGetIntegerv(GL_NUM_EXTENSIONS, &count);
@@ -583,11 +593,36 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
                 else if (!color)
                     p->colors[i] = id;
                 glBindTexture(GL_TEXTURE_2D, id);
+                if (!im.levels.empty()) {
+                    // Transcoded KTX2: the package's own mip chain, no runtime mips.
+                    glTexStorage2D(GL_TEXTURE_2D, im.levels.size(),
+                                   srgb ? srgbVariant(im.compressedFormat) : im.compressedFormat, im.width, im.height);
+                    return;
+                }
                 int levels = 1;
                 for (int dim = std::max(im.width, im.height); dim > 1; dim /= 2)
                     ++levels;
                 glTexStorage2D(GL_TEXTURE_2D, levels, srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8, im.width, im.height);
             });
+            if (!image.levels.empty()) {
+                GLenum format = srgb ? srgbVariant(image.compressedFormat) : image.compressedFormat;
+                size_t blockBytes = image.compressedFormat == 0x83F0 ? 8 : 16; // BC1 vs BC3/BC7/ASTC 4x4
+                for (size_t level = 0; level < image.levels.size(); ++level) {
+                    int lw = std::max(1, image.width >> level), lh = std::max(1, image.height >> level);
+                    size_t rowBytes = size_t((lw + 3) / 4) * blockBytes;
+                    int blockRows = std::max(size_t(1), chunk / rowBytes);
+                    for (int y = 0; y < lh; y += blockRows * 4) {
+                        int count = std::min(blockRows * 4, lh - y);
+                        size_t offset = size_t(y / 4) * rowBytes, bytes = size_t((count + 3) / 4) * rowBytes;
+                        add(bytes, [p, i, level, y, lw, count, format, offset, bytes, texture] {
+                            glBindTexture(GL_TEXTURE_2D, texture());
+                            glCompressedTexSubImage2D(GL_TEXTURE_2D, level, 0, y, lw, count, format, bytes,
+                                                      p->world->images[i].levels[level].data() + offset);
+                        });
+                    }
+                }
+                continue;
+            }
             int rows = std::max(size_t(1), chunk / (size_t(image.width) * 4));
             for (int y = 0; y < image.height; y += rows) {
                 int count = std::min(rows, image.height - y);
@@ -974,6 +1009,17 @@ void Renderer::applyGraphics(const world::Json &config) {
                 glSamplerParameterf(sampler, 0x84FE, std::min(maximum, graphics["anisotropy"].get<float>()));
         }
     }
+}
+unsigned Renderer::compressedFormats() {
+    // Advertised and sRGB-capable; ETC2 is core in ES 3 but often emulated on desktop GPUs.
+    unsigned formats = 0;
+    if (extension("GL_EXT_texture_compression_bptc"))
+        formats |= world::BC7;
+    if (extension("GL_EXT_texture_compression_s3tc") && extension("GL_EXT_texture_compression_s3tc_srgb"))
+        formats |= world::BC1BC3;
+    if (extension("GL_KHR_texture_compression_astc_ldr"))
+        formats |= world::ASTC4x4;
+    return formats;
 }
 bool Renderer::fsrPrograms() {
     if (fsrFailed_)

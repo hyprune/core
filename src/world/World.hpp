@@ -1,4 +1,5 @@
 #pragma once
+struct cgltf_data;
 #include <span>
 #include "Playable.hpp"
 #include "sim/Camera.hpp"
@@ -17,6 +18,16 @@ struct Vertex {
 struct Image {
     int width = 0, height = 0;
     std::vector<unsigned char> rgba;
+    // KTX2/Basis images arrive as a transcoded block-compressed mip chain:
+    // compressedFormat is the linear GL internal format (the renderer picks the
+    // sRGB variant for colour slots); empty levels means rgba (mips generated).
+    unsigned compressedFormat = 0;
+    std::vector<std::vector<unsigned char>> levels;
+};
+// Block formats the GPU accepts, for transcoding KHR_texture_basisu images.
+enum CompressedFormat : unsigned { BC7 = 1, BC1BC3 = 2, ASTC4x4 = 4 };
+struct LoadOptions {
+    unsigned compressedFormats = 0; // 0: transcode KTX2 to RGBA (no GL context, e.g. world-check)
 };
 // Texture indices refer to images and samplers together; color space belongs to a slot.
 struct Sampler {
@@ -82,13 +93,18 @@ struct World {
     const Spawn &spawn(const std::string &id = "") const;
 };
 std::filesystem::path safePath(const std::filesystem::path &root, const std::string &path);
-std::shared_ptr<World> load(const std::filesystem::path &package);
+std::shared_ptr<World> load(const std::filesystem::path &package, LoadOptions = {});
 // How materials sample each image: colour (sRGB base/emissive) and/or data
 // (normal, metal/rough, occlusion, lightmap). Shared by budget and uploader.
 struct ImageUse {
     bool color = false, data = false;
 };
 std::vector<ImageUse> imageUses(const World &);
+// KHR_texture_basisu: KTX2 (2D LDR ETC1S/UASTC, zstd allowed) transcoded to the
+// best of the given CompressedFormat bits (its mip chain), else RGBA level 0.
+Image decodeKtx2(const unsigned char *data, size_t size, unsigned formats);
+// EXT_meshopt_compression: decodes compressed views into view->data (freed by cgltf).
+void decodeMeshopt(cgltf_data *);
 // Fills mesh.gpuVertices/indices from decoded accessor vertices and indices.
 void buildGpuMesh(Mesh &, std::span<const Vertex> unique, std::vector<uint32_t> indices, bool keepTriangleOrder);
 // Conservative GPU bytes: vertex buffers, every image's full mip chain once

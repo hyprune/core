@@ -267,7 +267,7 @@ int main(int argc, char **argv) {
                   {"offset", b.dest.layout.offset}},
                  {b.dest.fd});
         }
-        auto scene = world::load(argv[2]);
+        auto scene = world::load(argv[2], {render::Renderer::compressedFormats()});
         render::Renderer renderer;
         renderer.applyGraphics(render::graphicsDefaults());
         renderer.worldOnly = true;

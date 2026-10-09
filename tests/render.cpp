@@ -1,4 +1,5 @@
 #include <cstring>
+#include <fstream>
 #include "render/GLState.hpp"
 #include "render/PNG.hpp"
 #include "render/Renderer.hpp"
@@ -809,6 +810,24 @@ int main(int argc, char **argv) {
                       "shared colour/data image sampled with the wrong decode");
             check(skip[3] < copies[3] && copies[3] == reference[3], "shared image GPU bytes not single-counted");
             renderer.srgbDecodeAllowed = true;
+            {
+                // KTX2 colour texture: a transcoded BC7/BC1 mip chain (sRGB variant)
+                // must draw like the same image transcoded to RGBA.
+                std::ifstream input(std::filesystem::path(argv[1]).parent_path() / "ktx2/gradient8.ktx2", std::ios::binary);
+                std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(input)), {});
+                auto formats = render::Renderer::compressedFormats();
+                check(formats != 0, "no compressed texture format advertised");
+                auto compressed = std::make_shared<world::World>(*shared);
+                compressed->materials[0].slots[3].texture = -1;
+                compressed->images = {world::decodeKtx2(bytes.data(), bytes.size(), formats)};
+                auto raw = std::make_shared<world::World>(*compressed);
+                raw->images = {world::decodeKtx2(bytes.data(), bytes.size(), 0)};
+                auto a = frame(raw, true), b = frame(compressed, true);
+                for (int c = 0; c < 3; ++c)
+                    check(std::abs(a[c] - b[c]) <= 6, "compressed KTX2 texture drew differently");
+                check(b[3] < a[3], "compressed texture GPU bytes not smaller");
+                check(glGetError() == GL_NO_ERROR, "compressed upload GL error");
+            }
             // Edited objects: the CPU normal matrix must shade a rotated node like
             // the same mesh rotated in the package (pre-transformed vertices).
             auto rotated = std::make_shared<world::World>(*shared);

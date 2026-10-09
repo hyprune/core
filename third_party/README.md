@@ -13,6 +13,11 @@ Vendored source, unmodified, licenses embedded in each header:
   a21ffb8f6c13233ba336352bdff293894c706575,
   https://github.com/GPUOpen-Effects/FidelityFX-FSR (MIT, `fidelityfx-fsr/license.txt`).
   Embedded into the EASU/RCAS shaders at configure time (`src/render/Fsr.hpp.in`).
+- Basis Universal v2.1.0 transcoder (tag commit 45d5f41015eecd9570d5a3f89ab9cc0037a25063),
+  https://github.com/BinomialLLC/basis_universal (Apache-2.0, `basisu/LICENSE`, `basisu/NOTICE`):
+  `transcoder/` unmodified, plus its bundled single-file zstd decoder `zstd/zstddeclib.c`
+  (BSD-3-Clause, `basisu/zstd/LICENSE`). KTX2 (KHR_texture_basisu) transcoding only; no encoder.
+  Release tarball SHA-256 `ee1dbeb4c16699b577a0c78dce337bbede268e04bd2d463946971f8cb1e9c8df`.
 
 No prototype assets or source files are included.
 

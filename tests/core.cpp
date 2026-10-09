@@ -2,6 +2,10 @@
 #include "world/Schema.hpp"
 #include "world/Spatial.hpp"
 #include "world/World.hpp"
+#include <cgltf.h>
+#include <meshoptimizer/meshoptimizer.h>
+#include <cstring>
+#include <fstream>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -76,6 +80,50 @@ int main(int argc, char **argv) {
                     assert(canonical(before) == canonical(after));
                 }
             }
+        }
+        {
+            // KTX2 (UASTC + zstd, 4 mips) from tests/fixtures/ktx2: RGBA fallback
+            // matches the source gradient; BC7/BC1 keep the package's mip chain.
+            auto path = std::filesystem::path(argv[1]).parent_path() / "ktx2/gradient8.ktx2";
+            std::ifstream input(path, std::ios::binary);
+            std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(input)), {});
+            auto rgba = world::decodeKtx2(bytes.data(), bytes.size(), 0);
+            assert(rgba.width == 8 && rgba.height == 8 && rgba.levels.empty() && rgba.rgba.size() == 256);
+            for (int y = 0; y < 8; ++y)
+                for (int x = 0; x < 8; ++x) {
+                    auto *p = &rgba.rgba[(y * 8 + x) * 4];
+                    assert(std::abs(p[0] - x * 32) <= 6 && std::abs(p[1] - y * 32) <= 6 && std::abs(p[2] - 128) <= 6);
+                }
+            auto bc7 = world::decodeKtx2(bytes.data(), bytes.size(), world::BC7 | world::BC1BC3);
+            assert(bc7.compressedFormat == 0x8E8C && bc7.levels.size() == 4 && bc7.levels[0].size() == 4 * 16 &&
+                   bc7.levels[3].size() == 16 && bc7.rgba.empty());
+            auto bc1 = world::decodeKtx2(bytes.data(), bytes.size(), world::BC1BC3);
+            assert(bc1.compressedFormat == 0x83F0 && bc1.levels[0].size() == 4 * 8);
+            rejects([&] { world::decodeKtx2(bytes.data(), bytes.size() / 2, 0); }, "truncated KTX2 accepted");
+        }
+        {
+            // EXT_meshopt_compression: an encoded attribute view decodes into view->data.
+            std::vector<float> vertices{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+            std::vector<unsigned char> encoded(meshopt_encodeVertexBufferBound(3, 16));
+            encoded.resize(meshopt_encodeVertexBuffer(encoded.data(), encoded.size(), vertices.data(), 3, 16));
+            cgltf_buffer buffer{};
+            buffer.data = encoded.data();
+            buffer.size = encoded.size();
+            cgltf_buffer_view view{};
+            view.size = 48;
+            view.has_meshopt_compression = true;
+            view.meshopt_compression = {&buffer, 0, encoded.size(), 16, 3, cgltf_meshopt_compression_mode_attributes,
+                                        cgltf_meshopt_compression_filter_none};
+            cgltf_data data{};
+            data.buffer_views = &view;
+            data.buffer_views_count = 1;
+            world::decodeMeshopt(&data);
+            assert(view.data && std::memcmp(view.data, vertices.data(), 48) == 0);
+            free(view.data);
+            encoded[encoded.size() / 2] ^= 0xff;
+            view.data = nullptr;
+            view.meshopt_compression.size = 4;
+            rejects([&] { world::decodeMeshopt(&data); }, "corrupt meshopt view accepted");
         }
         world::validateMapSvg("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><path d=\"M 0 0 L 10 "
                               "10\" stroke=\"#fff\"/></svg>");

@@ -71,6 +71,8 @@ class Renderer {
         return quality == "intel" || (quality == "auto" && device.find("Intel") != std::string::npos);
     }
     void applyGraphics(const world::Json &); // Deferred, owner EGL context current; no world re-upload.
+    // world::CompressedFormat bits this GL context accepts (current context required).
+    static unsigned compressedFormats();
     world::Json graphics = effectiveGraphics(graphicsDefaults(), "generic");
     bool intelQuality = false, effects = true;
     int msaa = 4;
