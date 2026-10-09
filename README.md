@@ -233,6 +233,14 @@ Ctrl crouches, U captures debug state. Tools 1–5 show their wheel submodes in 
 Settings captures up to three bindings per action through authenticated IPC 0.6.
 Matching actions steal colliding Hyprland bindings only in their active mode.
 
+U writes `capture-<ms>.png` + `.json` to `$HYPRUNE_CAPTURE_DIR` (default
+`~/.local/state/hyprune/captures`); photo mode stills use the same path. An
+optional brand watermark, `hl.plugin.hyprune.config({capture={watermark=true}})`
+(default off), stamps the Bold lockup bottom-right on the saved PNG only, in
+white or navy chosen from the area underneath, and records it as
+`frame.watermark` in the JSON. It is never drawn live. See
+[assets/brand/BRAND.md](assets/brand/BRAND.md).
+
 Run `dev/nested/run.sh --m3b` for isolated real seat acceptance, or add `--record`
 for the demo. Both use the lifetime flock. See [M3B.md](docs/M3B.md), including the
 complete supervised live cursor checklist, input options, contracts and evidence.

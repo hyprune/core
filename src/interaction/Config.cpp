@@ -43,6 +43,8 @@ Json defaultConfig() {
           {"scale", .002},
           {"wheel_factor", 1.06},
           {"transition_seconds", .35}}},
+        // Captures only (U, photo mode): never the live HUD or world rendering.
+        {"capture", {{"watermark", false}}},
         {"tools", {{"enabled", true}, {"slots", Json::array({"pointer", "mount", "path", "position", "placement"})}}},
         {"graphics", render::graphicsDefaults()}};
 }

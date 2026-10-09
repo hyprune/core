@@ -1123,3 +1123,20 @@ Lightmaps stay PNG. Core pins the 0.7 schema (`third_party/hyprune-schema/v0.7`,
 BC7/BC1-BC3/ASTC/RGBA on the loader. Shell: no change (IPC unchanged).
 Worlds tooling: keep world.json-only lightmap textures and node/material
 indices when adding glTF-Transform/basisu (see the RFC tooling notes).
+
+## Optional capture watermark (2026-10-09, IPC 0.15 unchanged)
+
+New core-local Lua config key `capture.watermark` (boolean, default `false`):
+`hl.plugin.hyprune.config({capture={watermark=true}})`, applied live. When on,
+U captures (and photo mode stills, same writer) get the Bold one-ink lockup
+bottom-right, inset by the brand clear space, at 55% group opacity, white or
+navy `#0f1a27` by contrast against the area underneath. It is composited on
+the capture writer thread before the PNG is encoded; the live HUD and world
+rendering never show it. The capture JSON (not a validated contract) gains
+`frame.watermark` (`{enabled:false}` or `{enabled, applied, variant, ink,
+opacity, rect, lockupWidthPx, clearSpacePx, regionLuminance, contrast}`, or
+`reason` when the capture is too small) and `frame.watermarkMs`. No IPC,
+settings-schema or world-format change. Shell: no change required; a settings
+toggle would need a future IPC setting (there is no config RPC today). Meta
+kits may emit the key in generated `session.lua` if the owner wants it on.
+

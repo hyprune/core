@@ -86,6 +86,7 @@ core-owned controls. Keys in `input.bindings` are XKB symbol names.
 | windows.scale | 0.002 | 0.0001–0.02 metres/logical pixel for new free windows |
 | windows.wheel_factor | 1.06 | 1.001–1.5 multiplicative distance/zoom step |
 | windows.transition_seconds | 0.35 | 0–2 seconds fullscreen and wall fly-in/out |
+| capture.watermark | false | Boolean; brand lockup bottom-right on U/photo capture PNGs only (55% opacity, white or navy by the area underneath, `frame.watermark` in the capture JSON); never on the live HUD or world. Live |
 | tools.enabled | true | Boolean; false releases 1–5 to ordinary navigation policy |
 | tools.slots | pointer,mount,path,path,path | Exactly five pointer/mount/path IDs; path is an M3B stub |
 | graphics.quality | auto | auto/high/intel; safe deferred resource preparation when changed |

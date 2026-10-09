@@ -51,6 +51,7 @@ extern "C" {
 #include "offload/Client.hpp"
 #include "render/PNG.hpp"
 #include "render/Renderer.hpp"
+#include "render/Watermark.hpp"
 #include "replay/Session.hpp"
 #include <fcntl.h>
 #include <fstream>
@@ -2120,8 +2121,23 @@ void Runtime::debugCapture() {
     image.replace_extension(".png");
     value["screenshot"] = image.string();
     value["frame"]["worldId"] = pixels.worldId;
-    captureWrite =
-        std::async(std::launch::async, [path, image, value = std::move(value), pixels = std::move(pixels)]() mutable {
+    bool watermark = config["capture"]["watermark"].get<bool>();
+    captureWrite = std::async(std::launch::async, [path, image, watermark, value = std::move(value),
+                                                   pixels = std::move(pixels)]() mutable {
+            // Writer thread, off the render pass: the optional brand mark touches only these pixels.
+            render::WatermarkResult mark;
+            if (watermark) {
+                auto markStarted = std::chrono::steady_clock::now();
+                try {
+                    mark = render::applyWatermark(pixels.rgba, pixels.width, pixels.height);
+                } catch (const std::exception &e) {
+                    mark = {};
+                    mark.reason = e.what();
+                }
+                value["frame"]["watermarkMs"] =
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - markStarted).count();
+            }
+            value["frame"]["watermark"] = render::watermarkJson(watermark, mark);
             auto started = std::chrono::steady_clock::now();
             render::writePNG(image, pixels.width, pixels.height, pixels.rgba);
             value["frame"]["pngWriteMs"] =
