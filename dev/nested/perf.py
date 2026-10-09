@@ -66,6 +66,7 @@ def acceptance(client,children,args,shell_token,socketpath):
         try:wait(lambda:sum(v['title'] in ('Perf-room','Perf-video') and v['visible'] for v in s.camera()['captures'])==2,timeout=20)
         except AssertionError:print('captures',json.dumps(s.camera()['captures']),flush=True);raise
         time.sleep(1.5)
+        report.setdefault('uploads',{})[world]=timings()['upload']
     client.call('graphics.set',{'patch':{'quality':'low','offload':'off','dynamic_resolution':False,'render_scale':scales[0],'sharpen':.35}})
     enter(LUMEN)
     report['device']=timings()['renderer'];report['upload']=timings()['upload']
