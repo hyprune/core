@@ -12,7 +12,7 @@
 using namespace hyprune;
 int main(int argc, char **argv) {
     if (argc < 2) {
-        std::cerr << "usage: upload-benchmark WORLD [tick_ms]\n";
+        std::cerr << "usage: upload-benchmark WORLD [tick_ms [quality]]\n";
         return 2;
     }
     EGLDisplay display = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
@@ -30,6 +30,11 @@ int main(int argc, char **argv) {
     auto world = world::load(argv[1], {render::Renderer::compressedFormats()});
     render::Renderer renderer;
     renderer.warmShaders = false;
+    if (argc > 3) { // graphics quality preset, e.g. low
+        auto settings = render::graphicsDefaults();
+        settings["quality"] = argv[3];
+        renderer.applyGraphics(settings);
+    }
     auto started = std::chrono::steady_clock::now();
     renderer.beginPrepare(world);
     int ticks = 0;

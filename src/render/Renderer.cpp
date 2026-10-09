@@ -62,7 +62,12 @@ uniform float nativeExposure;
 uniform int inkEnabled;
 uniform samplerCube environmentMap;
 uniform float cubeLevels,envRotation,envIntensity;
-uniform int excludeUnlit,effects,normalEnabled,specularEnabled,aoEnabled,reflectionEnabled,fogMode;
+uniform int excludeUnlit,effects;
+#ifdef HYPRUNE_FEATURES
+const int normalEnabled=HYPRUNE_NORMAL,specularEnabled=HYPRUNE_SPECULAR,aoEnabled=HYPRUNE_AO,reflectionEnabled=HYPRUNE_REFLECTION,fogMode=HYPRUNE_FOG;
+#else
+uniform int normalEnabled,specularEnabled,aoEnabled,reflectionEnabled,fogMode;
+#endif
 uniform vec3 fogColor,sunDirection,sunColor;
 uniform float fogDensity,heightFalloff,baseHeight,sunIntensity;
 out vec4 result;
@@ -409,6 +414,16 @@ GLuint program(const char *vertex, const char *fragment) {
     auto p = startProgram(vertex, fragment);
     return finishProgram(p);
 }
+// Preset-specialised world shader: graphics feature switches become constants,
+// so the compiler drops disabled paths (smaller program, wider SIMD on Intel).
+std::string specialised(const char *source, int key) {
+    std::string text = source, defines = "#define HYPRUNE_FEATURES 1\n";
+    const char *names[]{"HYPRUNE_NORMAL", "HYPRUNE_SPECULAR", "HYPRUNE_AO", "HYPRUNE_REFLECTION"};
+    for (int i = 0; i < 4; ++i)
+        defines += std::string("#define ") + names[i] + " " + std::to_string((key >> i) & 1) + "\n";
+    defines += "#define HYPRUNE_FOG " + std::to_string(key >> 4) + "\n";
+    return text.insert(text.find('\n') + 1, defines);
+}
 // Deletes shared names once: second[i] is only deleted where it differs from first[i].
 template <class Delete> void release(std::vector<GLuint> &first, std::vector<GLuint> &second, Delete del) {
     for (size_t i = 0; i < second.size(); ++i)
@@ -582,17 +597,19 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
     // texture and mesh uploads, by when parallel compiles have usually completed.
     std::vector<std::function<void()>> finishers;
     auto compile = [&](GLuint *target, const char *vs, const char *fs, std::string kind, bool block = false,
-                       bool optional = false) {
+                       bool optional = false, bool variant = false) {
         auto pending = std::make_shared<PendingProgram>();
         add(0, [target, vs, fs, pending] { if (!*target) *pending = startProgram(vs, fs); }, "start " + kind);
-        finishers.push_back([this, p, target, pending, kind, block, optional] {
+        finishers.push_back([this, p, target, pending, kind, block, optional, variant] {
             p->jobs.push_back({0,
-                               [this, target, pending, block, optional] {
+                               [this, target, pending, block, optional, variant] {
                                    if (*target || !pending->program)
                                        return;
                                    try {
                                        *target = finishProgram(*pending);
                                    } catch (const std::exception &e) {
+                                       if (variant)
+                                           return; // the generic world shader stays in use
                                        if (!optional)
                                            throw;
                                        fsrFailed_ = true; // FSR needs GLSL ES 3.1; bilinear stays
@@ -615,6 +632,15 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
     compile(&inkProgram_, screenVertex, inkFragment, "shader ink edges");
     compile(&inkComposite_, screenVertex, inkCompositeFragment, "shader ink composite");
     compile(&depthProgram_, vertex, depthFragment, "shader depth", true);
+    {
+        int key = featureKey();
+        if (!sceneVariants_.contains(key)) {
+            variantSources_[key] = specialised(fragment, key);
+            sceneVariants_[key] = 0;
+            compile(&sceneVariants_[key], vertex, variantSources_[key].c_str(), "shader scene_ preset variant", true,
+                    false, true);
+        }
+    }
     if (upscaler == "fsr1" && !fsrFailed_) {
         compile(&easu_, fsrVertex.c_str(), easuFragment.c_str(), "shader fsr1 easu", false, true);
         compile(&rcas_, fsrVertex.c_str(), rcasFragment.c_str(), "shader fsr1 rcas", false, true);
@@ -1054,6 +1080,8 @@ void Renderer::applyGraphics(const world::Json &config) {
     dynamicResolution = graphics["dynamic_resolution"];
     renderScale = graphics["render_scale"] == "auto" ? 0.f : graphics["render_scale"].get<float>();
     targetFPS = graphics["target_fps"];
+    if (scene_)
+        specializeScene();
     upscaler = getenv("HYPRUNE_UPSCALER")              ? getenv("HYPRUNE_UPSCALER")
                : graphics.value("upscaler", Json()).is_string() ? graphics["upscaler"].get<std::string>()
                                                                 : "fsr1";
@@ -1079,6 +1107,28 @@ void Renderer::applyGraphics(const world::Json &config) {
                 glSamplerParameterf(sampler, 0x84FE, std::min(maximum, graphics["anisotropy"].get<float>()));
         }
     }
+}
+int Renderer::featureKey() const {
+    return int(graphics["normal_maps"].get<bool>()) | int(graphics["specular"].get<bool>()) << 1 |
+           int(graphics["ambient_occlusion"].get<bool>()) << 2 | int(graphics["reflections"].get<bool>()) << 3 |
+           (graphics["fog"] == "off" ? 0 : graphics["fog"] == "linear" ? 1 : 2) << 4;
+}
+void Renderer::specializeScene() {
+    // Outside the frame with the owner context current (prepare jobs, applyGraphics).
+    int key = featureKey();
+    if (sceneVariants_.contains(key))
+        return; // compiled, compiling in the upload, or failed (0: generic program)
+    try {
+        variantSources_[key] = specialised(fragment, key);
+        sceneVariants_[key] = program(vertex, variantSources_[key].c_str());
+        materialBlock(sceneVariants_[key]);
+    } catch (const std::exception &) {
+        sceneVariants_[key] = 0;
+    }
+}
+GLuint Renderer::worldProgram() const {
+    auto it = sceneVariants_.find(featureKey());
+    return it != sceneVariants_.end() && it->second ? it->second : scene_;
 }
 unsigned Renderer::compressedFormats() {
     // Advertised and sRGB-capable; ETC2 is core in ES 3 but often emulated on desktop GPUs.
@@ -1336,38 +1386,39 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     gpu_[6].end();
     gpu_[0].begin();
     glEnable(GL_DEPTH_TEST);
-    glUseProgram(scene_);
+    const GLuint world = worldProgram(); // preset-specialised when compiled
+    glUseProgram(world);
     auto vp = camera.projection(float(w) / h) * camera.view();
-    glUniformMatrix4fv(location(scene_, "vp"), 1, GL_FALSE, vp.v.data());
-    uniform(scene_, "albedo", 0);
-    uniform(scene_, "lightmap", 1);
+    glUniformMatrix4fv(location(world, "vp"), 1, GL_FALSE, vp.v.data());
+    uniform(world, "albedo", 0);
+    uniform(world, "lightmap", 1);
     auto ink = effectiveOutline(profile, graphics);
     bool drawInk = !externalWorldFbo && graphics["outline"].get<bool>() && ink.value("enabled", false);
-    uniform(scene_, "inkEnabled", drawInk);
-    uniform(scene_, "normalMap", 2);
-    uniform(scene_, "mrMap", 3);
-    uniform(scene_, "aoMap", 4);
-    uniform(scene_, "emissiveMap", 5);
-    uniform(scene_, "eye", camera.position);
-    uniform(scene_, "details", materialDetails);
-    uniform(scene_, "normalEnabled", graphics["normal_maps"].get<bool>());
-    uniform(scene_, "specularEnabled", graphics["specular"].get<bool>());
-    uniform(scene_, "aoEnabled", graphics["ambient_occlusion"].get<bool>());
-    uniform(scene_, "reflectionEnabled", graphics["reflections"].get<bool>());
-    uniform(scene_, "fogMode", graphics["fog"] == "off" ? 0 : graphics["fog"] == "linear" ? 1 : 2);
-    uniform(scene_, "effects", effects);
-    uniform(scene_, "environmentMap", 6);
-    uniform(scene_, "excludeUnlit", fog["excludeUnlit"].get<bool>());
-    uniform(scene_, "fogColor", vec(fog["color"]));
-    uniform(scene_, "sunDirection", vec(sun["direction"]));
-    uniform(scene_, "sunColor", vec(sun["color"]));
-    glUniform1f(location(scene_, "fogDensity"), fog["density"].get<float>());
-    glUniform1f(location(scene_, "heightFalloff"), fog["heightFalloff"].get<float>());
-    glUniform1f(location(scene_, "baseHeight"), fog["baseHeight"].get<float>());
-    glUniform1f(location(scene_, "sunIntensity"), sun["intensity"].get<float>());
-    glUniform1f(location(scene_, "cubeLevels"), cubeLevels_);
-    glUniform1f(location(scene_, "envRotation"), rotation);
-    glUniform1f(location(scene_, "envIntensity"), 1);
+    uniform(world, "inkEnabled", drawInk);
+    uniform(world, "normalMap", 2);
+    uniform(world, "mrMap", 3);
+    uniform(world, "aoMap", 4);
+    uniform(world, "emissiveMap", 5);
+    uniform(world, "eye", camera.position);
+    uniform(world, "details", materialDetails);
+    uniform(world, "normalEnabled", graphics["normal_maps"].get<bool>());
+    uniform(world, "specularEnabled", graphics["specular"].get<bool>());
+    uniform(world, "aoEnabled", graphics["ambient_occlusion"].get<bool>());
+    uniform(world, "reflectionEnabled", graphics["reflections"].get<bool>());
+    uniform(world, "fogMode", graphics["fog"] == "off" ? 0 : graphics["fog"] == "linear" ? 1 : 2);
+    uniform(world, "effects", effects);
+    uniform(world, "environmentMap", 6);
+    uniform(world, "excludeUnlit", fog["excludeUnlit"].get<bool>());
+    uniform(world, "fogColor", vec(fog["color"]));
+    uniform(world, "sunDirection", vec(sun["direction"]));
+    uniform(world, "sunColor", vec(sun["color"]));
+    glUniform1f(location(world, "fogDensity"), fog["density"].get<float>());
+    glUniform1f(location(world, "heightFalloff"), fog["heightFalloff"].get<float>());
+    glUniform1f(location(world, "baseHeight"), fog["baseHeight"].get<float>());
+    glUniform1f(location(world, "sunIntensity"), sun["intensity"].get<float>());
+    glUniform1f(location(world, "cubeLevels"), cubeLevels_);
+    glUniform1f(location(world, "envRotation"), rotation);
+    glUniform1f(location(world, "envIntensity"), 1);
     glBindSampler(0, repeat_);
     glBindSampler(1, clamp_);
     auto visible = world::visibleAreas(*world_, camera.position);
@@ -1423,7 +1474,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         int native = -1;
         bool identity = false;
     };
-    std::array<std::pair<GLuint, ProgramState>, 2> programState{{{scene_, {}}, {depthProgram_, {}}}};
+    std::array<std::pair<GLuint, ProgramState>, 2> programState{{{world, {}}, {depthProgram_, {}}}};
     int tone = profile["toneMapping"] == "aces" ? 0 : profile["toneMapping"] == "reinhard" ? 1 : 2;
     float exposure = profile["exposure"].get<float>();
     bool haze = graphics["alpha_haze"].get<bool>();
@@ -1432,7 +1483,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         const auto &m = world_->materials[b.material];
         if (m.alphaMode == 2 && !haze)
             return;
-        auto shader = depthOnly ? depthProgram_ : scene_;
+        auto shader = depthOnly ? depthProgram_ : world;
         auto &state = programState[depthOnly].second;
         glUseProgram(shader);
         if (state.native < 0) {
@@ -2431,6 +2482,9 @@ void Renderer::destroy() {
     upscale_ = 0;
     deleteProgram(bloom_);
     deleteProgram(sky_);
+    for (auto &[key, variant] : sceneVariants_)
+        deleteProgram(variant);
+    sceneVariants_.clear();
     deleteProgram(easu_);
     deleteProgram(rcas_);
     glDeleteBuffers(1, &quadVbo_);

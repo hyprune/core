@@ -189,6 +189,11 @@ class Renderer {
     bool fsrFailed_ = false, fsrActive_ = false;
     std::string fsrError_;
     bool fsrPrograms();
+    std::map<int, GLuint> sceneVariants_; // world shader per graphics feature key (0 = failed/compiling)
+    std::map<int, std::string> variantSources_;
+    int featureKey() const;
+    void specializeScene();
+    GLuint worldProgram() const;
     void fsrTargets(int, int);
     void freeFsrTargets();
     void targets(int, int);
