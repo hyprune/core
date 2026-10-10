@@ -28,17 +28,22 @@ class Client:
         return json.loads(exact(struct.unpack('>I',exact(4))[0]))
     def call(self,method,params):
         self.count+=1;ident=str(self.count);message=json.dumps({'jsonrpc':'2.0','id':ident,'method':method,'params':params}).encode();self.socket.sendall(struct.pack('>I',len(message))+message)
-        while True:
-            result=self.receive()
-            if result.get('id')==ident:
-                self.transcript.append({'method':method,'response':result})
-                if 'error' in result:raise RuntimeError(result['error'])
-                return result['result']
-            self.events.append(result)
-            if STATE.exists():
-                with (STATE/'events.log').open('a') as stream:
-                    p=result.get('params',{});stream.write(f"revision {p.get('baseRevision','?')} -> {p.get('revision','?')}  {result.get('method')}\n")
-                    if 'movement' in p.get('changes',{}):stream.write('  camera '+str([round(v,2) for v in p['changes']['movement']['position']])+'\n')
+        # Core gives a package load 28 s (loadDeadline) before failing it; giving up sooner
+        # disconnects and cancels a load that was still progressing (a busy host, big package).
+        self.socket.settimeout(32 if method=='world.load' else 5)
+        try:
+            while True:
+                result=self.receive()
+                if result.get('id')==ident:
+                    self.transcript.append({'method':method,'response':result})
+                    if 'error' in result:raise RuntimeError(result['error'])
+                    return result['result']
+                self.events.append(result)
+                if STATE.exists():
+                    with (STATE/'events.log').open('a') as stream:
+                        p=result.get('params',{});stream.write(f"revision {p.get('baseRevision','?')} -> {p.get('revision','?')}  {result.get('method')}\n")
+                        if 'movement' in p.get('changes',{}):stream.write('  camera '+str([round(v,2) for v in p['changes']['movement']['position']])+'\n')
+        finally:self.socket.settimeout(5)
     def close(self):self.socket.close()
 def ctl(*args):
     return subprocess.check_output([str(HERE/'ctl.py'),'hyprctl',*args],text=True).strip()
