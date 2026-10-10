@@ -2,6 +2,7 @@
 // seen from behind is not clickable but can be carried, turning to face the player.
 #include "interaction/Hands.hpp"
 #include "world/World.hpp"
+#include <chrono>
 #include <cmath>
 #include <iostream>
 using namespace hyprune;
@@ -84,6 +85,21 @@ int main(int argc, char **argv) {
         instant.facing(true, camera);
         instant.flipFrom(from, 0);
         check(instant.flip == 0 && dist(instant.pose.normal(), {0, 0, 1}) < 1e-3f, "reduced motion flips at once");
+
+        // The sweep guarding the flip only tests geometry near it: the same answers, but no
+        // longer proportional to the whole world (a Lumen Reach flip took ~0.5 s).
+        std::vector<Triangle> world;
+        for (int i = 0; i < 200000; i++) {
+            float x = 100 + (i % 500) * .5f, z = 100 + (i / 500) * .5f;
+            world.push_back({{x, 0, z}, {x + .4f, 0, z}, {x, .4f, z + .1f}});
+        }
+        auto t0 = std::chrono::steady_clock::now();
+        check(interaction::sweepSafe(before, hands.pose, world), "far geometry never blocks the flip");
+        double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        check(ms < 50, "the flip sweep ignores far geometry (" + std::to_string(ms) + " ms)");
+        auto c = before.center;
+        world.push_back({c + Vec3{-.3f, -.3f, .2f}, c + Vec3{.3f, -.3f, .2f}, c + Vec3{0, .3f, .2f}});
+        check(!interaction::sweepSafe(before, hands.pose, world), "geometry in the flip's path still blocks it");
         std::cout << "static world: collision-owning nodes only; back-face carry flips to face the player\n";
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';

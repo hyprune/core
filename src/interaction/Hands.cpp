@@ -1,5 +1,7 @@
 #include "Hands.hpp"
 #include "Resize.hpp"
+#include <algorithm>
+#include <vector>
 namespace hyprune::interaction {
 std::optional<WorldHit> raycast(Vec3 o, Vec3 d, std::span<const Triangle> mesh, const sim::TriangleIndex *index) {
     std::optional<WorldHit> best;
@@ -63,6 +65,23 @@ bool sweepSafe(const surfaces::Surface &a, const surfaces::Surface &b, std::span
                                           .015f)));
     if (steps > 4096)
         return false;
+    // Broad phase: each intermediate box (with overlaps()' 4 cm margins) stays within
+    // its half-diagonal of the segment between the two centres. Testing every world
+    // triangle at every step took ~0.5 s for a 180 degree flip in Lumen Reach.
+    const float w = std::max(a.width, b.width) + .08f, h = std::max(a.height, b.height) + .08f;
+    const float r = .5f * std::sqrt(w * w + h * h + .08f * .08f);
+    const Vec3 low{std::min(a.center.x, b.center.x) - r, std::min(a.center.y, b.center.y) - r,
+                   std::min(a.center.z, b.center.z) - r},
+        high{std::max(a.center.x, b.center.x) + r, std::max(a.center.y, b.center.y) + r,
+             std::max(a.center.z, b.center.z) + r};
+    std::vector<Triangle> near;
+    for (const auto &t : mesh)
+        if (std::max({t.a.x, t.b.x, t.c.x}) >= low.x && std::min({t.a.x, t.b.x, t.c.x}) <= high.x &&
+            std::max({t.a.y, t.b.y, t.c.y}) >= low.y && std::min({t.a.y, t.b.y, t.c.y}) <= high.y &&
+            std::max({t.a.z, t.b.z, t.c.z}) >= low.z && std::min({t.a.z, t.b.z, t.c.z}) <= high.z)
+            near.push_back(t);
+    if (near.empty())
+        return true;
     float sign = 0;
     for (int j = 0; j < 4; j++)
         sign += a.rotation[j] * b.rotation[j];
@@ -80,7 +99,7 @@ bool sweepSafe(const surfaces::Surface &a, const surfaces::Surface &b, std::span
         for (auto &q : s.rotation)
             q /= std::sqrt(norm);
         s.yaw = a.yaw + (b.yaw - a.yaw) * t;
-        if (surfaces::overlaps(s, mesh))
+        if (surfaces::overlaps(s, near))
             return false;
     }
     return true;
