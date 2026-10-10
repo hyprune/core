@@ -4259,6 +4259,9 @@ int luaCamera(lua_State *state) {
         for (auto &t : runtime->world->collision)
             collisionSum += t.a.x + t.a.y * 3 + t.a.z * 7 + t.b.x + t.c.z;
     j["objectTransforms"] = runtime->renderer.transforms.size();
+    j["inputRecent"] = Json::array();
+    for (size_t i = runtime->input.recent.size() > 24 ? runtime->input.recent.size() - 24 : 0; i < runtime->input.recent.size(); ++i)
+        j["inputRecent"].push_back(runtime->input.recent[i]);
     j["presentLog"] = Json::array();
     for (auto &p : runtime->renderer.presentLog)
         j["presentLog"].push_back(Json(p));
