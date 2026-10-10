@@ -30,3 +30,4 @@ tests/fixtures/m3b/
 /dev/nested/.instances/
 /tests/fixtures/.prepare.lock
 /dev/nested/.reticle-state/
+/dev/nested/.capture-pose-state/
