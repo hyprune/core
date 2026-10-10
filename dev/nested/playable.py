@@ -59,7 +59,10 @@ def acceptance(client,children,args,shell_token,socketpath):
     check('IPC snapshot remains usable',bool(snap))
     for name in ['com.hyprune.lumen-reach','com.hyprune.switchyard']:
         client.call('world.load',{'worldId':name});client.call('movement.set',{'modeId':'com.hyprune.fly'})
-        pose(0,120,0);hold('space',300);p=position();check(name+' legacy unrestricted fly',p[1]>120.2,p)
+        # Packages without playable volumes fly unrestricted; ones declaring them are bounded.
+        declares='playable' in json.loads((s.ROOT.parent/'worlds/dist'/name/'world.json').read_text())
+        pose(0,120,0);hold('space',300);p=position()
+        check(name+(' declares playable volumes: flight bounded' if declares else ' legacy unrestricted fly'),(p[1]<=120.2) if declares else (p[1]>120.2),p)
     client.call('runtime.exit',{})
     evidence={'nestedOnly':True,'lock':'/tmp/worldshell-nested.lock','checks':checks}
     (s.ROOT/'docs/evidence/playable-bounds.json').write_text(json.dumps(evidence,indent=2)+'\n')
