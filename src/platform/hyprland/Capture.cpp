@@ -10,6 +10,7 @@
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/Popup.hpp>
 #include <hyprland/src/layout/target/WindowTarget.hpp>
+#include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/protocols/core/Compositor.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
@@ -495,19 +496,34 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         it->surface.pixelHeight = 720;
         it->surface.texture = it->texture;
         surfaces::anchorPlane(it->surface, *anchor, 1280, 720);
-        // Recompose only when a window, popup, rectangle or pull changed: an idle wall
-        // must not cost a clear and a draw per window on every tick.
-        uint64_t key = 1469598103934665603ull;
-        auto mix = [&](double v) { key = (key ^ std::hash<double>{}(v)) * 1099511628211ull; };
-        mix(monitor->m_position.x), mix(monitor->m_position.y), mix(monitor->m_size.x), mix(monitor->m_size.y);
+        // The workspace's windows in native stacking order: tiled, floating, pinned,
+        // fullscreen; within a layer by the compositor's window list (a raise moves a
+        // window to its end), so focus raises change the wall without a client commit.
+        const auto &native = Desktop::windowState()->windows();
+        auto layer = [](const PHLWINDOW &w) {
+            return Fullscreen::controller()->isFullscreen(w) ? 3 : w->m_pinned ? 2 : w->m_isFloating ? 1 : 0;
+        };
+        std::vector<std::pair<std::pair<int, size_t>, Entry *>> stack;
         for (auto &entry : entries) {
             if (entry.instance.workspaceId != id || layout.pulled(entry.instance, world))
                 continue;
             auto window = entry.window.lock();
-            auto box = window ? window->logicalBox() : std::nullopt;
-            if (!box)
+            if (!window || !window->logicalBox())
                 continue;
+            size_t at = std::find(native.begin(), native.end(), window) - native.begin();
+            stack.push_back({{layer(window), at}, &entry});
+        }
+        std::stable_sort(stack.begin(), stack.end(), [](auto &a, auto &b) { return a.first < b.first; });
+        // Recompose only when stacking, a window, popup, rectangle or pull changed: an idle
+        // wall must not cost a clear and a draw per window on every tick.
+        uint64_t key = 1469598103934665603ull;
+        auto mix = [&](double v) { key = (key ^ std::hash<double>{}(v)) * 1099511628211ull; };
+        mix(monitor->m_position.x), mix(monitor->m_position.y), mix(monitor->m_size.x), mix(monitor->m_size.y);
+        for (auto &[rank, item] : stack) {
+            auto &entry = *item;
+            auto box = entry.window.lock()->logicalBox();
             key = (key ^ std::hash<std::string>{}(entry.surface.id)) * 1099511628211ull;
+            mix(rank.first);
             mix(double(*entry.commits)), mix(entry.surface.texture), mix(box->x), mix(box->y), mix(box->w), mix(box->h);
             for (auto &child : children)
                 if (child.parentId == entry.surface.id && child.resource) {
@@ -518,6 +534,7 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         if (key == it->key)
             continue;
         it->key = key;
+        ++it->composed;
         glBindFramebuffer(GL_FRAMEBUFFER, it->fbo);
         glViewport(0, 0, 1280, 720);
         glDisable(GL_SCISSOR_TEST);
@@ -538,13 +555,9 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         // Compose approved root texture leases at the compositor's actual window rectangles.
         // Shell layers/world pass never enter this source; no compositor rendering is called.
-        for (auto &entry : entries) {
-            if (entry.instance.workspaceId != id || layout.pulled(entry.instance, world))
-                continue;
-            auto window = entry.window.lock();
-            auto box = window->logicalBox();
-            if (!box)
-                continue;
+        for (auto &[rank, item] : stack) {
+            auto &entry = *item;
+            auto box = entry.window.lock()->logicalBox();
             glUniform4f(glGetUniformLocation(program_, "rect"), (box->x - monitor->m_position.x) / monitor->m_size.x,
                         (box->y - monitor->m_position.y) / monitor->m_size.y, box->w / monitor->m_size.x,
                         box->h / monitor->m_size.y);

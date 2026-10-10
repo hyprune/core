@@ -44,7 +44,7 @@ def acceptance(client,children,args,shell_token,socketpath):
     for id,_ in HOMES[:2]:
         s.ctl('eval','hl.window_rule({name="home-'+str(id)+'",match={title="^Home-'+str(id)+'$"},workspace="'+str(id)+' silent"})')
         banner=f'printf "\\n  WORKSPACE {id}\\n  {dict(HOMES)[id]}\\n"; exec bash --noprofile --norc'
-        children.append(s.envrun('kitty','--title','Home-'+str(id),'--override','font_size=48','bash','--noprofile','--norc','-c',banner,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
+        children.append(s.envrun('kitty','--title','Home-'+str(id),'--override','font_size=48','--override','cursor_blink_interval=0','bash','--noprofile','--norc','-c',banner,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
     for id,_ in HOMES[:2]:
         w=wait(lambda:next((w for w in windows() if w['title']=='Home-'+str(id)),None))
         check(f'client mapped on workspace {id}',w['workspace']['id']==id and workspace()==20,w['workspace'])
@@ -82,6 +82,38 @@ def acceptance(client,children,args,shell_token,socketpath):
     pointer('button',272,0);mod.wait(timeout=5);wait(lambda:s.camera()['gesture']==0);time.sleep(.3)
     native=next(w for w in windows() if w['title']==pulled['title'])
     check('carry released at its wall drops back into workspace 21',pulled['title']=='Home-21' and native['workspace']['id']==21 and not native['floating'] and not any(i.get('status')=='carried' for i in state()['mounts']['instances']),{'title':pulled['title'],'workspace':native['workspace']['id'],'floating':native['floating']})
+
+    # Stacking: two overlapping floating windows on home 22. An idle wall is not
+    # recomposed; raising the lower one (no client commit) recomposes the wall and
+    # the world frame shows the raised colour.
+    stack={}
+    for title,colour in [('Stack-A','#d01010'),('Stack-B','#1030e0')]:
+        s.ctl('eval','hl.window_rule({name="'+title+'",match={title="^'+title+'$"},workspace="22 silent",float=true,center=true})')
+        stack[title]=s.envrun('kitty','--title',title,'--override','background='+colour,'--override','initial_window_width=1100','--override','initial_window_height=700','--override','cursor_blink_interval=0','bash','--noprofile','--norc',stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        children.append(stack[title])
+        wait(lambda:any(e['title']==title and e['workspaceId']==22 for e in s.camera()['captures']))
+    time.sleep(1.5)
+    check('stack windows float on workspace 22',all(w['floating'] and w['workspace']['id']==22 for w in windows() if w['title'].startswith('Stack-')))
+    face(22,'array-hall');time.sleep(.5)
+    def composed():return frame(22).get('composed',-1)
+    def tint(name):
+        path=s.STATE/name;subprocess.run([str(s.HERE/'ctl.py'),'shot',str(path)],check=True)
+        from PIL import Image
+        im=Image.open(path).convert('RGB');w,h=im.size;r,g,b=[sum(c)/len(c) for c in zip(*im.crop((w*2//5,h*2//5,w*3//5,h*3//5)).getdata())]
+        return r-b
+    c0=composed();time.sleep(1.5)
+    check('an idle wall is not recomposed',composed()==c0,{'before':c0,'after':composed()})
+    before=tint('stack-before.png')
+    lower=next(w['address'] for w in windows() if w['title']=='Stack-A')
+    s.ctl('eval','hl.dispatch(hl.dsp.window.alter_zorder({mode="top",window="address:'+lower+'"}))')
+    try:wait(lambda:composed()>c0,timeout=5)
+    except AssertionError:pass
+    time.sleep(.5)
+    after=tint('stack-after.png')
+    check('raising an overlapping window recomposes its wall',before<0<after and composed()>c0,{'redMinusBlueBefore':before,'after':after,'composed':[c0,composed()]})
+    for p in stack.values():p.terminate()
+    wait(lambda:not any(w['title'].startswith('Stack-') for w in windows()))
+
     client.call('movement.set',{'modeId':'com.hyprune.walk'})
 
     # Travel: Director, native dispatcher and a normal Hyprland keybind agree.

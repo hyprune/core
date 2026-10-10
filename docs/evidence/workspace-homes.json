@@ -75,6 +75,7 @@
       "passed": true,
       "evidence": {
         "frame": {
+          "composed": 11,
           "id": "workspace-21",
           "position": [
             8.0,
@@ -97,6 +98,7 @@
       "passed": true,
       "evidence": {
         "frame": {
+          "composed": 28,
           "id": "workspace-22",
           "position": [
             8.0,
@@ -124,12 +126,37 @@
       }
     },
     {
+      "name": "stack windows float on workspace 22",
+      "passed": true,
+      "evidence": null
+    },
+    {
+      "name": "an idle wall is not recomposed",
+      "passed": true,
+      "evidence": {
+        "before": 63,
+        "after": 63
+      }
+    },
+    {
+      "name": "raising an overlapping window recomposes its wall",
+      "passed": true,
+      "evidence": {
+        "redMinusBlueBefore": -207.8695987654321,
+        "after": 191.87962962962965,
+        "composed": [
+          63,
+          64
+        ]
+      }
+    },
+    {
       "name": "Director workspace 21 travels to sun-court",
       "passed": true,
       "evidence": [
         -8.0,
         1.7000000476837158,
-        11.999998092651367
+        12.0
       ]
     },
     {
@@ -171,7 +198,7 @@
         "director": [
           -8.0,
           1.7000000476837158,
-          11.999998092651367
+          12.0
         ]
       }
     },
@@ -277,6 +304,7 @@
       "passed": true,
       "evidence": {
         "frame": {
+          "composed": 55,
           "id": "workspace-21",
           "position": [
             63.0,

@@ -3811,6 +3811,9 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     }
     for (auto &c : capture.children)
         h(*c.commits);
+    // Wall composites: a recomposition (stacking, layout) must reach the world frame.
+    for (auto &f : capture.workspaces)
+        h(f.key);
     h(typing && !layerCursor)(r.debug)(r.showAreaMarkers)(r.showInteractionHints)(r.useDistance)(r.renderScale);
     h(r.logicalScale)(r.pointerX)(r.pointerY)(r.scopeVignette)(r.materialDetails)(r.effects)(r.worldOnly)(r.font);
     h(r.waypoint)(r.route)(r.toolPrompt)(r.overlayStyle)(r.graphics)(r.profile);
@@ -4059,6 +4062,7 @@ int luaCamera(lua_State *state) {
     for (auto &f : runtime->capture.workspaces)
         j["workspaceFrames"].push_back({{"id", f.surface.id},
                                         {"workspaceId", f.workspaceId},
+                                        {"composed", f.composed},
                                         {"title", f.surface.title},
                                         {"position", {f.surface.center.x, f.surface.center.y, f.surface.center.z}}});
     lua_pushstring(state, j.dump().c_str());
