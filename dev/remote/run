@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""One-command remote test run for a headless work host. See README.md.
+
+  dev/remote/run [--ref REF] [--lumen TAG] [--parallel N] [--detach] [SUITE ...]
+  dev/remote/run --status RUN_ID
+
+stdout carries exactly one JSON document (the summary); progress goes to
+stderr. Exit status is 0 only if every suite passed.
+"""
+import argparse, concurrent.futures, datetime, hashlib, json, os, pathlib, re, shutil, socket, subprocess, sys, tempfile, time
+HERE = pathlib.Path(__file__).resolve().parent
+CORE = HERE.parent.parent
+WORKSPACE = CORE.parent
+RUNS = pathlib.Path(os.environ.get('HYPRUNE_REMOTE_RUNS', str(pathlib.Path.home() / 'hyprune-remote-runs')))
+DEFAULT = ['ctest', 'workspace-homes', 'placement', 'playable', 'static-world', 'live-findings', 'ipc-warp']
+FIXTURES = ['generate', 'm2', 'm3a', 'm3b', 'climbing', 'visibility', 'materials']
+
+
+def log(*a):
+    print('[remote]', *a, file=sys.stderr, flush=True)
+
+
+def sh(cmd, cwd=None, **kw):
+    log('$', ' '.join(map(str, cmd)))
+    return subprocess.run(cmd, cwd=cwd, check=True, **kw)
+
+
+def checkout(ref):
+    """A detached worktree beside core/ (session.py finds ../worlds/dist from there)."""
+    sh(['git', 'fetch', '--quiet', 'origin'], cwd=CORE)
+    sha = subprocess.check_output(['git', 'rev-parse', '--verify', ref + '^{commit}'], cwd=CORE, text=True).strip()
+    tree = WORKSPACE / f'core-remote-{sha[:10]}'
+    if not tree.exists():
+        sh(['git', 'worktree', 'add', '--detach', '--quiet', str(tree), sha], cwd=CORE)
+    return tree, sha
+
+
+def build(tree):
+    jobs = str(max(2, (os.cpu_count() or 4) - 4))
+    if not (tree / 'build/build.ninja').exists():
+        sh(['cmake', '-S', '.', '-B', 'build', '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=RelWithDebInfo'], cwd=tree, stdout=sys.stderr)
+    sh(['cmake', '--build', 'build', '-j', jobs], cwd=tree, stdout=sys.stderr)
+    for name in FIXTURES:  # gitignored; nested runs and CTest expect them
+        sh([sys.executable, f'tests/fixtures/{name}.py'], cwd=tree, stdout=subprocess.DEVNULL)
+
+
+def ensure_schema():
+    schema = WORKSPACE / 'schema'
+    if (schema / 'package-lock.json').is_file() and not (schema / 'node_modules').is_dir():
+        sh(['npm', 'ci', '--no-audit', '--no-fund'], cwd=schema, stdout=sys.stderr)
+
+
+def pinned():
+    path = WORKSPACE / 'hyprune/worlds/releases.json'
+    return json.loads(path.read_text()) if path.is_file() else {}
+
+
+def ensure_world(key, tag=None):
+    """Install a hyprune/worlds release into worlds/dist after a SHA-256 check."""
+    pins = pinned().get(key, {})
+    world_id = pins.get('id', f'com.hyprune.{key}')
+    dest = WORKSPACE / 'worlds/dist' / world_id
+    if tag is None:
+        if (dest / 'world.json').is_file():
+            return json.loads((dest / 'world.json').read_text()).get('version')
+        tag = f"{key}-v{pins['version']}"
+    version = tag.rsplit('-v', 1)[1]
+    if (dest / 'world.json').is_file() and json.loads((dest / 'world.json').read_text()).get('version') == version:
+        return version
+    with tempfile.TemporaryDirectory() as tmp:
+        sh(['gh', 'release', 'download', tag, '-R', 'hyprune/worlds', '-D', tmp])
+        archive = next(pathlib.Path(tmp).glob('*.tar.zst'))
+        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+        sums = list(pathlib.Path(tmp).glob('*.sha256'))
+        expected = sums[0].read_text().split()[0] if sums else pins.get('sha256') if pins.get('version') == version else None
+        if expected and digest != expected:
+            raise RuntimeError(f'{tag}: sha256 {digest} != {expected}')
+        shutil.rmtree(dest, ignore_errors=True)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        sh(['tar', '--zstd', '-xf', str(archive), '-C', str(dest.parent)])
+    return version
+
+
+def gpus():
+    if not shutil.which('nvidia-smi'):
+        return []
+    out = subprocess.run(['nvidia-smi', '--query-gpu=index,pci.bus_id,name,driver_version,memory.total', '--format=csv,noheader'],
+                         capture_output=True, text=True).stdout
+    return [dict(zip(['index', 'pci', 'name', 'driver', 'memory'], [v.strip() for v in line.split(',')])) for line in out.splitlines()]
+
+
+def evidence_snapshot(tree):
+    out = subprocess.run(['git', 'status', '--porcelain', 'docs/evidence'], cwd=tree, capture_output=True, text=True).stdout
+    return {line[3:] for line in out.splitlines()}
+
+
+def run_suite(tree, suite, out):
+    out.mkdir(parents=True, exist_ok=True)
+    logfile = out / 'log.txt'
+    env = {k: v for k, v in os.environ.items() if k not in ('WAYLAND_DISPLAY', 'DISPLAY', 'HYPRLAND_INSTANCE_SIGNATURE')}
+    env.update(HYPRUNE_NESTED_STATE_ROOT=str(out / 'state'), HYPRUNE_LIVE_FINDINGS_STILLS=str(out / 'stills'))
+    if suite == 'ctest':
+        cmd = ['ctest', '--test-dir', 'build', '--output-on-failure']
+    else:
+        cmd = ['dev/nested/run.sh'] + ([] if suite == 'smoke' else ['--' + suite])
+    started = time.monotonic()
+    with logfile.open('w') as stream:
+        code = subprocess.call(cmd, cwd=tree, env=env, stdout=stream, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+    text = logfile.read_text(errors='replace')
+    result = {'suite': suite, 'status': 'pass' if code == 0 else 'fail', 'exitCode': code,
+              'durationS': round(time.monotonic() - started, 1), 'log': str(logfile)}
+    if suite == 'ctest':
+        m = re.search(r'(\d+)% tests passed, (\d+) tests failed out of (\d+)', text)
+        if m:
+            result['tests'] = {'total': int(m[3]), 'failed': int(m[2])}
+        result['failedTests'] = re.findall(r'\d+ - (\S+) \(', text)
+    else:
+        result['passLines'] = len(re.findall(r'^PASS', text, re.M))
+        instance = out / 'state/instance.json'
+        if instance.is_file():
+            info = json.loads(instance.read_text())
+            result.update(gpu=info.get('gpu'), gpuLoad=info.get('gpuLoad'), parent=info.get('parent'))
+    if code:
+        tail = [l for l in text.splitlines() if l.strip()][-1:]
+        errors = [l for l in text.splitlines() if re.match(r'\w*(Error|Exception)\b', l)]
+        result['failure'] = (errors or tail or [''])[-1][:400]
+    result['artifacts'] = sorted(str(p) for p in out.rglob('*') if p.suffix in ('.png', '.mp4', '.mkv', '.json') and p.stat().st_size and '/worlds/' not in str(p))[:200]
+    log(suite, result['status'], result['durationS'], 's')
+    return result
+
+
+def run(args):
+    run_id = args.run_id or datetime.datetime.now().strftime('%Y%m%d-%H%M%S') + '-' + os.urandom(2).hex()
+    root = RUNS / run_id
+    root.mkdir(parents=True, exist_ok=True)
+    summary = {'runId': run_id, 'host': socket.gethostname(), 'started': datetime.datetime.now().astimezone().isoformat(timespec='seconds'),
+               'artifacts': str(root), 'status': 'running', 'suites': args.suites}
+    (root / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+    try:
+        tree, sha = checkout(args.ref) if args.ref else (CORE, subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=CORE, text=True).strip())
+        summary.update(tree=str(tree), sha=sha, ref=args.ref or subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=CORE, text=True).strip())
+        if not args.no_build:
+            build(tree)
+        ensure_schema()
+        summary['worlds'] = {'lumen-reach': ensure_world('lumen-reach', args.lumen), 'switchyard': ensure_world('switchyard')}
+        summary['gpus'] = gpus()
+        before = evidence_snapshot(tree)
+        nested = [s for s in args.suites if s != 'ctest']
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.parallel)) as pool:
+            futures = [pool.submit(run_suite, tree, s, root / s) for s in args.suites]
+            results = [f.result() for f in futures]
+        # Suites rewrite docs/evidence; keep them with the run, restore files that were clean.
+        changed = evidence_snapshot(tree) - before
+        for name in changed:
+            (root / 'evidence').mkdir(exist_ok=True)
+            shutil.copy2(tree / name, root / 'evidence' / pathlib.Path(name).name)
+        if changed:
+            subprocess.run(['git', 'checkout', '--', *sorted(changed)], cwd=tree, check=False)
+        summary.update(results=results, nestedSuites=len(nested),
+                       passed=sum(r['status'] == 'pass' for r in results), failed=sum(r['status'] != 'pass' for r in results))
+        summary['status'] = 'pass' if summary['failed'] == 0 else 'fail'
+    except Exception as error:
+        summary.update(status='error', error=f'{type(error).__name__}: {error}')
+    summary['finished'] = datetime.datetime.now().astimezone().isoformat(timespec='seconds')
+    (root / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+    print(json.dumps(summary, indent=2))
+    return 0 if summary['status'] == 'pass' else 1
+
+
+def detach(args):
+    """Run under a transient systemd user unit (survives SSH and agent restarts)."""
+    run_id = datetime.datetime.now().strftime('%Y%m%d-%H%M%S') + '-' + os.urandom(2).hex()
+    (RUNS / run_id).mkdir(parents=True, exist_ok=True)
+    argv = [sys.executable, str(pathlib.Path(__file__).resolve()), '--run-id', run_id, '--parallel', str(args.parallel)]
+    argv += (['--ref', args.ref] if args.ref else []) + (['--lumen', args.lumen] if args.lumen else []) + (['--no-build'] if args.no_build else []) + args.suites
+    env = os.environ.copy()
+    env.setdefault('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')
+    keep = [f'{k}={v}' for k, v in env.items() if k in ('PATH', 'HOME') or k.startswith(('HYPRUNE_', '__GL_', 'GH_'))]
+    unit = f'hyprune-remote-{run_id}'
+    subprocess.run(['systemd-run', '--user', '--quiet', '--collect', f'--unit={unit}', f'--working-directory={CORE}',
+                    *[f'--setenv={kv}' for kv in keep], 'bash', '-c', 'exec "$@" >"$0/stdout.json" 2>"$0/stderr.log"', str(RUNS / run_id), *argv],
+                   check=True, env=env)
+    print(json.dumps({'runId': run_id, 'status': 'started', 'unit': unit, 'summary': str(RUNS / run_id / 'summary.json'),
+                      'stderr': str(RUNS / run_id / 'stderr.log'), 'poll': f'{pathlib.Path(__file__).resolve()} --status {run_id}'}, indent=2))
+    return 0
+
+
+def status(run_id):
+    path = RUNS / run_id / 'summary.json'
+    if not path.is_file():
+        print(json.dumps({'runId': run_id, 'status': 'unknown'}))
+        return 2
+    summary = json.loads(path.read_text())
+    print(json.dumps(summary, indent=2))
+    return {'pass': 0, 'running': 3}.get(summary.get('status'), 1)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('suites', nargs='*', help=f'ctest, smoke, or run.sh modes without "--" (default: {" ".join(DEFAULT)})')
+    parser.add_argument('--ref', help='git ref to test in a detached worktree (fetched from origin); default: this checkout')
+    parser.add_argument('--lumen', help='hyprune/worlds release tag, e.g. lumen-reach-v0.9.0 (default: installed, else pinned)')
+    parser.add_argument('--parallel', type=int, default=4, help='concurrent suites (each nested suite is an isolated instance)')
+    parser.add_argument('--no-build', action='store_true')
+    parser.add_argument('--detach', action='store_true', help='start in the background and print the run id')
+    parser.add_argument('--status', metavar='RUN_ID')
+    parser.add_argument('--run-id', help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    args.suites = args.suites or DEFAULT
+    if args.status:
+        return status(args.status)
+    return detach(args) if args.detach else run(args)
+
+
+if __name__ == '__main__':
+    sys.exit(main())
