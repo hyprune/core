@@ -907,6 +907,10 @@ bool Renderer::continuePrepare(double milliseconds, size_t byteBudget) {
     glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
     glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
     glActiveTexture(GL_TEXTURE0);
+    // The context is shared with the compositor: an error it left pending (a failed
+    // frame, a rejected buffer import) must not be blamed on this upload.
+    while (glGetError() != GL_NO_ERROR) {
+    }
     try {
         bool waiting = false;
         while (p->next < p->jobs.size()) {

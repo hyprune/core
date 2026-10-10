@@ -27,3 +27,5 @@ tests/fixtures/m3b/
 /dev/nested/.static-world-state/
 /dev/nested/.feel-state/
 /dev/nested/.watermark-state/
+/dev/nested/.instances/
+/tests/fixtures/.prepare.lock

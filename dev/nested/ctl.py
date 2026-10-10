@@ -2,9 +2,9 @@
 """The only permitted hyprctl entry point. Refuse unverified or outer sessions."""
 import json, os, pathlib, subprocess, sys
 HERE=pathlib.Path(__file__).resolve().parent
-STATE=HERE/'.state/session.json'
+STATE_ROOT=pathlib.Path(os.environ.get('HYPRUNE_NESTED_STATE_ROOT',str(HERE)))
 def verified():
-    path=pathlib.Path(os.environ.get('HYPRUNE_NESTED_STATE_DIR', str(HERE/'.state')))/'session.json'
+    path=pathlib.Path(os.environ.get('HYPRUNE_NESTED_STATE_DIR', str(STATE_ROOT/'.state')))/'session.json'
     state=json.loads(path.read_text());pid=state['pid']
     cmd=pathlib.Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
     assert state['config'].encode() in cmd and b'Hyprland' in pathlib.Path(os.fsdecode(cmd[0])).name.encode(), 'PID is not our nested compositor'

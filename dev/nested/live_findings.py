@@ -7,14 +7,14 @@
    Array Hall lectern lights the frame, and placing fits the client into it
    (flush, same orientation) instead of floating beside it.
 """
-import json,math,pathlib,shutil,subprocess,time
+import json,math,os,pathlib,shutil,subprocess,time
 import session as s
 from ctl import verified
 from m2 import wait,keys
 
 LUMEN='com.hyprune.lumen-reach'
 LECTERN='array-hall-slot-02-lectern-01'
-GALLERY=pathlib.Path.home()/'workspace/rick-the-alien/worldshell-gallery/screenshots/live-findings-2026-10-10'
+GALLERY=pathlib.Path(os.environ.get('HYPRUNE_LIVE_FINDINGS_STILLS',str(pathlib.Path.home()/'workspace/rick-the-alien/worldshell-gallery/screenshots/live-findings-2026-10-10')))
 
 def prepare(installed):
     shutil.copytree(s.ROOT.parent/'worlds/dist'/LUMEN,installed/LUMEN,dirs_exist_ok=True)
