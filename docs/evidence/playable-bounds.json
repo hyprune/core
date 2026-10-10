@@ -38,7 +38,7 @@
       "name": "noclip escapes box",
       "passed": true,
       "evidence": [
-        6.999978542327881,
+        7.083311557769775,
         1.7000000476837158,
         4.0
       ]
@@ -71,7 +71,7 @@
       "name": "fly returns gradually after noclip",
       "passed": true,
       "evidence": [
-        3.450000524520874,
+        3.40000057220459,
         1.7000000476837158,
         4.0
       ]
@@ -100,11 +100,11 @@
       "evidence": null
     },
     {
-      "name": "com.hyprune.lumen-reach legacy unrestricted fly",
+      "name": "com.hyprune.lumen-reach declares playable volumes: flight bounded",
       "passed": true,
       "evidence": [
         0.0,
-        121.50045776367188,
+        118.49990844726562,
         0.0
       ]
     },
@@ -113,7 +113,7 @@
       "passed": true,
       "evidence": [
         0.0,
-        121.58381652832031,
+        121.50045776367188,
         0.0
       ]
     }

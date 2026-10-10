@@ -4,6 +4,11 @@
   "world": "com.hyprune.lumen-reach",
   "checks": [
     {
+      "name": "ready notice shown once per plugin load",
+      "passed": true,
+      "evidence": 1
+    },
+    {
       "name": "room workspace is 20",
       "passed": true,
       "evidence": 20
@@ -98,7 +103,7 @@
       "passed": true,
       "evidence": {
         "frame": {
-          "composed": 28,
+          "composed": 29,
           "id": "workspace-22",
           "position": [
             8.0,
@@ -304,7 +309,7 @@
       "passed": true,
       "evidence": {
         "frame": {
-          "composed": 55,
+          "composed": 57,
           "id": "workspace-21",
           "position": [
             63.0,
