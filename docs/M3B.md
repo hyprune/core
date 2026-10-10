@@ -154,7 +154,7 @@ confirm no reentrant render / CMonitor::useFP16 crash, stuck cursor or leaked in
 - Scope Q/vignette, tool/submode selection, lock and gizmo dragging: native cursor stays hidden; overlays alone move/change; no cursor show/hide/shape mutation.
 - World/use/focus/menu → session lock: restore native cursor policy and clear owned input; unlock resumes only after state is safe.
 - World/use/focus/menu → exit, output loss, failed world load, daemon death or plugin unload: release keys/buttons, restore prior visibility/focus/workspace; native shortcuts work immediately.
-- Super+Tab stealing in E, F window and F workspace: native overview must not trigger on press or release. In world (where default Super+Tab is unbound), inactive, and after unload it must trigger. Unrelated binds must work in every mode.
+- Super+Tab stealing in E, F window and F workspace: native overview must not trigger on press or release. In world, Super+Tab is the free-cursor toggle (FREE-CURSOR.md) and must not trigger it either. Inactive, after helper failure and after unload it must trigger. Unrelated binds must work in every mode.
 - Live tooling panic/down → desktop: `live_stop` queues exit and a visibility reset after the frame, changing no cursor shape; unload waits for inactive/visible state. A second down performs no cursor transition. See [LIVE-TEST.md](../dev/live/LIVE-TEST.md).
 - Live binding reload during hold/grab and while Director is open: balanced releases; no cursor change inside render; settings-only reload preserves active hold.
 

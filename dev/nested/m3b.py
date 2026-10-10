@@ -82,7 +82,9 @@ def acceptance(client,children,args,shell_token,socketpath):
  def target():
   p=cap(sid)['position'];pose(client,[p[0],p[1],p[2]+3]);time.sleep(.3)
  pose(client,[0,2.3,4]);client.call('surface.pull',{'surfaceId':sid});time.sleep(.3);target()
- keys('-M','logo','-P','Super_L','-s','40','-k','Tab','-p','Super_L','-m','logo');wait(native.exists);check('world_unbound_super_tab_native',True);native.unlink()
+ # Free cursor (docs/FREE-CURSOR.md) owns Super+Tab in world: it toggles the real cursor and never reaches native.
+ chord();wait(lambda:s.camera()['layerCursor']);time.sleep(.3);check('world_super_tab_free_cursor_not_native',not native.exists())
+ chord();wait(lambda:not s.camera()['layerCursor']);check('world_super_tab_returns',s.camera()['mode']=='movement');target()
  before=state()['movement']['position'];keys('-k','e');wait(lambda:state()['editor']['mode']=='interactive');check('E_window_in_place',state()['movement']['position']==before)
  marker=s.STATE/'typed.txt';marker.unlink(missing_ok=True);keys(f"printf 'M3B use window\\n' > {marker}");keys('-k','Return');wait(marker.exists);check('relative_cursor_keyboard',marker.read_text()=='M3B use window\n');unrelatedIn('interactive')
  pointer(40,10);time.sleep(.2);check('relative_cursor_moves',diag()['pointer']!=[.5,.5],diag()['pointer'])
@@ -90,7 +92,7 @@ def acceptance(client,children,args,shell_token,socketpath):
  for _ in range(12):
   if diag()['cursor']=='desktop':break
   pointer(-400,0)
- check('virtual_cursor_free_other_output',diag()['cursor']=='desktop',diag()['pointer']);chord();check('SuperTab_other_output_exit_steals',state()['editor']['mode']=='world' and not native.exists());chord();wait(native.exists);check('mode_change_restores_native_bind',True);native.unlink()
+ check('virtual_cursor_free_other_output',diag()['cursor']=='desktop',diag()['pointer']);chord();check('SuperTab_other_output_exit_steals',state()['editor']['mode']=='world' and not native.exists());chord();wait(lambda:s.camera()['layerCursor']);time.sleep(.3);check('mode_change_world_super_tab_free_cursor',not native.exists());chord();wait(lambda:not s.camera()['layerCursor'])
  client.call('surface.place',{'surfaceId':sid,'anchorId':'occluded-window'});pose(client,[2,1.8,1]);time.sleep(.3);keys('-k','e');check('E_tolerance_preserves_geometry_occlusion',state()['editor']['mode']=='world',diag())
  client.call('surface.place',{'surfaceId':sid,'anchorId':'sun-court-slot-01-operator-desk-01'});time.sleep(.3);plane=cap(sid);p=plane['position'];pose(client,[p[0]+plane['size'][0]/2+.06,p[1],p[2]+3]);time.sleep(.3);keys('-k','e');check('E_use_tolerance_outside_window_edge',state()['editor']['mode']=='interactive',{'surface':plane,'diag':diag()});back()
  target();pointer();time.sleep(.2);check('normal_LMB_keeps_world',state()['editor']['mode']=='world');
@@ -126,6 +128,8 @@ def acceptance(client,children,args,shell_token,socketpath):
  client.call('surface.return',{'surfaceId':sid});pose(client,[0,3,-10]);time.sleep(.3)
  before=state()['movement']['position'];keys('-k','e');wait(lambda:state()['editor']['mode']=='interactive');check('E_workspace_in_place',state()['movement']['position']==before and state()['mounts']['desktopWorkspaceId'] is None);wallmarker=s.STATE/'workspace-typed.txt';wallmarker.unlink(missing_ok=True);keys(f"printf 'M3B workspace in place\\n' > {wallmarker}");keys('-k','Return');wait(wallmarker.exists);check('E_workspace_keyboard',wallmarker.read_text()=='M3B workspace in place\n');back();check('Back_interactive_exit',state()['editor']['mode']=='world')
  keys('-k','f');wait(lambda:state()['mounts']['desktopWorkspaceId']==10);check('F_workspace_fullscreen',state()['editor']['mode']=='focus');unrelatedIn('workspace_focus');chord();wait(lambda:state()['mounts']['desktopWorkspaceId'] is None);check('SuperTab_workspace_exit_steals',not native.exists())
+ # With the world active, new windows map in the world room (workspace 20 since the room move): pin the popup to the bound wall.
+ s.ctl('eval','hl.window_rule({name="m3b-popup",match={title="^M3B workspace popup$"},workspace="10 silent"})')
  popupmarker=s.STATE/'workspace-popup.txt';popupmarker.unlink(missing_ok=True);children.append(s.envrun('env','GDK_BACKEND=wayland',str(ROOT/'build/nested-parity-client'),str(popupmarker),'M3B workspace popup',stdout=subprocess.DEVNULL,stderr=open(s.STATE/'popup.log','w')))
  popup=wait(lambda:builtins.next((v for v in state()['surfaces'] if v['title']=='M3B workspace popup'),None));client.call('surface.return',{'surfaceId':popup['id']});pose(client,[0,3,-10]);time.sleep(.3);keys('-k','e');wait(lambda:state()['editor']['mode']=='interactive');pointer('button',273);child=wait(lambda:builtins.next((v for v in diag()['childSurfaces'] if v['parentId']==popup['id']),None));check('workspace_popup_composed',not child['visible'],child);shot('workspace-popup.png')
  nativewindow=builtins.next(w for w in json.loads(s.ctl('clients','-j')) if w['title']=='M3B workspace popup');u=(nativewindow['at'][0]-1600+child['offset'][0]+child['pixels'][0]*.5)/1920;v=(nativewindow['at'][1]+child['offset'][1]+child['pixels'][1]*.5)/1080;pointer((u-.5)*1280,(v-.5)*720);pointer();wait(popupmarker.exists);check('interactive_virtual_popup_click',popupmarker.read_text()=='popup click landed\n');pointer('scroll',1);wait(lambda:pathlib.Path(str(popupmarker)+'.scroll').exists());check('interactive_virtual_scroll',True);back()
@@ -146,9 +150,12 @@ def acceptance(client,children,args,shell_token,socketpath):
  pose(client,[-4,1.7,2]);keys('-P','k','-s','750','-p','k');time.sleep(.2);check('walk_stair_step_up',state()['movement']['position'][1]>2,state()['movement']['position'])
  pose(client,[0,-35,4]);wait(lambda:state()['movement']['position'][1]>1);check('fall_respawn',True)
  config=client.call('input.get',{})['config'];next=json.loads(json.dumps(config));next['longHoldMs']=1200;next['scopeVignette']=False
- client.call('input.set',{'config':next});check('IPC_config_persist',json.loads((s.STATE/'input.json').read_text())==next)
- next['longHoldMs']=1000;path=s.STATE/'input.json';tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(next));tmp.replace(path);wait(lambda:state()['keymap']['config']['longHoldMs']==1000);check('watched_atomic_reload',True)
- invalid=json.loads(json.dumps(next));invalid['longHoldMs']=1;path.write_text(json.dumps(invalid));wait(lambda:state()['keymap']['error']);check('bad_reload_retains_last_good',state()['keymap']['config']==next);client.call('input.set',{'config':config})
+ # Below IPC 0.15 input.get is the frozen pre-placement view; the file keeps the newer bindings input.set carried over.
+ client.call('input.set',{'config':next});saved=json.loads((s.STATE/'input.json').read_text())
+ check('IPC_config_persist',client.call('input.get',{})['config']==next and saved['longHoldMs']==1200 and saved['scopeVignette'] is False and 'carry.facing' in saved['modes']['world'],{k:saved[k] for k in ['longHoldMs','scopeVignette']})
+ # The file is canonical (current names); a 0.8 view written to disk would rebind Tool 5 to the old HUD chord.
+ ondisk=json.loads(json.dumps(saved));ondisk['longHoldMs']=1000;path=s.STATE/'input.json';tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(ondisk));tmp.replace(path);wait(lambda:state()['keymap']['config']['longHoldMs']==1000);check('watched_atomic_reload',True);good=state()['keymap']['config']
+ invalid=json.loads(json.dumps(ondisk));invalid['longHoldMs']=1;path.write_text(json.dumps(invalid));wait(lambda:state()['keymap']['error']);check('bad_reload_retains_last_good',state()['keymap']['config']==good);client.call('input.set',{'config':config})
  wait(lambda:status().get('lease'))
  hold=s.envrun('wtype','-P','Tab','-s','700','-p','Tab');children.append(hold)
  pending=wait(lambda:state()['keymap']['holds'])
@@ -159,14 +166,18 @@ def acceptance(client,children,args,shell_token,socketpath):
  keys('-P','Tab','-s','450','-p','Tab');check('Tab_short_hold_does_not_open',not status().get('director'));keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status().get('director'));check('Tab_hold_Map',not state()['keymap']['holds'],status());unrelatedIn('menu');ui('tab',6);time.sleep(.4);shot('settings.png')
  # Verified Director capture uses the shell actor, not the acceptance actor.
  # QML dev action passes published intent methods through its own IPC connection.
- xy=list(map(float,s.ctl('cursorpos').split(',')));pointer(1600+854-xy[0],627-xy[1]);pointer();wait(lambda:state()['keymap']['capture'] and state()['keymap']['capture']['status']=='waiting');keys('-M','logo','-P','Super_L','-s','40','-k','Tab','-p','Super_L','-m','logo');captured=wait(lambda:status().get('captured'));check('settings_capture',captured['binding']=='Super+Tab' and captured['mode']=='world' and captured['action']=='debug' and captured['slot']==2,captured);ui('inputSave');wait(lambda:'Super+Tab' in state()['keymap']['config']['modes']['world']['debug']);check('settings_core_save',True);check('settings_Hyprland_collision',any(v['binding']=='Super+Tab' for v in state()['keymap']['steals']));shot('settings-conflict.png');keys('-k','Escape');wait(lambda:not status().get('director'));check('Esc_menu_exit',True)
+ # Settings has sections now; open Input bindings and start the slot through the shell's own dev intent (shell actor).
+ # World mode binds Super+Tab (free cursor exit), so capture the other native-colliding chord, Super+F9.
+ ui('settingsSection',2);time.sleep(.4);ui('inputCapture','world','debug',2);wait(lambda:state()['keymap']['capture'] and state()['keymap']['capture']['status']=='waiting');keys('-M','logo','-P','Super_L','-s','40','-k','F9','-p','Super_L','-m','logo');captured=wait(lambda:status().get('captured'));check('settings_capture',captured['binding']=='Super+F9' and captured['mode']=='world' and captured['action']=='debug' and captured['slot']==2,captured);ui('inputSave');wait(lambda:'Super+F9' in state()['keymap']['config']['modes']['world']['debug']);check('settings_core_save',True);check('settings_Hyprland_collision',any(v['binding']=='Super+F9' for v in state()['keymap']['steals']));shot('settings-conflict.png');keys('-k','Escape');wait(lambda:not status().get('director'));check('Esc_menu_exit',True)
  client.call('input.set',{'config':config})
  client.call('movement.set',{'modeId':'com.hyprune.fly'});pose(client,[0,2.3,4]);client.call('surface.pull',{'surfaceId':sid});time.sleep(.25);target()
  client.call('surface.place',{'surfaceId':sid,'anchorId':'sun-court-slot-01-operator-desk-01'});target()
  before=cap(sid);mod=s.envrun('wtype','-P','Super_L','-s','800','-p','Super_L');children.append(mod);time.sleep(.1);pointer('button',273,1);pointer(-80,35);time.sleep(.15);pointer('button',273,0);mod.wait(timeout=5);check('SuperRMB_corner_client_resize',cap(sid)['pixels']!=before['pixels'],cap(sid))
  pose(client,[0,3,4]);client.call('surface.pull',{'surfaceId':sid});time.sleep(.25);before=cap(sid);mod=s.envrun('wtype','-P','Super_L','-s','650','-p','Super_L');children.append(mod);time.sleep(.1);pointer('scroll',-1);mod.wait(timeout=5);check('SuperWheel_distance',cap(sid)['position']!=before['position'])
- target();before=cap(sid);mod=s.envrun('wtype','-P','Super_L','-P','Shift_L','-s','650','-p','Shift_L','-p','Super_L');children.append(mod);time.sleep(.1);pointer('scroll',-1);mod.wait(timeout=5);check('SuperShiftWheel_rotate',cap(sid)['rotation']!=before['rotation'])
+ # Keymap v2: Super+Shift+Wheel is content scale on an aimed window (resolution, not world size); facing moved to R.
  client.call('surface.place',{'surfaceId':sid,'anchorId':'sun-court-slot-01-operator-desk-01'});target()
+ before=cap(sid);mod=s.envrun('wtype','-P','Super_L','-P','Shift_L','-s','650','-p','Shift_L','-p','Super_L');children.append(mod);time.sleep(.1);pointer('scroll',-1);mod.wait(timeout=5)
+ scaled=wait(lambda:cap(sid) if cap(sid)['pixels']!=before['pixels'] else None);check('SuperShiftWheel_content_scale',all(abs(scaled['size'][i]-before['size'][i])<.003 for i in range(2)),scaled)
  keys('-k','2');pointer();check('window_place_tag',state()['interaction']['taggedSurfaceId']==sid);pose(client,[4,2,1],math.pi/2);time.sleep(.2);pointer();wait(lambda:state()['interaction']['taggedSurfaceId'] is None);check('window_place_arbitrary_wall',not cap(sid)['collision'] and cap(sid)['position'][0]>4,cap(sid));client.call('surface.place',{'surfaceId':sid,'anchorId':'sun-court-slot-01-operator-desk-01'});target();pointer('scroll',-1);wait(lambda:state()['editor']['submode']=='lock');pointer();check('window_lock',sid in state()['editor']['locked']);shot('window-locked.png')
  before=cap(sid)['position'];mod=s.envrun('wtype','-P','Super_L','-s','600','-p','Super_L','-m','logo');children.append(mod);wait(lambda:diag()['superHeld']);pointer('button',272,1);pointer(80,0);time.sleep(.2);pointer('button',272,0);mod.wait(timeout=5);check('locked_carry_rejected',cap(sid)['position']==before)
  target();pointer();check('window_unlock',sid not in state()['editor']['locked'])
@@ -189,7 +200,9 @@ def acceptance(client,children,args,shell_token,socketpath):
  keys('-k','3');pose(client,[1,2.5,4],pitch=-.6);time.sleep(.2)
  modes=[]
  for _ in range(6):
-  modes.append(state()['editor']['submode']);pointer();pointer(40,0);time.sleep(.1);pointer();pointer('button',273);pointer('scroll',-1);time.sleep(.1)
+  # Tool slots: LMB add, RMB remove point, MMB open/closed, wheel segment type; reselecting the tool finishes a path.
+  if len(modes)==3:pointer('button',274);time.sleep(.1)
+  modes.append(state()['editor']['submode']);pointer();pointer(40,0);time.sleep(.1);pointer();keys('-k','3');pointer('scroll',-1);time.sleep(.1)
  check('six_path_types',len(set(modes))==6,modes);check('paths_persist',len(json.loads((s.STATE/'editor.json').read_text())['paths'])>=6);shot('paths.png')
  for slot in range(1,6):keys('-k',str(slot));check('tool_'+str(slot),state()['editor']['tool']==slot)
  unrelated=s.STATE/'native-unrelated';unrelated.unlink(missing_ok=True);keys('-M','logo','-P','Super_L','-s','40','-k','F9','-p','Super_L','-m','logo');wait(unrelated.exists);check('noncolliding_native_bind',True)
