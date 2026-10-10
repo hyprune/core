@@ -81,7 +81,11 @@ float packNormal(vec3 n){
  uvec2 q=uvec2(round(clamp(o*.5+.5,0.,1.)*127.));uint bits=q.x|(q.y<<7);
  return -uintBitsToFloat(((113u+(bits>>10))<<23)|((bits&1023u)<<13));
 }
-vec3 decode(vec3 x){return mix(x/12.92,pow((x+.055)/1.055,vec3(2.4)),step(vec3(.04045),x));}
+// NaN/Inf guards: mix() and step() evaluate both branches, pow(x, y) is undefined for x < 0
+// and for x == 0 with y <= 0 (Intel returns NaN), normalize(0) is NaN. A NaN pixel reads
+// back black and smears through bloom.
+vec3 decode(vec3 x){return mix(x/12.92,pow(max((x+.055)/1.055,vec3(0)),vec3(2.4)),step(vec3(.04045),x));}
+vec3 safeNormalize(vec3 v,vec3 fallback){float l=dot(v,v);return l>1e-20?v*inversesqrt(l):fallback;}
 vec2 coords(int i){return (uvMatrix[i]*vec3(uvSet[i]==0?uv:lightUV,1)).xy;}
 vec3 mappedNormal(vec3 N,vec2 st){
  // Derivatives use the transformed coordinates: mirrored and rotated islands retain handedness.
@@ -90,14 +94,18 @@ vec3 mappedNormal(vec3 N,vec2 st){
  float magnitude=max(dot(T,T),dot(B,B));
  if(magnitude<1e-16)return N;
  vec3 map=texture(normalMap,st).xyz*2.-1.;map.xy*=normalScale;
- return normalize(mat3(T*inversesqrt(magnitude),B*inversesqrt(magnitude),N)*map);
+ return safeNormalize(mat3(T*inversesqrt(magnitude),B*inversesqrt(magnitude),N)*map,N);
 }
 void main(){
+ // Face normal from derivatives before any discard (derivatives need uniform control flow).
+ vec3 face=safeNormalize(cross(dFdx(worldPosition),dFdy(worldPosition)),vec3(0,1,0));
  vec4 baseSample=present[0]!=0?texture(albedo,coords(0)):vec4(1);
  float coverage=alpha*baseSample.a;if(alphaMode==1&&coverage<alphaCutoff)discard;
  vec3 base=color*baseSample.rgb;
  vec3 emissive=emission*(present[4]!=0?texture(emissiveMap,coords(4)).rgb:vec3(1));
- vec3 N=normalize(gl_FrontFacing?n:-n),L=normalize(sunDirection);vec3 geometric=N;
+ // A degenerate (zero) interpolated normal falls back to the face normal, facing the eye.
+ if(dot(face,eye-worldPosition)<0.)face=-face;
+ vec3 N=safeNormalize(gl_FrontFacing?n:-n,face),L=safeNormalize(sunDirection,vec3(0,1,0));vec3 geometric=N;
  if(details!=0&&normalEnabled!=0&&present[1]!=0)N=mappedNormal(N,coords(1));
  vec3 irradiance=vec3(.24+.76*max(dot(N,L),0.));
  if(baked!=0){irradiance=texture(lightmap,lightUV).rgb;if(lightSrgb!=0)irradiance=decode(irradiance);irradiance*=intensity;}
@@ -106,23 +114,25 @@ void main(){
  if(details!=0&&specularEnabled!=0&&unlit==0){
   vec2 mr=present[2]!=0?texture(mrMap,coords(2)).bg:vec2(1);
   float metal=clamp(metallic*mr.x,0.,1.),rough=clamp(roughness*mr.y,.08,1.);
-  vec3 V=normalize(eye-worldPosition),H=normalize(L+V),F0=mix(vec3(.04),base,metal);
-  float nv=max(dot(N,V),0.),nh=max(dot(N,H),0.),nl=max(dot(N,L),0.);
-  float power=min(2./(rough*rough)-2.,512.);
-  vec3 F=F0+(1.-F0)*pow(1.-max(dot(V,H),0.),5.);
+  vec3 V=safeNormalize(eye-worldPosition,N),H=safeNormalize(L+V,N),F0=mix(vec3(.04),base,metal);
+  float nv=clamp(dot(N,V),0.,1.),nh=clamp(dot(N,H),1e-6,1.),nl=max(dot(N,L),0.);
+  // Blinn-Phong exponent: 0 at roughness 1 would make pow(0, 0) on back-facing half vectors.
+  float power=clamp(2./(rough*rough)-2.,1e-3,512.);
+  vec3 F=F0+(1.-F0)*pow(clamp(1.-dot(V,H),0.,1.),5.);
   vec3 key=F*((power+2.)/25.132741)*pow(nh,power)*nl;
   vec3 R=reflect(-V,N);vec3 sky=mix(vec3(.055,.07,.085),vec3(.32,.43,.58),clamp(R.y*.5+.5,0.,1.));
   sky=mix(sky,vec3(.16,.21,.28),rough*rough);
   if(effects!=0&&reflectionEnabled!=0){float c=cos(envRotation),s=sin(envRotation);R=vec3(c*R.x+s*R.z,R.y,-s*R.x+c*R.z);sky=textureLod(environmentMap,R,rough*(cubeLevels-1.)).rgb*envIntensity;}
   if(effects!=0)key*=sunColor*sunIntensity;
   if(reflectionEnabled==0)sky=vec3(0);
-  vec3 skyF=F0+(max(vec3(1.-rough),F0)-F0)*pow(1.-nv,5.);
+  vec3 skyF=F0+(max(vec3(1.-rough),F0)-F0)*pow(1.-nv,5.); // nv is clamped to 0..1
   float visibility=baked!=0?clamp(dot(irradiance,vec3(.2126,.7152,.0722)),0.,1.):1.;
   float detail=baked!=0?clamp(1.+.3*(dot(N,L)-dot(geometric,L)),.7,1.3):1.;
   lit=lit*(1.-metal)*detail+(key+sky*skyF)*visibility*ao;
  }
  if(unlit!=0)lit=base;
  lit+=emissive;
+ lit=min(lit,vec3(6e4)); // stays finite in FP16 targets (max 65504): no Inf into bloom/tone
  // Camera-relative integrated height density along the view segment.
  float fog=0.;
  if(fogMode!=0){

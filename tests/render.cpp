@@ -435,6 +435,70 @@ int main(int argc, char **argv) {
         renderer.draw(fbo, 320, 180, camera, std::span(&surface, 1), false);
         glReadPixels(180, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
         check(std::abs(int(pixel[0]) - 128) <= 1, "world bloom/exposure changed app color");
+        {
+            // Shading edge cases must never produce NaN/Inf (Intel turns pow(0, 0) into NaN,
+            // which reads back black): roughness 1 (Blinn-Phong exponent 0) and 0, the sun
+            // below the surface so N.H <= 0 everywhere, the sun straight overhead, a
+            // degenerate (zero) vertex normal, and the view straight into the sun (L + V = 0).
+            auto edges = std::make_shared<world::World>();
+            edges->atmosphere = world::defaultAtmosphere();
+            auto quad = [](std::array<Vec3, 4> corners, Vec3 normal) {
+                world::Mesh m;
+                for (int i : {0, 1, 2, 0, 2, 3}) {
+                    world::Vertex v;
+                    v.position = corners[i];
+                    v.normal = normal;
+                    m.vertices.push_back(v);
+                }
+                return m;
+            };
+            // A floor in the lower half of the frame, and a wall patch with zero normals.
+            auto floor = quad({Vec3{-30, 0, 3}, Vec3{30, 0, 3}, Vec3{30, 0, -60}, Vec3{-30, 0, -60}}, {0, 1, 0});
+            auto degenerate = quad({Vec3{-1, 2, -3}, Vec3{1, 2, -3}, Vec3{1, 3, -3}, Vec3{-1, 3, -3}}, {0, 0, 0});
+            edges->meshes = {floor, degenerate};
+            sim::Camera view;
+            view.position = {0, 1.7f, 4};
+            view.pitch = -.12f;
+            auto blackPixels = [&](const char *what, float roughness, Vec3 sun, bool zeroNormal) {
+                world::Material m;
+                m.color = {.5f, .5f, .5f};
+                m.metallic = 0;
+                m.roughness = roughness;
+                edges->materials = {m};
+                edges->atmosphere["sky"]["sun"]["direction"] = {sun.x, sun.y, sun.z};
+                edges->atmosphere["bloom"]["strength"] = .7; // NaN/Inf would also smear through bloom
+                renderer.prepare(edges);
+                renderer.profile = edges->atmosphere;
+                renderer.draw(fbo, 320, 180, view, {}, false);
+                std::vector<unsigned char> data(320 * 180 * 4);
+                glReadPixels(0, 0, 320, 180, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
+                // Floor: below the horizon (row 0 is the bottom). Degenerate wall: a box around its projection.
+                auto projected = view.project({0, 2.5f, -3}, 320.f / 180.f);
+                int cx = int(projected.x * 320), cy = int((1 - projected.y) * 180), black = 0, total = 0;
+                for (int y = 0; y < 180; ++y)
+                    for (int x = 0; x < 320; ++x) {
+                        bool inFloor = y < 95, inWall = zeroNormal && std::abs(x - cx) < 6 && std::abs(y - cy) < 4;
+                        if (!inFloor && !inWall)
+                            continue;
+                        auto *px = &data[(y * 320 + x) * 4];
+                        ++total;
+                        black += px[0] < 3 && px[1] < 3 && px[2] < 3;
+                    }
+                if (black)
+                    std::fprintf(stderr, "%s: %d of %d pixels black (roughness %.2f, sun %.2f %.2f %.2f)\n", what, black,
+                                 total, roughness, sun.x, sun.y, sun.z);
+                return black;
+            };
+            int black = 0;
+            for (float roughness : {1.f, 0.f, .5f})
+                for (Vec3 sun : {Vec3{0, -1, 0}, Vec3{0, 1, 0}, Vec3{.4f, .5f, -.77f}, Vec3{.3f, -.2f, .93f}})
+                    black += blackPixels("shading edge case", roughness, sun, true);
+            // L + V = 0 at the frame centre (on the floor): H = normalize(0).
+            black += blackPixels("L + V = 0", 1, view.forward(), false);
+            check(black == 0, "NaN/Inf shading (black pixels) at a roughness/normal/sun edge case");
+            renderer.profile = materialWorld->atmosphere;
+            renderer.prepare(materialWorld);
+        }
         check(glGetError() == GL_NO_ERROR, "material GL error");
         glFinish(); // Test-only synchronization; production fences never wait.
         renderer.waypoint = {{"position", {0, 1.7, -4}}, {"label", "ACTIVE WAYPOINT"}};
