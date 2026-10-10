@@ -4223,6 +4223,7 @@ int luaCamera(lua_State *state) {
         {"mountTarget", runtime->snapTarget},
         {"renderPasses", runtime->renderPass.passes()},
         {"renderPassesLeaked", runtime->renderPass.leaked()},
+        {"renderPassOpen", runtime->renderPass.active()},
         {"backdrops", runtime->capture.backdropDiagnostics()},
         {"gestureId", runtime->hands.pose.id},
         {"mode", runtime->typing ? "typing" : "movement"},
@@ -4392,6 +4393,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 g_pHyprRenderer->setCursorHidden(false);
             runtime->cursorHidden = false;
         });
+        return 0;
+    });
+#endif
+#ifndef HYPRUNE_LIVE_BUILD
+    // Nested test hook: exactly what Hyprland 0.56.2 emits when beginRender fails
+    // (RENDER_PRE, then return without RENDER_POST). Not in dev/live builds; anywhere
+    // else calling it only exercises the recovery below.
+    HyprlandAPI::addLuaFunction(handle, "hyprune", "test_render_fail", [](lua_State *) {
+        Event::bus()->m_events.render.stage.emit(RENDER_PRE);
         return 0;
     });
 #endif
