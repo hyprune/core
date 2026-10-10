@@ -170,6 +170,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         if (!attached && layout && world->areas.empty() && layout->freePoses.contains(it->surface.id)) {
             auto pixels = it->surface;
             it->surface = layout->freePoses.at(it->surface.id);
+            it->surface.title = pixels.title; // the pose was stored at spawn, before the client titled itself
             it->surface.texture = pixels.texture;
             it->surface.pixelWidth = pixels.pixelWidth;
             it->surface.pixelHeight = pixels.pixelHeight;
@@ -186,6 +187,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             if (auto placed =
                     layout->locate(it->instance, world, *camera, it->surface.pixelWidth, it->surface.pixelHeight)) {
                 placed->texture = texture->m_texID;
+                placed->title = identity.title;
                 it->surface = *placed;
                 it->visible = true;
             }
