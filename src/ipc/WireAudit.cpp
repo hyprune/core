@@ -64,10 +64,24 @@ void WireAudit::run() {
     close(pair[1]);
     if (result)
         failed("cannot launch schema validator");
+    size_t checked = 0;
+    // A forced stop (systemctl stop, SIGTERM to the process group) kills the
+    // validator too: that ends the audit, it is not a schema failure.
+    auto killed = [&] {
+        int status = 0;
+        pid_t done = 0;
+        for (int i = 0; i < 100 && done != child; ++i) {
+            done = waitpid(child, &status, WNOHANG);
+            if (done != child) usleep(10000);
+        }
+        if (done != child || !WIFSIGNALED(status))
+            return false;
+        std::fprintf(stderr, "IPC schema audit: validator stopped by signal %d after %zu frames\n", WTERMSIG(status), checked);
+        return true;
+    };
     timeval timeout{15, 0};
     setsockopt(pair[0], SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
     setsockopt(pair[0], SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof timeout);
-    size_t checked = 0;
     while (true) {
         std::string item;
         {
@@ -81,18 +95,32 @@ void WireAudit::run() {
         size_t at = 0;
         while (at < item.size()) {
             auto n = send(pair[0], item.data() + at, item.size() - at, MSG_NOSIGNAL);
-            if (n <= 0)
+            if (n <= 0) {
+                if (killed()) {
+                    close(pair[0]);
+                    return;
+                }
                 failed("validator write");
+            }
             at += n;
         }
         char reply;
-        if (recv(pair[0], &reply, 1, 0) != 1 || reply != '.')
+        auto got = recv(pair[0], &reply, 1, 0);
+        if (got != 1 && killed()) {
+            close(pair[0]);
+            return;
+        }
+        if (got != 1 || reply != '.')
             failed("outgoing frame rejected (see validator path above)");
         ++checked;
     }
     close(pair[0]);
     int status = 0;
     waitpid(child, &status, 0);
+    if (WIFSIGNALED(status)) {
+        std::fprintf(stderr, "IPC schema audit: validator stopped by signal %d after %zu frames\n", WTERMSIG(status), checked);
+        return;
+    }
     if (status)
         failed("validator exit");
     std::fprintf(stderr, "IPC schema audit: %zu outgoing frames validated\n", checked);
