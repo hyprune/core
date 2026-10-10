@@ -174,7 +174,7 @@ def acceptance(client,children,args,shell_token,socketpath):
 
 
 def record(client,state,ui):
- gallery=pathlib.Path.home()/'workspace/rick-the-alien/worldshell-gallery/videos';gallery.mkdir(parents=True,exist_ok=True)
+ gallery=s.video_dir()
  raw=s.STATE/'m2.mkv';output=gallery/'hyprune-core-m2.mp4';log=open(s.STATE/'recorder.log','w')
  recorder=s.envrun('wf-recorder','-o','HEADLESS-1','-r','30','-D','--no-dmabuf','-c','libx264','-p','preset=ultrafast','-p','crf=20','-x','yuv420p','-f',str(raw),stdout=log,stderr=subprocess.STDOUT)
  def pause(n):

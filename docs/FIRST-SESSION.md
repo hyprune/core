@@ -87,7 +87,7 @@ passes, including daemon-death desktop restoration in 53 ms and three active
 unload/reload cycles.
 See `evidence/first-session.json` for captured counts and artifact hashes.
 
-Video: `/home/rick/workspace/rick-the-alien/worldshell-gallery/videos/hyprune-first-session.mp4`,
+Video: `$HYPRUNE_VIDEO_DIR/hyprune-first-session.mp4`,
 61.433333 seconds, 22,226,000 bytes, H.264/yuv420p, 1920×1080 at 30 fps, with
 `moov` before `mdat` for fast start. Adjacent JSON supplies title/tag/notes.
 Frames were inspected at full resolution and in a contact sheet. Multiple takes

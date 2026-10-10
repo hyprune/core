@@ -272,14 +272,14 @@ Both shapes are valid 0.15. Not changed (no new scope).
 ## Validation (all run green on the final tree)
 
 ```sh
-cd /home/rick/workspace/hyprune/core
+cd path/to/core   # your core checkout
 flock /tmp/worldshell-nested.lock ctest --test-dir build --output-on-failure   # 18/18
 python3 dev/live/test_live.py           # 16 OK
 python3 dev/live/test_credentials.py    # 3 OK
 dev/nested/run.sh --playable            # 15 PASS, wire audit 276 frames
 dev/nested/run.sh --ipc-warp            # 28 PASS; client 49 responses + 447
                                         # notifications valid 0.15; audit 519 frames
-cd /home/rick/workspace/hyprune/shell
+cd ../shell
 python3 -m unittest discover -s tests -q                                  # 100 OK
 flock /tmp/worldshell-nested.lock python3 dev/recovery-core.py            # all PASS
 ```
@@ -313,7 +313,7 @@ Do not run as automated work. The old supervisor lacks renewal; use a fresh
 down/up.
 
 ```sh
-cd /home/rick/workspace/hyprune/core
+cd path/to/core   # your core checkout
 dev/live/down
 dev/live/preflight
 dev/live/up

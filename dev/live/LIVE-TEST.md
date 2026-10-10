@@ -7,7 +7,7 @@ The launcher derives its offers from core’s protocol helper; the shell uses th
 newest common installed protocol. Preflight and launcher.log report both versions.
 
 ```bash
-cd /home/rick/workspace/hyprune/core
+cd path/to/core   # your core checkout
 dev/live/preflight
 dev/live/up                 # Note the printed toggle and Recovery state path.
 dev/live/status
@@ -77,7 +77,7 @@ Walking checklist ([full M3B detail](../../docs/M3B.md#supervised-live-test-chec
 dev/live/status
 dev/live/down
 # Panic from TTY, without Wayland variables (safe to repeat):
-/home/rick/workspace/hyprune/core/dev/live/down
+/path/to/core/dev/live/down   # absolute path to your checkout
 ```
 
 **Crash:** switch to TTY, run down. It stops recorded test processes, keeps state
