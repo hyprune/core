@@ -495,6 +495,29 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         it->surface.pixelHeight = 720;
         it->surface.texture = it->texture;
         surfaces::anchorPlane(it->surface, *anchor, 1280, 720);
+        // Recompose only when a window, popup, rectangle or pull changed: an idle wall
+        // must not cost a clear and a draw per window on every tick.
+        uint64_t key = 1469598103934665603ull;
+        auto mix = [&](double v) { key = (key ^ std::hash<double>{}(v)) * 1099511628211ull; };
+        mix(monitor->m_position.x), mix(monitor->m_position.y), mix(monitor->m_size.x), mix(monitor->m_size.y);
+        for (auto &entry : entries) {
+            if (entry.instance.workspaceId != id || layout.pulled(entry.instance, world))
+                continue;
+            auto window = entry.window.lock();
+            auto box = window ? window->logicalBox() : std::nullopt;
+            if (!box)
+                continue;
+            key = (key ^ std::hash<std::string>{}(entry.surface.id)) * 1099511628211ull;
+            mix(double(*entry.commits)), mix(entry.surface.texture), mix(box->x), mix(box->y), mix(box->w), mix(box->h);
+            for (auto &child : children)
+                if (child.parentId == entry.surface.id && child.resource) {
+                    mix(double(*child.commits)), mix(child.surface.texture), mix(child.offset.x), mix(child.offset.y);
+                    mix(child.surface.pixelWidth), mix(child.surface.pixelHeight);
+                }
+        }
+        if (key == it->key)
+            continue;
+        it->key = key;
         glBindFramebuffer(GL_FRAMEBUFFER, it->fbo);
         glViewport(0, 0, 1280, 720);
         glDisable(GL_SCISSOR_TEST);

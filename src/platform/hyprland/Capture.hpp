@@ -49,6 +49,7 @@ class Capture {
         unsigned fbo = 0, texture = 0;
         int workspaceId = 0;
         surfaces::Surface surface;
+        uint64_t key = 0; // inputs of the last composition; unchanged = no redraw
     };
     std::vector<WorkspaceFrame> workspaces;
     void refresh(PHLMONITOR monitor, const world::World *world = nullptr, surfaces::Layout *layout = nullptr,
