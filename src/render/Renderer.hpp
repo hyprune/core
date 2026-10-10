@@ -36,6 +36,9 @@ class Renderer {
     // since the last rendered frame. draw() then re-presents the cached native
     // frame (one output pass) instead of rendering the world again.
     bool reuseFrame = false;
+    // Steady cadence: new frames on every paceInterval-th presentation when target_fps is
+    // below the display rate, never at irregular moments.
+    int paceInterval = 1;
     // Feel diagnostics: per presentation {steady ms, 0 new / 1 repeated / 2 idle, yaw, pitch, x, y, z}.
     std::deque<std::array<double, 7>> presentLog;
     bool srgbDecodeAllowed = true; // Tests force the two-copy fallback.
@@ -155,6 +158,9 @@ class Renderer {
     std::array<double, 4> cpu_{};
     double frameMs_ = 0, renderMs_ = 0;
     std::chrono::steady_clock::time_point lastFrame_{};
+    std::chrono::steady_clock::time_point lastPresent_{};
+    double presentPeriodMs_ = 1000. / 60;
+    int presentsSinceNew_ = 0;
     sim::Camera frameCamera_;
     std::string frameWorld_;
     bool frameTyping_ = false;

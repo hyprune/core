@@ -1314,13 +1314,31 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         frameFences_.pop_front();
     }
     bool idle = reuseFrame && !captureRequested && nativeFbo_ && w == width_ && h == height_;
+    // Presentation cadence (compositor repaints): its period sets the frame divisor.
+    if (lastPresent_.time_since_epoch().count()) {
+        double period = std::chrono::duration<double, std::milli>(now - lastPresent_).count();
+        if (period > 4 && period < 40)
+            presentPeriodMs_ += (period - presentPeriodMs_) * .05;
+    }
+    lastPresent_ = now;
+    bool behind = frameFences_.size() >= 2;
+    if (!idle) {
+        int divisor = std::clamp(int(std::lround(1000. / presentPeriodMs_ / std::max(1., double(targetFPS)))), 1, 4);
+        // Only an explicit target slower than the display paces (30 at 60 Hz: every second
+        // presentation, evenly). Automatic steps were tried and measured unreliable: queue
+        // depth at render time reflects scheduling phase as much as overload, and a slower
+        // cadence lets the GPU clock down (FEEL-2026-10.md).
+        paceInterval = divisor;
+    } else
+        presentsSinceNew_ = paceInterval; // motion after idle starts at once
+    bool paced = !idle && !captureRequested && frames && ++presentsSinceNew_ < paceInterval;
     auto logPresent = [&](int kind) {
         presentLog.push_back({std::chrono::duration<double, std::milli>(now.time_since_epoch()).count(), double(kind),
                               camera.yaw, camera.pitch, camera.position.x, camera.position.y, camera.position.z});
         while (presentLog.size() > 1200)
             presentLog.pop_front();
     };
-    if (frames && (captureRequested || frameFences_.size() >= 2 || idle)) {
+    if (frames && (captureRequested || behind || idle || paced)) {
         logPresent(idle ? 2 : 1);
         GLState guard;
         glDisable(GL_SCISSOR_TEST);
@@ -1335,10 +1353,11 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             return;
         }
         ++skipped_;
-        if (!captureRequested)
-            ++backlog_;
+        if (!captureRequested && !paced)
+            ++backlog_; // an intentional cadence repeat is not queue pressure
         return;
     }
+    presentsSinceNew_ = 0;
     logPresent(0);
     auto started = std::chrono::steady_clock::now();
     if (lastFrame_.time_since_epoch().count())
@@ -2417,6 +2436,8 @@ world::Json Renderer::timings() const {
             {"upscaler", {{"requested", upscaler}, {"active", fsrActive_ ? "fsr1" : "bilinear"},
                           {"error", fsrError_.empty() ? world::Json(nullptr) : world::Json(fsrError_)}}},
             {"inFlight", frameFences_.size()},
+            {"paceInterval", paceInterval},
+            {"presentHz", 1000. / presentPeriodMs_},
             {"renderer", device},
             {"offload", offloadState},
             {"msaaSamples", samples_},
