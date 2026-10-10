@@ -1,6 +1,7 @@
 #include "Config.hpp"
 #include "render/Graphics.hpp"
 #include <cmath>
+#include <regex>
 #include <set>
 namespace hyprune::interaction {
 using Json = world::Json;
@@ -82,6 +83,16 @@ Json configPatch(const Json &current, const Json &patch) {
                 result[section][key] = v;
                 continue;
             }
+            if (section == "graphics" && (key == "offload_power_cap_w" || key == "offload_device")) {
+                // null cap = automatic: laptop profile ceilings, or a share of the GPU's enforced limit.
+                bool valid = key == "offload_power_cap_w"
+                                 ? v.is_null() || (v.is_number() && std::isfinite(v.get<double>()) && v >= 20 && v <= 1000)
+                                 : v.is_string() && std::regex_match(v.get<std::string>(),
+                                                                     std::regex("auto|[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\\.[0-7]"));
+                if (!valid) throw std::runtime_error("invalid graphics." + key);
+                result[section][key] = v;
+                continue;
+            }
             if (section == "graphics" && (key == "outline_width_px" || key == "outline_colour")) {
                 bool valid = v.is_null();
                 if (key == "outline_width_px") valid |= v.is_number() && std::isfinite(v.get<double>()) && v >= 1 && v <= 4;
@@ -129,7 +140,6 @@ Json configPatch(const Json &current, const Json &patch) {
                         throw std::runtime_error("workspace_base must be a non-negative integer");
                 }
                 if (key == "fly_bounds_allowance") { min = 0; max = 20; }
-                if (key == "offload_power_cap_w") { min = 20; max = 100; }
                 if (key == "scale_min" || key == "scale_max") { min = .375; max = 1; }
                 if (key == "target_fps") {
                     min = 30;

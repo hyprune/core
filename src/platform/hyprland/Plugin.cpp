@@ -10,6 +10,7 @@
 #include "interaction/Tools.hpp"
 #include "world/Mounts.hpp"
 #include "world/Spatial.hpp"
+#include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
@@ -51,6 +52,7 @@ extern "C" {
 #include "ipc/Protocol.hpp"
 #include "ipc/Text.hpp"
 #include "offload/Client.hpp"
+#include "offload/Pci.hpp"
 #include "render/PNG.hpp"
 #include "render/Renderer.hpp"
 #include "render/Watermark.hpp"
@@ -774,14 +776,21 @@ void Runtime::workspaceLocation() {
         }
 }
 Json Runtime::performance() const {
-    Json state = {{"profile", "unknown"}, {"powerW", nullptr}, {"capW", 0}, {"targetFPS", 0},
-                  {"reason", "off"}, {"pid", nullptr}, {"generation", offloadGeneration}};
+    Json state = {{"profile", "unknown"}, {"powerW", nullptr}, {"capW", 0}, {"capSource", "profile"}, {"device", nullptr},
+                  {"targetFPS", 0}, {"reason", "off"}, {"pid", nullptr}, {"generation", offloadGeneration}};
     state.update(offloadPolicy);
     state["mode"] = config["graphics"]["offload"];
     state["activeRenderer"] = renderedOffload ? "offload" : "in-process";
     state["status"] = renderedOffload ? "active" : offload.connected() ? "warming" : "local";
     if (renderedOffload) state["reason"] = "ready";
-    if (!offload.error.empty()) state["reason"] = offload.error;
+    // A worker the supervisor stopped (watchdog, policy) looks like transport EOF to
+    // the client: report the supervisor's reason, not the symptom.
+    if (!offload.error.empty()) {
+        auto supervised = offloadPolicy.value("reason", std::string{});
+        bool running = supervised.empty() || supervised == "admitted" || supervised == "warming" ||
+                       supervised == "off" || supervised == "inactive";
+        state["reason"] = running ? offload.error : supervised;
+    }
     if (!renderer.transforms.empty() && config["graphics"]["offload"] != "off")
         state["reason"] = "edited world transforms use local renderer";
     bool custom = false;
@@ -798,8 +807,9 @@ Json Runtime::performance() const {
             state["costsMs"][key] = worker.at(key);
         state["costsMs"]["transfer"] = offload.timings.value("transferGpuMs", Json(nullptr));
         state["effective"]["target_fps"] = offloadPolicy.value("targetFPS", 45);
-        state["effective"]["offload_power_cap_w"] = offloadPolicy.value("capW", 50.);
     }
+    if (offloadPolicy.value("capW", 0.) > 0)
+        state["effective"]["offload_power_cap_w"] = offloadPolicy.value("capW", 0.);
     state["effective"]["offload"] = renderedOffload ? "on" : "off";
     state["workerTimings"] = offload.timings;
     state["controls"] = Json::object();
@@ -816,12 +826,18 @@ Json Runtime::performance() const {
     }
     return state;
 }
+// The GPU the compositor renders with; offload_device "auto" prefers another one.
+static const std::string &compositorPci() {
+    static const std::string pci = offload::pciOfFd(g_pCompositor->m_drmRenderNode.fd >= 0 ? g_pCompositor->m_drmRenderNode.fd
+                                                                                         : g_pCompositor->m_drm.fd);
+    return pci;
+}
 void Runtime::offloadTick() {
     if (renderPass.active()) throw std::runtime_error("offload lifecycle inside frame");
     auto g = config["graphics"];
     bool enabled = active && world && monitor && !loading && !locked() &&
                    g["offload"] != "off" && renderer.transforms.empty();
-    Json request = {{"enabled", enabled}, {"graphics", g},
+    Json request = {{"enabled", enabled}, {"graphics", g}, {"compositorPci", compositorPci()},
                     {"worldPath", world ? (installed / world->id).string() : ""},
                     {"width", monitor ? int(monitor->m_pixelSize.x) : 0},
                     {"height", monitor ? int(monitor->m_pixelSize.y) : 0}};
@@ -3274,6 +3290,12 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                 throw ipc::Error(-32602,"setting requires IPC 0.14");
             if (!ipc::protocol::atLeast(protocol, "0.16") && params["patch"].contains("upscaler"))
                 throw ipc::Error(-32602, "setting requires IPC 0.16");
+            if (!ipc::protocol::atLeast(protocol, "0.18")) {
+                auto &patch = params["patch"];
+                auto cap = patch.value("offload_power_cap_w", Json(50));
+                if (patch.contains("offload_device") || !cap.is_number() || cap.get<double>() > 100)
+                    throw ipc::Error(-32602, "setting requires IPC 0.18");
+            }
             auto merged = graphicsFile.current;
             merged.update(params["patch"]);
             try {
@@ -3297,6 +3319,28 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (ipc::protocol::atLeast(protocol, "0.10")) response["performance"] = performance();
         else for (auto section : {"config", "effective", "overrides", "options"})
             for (auto key : {"offload", "offload_power_cap_w", "scale_min", "scale_max"}) response[section].erase(key);
+        if (!ipc::protocol::atLeast(protocol, "0.18")) {
+            // Older schemas: the cap is a number in 20..100; no device selection.
+            double effectiveCap = offloadPolicy.value("capW", 0.) > 0 ? offloadPolicy.value("capW", 0.) : 80.;
+            auto legacyCap = [&](Json &value) { value = std::clamp(value.is_number() ? value.get<double>() : effectiveCap, 20., 100.); };
+            auto legacy = [&](Json &section) {
+                if (!section.is_object()) return;
+                section.erase("offload_device");
+                if (section.contains("offload_power_cap_w")) legacyCap(section["offload_power_cap_w"]);
+            };
+            for (auto section : {"config", "effective", "overrides", "options"})
+                legacy(response[section]);
+            if (response.contains("performance")) {
+                auto &perf = response["performance"];
+                perf.erase("capSource");
+                perf.erase("device");
+                legacy(perf["requested"]);
+                legacy(perf["effective"]);
+                perf["controls"].erase("offload_device");
+                if (perf["controls"].contains("offload_power_cap_w"))
+                    for (auto key : {"requested", "effective"}) legacyCap(perf["controls"]["offload_power_cap_w"][key]);
+            }
+        }
         if (!ipc::protocol::atLeast(protocol, "0.16")) {
             for (auto section : {"config", "effective", "overrides", "options"})
                 response[section].erase("upscaler");

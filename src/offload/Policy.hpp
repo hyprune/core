@@ -1,23 +1,51 @@
 #pragma once
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <string>
 namespace hyprune::offload {
 struct Supply {
     bool known = false, ac = false, usb = false, discharging = false;
     double watts = 0;
+    // No power_supply of type Battery: mains power (desktops), never "unknown".
+    bool mains = false;
 };
 struct Policy {
-    std::string profile = "unknown", reason = "off";
+    std::string profile = "unknown", reason = "off", capSource = "profile";
     bool admitted = false;
     int fps = 0;
     double cap = 0;
 };
-inline Policy policy(const Supply &s, const std::string &mode, int fps, double cap) {
+// Default cap on mains power, as a fraction of the GPU's own enforced power limit.
+inline constexpr double MainsCapFraction = .75;
+// configured: graphics.offload_power_cap_w (nullopt = automatic). limitW: the
+// offload GPU's enforced power limit, <= 0 if unknown.
+inline Policy policy(const Supply &s, const std::string &mode, int fps, std::optional<double> configured,
+                     double limitW = -1) {
     Policy p;
-    p.profile = !s.known ? "unknown" : !s.ac ? "battery" : s.usb ? "usb-c" : s.watts >= 150 ? "full-ac" : "limited-ac";
+    p.profile = !s.known       ? "unknown"
+                : !s.ac        ? "battery"
+                : s.usb        ? "usb-c"
+                : s.mains || s.watts >= 150 ? "full-ac"
+                                            : "limited-ac";
     const bool full = p.profile == "full-ac" && !s.discharging;
-    p.cap = std::min(cap, full ? 80. : 50.);
+    if (s.mains) {
+        if (configured) {
+            p.cap = limitW > 0 ? std::clamp(*configured, 20., limitW) : *configured;
+            p.capSource = "configured";
+        } else if (limitW > 0) {
+            p.cap = std::round(limitW * MainsCapFraction);
+            p.capSource = "device";
+        } else {
+            p.cap = 80;
+            p.capSource = "fallback";
+        }
+    } else {
+        // Battery present: the laptop ceilings; a configured cap can only lower them.
+        const double ceiling = full ? 80. : 50.;
+        p.cap = std::min(configured.value_or(ceiling), ceiling);
+        p.capSource = configured ? "configured" : "profile";
+    }
     p.fps = std::min(fps, full ? 60 : 45);
     if (mode == "off")
         return p;

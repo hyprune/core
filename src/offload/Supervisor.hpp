@@ -6,9 +6,12 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <optional>
 #include <signal.h>
 #include <spawn.h>
 #include <sys/wait.h>
+#include <unistd.h>
+#include <vector>
 namespace hyprune::offload {
 inline double milliseconds() {
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -28,12 +31,13 @@ inline double readNumber(const std::filesystem::path &p) {
 }
 inline Supply supply() {
     Supply s;
+    bool battery = false;
     std::error_code error;
     for (auto &entry : std::filesystem::directory_iterator("/sys/class/power_supply", error)) {
         auto p = entry.path();
         auto type = readText(p / "type");
         if (type == "Battery") {
-            s.known = true;
+            s.known = battery = true;
             s.discharging |= readText(p / "status") == "Discharging";
         }
         if (readText(p / "online") != "1")
@@ -45,19 +49,46 @@ inline Supply supply() {
                                                  readNumber(p / "voltage_max") * readNumber(p / "current_max") / 1e12));
         }
     }
+    if (!battery) // Desktops: mains power, whatever (if any) USB/AC entries say.
+        s = {.known = true, .ac = true, .usb = false, .discharging = false, .watts = s.watts, .mains = true};
     return s;
 }
 struct Device {
     std::string node, pci;
 };
-inline Device discreteDevice() {
+// NVIDIA render nodes this process can open (NVML telemetry is required), by node number.
+inline std::vector<Device> discreteDevices() {
+    std::vector<Device> found;
     std::error_code error;
-    for (auto &entry : std::filesystem::directory_iterator("/sys/class/drm", error))
-        if (entry.path().filename().string().starts_with("renderD") &&
-            readText(entry.path() / "device/vendor") == "0x10de")
-            return {"/dev/dri/" + entry.path().filename().string(),
-                    std::filesystem::canonical(entry.path() / "device").filename().string()};
-    return {};
+    for (auto &entry : std::filesystem::directory_iterator("/sys/class/drm", error)) {
+        auto name = entry.path().filename().string();
+        auto node = "/dev/dri/" + name;
+        if (name.starts_with("renderD") && readText(entry.path() / "device/vendor") == "0x10de" &&
+            access(node.c_str(), R_OK | W_OK) == 0)
+            found.push_back({node, std::filesystem::canonical(entry.path() / "device", error).filename().string()});
+    }
+    std::sort(found.begin(), found.end(), [](auto &a, auto &b) { return a.node.size() != b.node.size() ? a.node.size() < b.node.size() : a.node < b.node; });
+    return found;
+}
+// graphics.offload_device "auto": avoid the compositor's GPU, then the least utilised.
+// An explicit PCI address selects that device or nothing.
+inline std::optional<Device> chooseDevice(const std::vector<Device> &devices, const std::string &setting,
+                                          const std::string &compositorPci,
+                                          const std::function<std::optional<unsigned>(const std::string &)> &utilization) {
+    if (setting != "auto") {
+        for (auto &d : devices)
+            if (d.pci == setting)
+                return d;
+        return std::nullopt;
+    }
+    std::optional<Device> best;
+    std::pair<bool, unsigned> bestKey{};
+    for (auto &d : devices) {
+        std::pair<bool, unsigned> key{d.pci == compositorPci, utilization(d.pci).value_or(100)};
+        if (!best || key < bestKey)
+            best = d, bestKey = key;
+    }
+    return best;
 }
 class Meter {
     void *library_ = nullptr, *device_ = nullptr;
@@ -75,21 +106,51 @@ class Meter {
         if (library_) dlclose(library_);
         library_ = device_ = nullptr; initialized_ = false;
     }
-    bool init(const std::string &pci) {
-        if (device_)
-            return true;
+    bool load() {
         if (!library_)
             library_ = dlopen("libnvidia-ml.so.1", RTLD_NOW | RTLD_LOCAL);
         if (!library_)
             return false;
         auto init = reinterpret_cast<int (*)()>(dlsym(library_, "nvmlInit_v2"));
+        if (!init)
+            return false;
+        if (!initialized_) initialized_ = init() == 0;
+        return initialized_;
+    }
+    void *handle(const std::string &pci) {
         auto get =
             reinterpret_cast<int (*)(const char *, void **)>(dlsym(library_, "nvmlDeviceGetHandleByPciBusId_v2"));
+        void *h = nullptr;
+        return get && !get(pci.c_str(), &h) ? h : nullptr;
+    }
+    bool init(const std::string &pci) {
+        if (device_)
+            return true;
+        if (!load())
+            return false;
         power_ = reinterpret_cast<Sample>(dlsym(library_, "nvmlDeviceGetPowerUsage"));
         temperature_ = reinterpret_cast<Temperature>(dlsym(library_, "nvmlDeviceGetTemperature"));
-        if (!init || !get || !power_ || !temperature_) return false;
-        if (!initialized_) initialized_ = init() == 0;
-        return initialized_ && !get(pci.c_str(), &device_);
+        if (!power_ || !temperature_) return false;
+        device_ = handle(pci);
+        return device_;
+    }
+    // The power limit the driver enforces now (nvmlDeviceGetEnforcedPowerLimit), or -1.
+    double enforcedLimitW() {
+        auto limit = reinterpret_cast<int (*)(void *, unsigned *)>(dlsym(library_, "nvmlDeviceGetEnforcedPowerLimit"));
+        unsigned mw = 0;
+        return device_ && limit && !limit(device_, &mw) && mw ? mw / 1000. : -1;
+    }
+    std::string name() {
+        auto get = reinterpret_cast<int (*)(void *, char *, unsigned)>(dlsym(library_, "nvmlDeviceGetName"));
+        char text[96]{};
+        return device_ && get && !get(device_, text, sizeof text) ? std::string(text) : std::string{};
+    }
+    std::optional<unsigned> utilization(const std::string &pci) {
+        struct Rates { unsigned gpu, memory; } rates{};
+        if (!load()) return std::nullopt;
+        auto get = reinterpret_cast<int (*)(void *, Rates *)>(dlsym(library_, "nvmlDeviceGetUtilizationRates"));
+        auto h = handle(pci);
+        return h && get && !get(h, &rates) ? std::optional<unsigned>(rates.gpu) : std::nullopt;
     }
     bool sample(double &watts, double &celsius) {
         unsigned mw = 0, t = 0;
@@ -112,9 +173,12 @@ class Supervisor {
     double next_ = 0, nextMeter_ = 0, measured_ = 0, watts_ = -1, temperature_ = -1, killAt_ = 0;
     Meter meter_;
     std::function<Supply()> supply_;
-    std::function<Device()> discover_;
+    std::function<std::vector<Device>()> discover_;
     std::function<bool(double &, double &)> sample_;
     Device device_;
+    Json deviceState_ = nullptr; // published `device`: pci, node, name, enforcedLimitW, selection, drivesCompositor
+    std::string deviceError_;
+    double limitW_ = -1;
     Policy policy_;
     std::string reason_ = "off";
     void stop() {
@@ -131,6 +195,8 @@ class Supervisor {
         Json state = {{"profile", policy_.profile},
                       {"powerW", watts_ >= 0 ? Json(watts_) : Json(nullptr)},
                       {"capW", policy_.cap},
+                      {"capSource", policy_.capSource},
+                      {"device", deviceState_},
                       {"targetFPS", policy_.fps},
                       {"reason", reason_},
                       {"pid", child_ > 0 ? Json(child_) : Json(nullptr)},
@@ -143,7 +209,8 @@ class Supervisor {
 
   public:
     Supervisor(std::string executable, std::function<void(Json, int)> send, std::function<Supply()> power = supply,
-               std::function<Device()> discover = discreteDevice, std::function<bool(double &, double &)> sample = {})
+               std::function<std::vector<Device>()> discover = discreteDevices,
+               std::function<bool(double &, double &)> sample = {})
         : executable_(std::move(executable)), send_(std::move(send)), supply_(std::move(power)),
           discover_(std::move(discover)), sample_(std::move(sample)) {}
     ~Supervisor() {
@@ -156,10 +223,40 @@ class Supervisor {
     void request(Json j) {
         if (j == request_)
             return;
+        auto selection = [](const Json &r) {
+            return r.is_object() ? Json{r.value("compositorPci", ""), r.at("graphics").value("offload_device", "auto")} : Json();
+        };
+        if (selection(j) != selection(request_)) { // choose the offload GPU again
+            device_ = {};
+            deviceState_ = nullptr;
+            limitW_ = -1;
+            if (child_ <= 0) meter_.reset();
+        }
+        deviceError_.clear(); // an explicit off/on retry selects again
         stop();
         request_ = std::move(j);
         failed_ = false;
         next_ = 0;
+    }
+    void select(const std::string &setting) {
+        auto chosen = chooseDevice(discover_(), setting, request_.value("compositorPci", ""),
+                                   [&](const std::string &pci) { return sample_ ? std::nullopt : meter_.utilization(pci); });
+        if (!chosen) {
+            deviceError_ = setting == "auto" ? "no offload GPU" : "offload device unavailable";
+            return;
+        }
+        device_ = *chosen;
+        std::string name;
+        if (!sample_ && meter_.init(device_.pci)) {
+            limitW_ = meter_.enforcedLimitW();
+            name = meter_.name();
+        }
+        deviceState_ = {{"pci", device_.pci},
+                        {"node", std::filesystem::path(device_.node).filename().string()},
+                        {"name", name.empty() ? Json(nullptr) : Json(name)},
+                        {"enforcedLimitW", limitW_ > 0 ? Json(limitW_) : Json(nullptr)},
+                        {"selection", setting == "auto" ? "auto" : "explicit"},
+                        {"drivesCompositor", device_.pci == request_.value("compositorPci", "")}};
     }
     void tick() {
         try {
@@ -194,7 +291,11 @@ class Supervisor {
         next_ = now + 100;
         auto g = request_.at("graphics");
         auto previous = policy_;
-        policy_ = policy(supply_(), g.at("offload"), g.at("target_fps"), g.at("offload_power_cap_w"));
+        if (device_.node.empty() && deviceError_.empty() && request_.value("enabled", false) && g.at("offload") != "off")
+            select(g.value("offload_device", "auto"));
+        auto cap = g.at("offload_power_cap_w");
+        policy_ = policy(supply_(), g.at("offload"), g.at("target_fps"),
+                         cap.is_number() ? std::optional<double>(cap.get<double>()) : std::nullopt, limitW_);
         if (!request_.value("enabled", false))
             policy_.admitted = false;
         if (!policy_.admitted) {
@@ -215,10 +316,8 @@ class Supervisor {
             publish();
             return;
         }
-        if (device_.node.empty())
-            device_ = discover_();
         if (device_.node.empty() || (!sample_ && !meter_.init(device_.pci))) {
-            reason_ = "GPU/telemetry unavailable";
+            reason_ = deviceError_.empty() ? "GPU/telemetry unavailable" : deviceError_;
             failed_ = true;
             stop();
             publish();

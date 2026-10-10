@@ -132,7 +132,8 @@ Additional sparse graphics keys:
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `offload` | `"off"` | `off`, `auto`, `on`; runtime handover, never a world/Hyprland reload |
-| `offload_power_cap_w` | `80` | 20–100 W requested software budget, clamped to profile ceiling (50 W limited / 80 W qualified AC) |
+| `offload_power_cap_w` | `null` | Automatic (IPC 0.18): the battery profile ceiling (50 W limited / 80 W qualified AC), or without a battery 75 % of the offload GPU's enforced power limit (80 W if unknown). A number (20–1000 W) only lowers the ceiling with a battery and is clamped to the GPU's limit without one. Before 0.18: 20–100 W, default 80 |
+| `offload_device` | `"auto"` | IPC 0.18: `auto` prefers an NVIDIA GPU that isn't the compositor's, then the least utilised; or a PCI address such as `0000:65:00.0` |
 | `scale_min` | `0.375` | Automatic resolution floor, 0.375–1 |
 | `scale_max` | `1.0` | Automatic resolution ceiling, 0.375–1; cannot be below floor |
 
@@ -147,7 +148,8 @@ transfer cost and local native-depth cost when offload is active.
 
 USB-C, battery and limited AC keep automatic offload off. Explicit on uses the
 50 W / 45 FPS profile. Full AC needs an advertised capacity of at least 150 W
-and no battery discharge to admit 80 W / 60 FPS. Unknown supplies fail closed.
+and no battery discharge to admit 80 W / 60 FPS. A system without a battery is on
+mains (`full-ac`, IPC 0.18); otherwise unknown supplies fail closed.
 These are monitored software limits, not privileged hardware power-limit writes.
 The worker's renewable 500 ms lease, 75 °C ceiling and fresh NVML samples are
 mandatory. A fault stays on Intel until explicit off/on. Off stops the child and

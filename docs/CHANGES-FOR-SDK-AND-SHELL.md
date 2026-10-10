@@ -1203,3 +1203,46 @@ inside compositor render pass", and IPC stopped for good: the shell would see a
 silent, permanent disconnect with no error. Core now recovers on the next tick
 and logs once (branch `fix/render-pass-tracking`). Shell/SDK: nothing to change.
 A HUD that went quiet after a monitor hotplug on older cores was this bug.
+
+## IPC 0.18: offload power scaled to the device, offload device (2026-10-10)
+
+Schema `53c86f4` (pinned), RFC-0009 amendment "IPC 0.18". Offload stays off by
+default. Found on the 2x RTX 3090 work host, where offload could never stay on.
+
+- **Power supply:** no `power_supply` of type Battery means mains (desktops).
+  The profile is `full-ac`, `auto` is admitted and the FPS ceiling is 60. Before
+  this, desktops were "power supply unknown" and failed closed. Laptops with a
+  battery are unchanged.
+- **`graphics.offload_power_cap_w`:** a number from 20 to 1000, or `null`
+  (the new default, automatic).
+  - With a battery, automatic means the old ceilings (50 W, or 80 W on qualified
+    full AC); a number can only lower them.
+  - Without a battery, automatic means 75 % of the offload GPU's enforced power
+    limit (NVML), or 80 W if the limit is unknown; a number is clamped to the
+    enforced limit.
+  - `performance.capSource` says which applied: `profile`, `device`,
+    `configured` or `fallback`.
+- **`graphics.offload_device`:** `"auto"` (default) or a PCI address
+  (`0000:65:00.0`). Auto prefers an NVIDIA render node that isn't the
+  compositor's GPU, then the least utilised. An explicit address that isn't
+  available stops offload with reason `offload device unavailable`.
+  `performance.device` reports `{pci, node, name, enforcedLimitW, selection,
+  drivesCompositor}`, or null.
+- **Reasons:** when the supervisor stops the worker (power/temperature watchdog,
+  profile change, renderer exited), `performance.reason` now shows the
+  supervisor's reason instead of `renderer transport EOF/truncation`.
+- **Sessions below 0.18** get the frozen shape: no `offload_device`, `capSource`
+  or `device`. A null cap reads as the effective cap clamped to 20..100, and
+  effective caps above 100 read as 100. Writing `offload_device`, a null cap or
+  a cap above 100 is invalid params ("setting requires IPC 0.18").
+- **No wire change, same branch:** NVIDIA consumers now accept offload frames.
+  LINEAR dma-bufs are external-only there, so they're imported as
+  GL_TEXTURE_EXTERNAL_OES and copied. Evidence:
+  `docs/evidence/offload/nvidia-consumer/`.
+- **Debug only:** the IPC wire audit (HYPRUNE_VALIDATE_IPC) ends cleanly when its
+  validator is killed by a forced stop, instead of aborting hypruned. A rejected
+  frame still aborts.
+
+Shell: the Performance page can show `device.name`, `capW` and `capSource`, and
+offer `offload_device` (auto + the GPUs it learns from `device`) and a cap field
+that allows empty = automatic. SDK: types are in `53dd830`.

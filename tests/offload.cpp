@@ -30,6 +30,29 @@ int main(int argc, char **argv) {
     assert(!policy({}, "on", 60, 80).admitted);
     full.discharging = true;
     assert(!policy(full, "on", 60, 80).admitted);
+    full.discharging = false;
+    // Laptop defaults (automatic cap) are the profile ceilings; a configured cap only lowers them.
+    p = policy(full, "on", 60, std::nullopt, 350);
+    assert(p.cap == 80 && p.capSource == "profile");
+    assert(policy(usb, "on", 60, std::nullopt).cap == 50);
+    p = policy(full, "on", 60, 60.);
+    assert(p.cap == 60 && p.capSource == "configured" && policy(full, "on", 60, 200.).cap == 80);
+    // No battery: mains, the cap scales with the GPU's enforced limit.
+    Supply mains{.known = true, .ac = true, .mains = true};
+    p = policy(mains, "auto", 60, std::nullopt, 350);
+    assert(p.admitted && p.profile == "full-ac" && p.fps == 60 && p.cap == 263 && p.capSource == "device");
+    p = policy(mains, "on", 60, std::nullopt);
+    assert(p.cap == 80 && p.capSource == "fallback");
+    p = policy(mains, "on", 60, 500., 350);
+    assert(p.cap == 350 && p.capSource == "configured" && policy(mains, "on", 60, 30., 350).cap == 30);
+    // Offload GPU: an explicit address, else not the compositor's GPU, then the least utilised.
+    std::vector<Device> gpus{{"/dev/dri/renderD128", "0000:65:00.0"}, {"/dev/dri/renderD129", "0000:b3:00.0"}};
+    auto idle = [](const std::string &pci) { return std::optional<unsigned>(pci == "0000:65:00.0" ? 50 : 10); };
+    assert(chooseDevice(gpus, "auto", "0000:b3:00.0", idle)->pci == "0000:65:00.0");
+    assert(chooseDevice(gpus, "auto", "0000:65:00.0", idle)->pci == "0000:b3:00.0");
+    assert(chooseDevice(gpus, "auto", "", idle)->pci == "0000:b3:00.0");
+    assert(chooseDevice(gpus, "0000:65:00.0", "0000:65:00.0", idle)->node == "/dev/dri/renderD128");
+    assert(!chooseDevice(gpus, "0000:17:00.0", "", idle) && !chooseDevice({}, "auto", "", idle));
     assert(safeSample(49, 70, 500, 50));
     for (auto v : {51., -1.})
         assert(!safeSample(v, 70, 500, 50));
@@ -37,7 +60,8 @@ int main(int argc, char **argv) {
     auto defaults = interaction::defaultConfig();
     assert(defaults["graphics"]["offload"] == "off");
     for (auto patch :
-         {Json{{"scale_min", .8}, {"scale_max", .5}}, Json{{"offload_power_cap_w", 200}}, Json{{"offload", "yes"}}}) {
+         {Json{{"scale_min", .8}, {"scale_max", .5}}, Json{{"offload_power_cap_w", 2000}}, Json{{"offload_power_cap_w", 10}},
+          Json{{"offload", "yes"}}, Json{{"offload_device", "renderD128"}}, Json{{"offload_device", "0000:65:00.0x"}}}) {
         bool threw = false;
         try {
             interaction::configPatch(defaults, {{"graphics", patch}});
@@ -46,6 +70,10 @@ int main(int argc, char **argv) {
         }
         assert(threw);
     }
+    assert(defaults["graphics"]["offload_power_cap_w"].is_null() && defaults["graphics"]["offload_device"] == "auto");
+    for (auto patch : {Json{{"offload_power_cap_w", 200}}, Json{{"offload_power_cap_w", nullptr}},
+                       Json{{"offload_device", "0000:65:00.0"}}, Json{{"offload_device", "auto"}}})
+        interaction::configPatch(defaults, {{"graphics", patch}});
     // Exercise supervision and an AC -> USB policy withdrawal without waking a GPU.
     full.discharging = false;
     Json supervisorState;
@@ -56,7 +84,7 @@ int main(int argc, char **argv) {
                 if (channel < 0)
                     supervisorState = j.at("state");
             },
-            [&] { return full; }, [] { return Device{"/dev/null", "fake"}; },
+            [&] { return full; }, [] { return std::vector<Device>{{"/dev/null", "fake"}}; },
             [](double &w, double &t) {
                 w = 30;
                 t = 40;

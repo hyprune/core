@@ -5,7 +5,7 @@ using world::Json;
 // Null means inherit the selected preset; explicit values survive preset changes.
 inline Json graphicsDefaults() {
     return {{"quality", "auto"},
-            {"offload", "off"}, {"offload_power_cap_w", 80},
+            {"offload", "off"}, {"offload_power_cap_w", nullptr}, {"offload_device", "auto"},
             {"scale_min", .375}, {"scale_max", 1.0},
             {"outline_width_px", nullptr}, {"outline_colour", nullptr}, {"outline_quality", nullptr}, {"outline", nullptr}, {"visibility_culling", true},
             {"upscaler", nullptr},
