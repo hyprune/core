@@ -3549,7 +3549,12 @@ void Runtime::tick() {
         if (auto surface = directorSurface())
             g_pSeatManager->setKeyboardFocus(surface);
     }
-    if (!layerCursor) control.tick(dt, camera, world.get());
+    if (!layerCursor) {
+        sim::Intent walking;
+        walking.stepHeight = config["player"]["step_height"];
+        walking.jumpSpeed = config["player"]["jump_speed"];
+        control.tick(dt, camera, world.get(), movement == &walk && !noclip ? &walk : nullptr, walking);
+    }
     if (control.uiVisible()) {
         keys.clear();
         smoothIntent = {};

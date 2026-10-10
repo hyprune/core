@@ -15,7 +15,10 @@ class Control {
     std::vector<std::pair<std::string, Json>> events;
     Json execute(const std::string &, const Json &, const std::string &actor, const std::string &client,
                  const world::World *, sim::Camera &, const Json &outputs);
-    void tick(float dt, sim::Camera &, const world::World *);
+    // With a walker, autodrive walks the route with the player's walker (step height,
+    // gravity, slopes) instead of a straight capsule-checked line (fly).
+    void tick(float dt, sim::Camera &, const world::World *, const sim::MotionStrategy *walker = nullptr,
+              sim::Intent walkIntent = {});
     void reset(const world::World *);
     void beginLoad(const Json &to, const Json &output);
     void endLoad(bool success, bool cancelled = false);
@@ -47,6 +50,7 @@ class Control {
     float elapsed = 0, duration = 0, speed = 3.5f, held = 0;
     bool holding = false, opened = false;
     size_t routeIndex = 0;
+    float stalled = 0; // seconds of autodrive walking without horizontal progress
     uint64_t transitions = 0;
     Vec3 target(const Json &, const world::World *) const;
     void transition(const std::string &, float);

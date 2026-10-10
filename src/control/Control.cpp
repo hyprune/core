@@ -358,6 +358,7 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
         require(std::isfinite(speed) && speed >= .1f && speed <= 10, -32602, "speed out of bounds");
         stop();
         routeIndex = 0;
+        stalled = 0;
         location["autodrive"] = true;
     } else if (m == "autodrive.stop") {
         fields(p, {});
@@ -493,7 +494,8 @@ void Control::openMenu() {
 void Control::releasePhoto(sim::Camera &camera) {
     if (photoHeld()) { camera=photoBefore; photoOwner.clear(); }
 }
-void Control::tick(float dt, sim::Camera &camera, const world::World *w) {
+void Control::tick(float dt, sim::Camera &camera, const world::World *w, const sim::MotionStrategy *walker,
+                   sim::Intent walkIntent) {
     dt = std::clamp(dt, 0.f, .1f);
     auto now = Clock::now();
     eraseJson(sources, [&](const Json &s) {
@@ -526,6 +528,35 @@ void Control::tick(float dt, sim::Camera &camera, const world::World *w) {
         transition(p >= 1 ? "arrived" : "travelling", p);
         if (p >= 1)
             duration = 0;
+    } else if (location["autodrive"] == true && w && walker) {
+        // Walk the route like the keyboard does: head for each point's footprint and let
+        // the walker climb steps and ramps; the walker decides height. No progress = blocked.
+        auto to = vector(location["route"][routeIndex]["position"]);
+        Vec3 flat{to.x - camera.position.x, 0, to.z - camera.position.z};
+        float distance = length(flat);
+        if (distance > .05f) {
+            sim::Camera mover = camera;
+            mover.yaw = std::atan2(flat.x, -flat.z);
+            walkIntent.forward = 1;
+            walkIntent.right = walkIntent.up = 0;
+            walkIntent.jump = walkIntent.crouch = false;
+            walkIntent.speed = std::min(speed, distance / std::max(dt, 1e-4f)) / 3.5f;
+            for (float left = dt; left > 1e-6f; left -= 1.f / 60.f)
+                walker->step(mover, walkIntent, std::min(left, 1.f / 60.f), w->collision, &w->collisionIndex);
+            Vec3 moved{mover.position.x - camera.position.x, 0, mover.position.z - camera.position.z};
+            stalled = length(moved) < .2f * std::min(speed * dt, distance) ? stalled + dt : 0;
+            camera.position = mover.position;
+            camera.verticalSpeed = mover.verticalSpeed;
+            camera.grounded = mover.grounded;
+            camera.eyeHeight = mover.eyeHeight;
+            if (stalled > .5f) {
+                location["autodrive"] = false;
+                return;
+            }
+            distance = length(Vec3{to.x - camera.position.x, 0, to.z - camera.position.z});
+        }
+        if (distance <= .05f && ++routeIndex >= location["route"].size())
+            location["autodrive"] = false;
     } else if (location["autodrive"] == true && w) {
         auto to = vector(location["route"][routeIndex]["position"]);
         auto d = to - camera.position;
