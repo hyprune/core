@@ -44,6 +44,7 @@ extern "C" {
 #include <lua.h>
 }
 #include "Capture.hpp"
+#include "platform/RenderPass.hpp"
 #include "hud/Telemetry.hpp"
 #include "interaction/Resize.hpp"
 #include "ipc/Bridge.hpp"
@@ -279,7 +280,10 @@ struct Runtime {
     int worldWorkspace = 0;
     void returnToWorldWorkspace();
     bool active = false, typing = false, loading = false, loadCancelled = false;
-    int renderDepth = 0;
+    platform::RenderPass renderPass; // see RenderPass.hpp: survives PRE without POST
+    bool renderPassLogged = false;
+    void settleRenderPass();
+    void renderPassLeaked();
     std::future<std::shared_ptr<world::World>> pendingWorld;
     std::shared_ptr<world::World> uploadingWorld;
     std::string pendingSpawn, pendingToggle, resolvedLocation;
@@ -533,13 +537,28 @@ std::optional<std::pair<std::string, surfaces::Hit>> aim(bool backFaces = false)
     }
     return best;
 }
+void Runtime::renderPassLeaked() {
+    if (renderPassLogged)
+        return;
+    renderPassLogged = true;
+    std::fprintf(stderr, "[hyprune] compositor render pass ended without RENDER_POST (beginRender failed?); "
+                         "recovered, further occurrences counted silently\n");
+}
+void Runtime::settleRenderPass() {
+    // Hyprland returns without RENDER_POST when beginRender fails; a pass still
+    // open at an event-loop entry point never ended (idle/timer callbacks never
+    // run inside renderMonitor). Rule 2 holds: a real pass is never settled.
+    if (renderPass.settle())
+        renderPassLeaked();
+}
 void Runtime::deferInput(std::function<void()> operation) {
     auto id = std::make_shared<uint64_t>(0);
     *id = g_pEventLoopManager->doLater([id, operation = std::move(operation)] {
         if (!runtime)
             return;
         std::erase(runtime->inputDeferred, *id);
-        if (runtime->renderDepth) {
+        runtime->settleRenderPass(); // an idle callback never runs inside renderMonitor
+        if (runtime->renderPass.active()) {
             runtime->deferInput(std::move(operation));
             return;
         }
@@ -605,7 +624,7 @@ SP<CWLSurfaceResource> Runtime::directorSurface() {
     return nullptr;
 }
 void Runtime::refresh() {
-    if (renderDepth)
+    if (renderPass.active())
         throw std::runtime_error("capture inside render pass");
     if (monitor && world) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
@@ -790,7 +809,7 @@ Json Runtime::performance() const {
     return state;
 }
 void Runtime::offloadTick() {
-    if (renderDepth) throw std::runtime_error("offload lifecycle inside frame");
+    if (renderPass.active()) throw std::runtime_error("offload lifecycle inside frame");
     auto g = config["graphics"];
     bool enabled = active && world && monitor && !loading && !locked() &&
                    g["offload"] != "off" && renderer.transforms.empty();
@@ -815,7 +834,7 @@ void Runtime::offloadTick() {
                             {"worker", offload.timings}};
 }
 void Runtime::offloadPump() {
-    if (renderDepth) throw std::runtime_error("offload polling inside frame");
+    if (renderPass.active()) throw std::runtime_error("offload polling inside frame");
     if (offload.connected()) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         // Flatten the simulation's visual-only bob into the existing pose packet.
@@ -1186,7 +1205,7 @@ void Runtime::finishLoad() {
 }
 
 void Runtime::returnToWorldWorkspace() {
-    if (renderDepth)
+    if (renderPass.active())
         throw std::runtime_error("workspace switch inside render pass");
     if (!active || !monitor || !worldWorkspace)
         return;
@@ -1205,7 +1224,7 @@ void Runtime::returnToWorldWorkspace() {
 void Runtime::readyNotice() {
     if (active || loading || readyNotices)
         return;
-    if (renderDepth)
+    if (renderPass.active())
         throw std::runtime_error("ready notification inside render pass");
     std::string chord;
     for (const auto &b : g_pKeybindManager->m_keybinds) {
@@ -1224,7 +1243,7 @@ void Runtime::readyNotice() {
     ++readyNotices;
 }
 void Runtime::toggle(const std::string &output) {
-    if (renderDepth)
+    if (renderPass.active())
         throw std::runtime_error("world toggle inside render pass");
     if (active) {
         exit();
@@ -1286,7 +1305,7 @@ void Runtime::toggle(const std::string &output) {
 void Runtime::exit() {
     control.releasePhoto(camera);
     climbing.reset(camera);
-    if (renderDepth)
+    if (renderPass.active())
         throw std::runtime_error("world exit inside render pass");
     if (loading)
         loadCancelled = true;
@@ -1343,7 +1362,7 @@ void Runtime::exit() {
     publish();
 }
 void Runtime::focus(const std::string &id, bool keyboard, bool enterUse) {
-    if (renderDepth)
+    if (renderPass.active())
         throw std::runtime_error("focus inside render pass");
     if (auto frame = capture.workspace(id)) {
         if (auto binding = layout.binding(frame->workspaceId, world.get()))
@@ -1428,7 +1447,7 @@ void Runtime::focus(const std::string &id, bool keyboard, bool enterUse) {
     publish();
 }
 void Runtime::cursor() {
-    if (renderDepth)
+    if (renderPass.active())
         throw std::runtime_error("cursor inside render pass");
     std::string next = !active || freeCursor       ? "desktop"
                        : !layout.desktop.is_null() ? "workspace"
@@ -2104,7 +2123,7 @@ void Runtime::leaveInteraction() {
     publish();
 }
 void Runtime::debugCapture() {
-    if (renderDepth)
+    if (renderPass.active())
         throw std::runtime_error("capture inside render pass");
     if (*captureSnapshots >= 4)
         throw ipc::Error(-32004, "capture queue full; still writing earlier captures");
@@ -3233,7 +3252,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         return Json::object();
     }
     if (method == "graphics.get" || method == "graphics.set") {
-        if (renderDepth)
+        if (renderPass.active())
             throw ipc::Error(-32004, "graphics update during render");
         if (method == "graphics.set") {
             if (params.size() != 1 || !params.contains("patch") || !params["patch"].is_object())
@@ -3306,7 +3325,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         return ipc::protocol::atLeast(protocol, "0.9") ? response : interaction::legacyInputNames(response);
     }
     if (method == "overlay.style") {
-        if (renderDepth || params.size() != 2 || !params.contains("leaseId") || !params["leaseId"].is_string() ||
+        if (renderPass.active() || params.size() != 2 || !params.contains("leaseId") || !params["leaseId"].is_string() ||
             !control.ownsLease(actor, params["leaseId"]) || !params.contains("style"))
             throw ipc::Error(-32602, "overlay style needs owning shell lease");
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
@@ -3654,7 +3673,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
 }
 #include "Replay.inc"
 void Runtime::tick() {
-    if (renderDepth != 0)
+    if (renderPass.active())
         throw std::runtime_error("deferred work inside compositor render pass");
     auto updateStarted = std::chrono::steady_clock::now();
     if (capturePending) {
@@ -3668,7 +3687,7 @@ void Runtime::tick() {
         else if (!done->result.empty())
             ipc->notify("runtime.notice", {{"level", "info"}, {"code", "capture.saved"}, {"message", done->result}});
     }
-    if (renderDepth != 0)
+    if (renderPass.active())
         throw std::runtime_error("deferred work inside compositor render pass");
     ipc->poll();
     if (auto next = graphicsFile.poll())
@@ -4202,6 +4221,8 @@ int luaCamera(lua_State *state) {
         {"instances", runtime->layout.instances},
         {"aim", aim() ? aim()->first : ""},
         {"mountTarget", runtime->snapTarget},
+        {"renderPasses", runtime->renderPass.passes()},
+        {"renderPassesLeaked", runtime->renderPass.leaked()},
         {"backdrops", runtime->capture.backdropDiagnostics()},
         {"gestureId", runtime->hands.pose.id},
         {"mode", runtime->typing ? "typing" : "movement"},
@@ -4430,10 +4451,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     }));
     runtime->listeners.push_back(Event::bus()->m_events.render.stage.listen([](eRenderStage stage) {
         safe([&] {
-            if (stage == RENDER_PRE)
-                ++runtime->renderDepth;
-            if (stage == RENDER_POST && runtime->renderDepth > 0)
-                --runtime->renderDepth;
+            if (stage == RENDER_PRE && runtime->renderPass.begin(g_pHyprRenderer->m_renderData.pMonitor.get()))
+                runtime->renderPassLeaked(); // the previous pass never got RENDER_POST
+            if (stage == RENDER_POST)
+                runtime->renderPass.end();
             if (stage == RENDER_POST_WINDOWS && runtime->active && !locked() &&
                 g_pHyprRenderer->m_renderData.pMonitor == runtime->monitor)
                 g_pHyprRenderer->addPassElement(makeUnique<Pass>());
@@ -4833,6 +4854,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     if (!runtime)
                         return;
                     runtime->tickDeferred = 0;
+                    runtime->settleRenderPass();
                     safe([] { runtime->tick(); });
                 });
             self->updateTimeout(std::chrono::milliseconds(16));
@@ -4845,6 +4867,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 runtime->offloadDeferred = g_pEventLoopManager->doLater([] {
                     if (!runtime) return;
                     runtime->offloadDeferred = 0;
+                    runtime->settleRenderPass();
                     safe([] { runtime->offloadPump(); });
                 });
             self->updateTimeout(std::chrono::milliseconds(runtime->offload.connected() ? 4 : 100));

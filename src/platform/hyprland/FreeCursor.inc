@@ -1,7 +1,7 @@
 // Input callbacks enter here only through deferInput, never from a render pass.
 void Runtime::toggleFreeCursor() {
     if (!active || loading) return;
-    if (renderDepth) throw std::runtime_error("free cursor transition inside render pass");
+    if (renderPass.active()) throw std::runtime_error("free cursor transition inside render pass");
     // Use/focus exits are one-way back to adventure control. Never park their
     // return target in the free-cursor state (the old two-state trap).
     if (!layerCursor && inputMode() != "world") {
