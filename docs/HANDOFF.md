@@ -1,3 +1,47 @@
+# Core handoff — 2026-10-10 (render-pass tracking)
+
+Branch `fix/render-pass-tracking` from main `821ce9c`, worktree `core-renderpass`.
+Nested only and nothing pushed; no `dev/live/*`.
+
+| Commit | What |
+| --- | --- |
+| `9dfb841` | `platform::RenderPass` replaces the leaking `renderDepth` counter; unit test |
+| `4cdc5d2` | Non-live hook `hl.plugin.hyprune.test_render_fail()` + `dev/nested/run.sh --render-fail` |
+| this commit | CHANGES, LIVE-TEST item, evidence, handoff |
+
+**Bug** (NVIDIA bake host): Hyprland 0.56.2 `renderMonitor` emits `RENDER_PRE`,
+and when `beginRender` fails it returns without `RENDER_POST`; it even leaves
+`m_renderingActive` set. Core's counter stayed at 1, `tick()` threw every frame,
+`deferInput` re-deferred forever, and IPC stopped permanently.
+
+**Fix:** a render pass lives inside one synchronous `renderMonitor` call.
+- **Leak detection:** a new `RENDER_PRE` while a pass is open means the old one
+  leaked. Event-loop entry points (tick and offload `doLater`, `deferInput`)
+  settle a pass still open: Hyprland's `doLater` is a `wl_event_loop` idle
+  source, never dispatched from inside `renderMonitor`.
+- **Rule 2:** unchanged. A genuine pass blocks deferred work until its POST and
+  is never settled from inside itself.
+- **Logging:** one stderr line. The debug dump has `renderPasses`,
+  `renderPassesLeaked` and `renderPassOpen`.
+
+**Reproduction:** an unallocatable headless mode (32768x32768) is rejected by
+GBM at mode set and Hyprland falls back, so `beginRender` never fails locally.
+The hook emits Hyprland's failing sequence instead. Unfixed `main` + hook:
+`deferred work inside compositor render pass` immediately and the next
+compositor command fails. Fixed: 7/7.
+
+Validation:
+
+```sh
+ctest --test-dir build                 # 26/26 (new: render-pass)
+dev/nested/run.sh --render-fail        # 7 PASS
+dev/nested/run.sh --live-findings / --placement / --workspace-homes / --m2 / --long-titles / --ipc-warp   # PASS
+dev/nested/run.sh --playable           # 15 PASS
+flock /tmp/worldshell-nested.lock python3 dev/nested/world_workspace.py   # PASS
+```
+
+---
+
 # Core handoff — 2026-10-10 (live findings: walls, mounts)
 
 Branch `fix/live-walls-mounts`, rebased onto main `d4eecb4` (carry from behind,

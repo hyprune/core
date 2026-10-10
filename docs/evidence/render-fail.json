@@ -1,0 +1,13 @@
+{
+  "nestedOnly": true,
+  "checks": [
+    "IPC keeps answering and publishing",
+    "world keeps rendering on the healthy output",
+    "deferred work still runs (toggle out)",
+    "and back in",
+    "every unpaired RENDER_PRE was noticed and closed",
+    "logged once",
+    "no stuck render-pass exceptions"
+  ],
+  "leakedPasses": 4
+}

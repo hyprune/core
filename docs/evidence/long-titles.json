@@ -34,6 +34,6 @@
     "IPC 0.8: 13 client frames valid",
     "IPC 0.11: 13 client frames valid",
     "IPC 0.14: 13 client frames valid",
-    "core wire audit validated 167 outgoing frames"
+    "core wire audit validated 165 outgoing frames"
   ]
 }

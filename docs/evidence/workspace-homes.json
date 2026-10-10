@@ -80,7 +80,7 @@
       "passed": true,
       "evidence": {
         "frame": {
-          "composed": 12,
+          "composed": 9,
           "id": "workspace-21",
           "position": [
             8.0,
@@ -139,8 +139,8 @@
       "name": "an idle wall is not recomposed",
       "passed": true,
       "evidence": {
-        "before": 64,
-        "after": 64
+        "before": 62,
+        "after": 62
       }
     },
     {
@@ -150,8 +150,8 @@
         "redMinusBlueBefore": -207.8695987654321,
         "after": 191.87962962962965,
         "composed": [
-          64,
-          65
+          62,
+          63
         ]
       }
     },
