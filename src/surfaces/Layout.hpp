@@ -71,4 +71,14 @@ Surface carryPlane(const sim::Camera &, float width, float height, std::span<con
 void anchorPlane(Surface &, const Json &, int width, int height);
 // Aspect-fit, centred and flush in a tool mount's frame without intersecting geometry.
 std::optional<Surface> fitToMount(const Json &mount, int width, int height, std::span<const Triangle> collision);
+// Area-less worlds author room-window poses as manifest anchors (screenType
+// "com.hyprune.window"), taken in capture order. Null when entry `index` has none.
+const Json *roomAnchor(const world::World &, size_t index);
+// That anchor's window pose: its centre and yaw, aspect-fit to its size by the client's pixels.
+void roomAnchorPose(Surface &, const Json &anchor);
+// A room client adopted without a saved placement. A pocketed client stays pocketed. A
+// client present at activation takes its authored room anchor, visible, or waits in the
+// pocket (hidden, never posed at an anchor). A client opened later spawns.
+enum class RoomAdoption { Anchor, Spawn, Pocket };
+RoomAdoption adoptRoomClient(const world::World &, size_t index, bool existing, bool pocketed);
 } // namespace hyprune::surfaces

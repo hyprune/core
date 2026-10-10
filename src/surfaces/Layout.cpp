@@ -781,4 +781,27 @@ Json Layout::state(const world::World *w) const {
             {"carriedSurfaceId", carried.empty() ? Json(nullptr) : Json(carried)},
             {"desktopWorkspaceId", desktop}};
 }
+const Json *roomAnchor(const world::World &w, size_t index) {
+    auto anchors = w.manifest.find("anchors");
+    if (!w.areas.empty() || anchors == w.manifest.end() || !anchors->is_array() || index >= anchors->size())
+        return nullptr;
+    auto &a = (*anchors)[index];
+    return a.value("screenType", "") == "com.hyprune.window" ? &a : nullptr;
+}
+void roomAnchorPose(Surface &s, const Json &a) {
+    auto pos = a.at("pose").at("position"), q = a.at("pose").at("rotation");
+    s.center = {pos[0], pos[1], pos[2]};
+    s.yaw = std::atan2(2 * (q[3].get<float>() * q[1].get<float>() + q[0].get<float>() * q[2].get<float>()),
+                       1 - 2 * (q[1].get<float>() * q[1].get<float>() + q[2].get<float>() * q[2].get<float>()));
+    float ratio = float(std::max(1, s.pixelWidth)) / std::max(1, s.pixelHeight);
+    s.width = std::min(a.at("size")[0].get<float>(), a.at("size")[1].get<float>() * ratio);
+    s.height = s.width / ratio;
+}
+RoomAdoption adoptRoomClient(const world::World &w, size_t index, bool existing, bool pocketed) {
+    if (pocketed)
+        return RoomAdoption::Pocket;
+    if (!existing)
+        return RoomAdoption::Spawn;
+    return roomAnchor(w, index) ? RoomAdoption::Anchor : RoomAdoption::Pocket;
+}
 } // namespace hyprune::surfaces

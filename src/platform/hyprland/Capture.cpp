@@ -124,15 +124,18 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 // bounded spawn search, which queues the client if no spot fits.
                 surfaces::pushOut(e.surface, world->collision);
                 surfaces::Instance instance{e.surface.id, identity.appClass, identity.title, identity.workspaceId};
-                if (layout && !layout->hasPlacement(instance, world)) {
-                    // Existing unplaced room clients wait for explicit placement. New
-                    // clients may auto-spawn only when a free full-sized spot exists.
-                    if (!spawnNew || layout->unplaced.contains(e.surface.id))
+                if (layout && !layout->hasPlacement(instance, world))
+                    switch (surfaces::adoptRoomClient(*world, i, !spawnNew, layout->unplaced.contains(e.surface.id))) {
+                    case surfaces::RoomAdoption::Anchor: // posed at its authored anchor below, visible
+                        break;
+                    case surfaces::RoomAdoption::Pocket: // waits for explicit placement
                         layout->unplaced.insert(e.surface.id);
-                    else
+                        break;
+                    case surfaces::RoomAdoption::Spawn: // only when a free full-sized spot exists
                         layout->spawn(instance, world, *camera, e.surface,
                                       float(monitor->m_size.x) / monitor->m_size.y);
-                }
+                        break;
+                    }
             }
             if (world && remembered == adoptedWindows_.end())
                 adoptedWindows_.push_back({w, e.surface.id, world->id});
@@ -151,22 +154,12 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         it->surface.pixelWidth = std::max(1, int(surface->m_current.size.x));
         it->surface.pixelHeight = std::max(1, int(surface->m_current.size.y));
         it->surface.height = it->surface.width * float(it->surface.pixelHeight) / it->surface.pixelWidth;
-        if (!attached && world && world->areas.empty() && !spawnNew &&
-            (!layout || !layout->freePoses.contains(it->surface.id))) {
-            auto anchors = world->manifest.value("anchors", world::Json::array());
-            size_t index = std::distance(entries.begin(), it);
-            if (index < anchors.size() && anchors[index].at("screenType") == "com.hyprune.window") {
-                auto &a = anchors[index];
-                auto pos = a.at("pose").at("position"), q = a.at("pose").at("rotation");
-                it->surface.center = {pos[0], pos[1], pos[2]};
-                it->surface.yaw =
-                    std::atan2(2 * (q[3].get<float>() * q[1].get<float>() + q[0].get<float>() * q[2].get<float>()),
-                               1 - 2 * (q[1].get<float>() * q[1].get<float>() + q[2].get<float>() * q[2].get<float>()));
-                float ratio = float(it->surface.pixelWidth) / it->surface.pixelHeight;
-                it->surface.width = std::min(a.at("size")[0].get<float>(), a.at("size")[1].get<float>() * ratio);
-                it->surface.height = it->surface.width / ratio;
-            }
-        }
+        // Authored room anchors of an area-less world. A pocketed client stays hidden and
+        // keeps no anchor pose: state never reports a window at a dock where it isn't drawn.
+        if (!attached && world && !spawnNew &&
+            (!layout || (!layout->freePoses.contains(it->surface.id) && !layout->unplaced.contains(it->surface.id))))
+            if (auto a = surfaces::roomAnchor(*world, std::distance(entries.begin(), it)))
+                surfaces::roomAnchorPose(it->surface, *a);
         if (!attached && layout && world->areas.empty() && layout->freePoses.contains(it->surface.id)) {
             auto pixels = it->surface;
             it->surface = layout->freePoses.at(it->surface.id);

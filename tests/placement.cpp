@@ -120,5 +120,36 @@ int main() {
         try { snap.placeOnMount(other, mount, &stand); } catch (const std::exception &) { occupied = true; }
         assert(occupied);
     }
+    {
+        // Area-less worlds author room-window docks as anchors (Switchyard). A client already
+        // in the room at activation takes its dock, visible; with no dock left it waits in the
+        // pocket. It is never hidden at a dock pose. Clients opened later spawn.
+        world::World docks;
+        auto window = [](float x) {
+            return world::Json{{"id", "dock"}, {"screenType", "com.hyprune.window"}, {"size", {4.2, 2.36}},
+                               {"pose", {{"position", {x, 2.25, -6.79}}, {"rotation", {0, 0, 0, 1}}}}};
+        };
+        docks.manifest["anchors"] = {window(-10.7f), window(1.3f),
+                                     {{"id", "sign"}, {"screenType", "com.hyprune.panel"}, {"size", {1, 1}},
+                                      {"pose", {{"position", {0, 0, 0}}, {"rotation", {0, 0, 0, 1}}}}}};
+        using A = surfaces::RoomAdoption;
+        assert(surfaces::adoptRoomClient(docks, 0, true, false) == A::Anchor);
+        assert(surfaces::adoptRoomClient(docks, 1, true, false) == A::Anchor);
+        assert(surfaces::adoptRoomClient(docks, 2, true, false) == A::Pocket); // not a window anchor
+        assert(surfaces::adoptRoomClient(docks, 3, true, false) == A::Pocket); // no anchor left
+        assert(surfaces::adoptRoomClient(docks, 0, true, true) == A::Pocket);  // explicitly pocketed
+        assert(surfaces::adoptRoomClient(docks, 0, false, false) == A::Spawn); // opened after entering
+        assert(surfaces::roomAnchor(docks, 1) && !surfaces::roomAnchor(docks, 2) && !surfaces::roomAnchor(docks, 9));
+        surfaces::Surface dock;
+        dock.pixelWidth = 1200, dock.pixelHeight = 675;
+        surfaces::roomAnchorPose(dock, *surfaces::roomAnchor(docks, 1));
+        assert(length(dock.center - Vec3{1.3f, 2.25f, -6.79f}) < 1e-4f && std::abs(dock.yaw) < 1e-6f);
+        assert(std::abs(dock.width - 4.1955f) < 1e-3f && std::abs(dock.height - 2.36f) < 1e-3f); // aspect-fit
+        world::World areas = docks;
+        areas.areas = {{{"id", "hall"}}};
+        assert(!surfaces::roomAnchor(areas, 0) && surfaces::adoptRoomClient(areas, 0, true, false) == A::Pocket);
+        world::World bare;
+        assert(!surfaces::roomAnchor(bare, 0) && surfaces::adoptRoomClient(bare, 0, true, false) == A::Pocket);
+    }
     std::cout << "PASS placement queue, pocket ordering, durable client size, workspace scope and facing toggle\n";
 }
