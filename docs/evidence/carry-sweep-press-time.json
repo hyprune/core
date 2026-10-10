@@ -1,0 +1,34 @@
+{
+  "nestedOnly": true,
+  "date": "2026-10-10",
+  "scenario": "Back-face Super+LMB carry of a window in Lumen Reach: the 180 degree flip guarded by interaction::sweepSafe (nested --static-world, part 2).",
+  "machine": {
+    "host": "owner's laptop",
+    "cpu": "Intel Core Ultra 9 386H, 16 threads",
+    "gpus": "Intel iGPU drives the nested session (RTX 5090 Laptop GPU idle; offload off)",
+    "power": "USB-C PD"
+  },
+  "world": {
+    "id": "com.hyprune.lumen-reach",
+    "version": "0.9.1",
+    "source": "../worlds/dist (as installed by dev/nested/static_world.py)",
+    "worldJsonSha256": "025ecca3c94ee7fd5955aebf522d71e74c14117435f14e096242ce6a026551fd"
+  },
+  "method": [
+    "Each plugin build carried a temporary, uncommitted RAII timer at the top of Runtime::button: on a press it appended the handler's wall time (std::chrono::steady_clock, ms) to /tmp/hyprune-press-times.log.",
+    "HYPRUNE_NESTED_PLUGIN=<build>/hyprune-core.so dev/nested/run.sh --static-world, under flock /tmp/worldshell-nested.lock, RelWithDebInfo builds.",
+    "Per run the reported value is the slowest press, the back-face grab (the other presses in the first baseline run took 0.02-0.03 ms).",
+    "Builds alternated before, remote fix, final, before, remote fix, final; every run passed all 14 static-world checks."
+  ],
+  "builds": [
+    {"label": "before", "core": "e295b23", "note": "core main then: every collision triangle at every sweep step"},
+    {"label": "segment broad phase", "core": "3a0661a", "landedAs": "c15129e", "note": "remote/static-world-stall (1705edc) rebased; patch-identical to c15129e"},
+    {"label": "BVH + per-pose bounds", "core": "54ae3ec", "landedAs": "31fc328", "note": "patch-identical to 31fc328"}
+  ],
+  "pressHandlerMs": {
+    "before": [234.466, 238.66],
+    "segment broad phase": [0.433402, 0.447925],
+    "BVH + per-pose bounds": [0.152008, 0.167975]
+  },
+  "reference": "The remote work host measured the same press at 561 ms before the fix (commit 1705edc message)."
+}
