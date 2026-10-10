@@ -11,6 +11,7 @@ struct Camera {
     bool grounded = false;
     float eyeHeight = 1.7f;
     float climbBob = 0; // visual-only, metres; reduced motion sets this to zero
+    Vec3 viewBob{};     // visual-only walking bob offset, metres; zero with reduced motion
     Vec3 forward() const {
         return {std::sin(yaw) * std::cos(pitch), std::sin(pitch), -std::cos(yaw) * std::cos(pitch)};
     }
@@ -48,7 +49,7 @@ struct Camera {
         return m;
     }
     Mat4 view() const {
-        auto eye = position + Vec3{0, climbBob, 0}, r = right(), u = up(), f = forward();
+        auto eye = position + Vec3{0, climbBob, 0} + viewBob, r = right(), u = up(), f = forward();
         auto m = Mat4::identity();
         m.v[0]=r.x; m.v[4]=r.y; m.v[8]=r.z; m.v[12]=-dot(r,eye);
         m.v[1]=u.x; m.v[5]=u.y; m.v[9]=u.z; m.v[13]=-dot(u,eye);

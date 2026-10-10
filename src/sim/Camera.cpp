@@ -1,4 +1,5 @@
 #include "Camera.hpp"
+#include <algorithm>
 #include "interaction/Hands.hpp"
 namespace hyprune::sim {
 namespace {
@@ -126,8 +127,9 @@ void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh, c
         d = normalized(d);
     if (i.jump && c.grounded)
         c.verticalSpeed = i.jumpSpeed;
-    // At most 8 mm horizontal movement per substep: no thin-wall tunneling at M0 speeds.
-    int steps = std::max(1, int(std::ceil(dt / .002f)));
+    // 2 ms substeps and at most 8 mm horizontal movement each: no thin-wall tunneling,
+    // also at a fast run speed.
+    int steps = std::max({1, int(std::ceil(dt / .002f)), int(std::ceil(3.5f * i.speed * dt / .008f))});
     float h = dt / steps;
     for (int k = 0; k < steps; k++) {
         bool supported = c.grounded && !i.jump;
