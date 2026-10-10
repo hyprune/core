@@ -160,6 +160,10 @@ hardware cursor here:
 - [ ] Type a note including w/a/s/d and space: the world does not move. Enter: the
   reticle is back and W walks immediately (no lost or stuck keys).
 - [ ] U, type, Esc: the prompt closes and nothing is written; walking resumes.
+- [ ] U, then press and hold W while the prompt is still open, Enter with W held:
+  walking starts without re-pressing W. Then U again and type at once: the first
+  character appears (nested wtype drops it after this sequence; check a real
+  keyboard).
 - [ ] U, type, Super+U, type, Enter: two captures, both notes in
   `~/.local/state/hyprune/captures/notes.md` in order.
 - [ ] Super+U while typing in a window (E), in F focus and in the free cursor:

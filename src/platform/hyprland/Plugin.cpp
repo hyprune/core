@@ -118,6 +118,8 @@ struct Runtime {
     void action(interaction::Action);
     void useAim(bool zoom);
     void leaveInteraction();
+    void resumeHeldMovement();
+    bool wasExclusive = false;
     void debugCapture();
     void toolClick(const std::string &action);
     void toolsTick();
@@ -2021,6 +2023,29 @@ void Runtime::useAim(bool zoom) {
     cursor();
     publish();
 }
+void Runtime::resumeHeldMovement() {
+    auto kb = g_pSeatManager->m_keyboard.lock();
+    if (!active || !kb || !kb->m_xkbSymState || inputMode() != "world")
+        return;
+    const auto &world = input.config["modes"]["world"];
+    auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::steady_clock::now().time_since_epoch()).count();
+    for (uint32_t code = 1; code < 256; ++code) {
+        if (!kb->getPressed(code) || swallowedKeys.contains(code))
+            continue;
+        auto key = interaction::bindingKey(kb->m_xkbSymState, code + 8);
+        // Only continuous movement resumes; a held Enter, U or Tab never re-fires.
+        bool movement = false;
+        for (auto name : {"forward", "back", "left", "right"})
+            for (const auto &binding : world.value(name, Json::array()))
+                movement = movement || binding == key;
+        if (!movement)
+            continue;
+        swallowedKeys.insert(code); // its release ends the movement through the normal path
+        for (auto a : inputEvent("world", key, modifiers, true, now, 0, false))
+            action(a);
+    }
+}
 void Runtime::leaveInteraction() {
     layerCursor = false;
     if (monitor && (freeCursor || monitor != Desktop::focusState()->monitor())) {
@@ -3586,6 +3611,11 @@ void Runtime::tick() {
         if (auto surface = directorSurface())
             g_pSeatManager->setKeyboardFocus(surface);
     }
+    // Keys pressed while a shell overlay held the keyboard (e.g. W right after Enter in
+    // the capture note prompt) went to the shell; walking must not wait for a re-press.
+    if (wasExclusive && !control.exclusive())
+        resumeHeldMovement();
+    wasExclusive = control.exclusive();
     if (!layerCursor) {
         sim::Intent walking;
         walking.stepHeight = config["player"]["step_height"];
