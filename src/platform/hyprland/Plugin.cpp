@@ -196,6 +196,7 @@ struct Runtime {
     Json contentFeedback = nullptr;
     uint64_t contentSequence = 0;
     void readyNotice();
+    int readyNotices = 0; // once per plugin load: init and the first inactive world load both ask
     std::string tagged, unplacedSelected;
     std::optional<surfaces::Surface> placementPreview();
     Json unplacedState();
@@ -1191,7 +1192,7 @@ void Runtime::returnToWorldWorkspace() {
 }
 
 void Runtime::readyNotice() {
-    if (active || loading)
+    if (active || loading || readyNotices)
         return;
     if (renderDepth)
         throw std::runtime_error("ready notification inside render pass");
@@ -1209,6 +1210,7 @@ void Runtime::readyNotice() {
     std::string message =
         "Hyprune ready · " + (chord.empty() ? "use your configured toggle to enter" : "press " + chord + " to enter");
     HyprlandAPI::addNotification(handle, message, CHyprColor{.4f, .73f, .87f, 1.f}, 7000);
+    ++readyNotices;
 }
 void Runtime::toggle(const std::string &output) {
     if (renderDepth)
@@ -3999,6 +4001,7 @@ int luaCamera(lua_State *state) {
         {"selectedScale",
          {runtime->selectedTransform.scale.x, runtime->selectedTransform.scale.y, runtime->selectedTransform.scale.z}},
         {"superHeld", runtime->superHeld},
+        {"readyNotices", runtime->readyNotices},
         {"ownsInput", ownsInput()},
         {"layerCursor", runtime->layerCursor},
         {"debug", runtime->debug},

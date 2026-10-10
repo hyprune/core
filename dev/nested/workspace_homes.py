@@ -32,6 +32,9 @@ def acceptance(client,children,args,shell_token,socketpath):
     def saved():
         path=s.STATE/'layout.json'
         return json.loads(path.read_text())['bindings'] if path.exists() else []
+    # Plugin init and each inactive world load ask for the ready notice; it shows once.
+    client.call('world.load',{'worldId':'com.hyprune.switchyard'});client.call('world.load',{'worldId':LUMEN});time.sleep(1)
+    check('ready notice shown once per plugin load',s.camera()['readyNotices']==1,s.camera()['readyNotices'])
     s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")');wait(lambda:s.camera()['active'])
     check('room workspace is 20',wait(lambda:workspace()==20),workspace())
     check('world defines homes 21-24 with no user binding',homes()==HOMES,state()['mounts']['bindings'])
