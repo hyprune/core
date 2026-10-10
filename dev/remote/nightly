@@ -96,7 +96,9 @@ def make_steps(target, cwd, logs, prefix):
                 args = ' -b -t 12 --python-exit-code 1 --python lumen-reach/build.py --' + args
             line = 'HYPRUNE_REMOTE_BLENDER=1 flock .blender.lock blender' + args
         elif line.startswith('python3 tools/derive-visibility.py') and '--local' not in line:
-            line += ' --local'  # its kernel would ssh to the bake host, which is this machine
+            # Its kernel would ssh to the bake host, which is this machine. --threads 0
+            # (every core, as the remote path) where the tool has it; 2 threads takes 20+ min.
+            line += ' --local' + (' --threads 0' if '--threads' in (cwd / 'tools/derive-visibility.py').read_text() else '')
         rows.append(step(f'{prefix}: {line[:90]}', line, cwd, logs, shell=True, timeout=7200))
         if rows[-1]['status'] != 'pass':
             break
@@ -109,9 +111,15 @@ def make_steps(target, cwd, logs, prefix):
 
 def worlds(logs):
     w = WS / 'worlds-build'
-    rows = [step('worlds: navmesh deps', ['make', 'navmesh-deps'], w, logs),
+    # validate-gltf.mjs needs gltf-validator from GLTF_VALIDATOR_DIR (no package.json declares it).
+    tools = WS / 'tools'
+    os.environ['GLTF_VALIDATOR_DIR'] = str(tools / 'node_modules')
+    rows = [step('worlds: gltf-validator', ['npm', 'install', '--prefix', str(tools), '--no-audit', '--no-fund', 'gltf-validator'], w, logs)
+            if not (tools / 'node_modules/gltf-validator').is_dir() else None,
+            step('worlds: navmesh deps', ['make', 'navmesh-deps'], w, logs),
             step('worlds: gltf deps', ['make', 'gltf-deps'], w, logs),
             step('worlds: navmesh unit tests', ['make', 'navmesh-test'], w, logs)]
+    rows = [r for r in rows if r]
     for target in ['lumen-build', 'lumen-validate', 'visibility-validate', 'build', 'validate', 'budgets', 'gltf-check']:
         rows += make_steps(target, w, logs, f'worlds {target}')
         if rows[-1]['status'] != 'pass' and target in ('lumen-build', 'build'):
