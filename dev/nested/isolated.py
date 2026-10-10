@@ -75,8 +75,11 @@ def choose_gpu(base):
         if node in live and pathlib.Path(f'/proc/{pid}').exists():live[node]+=1
     return min(found,key=lambda g:live[g['node']])
 
-def sandbox(gpu):
-    args=['bwrap','--dev-bind','/','/','--dev','/dev','--dev-bind','/dev/shm','/dev/shm','--die-with-parent']
+def sandbox(gpu,runtime):
+    # bwrap's user namespace shows root-owned /tmp/.X11-unix as nobody's, and Hyprland
+    # then refuses to create X11 sockets there (no Xwayland). Each instance gets its own.
+    x11=runtime/'x11';x11.mkdir(mode=0o1777,exist_ok=True)
+    args=['bwrap','--dev-bind','/','/','--dev','/dev','--dev-bind','/dev/shm','/dev/shm','--bind',str(x11),'/tmp/.X11-unix','--die-with-parent']
     nodes=['/dev/dri/'+gpu['node']]
     if gpu['nvidiaMinor'] is not None:
         # Only the render node steers EGL/GBM/the parent. Every /dev/nvidiaN stays:
@@ -126,7 +129,7 @@ def main():
         (runtime/'gpu').write_text(f"{gpu['node'] if gpu else 'all'} {os.getpid()}\n");lock.close()
         if gpu:
             os.environ.update(HYPRUNE_NESTED_RUNTIME=str(runtime),HYPRUNE_NESTED_GPU_INFO=json.dumps(gpu))
-            os.execvp('bwrap',sandbox(gpu)+[sys.executable,str(pathlib.Path(__file__).resolve()),*sys.argv[1:]])
+            os.execvp('bwrap',sandbox(gpu,runtime)+[sys.executable,str(pathlib.Path(__file__).resolve()),*sys.argv[1:]])
     ident=runtime.name
     root=pathlib.Path(os.environ.get('HYPRUNE_NESTED_STATE_ROOT',str(HERE/'.instances'/ident)))
     root.mkdir(parents=True,exist_ok=True)
