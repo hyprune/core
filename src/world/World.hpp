@@ -82,6 +82,9 @@ struct World {
     std::vector<Image> images;
     std::vector<Sampler> samplers;
     std::vector<unsigned> collisionNodes;
+    // Node owns collision in its subtree: the only geometry a gesture or tool may move
+    // (its collision moves with it). Everything else in a package is static.
+    std::vector<bool> ownsCollision;
     std::vector<int> nodeParents;
     std::map<std::string, unsigned> objectNodes;
     Json manifest, map = nullptr, places = Json::array();
@@ -94,6 +97,9 @@ struct World {
 };
 std::filesystem::path safePath(const std::filesystem::path &root, const std::string &path);
 std::shared_ptr<World> load(const std::filesystem::path &package, LoadOptions = {});
+// Marks ownsCollision from collisionNodes and nodeParents (load calls it).
+void markCollisionOwners(World &);
+bool movableNode(const World &, unsigned node);
 // How materials sample each image: colour (sRGB base/emissive) and/or data
 // (normal, metal/rough, occlusion, lightmap). Shared by budget and uploader.
 struct ImageUse {

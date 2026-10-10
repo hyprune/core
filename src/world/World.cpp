@@ -52,6 +52,13 @@ std::filesystem::path safePath(const std::filesystem::path &root, const std::str
     checkFile(out);
     return out;
 }
+void markCollisionOwners(World &w) {
+    w.ownsCollision.assign(w.nodeParents.size(), false);
+    for (auto node : std::set<unsigned>(w.collisionNodes.begin(), w.collisionNodes.end()))
+        for (int i = int(node); i >= 0 && size_t(i) < w.nodeParents.size() && !w.ownsCollision[i]; i = w.nodeParents[i])
+            w.ownsCollision[i] = true;
+}
+bool movableNode(const World &w, unsigned node) { return node < w.ownsCollision.size() && w.ownsCollision[node]; }
 const Spawn &World::spawn(const std::string &id) const {
     for (auto &s : spawns)
         if (s.id == (id.empty() ? defaultSpawn : id))
@@ -657,6 +664,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions optio
             result->visualTriangles.push_back(
                 {mesh.vertices[i].position, mesh.vertices[i + 1].position, mesh.vertices[i + 2].position});
     result->visualIndex.rebuild(result->visualTriangles);
+    markCollisionOwners(*result);
     return result;
 }
 } // namespace hyprune::world

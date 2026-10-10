@@ -126,6 +126,7 @@ struct Runtime {
     std::optional<interaction::WorldHit> worldHit();
     void saveEditor();
     std::optional<std::pair<std::string, interaction::WorldHit>> objectAim();
+    std::optional<std::pair<std::string, interaction::WorldHit>> meshAim();
     std::vector<Triangle> originalCollision;
     std::map<unsigned, Mat4> objectModels;
     interaction::Transform selectedTransform, dragStart;
@@ -2494,7 +2495,18 @@ void Runtime::saveEditor() {
     interaction::atomicJSON(editorFile, value);
     lastEditor = value;
 }
+// Only geometry that owns its collision may be selected, carried or transformed; a static
+// mesh in front blocks the aim. World package geometry is otherwise static.
 std::optional<std::pair<std::string, interaction::WorldHit>> Runtime::objectAim() {
+    auto hit = meshAim();
+    if (!hit)
+        return {};
+    auto node = editorNode(*world, hit->first);
+    if (!node || !world::movableNode(*world, *node))
+        return {};
+    return hit;
+}
+std::optional<std::pair<std::string, interaction::WorldHit>> Runtime::meshAim() {
     if (!world)
         return {};
     std::optional<std::pair<std::string, interaction::WorldHit>> result;
@@ -2522,7 +2534,7 @@ std::optional<std::pair<std::string, interaction::WorldHit>> Runtime::objectAim(
 std::optional<interaction::WorldHit> Runtime::worldHit() {
     if (!world)
         return {};
-    auto mesh = objectAim();
+    auto mesh = meshAim();
     auto collision = interaction::raycast(pointerCamera().position, pointerRay(), world->collision, &world->collisionIndex);
     if (mesh && (!collision || mesh->second.distance < collision->distance))
         return mesh->second;
@@ -2964,6 +2976,26 @@ void Runtime::toolsTick() {
             else if (editor.objects.size() < 128)
                 editor.objects.push_back(next);
         }
+    }
+    // Persisted moves of static geometry (from before this rule) are dropped, not applied.
+    Json kept = Json::array();
+    for (auto &o : editor.objects) {
+        auto node = o["worldId"] == world->id ? editorNode(*world, o["objectId"]) : std::optional<unsigned>{0};
+        if (o["worldId"] != world->id || (node && world::movableNode(*world, *node)))
+            kept.push_back(o);
+    }
+    if (editor.kind == "object") {
+        auto node = editorNode(*world, editor.selected);
+        if (!node || !world::movableNode(*world, *node)) {
+            editor.selected.clear();
+            editor.kind.clear();
+            editor.activeHandle = -1;
+            objectCarry = false;
+        }
+    }
+    if (kept.size() != editor.objects.size()) {
+        editor.objects = std::move(kept);
+        saveEditor();
     }
     renderer.transforms.clear();
     for (auto &o : editor.objects)
@@ -4126,6 +4158,13 @@ int luaCamera(lua_State *state) {
              {"workspaceId", e.instance.workspaceId},
              {"pixels", {e.surface.pixelWidth, e.surface.pixelHeight}},
              {"position", {e.surface.center.x, e.surface.center.y, e.surface.center.z}}});
+    // Static-geometry regression evidence: moved nodes and a collision checksum.
+    double collisionSum = 0;
+    if (runtime->world)
+        for (auto &t : runtime->world->collision)
+            collisionSum += t.a.x + t.a.y * 3 + t.a.z * 7 + t.b.x + t.c.z;
+    j["objectTransforms"] = runtime->renderer.transforms.size();
+    j["collisionChecksum"] = collisionSum;
     j["workspaceFrames"] = Json::array();
     for (auto &f : runtime->capture.workspaces)
         j["workspaceFrames"].push_back({{"id", f.surface.id},

@@ -69,6 +69,8 @@ def run(args):
         STATE=HERE/'.perf-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if getattr(args,'autodrive',False):
         STATE=HERE/'.autodrive-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+    if getattr(args,'static_world',False):
+        STATE=HERE/'.static-world-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if not hasattr(args,'authoring'): args.authoring=False
     if args.authoring: args.m3b=True
     if not hasattr(args,'climbing'): args.climbing=False
@@ -167,6 +169,9 @@ def run(args):
     if getattr(args,'autodrive',False):
         from autodrive import prepare
         prepare(installed)
+    if getattr(args,'static_world',False):
+        from static_world import prepare
+        prepare(installed)
     grants=[{'token':token,'client':'org.hyprune.nested','capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}]
     if args.m1 or args.integration or args.m2 or args.m3a or args.m3b or getattr(args,'perf',False):grants[0]['capabilities']+=['shell.control','data.publish']
     if args.authoring: grants[0]['capabilities'].append('camera.author')
@@ -227,8 +232,12 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,"0.16" if getattr(args,"upscaler",False) else "0.15" if getattr(args,"perf",False) or getattr(args,"autodrive",False) or getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) or getattr(args,"workspace_homes",False) or getattr(args,"long_titles",False) or getattr(args,"watermark",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.16" if getattr(args,"upscaler",False) else "0.15" if getattr(args,"perf",False) or getattr(args,"autodrive",False) or getattr(args,"static_world",False) or getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) or getattr(args,"workspace_homes",False) or getattr(args,"long_titles",False) or getattr(args,"watermark",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
+        if getattr(args,"static_world",False):
+            from static_world import acceptance
+            acceptance(client,children,args,shell_token,socketpath)
+            return
         if getattr(args,"autodrive",False):
             from autodrive import acceptance
             acceptance(client,children,args,shell_token,socketpath)
@@ -510,6 +519,6 @@ def m1(client):
     print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--ipc-warp',action='store_true');parser.add_argument('--perf',action='store_true');parser.add_argument('--upscaler',action='store_true');parser.add_argument('--autodrive',action='store_true');parser.add_argument('--playable',action='store_true');parser.add_argument('--workspace-homes',action='store_true');parser.add_argument('--long-titles',action='store_true');parser.add_argument('--placement',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--watermark',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--ipc-warp',action='store_true');parser.add_argument('--perf',action='store_true');parser.add_argument('--upscaler',action='store_true');parser.add_argument('--autodrive',action='store_true');parser.add_argument('--static-world',action='store_true');parser.add_argument('--playable',action='store_true');parser.add_argument('--workspace-homes',action='store_true');parser.add_argument('--long-titles',action='store_true');parser.add_argument('--placement',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--watermark',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
     try:run(args)
     except KeyboardInterrupt:print("Nested session stopped.",flush=True)
