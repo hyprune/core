@@ -203,3 +203,20 @@ tests cannot show hardware-cursor or real-DRM presentation behaviour:
   world is active: no freeze or crash; walking still works afterwards.
 - [ ] Walls with windows (e.g. a terminal on the Sun Court wall) read as crisp up close as
   on the desktop; moving across the court does not shimmer.
+
+## Player settings, view bob, reticle (IPC 0.19)
+
+The reticle is now its own small pass at the end of `present()` (scissored, blend and
+scissor state restored, no cursor/focus/workspace calls); the bob is a view-only offset.
+Nested uses a software cursor and a headless output, so check on the real monitor:
+
+- [ ] The reticle is crisp at your monitor scale (no blur, no shimmer while turning) in
+  every style (Settings, Reticle); the outline keeps it visible on sky and on white windows.
+- [ ] Walk in Lumen Reach: a subtle bob, calm when running (Shift), gone in flight, while
+  climbing and with Reduced motion; stopping never snaps. Try Settings, Movement: off /
+  subtle / normal, FOV 50-120, walk and run speeds apply immediately.
+- [ ] Tool 5 / Super on windows near and far: green with corner brackets only within reach,
+  dim with a distance below beyond it (and the click does nothing but a notice), an x on
+  an occupied spot. The hardware cursor never appears or flickers while the reticle changes.
+- [ ] E into a window and back, Super+Tab free cursor and back: the reticle hides and returns
+  with no cursor flicker.

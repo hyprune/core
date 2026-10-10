@@ -1258,3 +1258,48 @@ the dGPU at the 50 W profile cap. `dev/nested/offload_policy.py` checks this
 for whatever supply the machine is on. The shell vendors 0.18 and shows the
 Automatic/Custom cap and the offload GPU on the Performance page
 (shell `576994e`).
+
+## IPC 0.19: player settings, view bob, reticle (2026-10-10)
+
+Schema `f76922b` (on top of 0.18 `53c86f4`), docs RFC-0006 amendment, SDK types; shell
+Settings → Movement / Reticle. Everything in 0.18 is inherited unchanged.
+
+- **`player.get`** (`state.read`, params `{}`) and **`player.set {patch}`**
+  (`movement.control`) return `playerSettings {config, defaults, overrides, options,
+  ranges, path, error}`. `config` holds 14 keys: `walk_speed` 4 (0.5–20 m/s),
+  `run_speed` 10 (0.5–30, Shift), `view_bob` off/subtle/normal (subtle; always off with
+  reduced motion), `reticle_style` cross_dot/t_dot/circle_dot/dot/cross/chevron,
+  `reticle_size` 18 / `reticle_thickness` 2 / `reticle_gap` 4 (logical px),
+  `reticle_opacity` 0.9, `reticle_outline` true, `reticle_colour` "theme" or RGB,
+  `reticle_dynamic` true, `reach_grab` 15 / `reach_mount` 8 / `reach_placement` 12 (m).
+  Patches are atomic (an invalid value rejects all with -32602), live, and persisted as
+  overrides in `player.json` (`$HYPRUNE_PLAYER_FILE`). `null` removes an override.
+  `overrides` is `playerOverrides`: same keys, never null, may be empty. Overrides win
+  over Lua `hl.plugin.hyprune.config{player=...}`; Lua still accepts the old
+  `run_multiplier` as run = walk × multiplier.
+- **`graphics.fov`** is 30–120, default 65 (was 30–110, 60). For older sessions the
+  response clamps fov to 110, and a patch above 110 is invalid ("setting requires IPC 0.19").
+- **`overlayStyle`** gains `reticleColor`, `validColor`, `invalidColor` (RGB). The shell
+  sends them from the HUD concept (foreground, positive, warning). Older sessions don't
+  see them and can't send them.
+- **`state.interaction.reticle {state, action}`**:
+  - `state`: hidden, neutral, typing, target, valid, out_of_range, invalid or holding.
+  - `action`: "", click, grab, pocket, place, mount, select, path or drop.
+  - It is published when either value changes, and stripped for sessions below 0.19.
+  - Core draws the reticle itself: crisp, native resolution, in the final present pass.
+    Each state changes shape as well as colour. Valid has corner brackets and the valid
+    colour. Out of range is dimmed, with a hollow centre and an "N m" hint. Invalid is an
+    x in the invalid colour. Holding has brackets. Target has a tighter gap.
+- **Reach is enforced:**
+  - Super+button gestures beyond `reach_grab` do nothing.
+  - These are refused with `runtime.notice` code `placement.out_of_range` ("Too far: 8.2 m
+    (reach 1 m)"): tool 5 surface placement and pocket, tool 2 wall mount, and tool 3 path
+    points beyond `reach_placement`.
+  - Tool-mount snaps beyond `reach_mount` don't snap. This was a hard-coded 8 m before.
+- **No wire shape:** the walking view bob (docs/VIEW-BOB.md). Walking runs at
+  `run_speed` with Shift, and the walker substeps by distance so a fast run can't tunnel.
+  Diagnostics (`hl.plugin.hyprune.camera()`) add `reticle`, `viewBob` and `motion`.
+- **Tests:** CTest `player` (settings, ranges, alias, view bob) and `ipc` (0.19 floor,
+  reticle projection). `dev/nested/run.sh --reticle` reaches every reticle state and
+  checks each reach limit, player.set persistence, live speeds and the bob: 47 checks at
+  1080p, 54 with the screenshot pass at 4K. Evidence: `docs/evidence/reticle.json`.

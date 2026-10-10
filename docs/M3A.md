@@ -38,10 +38,10 @@ amendments and [SDK/shell handoff](CHANGES-FOR-SDK-AND-SHELL.md).
 hl.plugin.hyprune.config({
   input = { typing_button = 275, typing_cursor = true,
             bindings = { focus = "f", fly = "F4", noclip = "v" } },
-  player = { walk_speed = 3.5, fly_speed = 5, step_height = 0.35 },
+  player = { walk_speed = 4, run_speed = 10, fly_speed = 5, step_height = 0.35, view_bob = "subtle" },
   windows = { spawn_distance = 5, scale = 0.002 },
   tools = { enabled = true, slots = {"pointer", "mount", "path", "path", "path"} },
-  graphics = { quality = "auto", fov = 60, reduced_motion = false },
+  graphics = { quality = "auto", fov = 65, reduced_motion = false },
 })
 ```
 
@@ -70,15 +70,30 @@ core-owned controls. Keys in `input.bindings` are XKB symbol names.
 | input.bindings.noclip | v | XKB symbol for noclip toggle |
 | input.bindings.fly | F4 | XKB symbol for walk/flight toggle |
 | input.bindings.zoom | c | XKB symbol for held view zoom |
-| player.walk_speed | 3.5 | 0.1–20 metres/second |
+| player.walk_speed | 4 | 0.5–20 metres/second (IPC 0.19 player setting) |
+| player.run_speed | 10 | 0.5–30 metres/second with Shift; flight scales by run/walk (IPC 0.19). The old `run_multiplier` is still accepted from Lua as run = walk × multiplier |
 | player.fly_speed | 5 | 0.1–20 metres/second |
-| player.run_multiplier | 1.8 | 1–4, Shift speed multiplier |
 | player.jump_speed | 5 | 0–15 metres/second initial jump speed |
 | player.look_sensitivity | 0.0025 | 0.00001–0.05 radians/pointer count |
 | player.look_inertia | 0.03 | 0–1 seconds exponential look easing; 0 immediate |
 | player.move_inertia | 0.05 | 0–1 seconds exponential movement easing; 0 immediate |
 | player.step_height | 0.35 | 0–0.5 metres; 0 disables discrete step-up |
 | player.respawn_below | 30 | 0–100 metres below spawn eye; 0 disables |
+| player.view_bob | subtle | off/subtle/normal walking bob (docs/VIEW-BOB.md); always off with reduced motion |
+| player.reticle_style | cross_dot | cross_dot/t_dot/circle_dot/dot/cross/chevron |
+| player.reticle_size / _thickness / _gap | 18 / 2 / 4 | logical px: 6–64 / 1–6 / 0–20 |
+| player.reticle_opacity | 0.9 | 0.2–1 |
+| player.reticle_outline | true | Boolean; dark 1 px contrast outline |
+| player.reticle_colour | theme | "theme" (the shell's HUD colour) or {r,g,b} 0–1 |
+| player.reticle_dynamic | true | Boolean; opens while moving/turning; off with reduced motion |
+| player.reach_grab | 15 | 1–100 m; Super+button window gestures |
+| player.reach_mount | 8 | 1–100 m; snapping into tool-mount frames |
+| player.reach_placement | 12 | 1–100 m; tool 5 surface placement and pocket, tool 2 wall mount, tool 3 path points |
+
+The player settings (walk/run speed, view bob, reticle, reach) are also on the wire
+from IPC 0.19 (`player.get` / `player.set`, Settings → Movement / Reticle in the shell)
+and persist in `~/.config/hyprune/player.json` (`$HYPRUNE_PLAYER_FILE`), overrides
+only; those overrides win over the Lua values.
 | windows.world_workspace | 20 | Integer 1–999999; dedicated native room, applies on next activation (was 8) |
 | windows.workspace_base | 20 | Integer 0–990000; area default home = base + workspaceSlot (0 disables), re-derived live |
 | windows.carry_face_player | true | Boolean; pickup faces the player, R toggles during a carry |
@@ -90,10 +105,10 @@ core-owned controls. Keys in `input.bindings` are XKB symbol names.
 | tools.enabled | true | Boolean; false releases 1–5 to ordinary navigation policy |
 | tools.slots | pointer,mount,path,path,path | Exactly five pointer/mount/path IDs; path is an M3B stub |
 | graphics.quality | auto | auto/high/intel; safe deferred resource preparation when changed |
-| graphics.fov | 60 | 30–110 vertical degrees |
+| graphics.fov | 65 | 30–120 vertical degrees (110 before IPC 0.19) |
 | graphics.exposure | 1 | 0.01–16 world radiance override once explicitly set; otherwise authored atmosphere wins; app pixels bypass it |
 | graphics.bloom_strength | 0.15 | 0–4 world bloom override once explicitly set; otherwise authored atmosphere wins; app pixels bypass it |
-| graphics.reduced_motion | false | Boolean; instant fullscreen and focus handovers |
+| graphics.reduced_motion | false | Boolean; instant fullscreen and focus handovers; no view bob or reticle spread |
 
 ## Supervised live test checklist
 
