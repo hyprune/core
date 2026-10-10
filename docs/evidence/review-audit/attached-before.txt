@@ -1,25 +1,25 @@
-/home/rick/workspace/hyprune/core/tests/fixtures/atrium
-/home/rick/workspace/hyprune/core/tests/fixtures/materials
-/home/rick/workspace/hyprune/core/tests/fixtures/m2
-/home/rick/workspace/hyprune/core/tests/fixtures/atrium
-/home/rick/workspace/hyprune/core/tests/fixtures/materials
-/home/rick/workspace/hyprune/core/tests/fixtures/m2
+$WORKSPACE/core/tests/fixtures/atrium
+$WORKSPACE/core/tests/fixtures/materials
+$WORKSPACE/core/tests/fixtures/m2
+$WORKSPACE/core/tests/fixtures/atrium
+$WORKSPACE/core/tests/fixtures/materials
+$WORKSPACE/core/tests/fixtures/m2
 load: ok
 hello: 0.8 ['session.hello', 'session.ping', 'state.subscribe', 'state.snapshot', 'state.unsubscribe', 'atmosphere.get', 'atmosphere.set', 'autodrive.start', 'autodrive.stop', 'camera.fov', 'camera.get', 'camera.set', 'data.object.bind', 'data.publish', 'data.remove', 'graphics.get', 'graphics.set', 'input.capture', 'input.capture.cancel', 'input.get', 'input.preview', 'input.set', 'movement.set', 'overlay.style', 'placements.list', 'placements.remove', 'route.clear', 'route.set', 'runtime.exit', 'shell.bind', 'shell.claim', 'shell.overlay', 'shell.release', 'surface.focus', 'surface.place', 'surface.pull', 'surface.return', 'surfaces.recall', 'travel.cancel', 'travel.start', 'ui.close', 'ui.open', 'waypoint.clear', 'waypoint.set', 'workspace.activate', 'workspace.bind', 'workspace.focus', 'workspace.unfocus', 'world.load']
 PASS audit: X11_transient_owner_beats_other_focus
 dialog size [1600, 900]
 PASS audit: attached_dialog_keeps_requested_size
 Traceback (most recent call last):
-  File "/home/rick/workspace/hyprune/core/dev/nested/review_audit.py", line 69, in <module>
+  File "$WORKSPACE/core/dev/nested/review_audit.py", line 69, in <module>
     s.run(argparse.Namespace(integration=False,m3b=True,m3a=False,m2=False,m1=False,live=False,serve=False,record=False,visible=False))
     ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/rick/workspace/hyprune/core/dev/nested/session.py", line 163, in run
+  File "$WORKSPACE/core/dev/nested/session.py", line 163, in run
     acceptance(client,children,args,shell_token,socketpath)
     ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/rick/workspace/hyprune/core/dev/nested/review_audit.py", line 39, in acceptance
+  File "$WORKSPACE/core/dev/nested/review_audit.py", line 39, in acceptance
     check('attached_windows_skip_root_placement',not any(v['surfaceId'] in [menu['id'],dialog['id']] for v in s.camera()['instances']))
     ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/rick/workspace/hyprune/core/dev/nested/review_audit.py", line 18, in check
+  File "$WORKSPACE/core/dev/nested/review_audit.py", line 18, in check
     assert value,name;results[name]=True;print('PASS audit:',name,flush=True)
            ^^^^^
 AssertionError: attached_windows_skip_root_placement

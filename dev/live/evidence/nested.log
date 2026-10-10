@@ -3,8 +3,8 @@ PASS live: fixture_HUD_and_main_running
 PASS live: preflight_ABI_and_plan
 PASS live: preflight_read_only
 UP: efb50993780079460b0cbed1363e2166a2de1d9f_1791458071_1730299214 Lumen Reach; toggle SUPER + SHIFT + F10 
-Recovery state: /home/rick/workspace/hyprune/core/dev/nested/.state/live/state.json 
-Logs: /home/rick/workspace/hyprune/core/dev/nested/.state/live
+Recovery state: $WORKSPACE/core/dev/nested/.state/live/state.json 
+Logs: $WORKSPACE/core/dev/nested/.state/live
 
 PASS live: exact_old_path_recorded
 PASS live: old_HUD_stopped_main_preserved
@@ -19,8 +19,8 @@ DOWN: core stopped, runtime bind removed, old plugin/HUD restored; cursor reset 
 
 PASS live: healthy_down
 UP: efb50993780079460b0cbed1363e2166a2de1d9f_1791458071_1730299214 Lumen Reach; toggle SUPER + SHIFT + F10 
-Recovery state: /home/rick/workspace/hyprune/core/dev/nested/.state/live/state.json 
-Logs: /home/rick/workspace/hyprune/core/dev/nested/.state/live
+Recovery state: $WORKSPACE/core/dev/nested/.state/live/state.json 
+Logs: $WORKSPACE/core/dev/nested/.state/live
 
 PASS live: second_up_unique_core_path
 DOWN: core stopped, runtime bind removed, old plugin/HUD restored; cursor reset was deferred.

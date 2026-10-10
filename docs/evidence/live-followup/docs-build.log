@@ -5,7 +5,7 @@ npm notice run astro build
 15:30:46 [types] Generated 343ms
 15:30:46 [build] output: "static"
 15:30:46 [build] mode: "static"
-15:30:46 [build] directory: /home/rick/workspace/hyprune/docs/dist/
+15:30:46 [build] directory: $WORKSPACE/docs/dist/
 15:30:46 [build] Collecting build info...
 15:30:46 [build] ✓ Completed in 437ms.
 15:30:46 [build] Building static entrypoints...

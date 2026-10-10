@@ -143,7 +143,7 @@
     "treeHashAlgorithm": "sorted relative UTF-8 path + NUL + raw file SHA-256 digest"
   },
   "video": {
-    "path": "/home/rick/workspace/rick-the-alien/worldshell-gallery/videos/hyprune-first-session.mp4",
+    "path": "$HYPRUNE_VIDEO_DIR/hyprune-first-session.mp4",
     "durationSeconds": 61.433333,
     "bytes": 22226000,
     "codec": "h264",
@@ -160,7 +160,7 @@
     ],
     "sha256": "f142f47bf75398f89d91b61a0a5d4549f2f9d9c8bde2f498fe4e3ef2f2746d05",
     "framesReviewed": true,
-    "metadataPath": "/home/rick/workspace/rick-the-alien/worldshell-gallery/videos/hyprune-first-session.json"
+    "metadataPath": "$HYPRUNE_VIDEO_DIR/hyprune-first-session.json"
   },
   "commits": {
     "schema": "4facaa1a66d01986e0d469762e9f93ac48858892",

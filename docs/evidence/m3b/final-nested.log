@@ -1,9 +1,9 @@
-/home/rick/workspace/hyprune/core/tests/fixtures/atrium
-/home/rick/workspace/hyprune/core/tests/fixtures/materials
-/home/rick/workspace/hyprune/core/tests/fixtures/m2
-/home/rick/workspace/hyprune/core/tests/fixtures/atrium
-/home/rick/workspace/hyprune/core/tests/fixtures/materials
-/home/rick/workspace/hyprune/core/tests/fixtures/m2
+$WORKSPACE/core/tests/fixtures/atrium
+$WORKSPACE/core/tests/fixtures/materials
+$WORKSPACE/core/tests/fixtures/m2
+$WORKSPACE/core/tests/fixtures/atrium
+$WORKSPACE/core/tests/fixtures/materials
+$WORKSPACE/core/tests/fixtures/m2
 load: ok
 hello: 0.6 ['session.hello', 'session.ping', 'state.subscribe', 'state.snapshot', 'state.unsubscribe', 'atmosphere.get', 'atmosphere.set', 'autodrive.start', 'autodrive.stop', 'camera.fov', 'camera.get', 'camera.set', 'data.object.bind', 'data.publish', 'data.remove', 'input.capture', 'input.capture.cancel', 'input.get', 'input.preview', 'input.set', 'movement.set', 'placements.list', 'placements.remove', 'route.clear', 'route.set', 'runtime.exit', 'shell.bind', 'shell.claim', 'shell.overlay', 'shell.release', 'surface.focus', 'surface.place', 'surface.pull', 'surface.return', 'surfaces.recall', 'travel.cancel', 'travel.start', 'ui.close', 'ui.open', 'waypoint.clear', 'waypoint.set', 'workspace.activate', 'workspace.bind', 'workspace.focus', 'workspace.unfocus', 'world.load']
 PASS M3B: steal_inactive_restore

@@ -103,7 +103,7 @@
     ]
   },
   "overrides": {},
-  "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/graphics.json",
+  "path": "$WORKSPACE/core/dev/nested/.m3b-state/graphics.json",
   "presets": {
     "high": {
       "alpha_haze": true,

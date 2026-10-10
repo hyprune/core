@@ -3,7 +3,7 @@
 12:35:22 [types] Generated 382ms
 12:35:22 [build] output: "static"
 12:35:22 [build] mode: "static"
-12:35:22 [build] directory: /home/rick/workspace/hyprune/docs/dist/
+12:35:22 [build] directory: $WORKSPACE/docs/dist/
 12:35:22 [build] Collecting build info...
 12:35:22 [build] ✓ Completed in 477ms.
 12:35:22 [build] Building static entrypoints...

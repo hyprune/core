@@ -63,7 +63,7 @@
     }
   ],
   "format": {
-    "filename": "/home/rick/workspace/rick-the-alien/worldshell-gallery/videos/hyprune-core-m2.mp4",
+    "filename": "$HYPRUNE_VIDEO_DIR/hyprune-core-m2.mp4",
     "nb_streams": 1,
     "nb_programs": 0,
     "nb_stream_groups": 0,

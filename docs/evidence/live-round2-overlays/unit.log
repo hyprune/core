@@ -1,4 +1,4 @@
-Test project /home/rick/workspace/hyprune/core-round2-overlays/build
+Test project $WORKSPACE/core-round2-overlays/build
     Start 1: render
 1/8 Test #1: render ...........................   Passed    2.99 sec
     Start 2: ipc
