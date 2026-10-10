@@ -1152,3 +1152,26 @@ peers get invalid-params for writing it. Schema `1ae2ed1`, docs `cea6441`
 (RFC-0008 amendment), SDK `0cf79a4`, shell (Graphics settings Upscaler row,
 `supportsProtocol(16)`). Nested `dev/nested/run.sh --upscaler`: 12 checks,
 wire-audited, including a 0.15 session.
+
+## IPC 0.17: capture notes (2026-10-10)
+
+`capture.taken {captureId, timestampMs, mode}` goes to 0.17 peers holding
+`shell.control` (and a state subscription) the moment U (or a mode's capture
+binding) snapshots the world, before the PNG/JSON are written. `mode` is the input
+mode at capture (`world`, `interactive`, `focus`, `cursor`, `menu`).
+`capture.annotate {captureId, note}` (shell.control) queues the note behind that
+capture's own write: it sets `note` and `noteTimeMs` in `capture-<ms>.json` (latest
+note wins), appends `{timestampMs, noteTimeMs, capture, screenshot, note}` to
+`captures/index.jsonl` and, for a non-empty note, a line to `captures/notes.md`.
+Notes are 0..1000 code points of UTF-8 without control characters; only captures
+taken during this plugin load are accepted (-32005 otherwise). Rapid captures
+queue (at most four snapshots waiting) instead of failing while a PNG is written;
+writes and notes stay in order. Older protocols see neither message.
+
+Shell: on `capture.taken` with mode `world` (not while the Director is open) it
+grabs exclusive input like the Director and shows a one-line prompt in a
+`hyprune-director` layer. Enter annotates (empty allowed) and releases the grab with
+`shell.overlay` hidden (autodrive/travel continue); core's Escape (menu exit) closes
+it with no note; the capture binding in the prompt (Super+U) saves the pending text
+as-is and moves the prompt to the new capture. Captures taken while typing in an
+app, in focus or in the free cursor do not prompt.

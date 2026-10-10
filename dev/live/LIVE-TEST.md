@@ -145,3 +145,24 @@ frame. No cursor/focus/workspace calls were added. Supervised checks:
   rendering) and closing it returns to idle.
 - [ ] Optional: `HYPRUNE_CONTINUOUS_RENDER=1` restores per-tick frames if
   anything above fails; `HYPRUNE_UPSCALER=fsr1` tries the FSR 1 upscaler.
+
+## Capture notes (IPC 0.17)
+
+U saves the capture immediately; a 0.17 shell then shows a one-line "Why?" prompt
+holding exclusive keyboard input, like the Director. Core adds no cursor, focus or
+workspace calls of its own: the prompt reuses the Director's deferred keyboard
+focus and menu-mode cursor path. Nested runs use a software cursor, so check the
+hardware cursor here:
+
+- [ ] Walking in Lumen Reach, press U: the prompt appears at the bottom; no crash,
+  no flicker. Note what the hardware cursor does while the prompt is open (menu
+  mode, like the Director) and that it is gone again after Enter.
+- [ ] Type a note including w/a/s/d and space: the world does not move. Enter: the
+  reticle is back and W walks immediately (no lost or stuck keys).
+- [ ] U, type, Esc: the prompt closes and nothing is written; walking resumes.
+- [ ] U, type, Super+U, type, Enter: two captures, both notes in
+  `~/.local/state/hyprune/captures/notes.md` in order.
+- [ ] Super+U while typing in a window (E), in F focus and in the free cursor:
+  capture only, no prompt, the mode is unchanged.
+- [ ] Hold Tab while the prompt is open: the Director replaces it (typed text is
+  kept as the note); Esc closes the Director as usual.

@@ -197,6 +197,14 @@ void Server::notify(const std::string &event, Json params, const std::string &ac
         params["sessionId"] = session_;
         params["revision"] = revision_;
     }
+    if (event == "capture.taken") {
+        // Debug capture IDs are shell business: 0.17 shells only, never older protocols.
+        for (auto &p : peers_)
+            if (p.hello && !p.closing && protocol::atLeast(p.protocol, "0.17") && p.grants.contains("shell.control") &&
+                p.grants.contains("state.read") && !p.subscription.empty())
+                queue(p, {{"jsonrpc", "2.0"}, {"method", event}, {"params", params}});
+        return;
+    }
     const bool hud = event.starts_with("hud.") || event.starts_with("zone.") || event == "tool.changed";
     if (hud || event == "ui.hud.cycle") {
         for (auto &p : peers_) {
@@ -390,6 +398,8 @@ void Server::frame(Peer &p, const std::string &bytes) {
                         events.push_back(event);
                 if (protocol::atLeast(p.protocol, "0.6"))
                     events.push_back("runtime.notice");
+                if (protocol::atLeast(p.protocol, "0.17") && p.grants.contains("shell.control"))
+                    events.push_back("capture.taken");
             }
             result = {{"protocol", p.protocol},
                       {"sessionId", session_},

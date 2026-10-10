@@ -1,6 +1,7 @@
 #include "control/Control.hpp"
 #include "interaction/Config.hpp"
 #include "interaction/Content.hpp"
+#include "interaction/CaptureNotes.hpp"
 #include "interaction/Hands.hpp"
 #include "interaction/InputFile.hpp"
 #ifdef HYPRUNE_LIVE_BUILD
@@ -103,7 +104,11 @@ struct Runtime {
     unsigned modifiers = 0;
     bool debug = false, lookHeld = false, capturePending = false;
     std::filesystem::path captureDirectory;
-    std::future<std::string> captureWrite;
+    // Capture writes and their notes, one at a time in order; at most four snapshots wait.
+    interaction::SerialJobs captureJobs;
+    std::shared_ptr<std::atomic<int>> captureSnapshots = std::make_shared<std::atomic<int>>(0);
+    int64_t lastCaptureStamp = 0;
+    std::deque<std::string> captureIds; // this plugin load's captures, newest last (bounded)
     std::string relativeSurface;
     float localX = .5f, localY = .5f;
     std::string inputMode() const;
@@ -2062,8 +2067,8 @@ void Runtime::leaveInteraction() {
 void Runtime::debugCapture() {
     if (renderDepth)
         throw std::runtime_error("capture inside render pass");
-    if (captureWrite.valid())
-        throw ipc::Error(-32004, "capture is still being written");
+    if (*captureSnapshots >= 4)
+        throw ipc::Error(-32004, "capture queue full; still writing earlier captures");
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
     if (!renderer.completed()) {
         renderer.captureRequested = true;
@@ -2074,8 +2079,12 @@ void Runtime::debugCapture() {
     renderer.captureRequested = false;
     auto pixels = renderer.snapshot();
     auto now = std::chrono::system_clock::now();
-    auto stamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    auto path = captureDirectory / ("capture-" + std::to_string(stamp) + ".json");
+    int64_t stamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    stamp = std::max(stamp, lastCaptureStamp + 1); // unique IDs for rapid captures
+    lastCaptureStamp = stamp;
+    const auto captureId = "capture-" + std::to_string(stamp);
+    auto path = captureDirectory / (captureId + ".json");
+    const auto captureMode = inputMode();
     Json surfaces = Json::array();
     for (auto &e : capture.entries)
         surfaces.push_back({{"id", e.surface.id},
@@ -2124,8 +2133,10 @@ void Runtime::debugCapture() {
     value["screenshot"] = image.string();
     value["frame"]["worldId"] = pixels.worldId;
     bool watermark = config["capture"]["watermark"].get<bool>();
-    captureWrite = std::async(std::launch::async, [path, image, watermark, value = std::move(value),
-                                                   pixels = std::move(pixels)]() mutable {
+    ++*captureSnapshots;
+    captureJobs.push([path, image, watermark, value = std::move(value), pixels = std::move(pixels),
+                      waiting = captureSnapshots]() mutable -> std::string {
+            struct Release { std::shared_ptr<std::atomic<int>> n; ~Release() { --*n; } } release{waiting};
             // Writer thread, off the render pass: the optional brand mark touches only these pixels.
             render::WatermarkResult mark;
             if (watermark) {
@@ -2145,8 +2156,13 @@ void Runtime::debugCapture() {
             value["frame"]["pngWriteMs"] =
                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
             interaction::atomicJSON(path, value, 4 * 1048576);
-            return path.string();
+            return "Saved JSON + PNG: " + path.string();
         });
+    captureIds.push_back(captureId);
+    while (captureIds.size() > 512)
+        captureIds.pop_front();
+    // IPC 0.17 shells offer a note prompt; the capture never waits for it.
+    ipc->notify("capture.taken", {{"captureId", captureId}, {"timestampMs", stamp}, {"mode", captureMode}});
 }
 namespace {
 interaction::Transform objectTransform(const interaction::Tools &, const world::World &, const std::string &);
@@ -3032,6 +3048,28 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     params.erase("_pid");
     params.erase("_protocol");
     if (method == "replay.start" && control.photoHeld()) throw ipc::Error(-32005,"release photo camera before replay");
+    if (method == "capture.annotate") {
+        if (params.size() != 2 || !params.contains("captureId") || !params.contains("note") ||
+            !params["captureId"].is_string())
+            throw ipc::Error(-32602, "captureId and note required");
+        std::string id = params["captureId"];
+        if (!interaction::validCaptureId(id) || std::find(captureIds.begin(), captureIds.end(), id) == captureIds.end())
+            throw ipc::Error(-32005, "unknown capture");
+        std::string note;
+        try {
+            note = interaction::captureNote(params["note"]);
+        } catch (const std::invalid_argument &e) {
+            throw ipc::Error(-32602, e.what());
+        }
+        auto noteTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::system_clock::now().time_since_epoch()).count();
+        // Queued behind that capture's own write: the note never races its file.
+        captureJobs.push([dir = captureDirectory, id, note, noteTime] {
+            interaction::annotateCapture(dir, id, note, noteTime);
+            return std::string();
+        });
+        return Json{{"revision", ipc->revision()}};
+    }
     if (method.starts_with("recording.") || method.starts_with("replay.")) return sessionMethod(method, params);
     if (method == "_renderer.channel") {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
@@ -3474,14 +3512,11 @@ void Runtime::tick() {
         if (renderer.completed())
             debugCapture();
     }
-    if (captureWrite.valid() && captureWrite.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-        try {
-            auto path = captureWrite.get();
-            ipc->notify("runtime.notice",
-                        {{"level", "info"}, {"code", "capture.saved"}, {"message", "Saved JSON + PNG: " + path}});
-        } catch (const std::exception &e) {
-            ipc->notify("runtime.notice", {{"level", "warning"}, {"code", "capture.failed"}, {"message", e.what()}});
-        }
+    if (auto done = captureJobs.poll()) {
+        if (!done->error.empty())
+            ipc->notify("runtime.notice", {{"level", "warning"}, {"code", "capture.failed"}, {"message", done->error}});
+        else if (!done->result.empty())
+            ipc->notify("runtime.notice", {{"level", "info"}, {"code", "capture.saved"}, {"message", done->result}});
     }
     if (renderDepth != 0)
         throw std::runtime_error("deferred work inside compositor render pass");
@@ -4124,7 +4159,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         }
     }
     auto methods = hyprune::control::Control::methods();
-    methods.insert({{"workspace.bind", "world.control"},
+    methods.insert({{"capture.annotate", "shell.control"},
+                    {"workspace.bind", "world.control"},
                     {"workspace.focus", "surface.control"},
                     {"workspace.unfocus", "surface.control"},
                     {"surface.pull", "surface.control"},
