@@ -1,0 +1,288 @@
+#!/usr/bin/env python3
+"""Nightly regression for a headless work host. See README.md ("Nightly").
+
+  dev/remote/nightly install   copy this tooling to ~/.local/share/hyprune-nightly and enable
+                               the systemd --user timer (02:00 daily, catches up after downtime)
+  dev/remote/nightly run       one run now (what the timer starts)
+  dev/remote/nightly status    the latest result
+
+A run updates dedicated clones of core/shell/sdk/schema/worlds/hyprune (main) in
+~/hyprune-nightly. It runs core's remote runner (CTest, then every automatable nested
+suite as parallel isolated instances across the host's GPUs), the schema/sdk/shell
+tests, and the worlds build + validate targets (Blender locally: this is the bake
+host). It writes pages/nightly/<date>.json + .html and index.html into the gallery
+clone, never commits or pushes, and keeps the last 14 runs.
+"""
+import argparse, datetime, fcntl, html, json, os, pathlib, re, shutil, socket, subprocess, sys, time
+HERE = pathlib.Path(__file__).resolve().parent
+HOME = pathlib.Path.home()
+WS = pathlib.Path(os.environ.get('HYPRUNE_NIGHTLY_WS', str(HOME / 'hyprune-nightly')))
+GALLERY = pathlib.Path(os.environ.get('HYPRUNE_NIGHTLY_GALLERY', str(HOME / 'workspace/rick-the-alien/worldshell-gallery')))
+RUNS = pathlib.Path(os.environ.get('HYPRUNE_REMOTE_RUNS', str(HOME / 'hyprune-remote-runs')))
+INSTALL = HOME / '.local/share/hyprune-nightly'
+KEEP = 14
+# worlds-build is a second worlds clone: Blender builds write its dist/, while the
+# nested suites use the pinned releases the runner installs into worlds/dist.
+REPOS = {'core': 'hyprune/core', 'shell': 'hyprune/shell', 'sdk': 'hyprune/sdk', 'schema': 'hyprune/schema',
+         'worlds': 'hyprune/worlds', 'hyprune': 'hyprune/hyprune', 'worlds-build': 'hyprune/worlds'}
+# Real-session, interactive and gallery-writing modes; power-wrapped/recording scripts.
+EXCLUDED_MODES = {'live', 'serve', 'record', 'visible'}
+EXCLUDED_SCRIPTS = {'offload_acceptance.py', 'offload_menu.py', 'offload_measure.py', 'walkthrough.py'}
+
+
+def log(*a):
+    print('[nightly]', *a, file=sys.stderr, flush=True)
+
+
+def step(name, cmd, cwd, logs, env=None, timeout=3600, shell=False):
+    """Run one check; never raises. Returns a result row."""
+    logfile = logs / (re.sub(r'[^a-z0-9.-]+', '-', name.lower()) + '.log')
+    started = time.monotonic()
+    log(name)
+    try:
+        with logfile.open('w') as out:
+            code = subprocess.run(cmd, cwd=cwd, env={**os.environ, **(env or {})}, stdout=out, stderr=subprocess.STDOUT,
+                                  stdin=subprocess.DEVNULL, timeout=timeout, shell=shell).returncode
+    except subprocess.TimeoutExpired:
+        code = 124
+    except OSError as error:
+        logfile.write_text(str(error))
+        code = 127
+    tail = [l for l in logfile.read_text(errors='replace').splitlines() if l.strip()][-3:]
+    return {'name': name, 'status': 'pass' if code == 0 else 'fail', 'exitCode': code,
+            'durationS': round(time.monotonic() - started, 1), 'log': str(logfile), 'tail': tail if code else []}
+
+
+def update(logs):
+    shas = {}
+    WS.mkdir(parents=True, exist_ok=True)
+    for name, slug in REPOS.items():
+        d = WS / name
+        cmds = ([] if (d / '.git').is_dir() else [['git', 'clone', '--quiet', f'git@github.com:{slug}.git', str(d)]]) + [
+            ['git', '-C', str(d), 'fetch', '--quiet', 'origin'],
+            ['git', '-C', str(d), 'checkout', '--quiet', '--force', '-B', 'main', 'origin/main'],
+            ['git', '-C', str(d), 'clean', '-fdq']]  # untracked only: build/, node_modules/, dist/ stay
+        for cmd in cmds:
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=(logs / 'update.log').open('a'))
+        shas[name] = subprocess.check_output(['git', '-C', str(d), 'rev-parse', 'HEAD'], text=True).strip()
+    return shas
+
+
+def suites():
+    core = WS / 'core/dev/nested'
+    modes = sorted(set(re.findall(r"add_argument\('--([a-z0-9-]+)'", (core / 'session.py').read_text())) - EXCLUDED_MODES)
+    scripts = sorted(p.name for p in core.glob('*.py') if p.name not in EXCLUDED_SCRIPTS and "__main__" in (t := p.read_text())
+                     and re.search(r'\bs\.run\(argparse\.Namespace', t))
+    return ['ctest', 'smoke', *modes, *scripts]
+
+
+def make_steps(target, cwd, logs, prefix):
+    """`make TARGET` with the bake host's ssh hop replaced by local Blender. Lines after
+    a Blender build are expanded again, so paths derived from the new package resolve."""
+    rows = []
+    def lines():
+        out = subprocess.run(['make', '-n', target], cwd=cwd, capture_output=True, text=True)
+        return [l for l in out.stdout.splitlines() if l.strip()], out.returncode
+    todo, code = lines()
+    if code:
+        return [{'name': f'{prefix}: make -n {target}', 'status': 'fail', 'exitCode': code, 'durationS': 0, 'log': '', 'tail': []}]
+    i = 0
+    while i < len(todo):
+        line = todo[i]
+        blender = re.match(r'\./tools/remote-(lumen|blender)\.sh(.*)$', line)
+        if blender:
+            args = blender.group(2)
+            if blender.group(1) == 'lumen':  # remote-lumen.sh's fixed Blender command line
+                args = ' -b -t 12 --python-exit-code 1 --python lumen-reach/build.py --' + args
+            line = 'HYPRUNE_REMOTE_BLENDER=1 flock .blender.lock blender' + args
+        rows.append(step(f'{prefix}: {line[:90]}', line, cwd, logs, shell=True, timeout=7200))
+        if rows[-1]['status'] != 'pass':
+            break
+        i += 1
+        if blender:
+            fresh, _ = lines()
+            todo = todo[:i] + fresh[i:] if len(fresh) == len(todo) else todo
+    return rows
+
+
+def worlds(logs):
+    w = WS / 'worlds-build'
+    rows = [step('worlds: navmesh deps', ['make', 'navmesh-deps'], w, logs),
+            step('worlds: gltf deps', ['make', 'gltf-deps'], w, logs),
+            step('worlds: navmesh unit tests', ['make', 'navmesh-test'], w, logs)]
+    for target in ['lumen-build', 'lumen-validate', 'visibility-validate', 'build', 'validate', 'budgets', 'gltf-check']:
+        rows += make_steps(target, w, logs, f'worlds {target}')
+        if rows[-1]['status'] != 'pass' and target in ('lumen-build', 'build'):
+            log(target, 'failed; dependent targets still run and report')
+    # The published release the nested suites use: schema and core's own package check.
+    release = WS / 'worlds/dist/com.hyprune.lumen-reach'
+    version = json.loads((release / 'world.json').read_text()).get('formatVersion', '0.7') if (release / 'world.json').is_file() else '0.7'
+    rows.append(step('worlds release: schema', ['node', str(WS / 'schema/bin/validate.mjs'), 'world', str(release / 'world.json'), '-', version], w, logs))
+    rows.append(step('worlds release: hyprune-world-check', [str(WS / 'core/build/hyprune-world-check'), str(release)], w, logs))
+    return rows
+
+
+def repo_tests(logs):
+    return [step('schema: npm ci', ['npm', 'ci', '--no-audit', '--no-fund'], WS / 'schema', logs),
+            step('schema: npm test', ['npm', 'test'], WS / 'schema', logs),
+            step('sdk: npm ci', ['npm', 'ci', '--no-audit', '--no-fund'], WS / 'sdk', logs),
+            step('sdk: npm test', ['npm', 'test'], WS / 'sdk', logs),
+            step('shell: unittest', [sys.executable, '-m', 'unittest', 'discover', '-s', 'tests'], WS / 'shell', logs)]
+
+
+def page(result):
+    def badge(s): return f'<b class="{html.escape(s)}">{html.escape(s.upper())}</b>'
+    def rows(items, extra):
+        return ''.join(f'<tr><td>{html.escape(r.get("suite", r.get("name", "")))}</td><td>{badge(r["status"])}</td>'
+                       f'<td>{r.get("durationS", "")}</td><td>{html.escape(extra(r))}</td></tr>' for r in items)
+    core = result.get('core', {})
+    def core_extra(r):
+        gpu = r.get('gpu') if isinstance(r.get('gpu'), dict) else {}
+        bits = [f'{r["passLines"]} PASS' if 'passLines' in r else '', f'{r["tests"]["total"] - r["tests"]["failed"]}/{r["tests"]["total"]} tests' if r.get('tests') else '',
+                gpu.get('node', ''), r.get('failure', '')]
+        return ' · '.join(b for b in bits if b)
+    shas = ' '.join(f'{k} <code>{v[:8]}</code>' for k, v in result['shas'].items())
+    counts = result['counts']
+    return f'''<!doctype html><meta charset="utf-8"><title>Hyprune nightly {result["date"]}</title>
+<style>body{{font:14px system-ui;margin:2em;max-width:70em}}table{{border-collapse:collapse;margin:1em 0}}td,th{{padding:.2em .8em;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}}
+b.pass{{color:#147a3c}}b.fail,b.error{{color:#b3261e}}code{{font-size:12px}}</style>
+<h1>Hyprune nightly {html.escape(result["date"])} {badge(result["status"])}</h1>
+<p>{html.escape(result["host"])} · {html.escape(result["started"])} → {html.escape(result["finished"])} · {counts["pass"]} pass, {counts["fail"]} fail · <a href="index.html">all runs</a> · <a href="{html.escape(result["date"])}.json">JSON</a></p>
+<p>{shas}</p>
+<p>Artifacts on the host: <code>{html.escape(core.get("artifacts", ""))}</code>, logs <code>{html.escape(result["logs"])}</code></p>
+<h2>Core: CTest and nested suites</h2><table><tr><th>Suite</th><th></th><th>s</th><th></th></tr>{rows(core.get("results", []), core_extra)}</table>
+<h2>Repository tests</h2><table>{rows(result["repoTests"], lambda r: " ".join(r["tail"]))}</table>
+<h2>Worlds builds and validation</h2><table>{rows(result["worlds"], lambda r: " ".join(r["tail"]))}</table>
+'''
+
+
+def index():
+    runs = sorted(GALLERY.joinpath('pages/nightly').glob('????-??-??.json'), reverse=True)
+    items = []
+    for p in runs:
+        r = json.loads(p.read_text())
+        items.append(f'<li><a href="{p.stem}.html">{p.stem}</a> <b class="{r["status"]}">{r["status"].upper()}</b> '
+                     f'{r["counts"]["pass"]} pass, {r["counts"]["fail"]} fail · core <code>{r["shas"].get("core", "")[:8]}</code></li>')
+    return ('<!doctype html><meta charset="utf-8"><title>Hyprune nightly</title><style>body{font:14px system-ui;margin:2em}'
+            'b.pass{color:#147a3c}b.fail,b.error{color:#b3261e}</style><h1>Hyprune nightly (remote work host)</h1>'
+            f'<p>Last {KEEP} runs, 02:00 daily.</p><ul>{"".join(items)}</ul>')
+
+
+def prune():
+    out = GALLERY / 'pages/nightly'
+    for stem in sorted({p.stem for p in out.glob('????-??-??.*')}, reverse=True)[KEEP:]:
+        for p in out.glob(stem + '.*'):
+            p.unlink()
+    stamps = sorted({d.name.split('-scripts')[0] for d in RUNS.glob('nightly-*')}, reverse=True)
+    for old in stamps[KEEP:]:
+        for d in RUNS.glob(old + '*'):
+            shutil.rmtree(d, ignore_errors=True)
+    for d in sorted((WS / 'logs').glob('*'), reverse=True)[KEEP:]:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def run():
+    WS.mkdir(parents=True, exist_ok=True)
+    lock = open(WS / '.nightly.lock', 'w')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        log('another nightly run is active'); return 0
+    now = datetime.datetime.now().astimezone()
+    date, stamp = now.strftime('%Y-%m-%d'), now.strftime('%Y%m%d-%H%M%S')
+    logs = WS / 'logs' / stamp
+    logs.mkdir(parents=True, exist_ok=True)
+    result = {'date': date, 'host': socket.gethostname(), 'started': now.isoformat(timespec='seconds'), 'logs': str(logs),
+              'shas': {}, 'core': {}, 'repoTests': [], 'worlds': []}
+    try:
+        result['shas'] = update(logs)
+        names = suites()
+        result['suites'] = names
+        env = {'HYPRUNE_REMOTE_CORE': str(WS / 'core'), 'HYPRUNE_PERF_WORLD': str(WS / 'worlds/dist/com.hyprune.lumen-reach')}
+        # Harness scripts that predate per-instance state roots share dev/nested/.m3b-state:
+        # run them one at a time after the parallel pass.
+        passes = [('', ['--parallel', '4'], [n for n in names if not n.endswith('.py')]),
+                  ('-scripts', ['--parallel', '1', '--no-build'], [n for n in names if n.endswith('.py')])]
+        summaries = []
+        for suffix, options, chosen in passes:
+            core = subprocess.run([sys.executable, str(HERE / 'run'), '--run-id', f'nightly-{stamp}{suffix}', *options, *chosen],
+                                  env={**os.environ, **env}, capture_output=True, text=True)
+            (logs / f'runner{suffix}.stderr.log').write_text(core.stderr)
+            try:
+                summaries.append(json.loads(core.stdout))
+            except ValueError:
+                summaries.append({'status': 'error', 'error': 'runner printed no JSON', 'results': []})
+        result['core'] = {**summaries[0], 'results': [r for s in summaries for r in s.get('results', [])],
+                          'artifacts': ' '.join(s.get('artifacts', '') for s in summaries),
+                          'status': 'error' if any(s.get('status') == 'error' for s in summaries) else
+                                    'fail' if any(s.get('status') == 'fail' for s in summaries) else 'pass'}
+        result['repoTests'] = repo_tests(logs)
+        result['worlds'] = worlds(logs)
+    except Exception as error:
+        result['error'] = f'{type(error).__name__}: {error}'
+    rows = result['core'].get('results', []) + result['repoTests'] + result['worlds']
+    result['counts'] = {'pass': sum(r['status'] == 'pass' for r in rows), 'fail': sum(r['status'] != 'pass' for r in rows)}
+    result['status'] = 'error' if 'error' in result or result['core'].get('status') == 'error' else 'pass' if result['counts']['fail'] == 0 else 'fail'
+    result['finished'] = datetime.datetime.now().astimezone().isoformat(timespec='seconds')
+    out = GALLERY / 'pages/nightly'
+    out.mkdir(parents=True, exist_ok=True)
+    (out / f'{date}.json').write_text(json.dumps(result, indent=2) + '\n')
+    (out / f'{date}.html').write_text(page(result))
+    prune()
+    (out / 'index.html').write_text(index())
+    link = GALLERY / 'pages/nightly.html'  # the gallery lists top-level pages only
+    if not link.exists():
+        link.write_text('<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=nightly/index.html">'
+                        '<a href="nightly/index.html">Hyprune nightly</a>')
+        (GALLERY / 'pages/nightly.json').write_text(json.dumps({'title': 'Hyprune nightly regression (remote work host)'}) + '\n')
+    log('result', result['status'], result['counts'], out / f'{date}.html')
+    return 0 if result['status'] == 'pass' else 1
+
+
+def install():
+    INSTALL.mkdir(parents=True, exist_ok=True)
+    for name in ('nightly', 'run'):
+        shutil.copy2(HERE / name, INSTALL / name)
+    units = HOME / '.config/systemd/user'
+    units.mkdir(parents=True, exist_ok=True)
+    (units / 'hyprune-nightly.service').write_text(f'''[Unit]
+Description=Hyprune nightly regression (core/shell/sdk/schema/worlds main)
+
+[Service]
+Type=oneshot
+ExecStart={sys.executable} {INSTALL / 'nightly'} run
+Environment=PATH={os.environ.get('PATH', '/usr/bin')}
+TimeoutStartSec=6h
+Nice=5
+''')
+    (units / 'hyprune-nightly.timer').write_text('''[Unit]
+Description=Hyprune nightly regression at 02:00
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+''')
+    env = {**os.environ, 'XDG_RUNTIME_DIR': os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')}
+    subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True, env=env)
+    subprocess.run(['systemctl', '--user', 'enable', '--now', 'hyprune-nightly.timer'], check=True, env=env)
+    linger = subprocess.run(['loginctl', 'show-user', os.environ.get('USER', ''), '-p', 'Linger'], capture_output=True, text=True).stdout.strip()
+    print(json.dumps({'installed': str(INSTALL), 'timer': 'hyprune-nightly.timer', 'linger': linger}))
+    return 0
+
+
+def status():
+    runs = sorted((GALLERY / 'pages/nightly').glob('????-??-??.json'))
+    if not runs:
+        print(json.dumps({'status': 'none'})); return 2
+    r = json.loads(runs[-1].read_text())
+    print(json.dumps({k: r[k] for k in ('date', 'status', 'counts', 'started', 'finished', 'shas')} | {'page': str(runs[-1].with_suffix('.html'))}, indent=2))
+    return 0
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('command', choices=['install', 'run', 'status'])
+    sys.exit({'install': install, 'run': run, 'status': status}[parser.parse_args().command]())

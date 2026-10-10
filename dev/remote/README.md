@@ -76,3 +76,41 @@ xdg_wm_base v6), `bwrap`, `grim`, `wtype`, `wf-recorder`, `kitty`, `qs`,
 for world releases), CMake/Ninja. On NVIDIA-only hosts the harness skips the
 Mesa EGL pin and preloads `build/nested-nvidia-headless.so` into nested
 Hyprland so HEADLESS-1 gets renderable buffers.
+
+## Nightly
+
+`dev/remote/nightly install` copies `nightly` and `run` to
+`~/.local/share/hyprune-nightly/` and enables a systemd `--user` timer:
+`hyprune-nightly.timer`, daily at 02:00. It's `Persistent=true`, so a missed
+run starts after downtime. User lingering must be on (`loginctl enable-linger`)
+so the timer fires with nobody logged in, independent of any agent daemon.
+Re-run `install` after changes merge.
+
+Each run (`nightly run`, or `systemctl --user start hyprune-nightly`):
+
+1. Updates dedicated clones of core, shell, sdk, schema, worlds and hyprune
+   to `origin/main` in `~/hyprune-nightly/`. A second worlds clone,
+   `worlds-build`, takes the Blender builds.
+2. Runs the core runner against that core:
+   - CTest first;
+   - then every automatable `run.sh` mode in parallel isolated instances
+     across the GPUs. live, serve, record and visible are left out.
+   - then, one at a time, the harness scripts that drive `session.run`.
+     The offload power-wrapped scripts and the walkthrough recorder are left out.
+3. Runs `npm test` in schema and sdk, and the shell unittests.
+4. Worlds:
+   - `navmesh-test`;
+   - `lumen-build`, `lumen-validate`, `visibility-validate`;
+   - `build`, `validate`, `budgets` and `gltf-check` (Switchyard);
+   - schema and `hyprune-world-check` against the published Lumen Reach
+     release.
+
+   The make targets are expanded with `make -n`. Their ssh hop
+   (`tools/remote-*.sh`) becomes the same local Blender call, because this is
+   the bake host.
+5. Writes `pages/nightly/<date>.json`, `<date>.html` and `index.html` into the
+   gallery clone, plus a top-level `pages/nightly.html` link. It never commits
+   or pushes. It keeps the last 14 runs: pages, runner artifacts
+   (`~/hyprune-remote-runs/nightly-*`) and logs (`~/hyprune-nightly/logs/`).
+
+`nightly status` prints the latest result.

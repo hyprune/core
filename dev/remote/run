@@ -9,7 +9,8 @@ stderr. Exit status is 0 only if every suite passed.
 """
 import argparse, concurrent.futures, datetime, hashlib, json, os, pathlib, re, shutil, socket, subprocess, sys, tempfile, time
 HERE = pathlib.Path(__file__).resolve().parent
-CORE = HERE.parent.parent
+# An installed copy (dev/remote/nightly install) drives another checkout.
+CORE = pathlib.Path(os.environ.get('HYPRUNE_REMOTE_CORE', str(HERE.parent.parent))).resolve()
 WORKSPACE = CORE.parent
 RUNS = pathlib.Path(os.environ.get('HYPRUNE_REMOTE_RUNS', str(pathlib.Path.home() / 'hyprune-remote-runs')))
 DEFAULT = ['ctest', 'workspace-homes', 'placement', 'playable', 'static-world', 'live-findings', 'ipc-warp']
@@ -101,6 +102,8 @@ def run_suite(tree, suite, out):
     env.update(HYPRUNE_NESTED_STATE_ROOT=str(out / 'state'), HYPRUNE_LIVE_FINDINGS_STILLS=str(out / 'stills'))
     if suite == 'ctest':
         cmd = ['ctest', '--test-dir', 'build', '--output-on-failure']
+    elif suite.endswith('.py'):  # a dev/nested harness script that drives session.run itself
+        cmd = [sys.executable, 'dev/nested/isolated.py', 'dev/nested/' + suite]
     else:
         cmd = ['dev/nested/run.sh'] + ([] if suite == 'smoke' else ['--' + suite])
     started = time.monotonic()
@@ -200,7 +203,7 @@ def status(run_id):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('suites', nargs='*', help=f'ctest, smoke, or run.sh modes without "--" (default: {" ".join(DEFAULT)})')
+    parser.add_argument('suites', nargs='*', help=f'ctest, smoke, run.sh modes without "--", or dev/nested/<script>.py names (default: {" ".join(DEFAULT)})')
     parser.add_argument('--ref', help='git ref to test in a detached worktree (fetched from origin); default: this checkout')
     parser.add_argument('--lumen', help='hyprune/worlds release tag, e.g. lumen-reach-v0.9.0 (default: installed, else pinned)')
     parser.add_argument('--parallel', type=int, default=4, help='concurrent suites (each nested suite is an isolated instance)')

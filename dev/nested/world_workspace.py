@@ -104,7 +104,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     print('PASS dedicated world workspace:',len(results),'checks',flush=True)
 
 if __name__ == '__main__':
-    fixture=s.HERE/'.m3b-state';fixture.mkdir(exist_ok=True)
+    fixture=s.STATE_ROOT/'.m3b-state';fixture.mkdir(exist_ok=True)
     (fixture/'layout.json').write_text('{"version":1,"bindings":[],"placements":[]}\n')
     m3b.acceptance=acceptance
     s.run(argparse.Namespace(m3b=True,m3a=False,m2=False,m1=False,integration=False,live=False,serve=False,record=False,visible=False))

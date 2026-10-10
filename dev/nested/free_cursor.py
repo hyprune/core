@@ -99,6 +99,6 @@ ShellRoot { Process { id: hit; command: ["touch", %s] }
     (s.ROOT/'docs/evidence/free-cursor.json').write_text(json.dumps({'checks':results},indent=2)+'\n')
 
 if __name__=='__main__':
-    (s.HERE/'.m3b-state/layout.json').unlink(missing_ok=True)
+    (s.STATE_ROOT/'.m3b-state/layout.json').unlink(missing_ok=True)
     os.environ['HYPRUNE_NESTED_PROTOCOL']='0.12';m3b.acceptance=acceptance
     s.run(argparse.Namespace(m3b=True,m3a=False,m2=False,m1=False,integration=False,live=False,serve=False,record=False,visible=False))

@@ -77,7 +77,7 @@ def main():
             dest=pathlib.Path(args.video).resolve();dest.parent.mkdir(parents=True,exist_ok=True)
             stage_dir=dest.parents[2] if dest.parent.name=='videos' and dest.parent.parent.name=='worldshell-gallery' else dest.parent
             staging=stage_dir/('.'+dest.name+'.complete');shutil.copyfile(temp/'tour.mp4',staging);os.replace(staging,dest)
-    fixture=s.HERE/'.m3b-state';fixture.mkdir(exist_ok=True)
+    fixture=s.STATE_ROOT/'.m3b-state';fixture.mkdir(exist_ok=True)
     for name in ['input.json','layout.json','editor.json']:(fixture/name).unlink(missing_ok=True)
     os.environ['HYPRUNE_NESTED_PROTOCOL']='0.12';m3b.acceptance=acceptance
     s.run(argparse.Namespace(m3b=True,m3a=False,m2=False,m1=False,integration=False,live=False,serve=False,record=False,visible=False))
