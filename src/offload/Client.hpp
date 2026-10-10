@@ -8,6 +8,7 @@ namespace hyprune::offload {
 class Client {
     struct Slot {
         GLuint tex = 0, fbo = 0;
+        bool external = false; // tex is GL_TEXTURE_EXTERNAL_OES, fbo stays 0
         EGLImageKHR image = nullptr;
         int phase = 0, acquire = -1, target = -1;
         GLsync copied = nullptr;
@@ -22,6 +23,7 @@ class Client {
     double started_ = 0, nextSend_ = 0;
     bool ready_ = false;
     Json frontReply_;
+    ExternalCopy externalCopy_;
 
   public:
     std::string error;
@@ -93,8 +95,13 @@ class Client {
                     glActiveTexture(GL_TEXTURE0);
                     b.image =
                         import(eglGetCurrentDisplay(), packet->fds[0], w_, h_, stride, offset, DRM_FORMAT_ABGR8888, 0);
-                    b.tex = imageTexture(b.image);
-                    b.fbo = framebuffer(b.tex);
+                    b.external = externalOnly(eglGetCurrentDisplay(), DRM_FORMAT_ABGR8888, DRM_FORMAT_MOD_LINEAR);
+                    if (b.external)
+                        b.tex = externalTexture(b.image);
+                    else {
+                        b.tex = imageTexture(b.image);
+                        b.fbo = framebuffer(b.tex);
+                    }
                 } else if (type == "frame") {
                     int i = p.at("slot");
                     check(i >= 0 && i < 2 && packet->fds.size() == 1, "frame slot");
@@ -145,9 +152,13 @@ class Client {
                         out.fbo = framebuffer(out.tex);
                     }
                     glDisable(GL_SCISSOR_TEST);
-                    glBindFramebuffer(GL_READ_FRAMEBUFFER, b.fbo);
                     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, out.fbo);
-                    glBlitFramebuffer(0, 0, w_, h_, 0, 0, w_, h_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                    if (b.external)
+                        externalCopy_.draw(b.tex, w_, h_);
+                    else {
+                        glBindFramebuffer(GL_READ_FRAMEBUFFER, b.fbo);
+                        glBlitFramebuffer(0, 0, w_, h_, 0, 0, w_, h_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                    }
                     b.copied = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
                     glFlush();
                     b.phase = 3;

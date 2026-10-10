@@ -38,7 +38,10 @@ def stats(values):
 
 
 def phase(client, mode, perf):
-    client.call('graphics.set', {'patch': {'offload': mode}})
+    patch = {'offload': mode}
+    if os.environ.get('HYPRUNE_MEASURE_CAP_W'):  # only builds whose policy allows more than 80 W
+        patch['offload_power_cap_w'] = float(os.environ['HYPRUNE_MEASURE_CAP_W'])
+    client.call('graphics.set', {'patch': patch})
     if mode == 'on':
         try:
             wait(lambda: perf()['activeRenderer'] == 'offload', timeout=25)

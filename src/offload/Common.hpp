@@ -130,6 +130,78 @@ inline GLuint imageTexture(EGLImageKHR image) {
     check(glGetError() == GL_NO_ERROR, "image texture");
     return t;
 }
+// NVIDIA's EGL marks LINEAR dma-bufs external_only: they bind only as
+// GL_TEXTURE_EXTERNAL_OES (TEXTURE_2D fails with GL_INVALID_OPERATION) and can't
+// be framebuffer attachments. Mesa imports them as ordinary 2D textures.
+inline bool externalOnly(EGLDisplay d, uint32_t format, uint64_t modifier) {
+    auto query = reinterpret_cast<PFNEGLQUERYDMABUFMODIFIERSEXTPROC>(eglGetProcAddress("eglQueryDmaBufModifiersEXT"));
+    EGLint n = 0;
+    if (!query || !query(d, EGLint(format), 0, nullptr, nullptr, &n) || n <= 0)
+        return false;
+    std::vector<EGLuint64KHR> modifiers(n);
+    std::vector<EGLBoolean> external(n);
+    if (!query(d, EGLint(format), n, modifiers.data(), external.data(), &n))
+        return false;
+    for (int i = 0; i < n; ++i)
+        if (modifiers[i] == modifier)
+            return external[i];
+    return false;
+}
+inline GLuint externalTexture(EGLImageKHR image) {
+    GLuint t;
+    glGenTextures(1, &t);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, t);
+    proc<PFNGLEGLIMAGETARGETTEXTURE2DOESPROC>("glEGLImageTargetTexture2DOES")(GL_TEXTURE_EXTERNAL_OES, image);
+    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
+    check(glGetError() == GL_NO_ERROR, "external image texture");
+    return t;
+}
+// Copies an external texture into the bound draw framebuffer, texel for texel
+// (same orientation as glBlitFramebuffer). Callers hold a render::GLState guard.
+class ExternalCopy {
+    GLuint program_ = 0;
+    GLint sampler_ = -1;
+    static GLuint shader(GLenum type, const char *source) {
+        GLuint s = glCreateShader(type);
+        glShaderSource(s, 1, &source, nullptr);
+        glCompileShader(s);
+        GLint ok = 0;
+        glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
+        check(ok, "external copy shader");
+        return s;
+    }
+
+  public:
+    void draw(GLuint texture, int w, int h) {
+        if (!program_) {
+            GLuint v = shader(GL_VERTEX_SHADER, "#version 300 es\nout vec2 uv;\nvoid main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));uv=p;gl_Position=vec4(p*2.0-1.0,0.0,1.0);}\n");
+            GLuint f = shader(GL_FRAGMENT_SHADER, "#version 300 es\n#extension GL_OES_EGL_image_external_essl3 : require\nprecision highp float;\nuniform samplerExternalOES frame;\nin vec2 uv;\nout vec4 color;\nvoid main(){color=texture(frame,uv);}\n");
+            program_ = glCreateProgram();
+            glAttachShader(program_, v);
+            glAttachShader(program_, f);
+            glLinkProgram(program_);
+            glDeleteShader(v);
+            glDeleteShader(f);
+            GLint ok = 0;
+            glGetProgramiv(program_, GL_LINK_STATUS, &ok);
+            check(ok, "external copy program");
+            sampler_ = glGetUniformLocation(program_, "frame");
+        }
+        for (auto cap : {GL_BLEND, GL_DEPTH_TEST, GL_SCISSOR_TEST, GL_STENCIL_TEST, GL_CULL_FACE, GL_RASTERIZER_DISCARD})
+            glDisable(cap);
+        glViewport(0, 0, w, h);
+        glUseProgram(program_);
+        glBindVertexArray(0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindSampler(0, 0);
+        glBindTexture(GL_TEXTURE_EXTERNAL_OES, texture);
+        glUniform1i(sampler_, 0);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
+    }
+};
 inline int fence(EGLDisplay d) {
     auto s = proc<PFNEGLCREATESYNCKHRPROC>("eglCreateSyncKHR")(d, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr);
     check(s != EGL_NO_SYNC_KHR, "native fence");
