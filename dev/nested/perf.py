@@ -76,7 +76,8 @@ def acceptance(client,children,args,shell_token,socketpath):
     #    every sample is a newly rendered frame regardless of idle skipping.
     #    Variants alternate per round so GPU clock/thermal drift hits both.
     rounds=int(os.environ.get('HYPRUNE_PERF_ROUNDS','1'))
-    for round in range(rounds):
+    idle_only=os.environ.get('HYPRUNE_PERF_IDLE_ONLY')=='1'   # bisecting idle cost: skip poses, three idle windows
+    for round in range(0 if idle_only else rounds):
         for variant,world in variants:
             if len(variants)>1:enter(world)
             for scale in scales:
@@ -109,6 +110,10 @@ def acceptance(client,children,args,shell_token,socketpath):
                 'nestedGpuBusyPct':100*(c1[0]-c0[0])/max(1,c1[1]-c0[1]),
                 'gt0IdlePct':None if g0 is None else 100*(g1-g0)/(dt*1000)}
     report['idle']['static']=window(8);print('MEASURE idle',json.dumps(report['idle']['static']),flush=True)
+    if idle_only:
+        report['idle']['repeats']=[window(8) for _ in range(2)]
+        for w in report['idle']['repeats']:print('MEASURE idle',json.dumps(w),flush=True)
+        (out/'report.json').write_text(json.dumps(report,indent=2)+'\n');print('PERF report',out/'report.json',flush=True);return
     # 3. A continuously updating room client (~30 Hz commits) must keep updating.
     flag.touch();time.sleep(1.5)
     report['idle']['updatingClient']=window(5);print('MEASURE updating',json.dumps(report['idle']['updatingClient']),flush=True)
@@ -127,7 +132,14 @@ def acceptance(client,children,args,shell_token,socketpath):
     # 5. Video wall: the Sun Court workspace wall (composited client) updates at ~30 Hz.
     pose(client,POSES[0][1],POSES[0][2],POSES[0][3]);time.sleep(1.5)
     wallflag.touch();time.sleep(1.5)
-    report['idle']['videoWall']=window(5);print('MEASURE videoWall',json.dumps(report['idle']['videoWall']),flush=True)
+    report['idle']['videoWall']=window(5)
+    # The composed wall must keep updating: two stills a second apart differ where the clock prints.
+    for name in ['wall-a','wall-b']:
+        subprocess.run([str(s.HERE/'ctl.py'),'shot',str(out/f'{name}.png')],check=True);time.sleep(1)
+    from PIL import Image, ImageChops
+    diff=ImageChops.difference(Image.open(out/'wall-a.png').convert('L'),Image.open(out/'wall-b.png').convert('L')).point(lambda v:255 if v>24 else 0)
+    report['idle']['videoWall']['changedPixelPct']=100*sum(diff.histogram()[255:])/(diff.width*diff.height)
+    print('MEASURE videoWall',json.dumps(report['idle']['videoWall']),flush=True)
     wallflag.unlink();time.sleep(2)
     # 6. Walking: W held for 6 s from the arrival spawn (renders every tick).
     from m2 import keys
