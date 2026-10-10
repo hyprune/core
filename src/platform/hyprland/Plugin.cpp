@@ -207,6 +207,9 @@ struct Runtime {
     int readyNotices = 0; // once per plugin load: init and the first inactive world load both ask
     std::string tagged, unplacedSelected;
     std::optional<surfaces::Surface> placementPreview();
+    // Tool-mount snap target for a client being placed (carry, pocket, tagged).
+    std::optional<std::pair<const Json *, surfaces::Surface>> mountTarget(const Capture::Entry &);
+    std::string snapTarget; // anchor highlighted this tick (diagnostics)
     Json unplacedState();
     void contentScale(bool reset, float steps);
 
@@ -1584,7 +1587,9 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
                     throw std::runtime_error("client tiling rejected: " + tiled.error().message);
             } else if (held) {
                 layout.carried.clear();
-                if (layout.binding(held->instance.workspaceId, world.get()))
+                if (auto snapped = mountTarget(*held))
+                    layout.placeOnMount(held->instance, *snapped->first, world.get());
+                else if (layout.binding(held->instance.workspaceId, world.get()))
                     layout.mount(held->instance, world.get(), hands.pose);
             }
         }
@@ -2574,10 +2579,54 @@ Json Runtime::unplacedState() {
             {"windows", windows},
             {"selectedId", unplacedSelected.empty() ? Json(nullptr) : Json(unplacedSelected)}};
 }
+std::optional<std::pair<const Json *, surfaces::Surface>> Runtime::mountTarget(const Capture::Entry &e) {
+    if (!world || !e.parentId.empty() || e.surface.pixelWidth <= 0 || e.surface.pixelHeight <= 0)
+        return {};
+    auto origin = pointerCamera().position;
+    auto ray = pointerRay();
+    auto blocker = interaction::raycast(origin, ray, world->collision, &world->collisionIndex);
+    auto home = layout.binding(e.instance.workspaceId, world.get());
+    std::optional<std::pair<const Json *, surfaces::Surface>> best;
+    float nearest = INFINITY;
+    for (const auto &mount : world->anchors) {
+        if (mount.at("mount").at("role") != "tool-mount" || (home && mount.at("areaId") != home->at("areaId")))
+            continue;
+        auto id = mount.at("id").get<std::string>();
+        if (std::any_of(layout.instances.begin(), layout.instances.end(),
+                        [&](auto &v) { return v.value("anchorId", "") == id && v.at("surfaceId") != e.surface.id; }))
+            continue;
+        // The authored frame with a forgiving rim; the face may sit just behind its skin.
+        surfaces::Surface frame;
+        auto &p = mount.at("pose").at("position");
+        frame.center = {p[0], p[1], p[2]};
+        frame.rotation = mount.at("pose").at("rotation").get<std::array<float, 4>>();
+        frame.yaw = 0;
+        frame.width = mount.at("size")[0].get<float>() + .3f;
+        frame.height = mount.at("size")[1].get<float>() + .3f;
+        auto hit = surfaces::intersect(frame, origin, ray);
+        if (!hit || hit->distance > 8 || hit->distance >= nearest || (blocker && blocker->distance < hit->distance - .35f))
+            continue;
+        auto fitted = surfaces::fitToMount(mount, e.surface.pixelWidth, e.surface.pixelHeight, world->collision);
+        if (!fitted)
+            continue; // aspect outside its limits, or no collision-free fit
+        fitted->id = e.surface.id;
+        fitted->title = e.surface.title;
+        fitted->texture = e.surface.texture;
+        fitted->pixelWidth = e.surface.pixelWidth;
+        fitted->pixelHeight = e.surface.pixelHeight;
+        best = {{&mount, *fitted}};
+        nearest = hit->distance;
+    }
+    return best;
+}
 std::optional<surfaces::Surface> Runtime::placementPreview() {
     auto e = capture.find(unplacedSelected);
     if (!e || !world || !layout.unplaced.contains(e->surface.id))
         return {};
+    if (auto snapped = mountTarget(*e)) { // the ghost shows where it will sit: in the frame
+        snapped->second.opacity = .35f;
+        return snapped->second;
+    }
     auto s = e->surface;
     s.yaw = -camera.yaw;
     s.rotation = {0, 0, 0, 1};
@@ -2747,7 +2796,10 @@ void Runtime::toolClick(const std::string &action) {
         auto e = capture.find(unplacedSelected);
         auto placed = *preview;
         placed.opacity = 1;
-        if (action == "placement.surface") {
+        auto snapped = mountTarget(*e);
+        if (snapped) {
+            // Into the tool mount's frame: its own anchored placement, at the client's size.
+        } else if (action == "placement.surface") {
             auto hit = worldHit();
             if (!hit)
                 return;
@@ -2755,7 +2807,7 @@ void Runtime::toolClick(const std::string &action) {
             placed.rotation = interaction::orientation(hit->normal);
             placed.center = hit->point + hit->normal * .06f;
         }
-        if (!surfaces::pushOut(placed, world->collision) || !layout.vacant(placed, placed.id)) {
+        if (!snapped && (!surfaces::pushOut(placed, world->collision) || !layout.vacant(placed, placed.id))) {
             ipc->notify("runtime.notice", {{"level", "info"},
                                            {"code", "placement.blocked"},
                                            {"message", "No free space here. Aim at another spot."}});
@@ -2772,7 +2824,10 @@ void Runtime::toolClick(const std::string &action) {
             w->m_target->rememberFloatingSize({double(placed.pixelWidth), double(placed.pixelHeight)});
             w->sendWindowSize(true);
         }
-        layout.mount(e->instance, world.get(), placed);
+        if (snapped)
+            layout.placeOnMount(e->instance, *snapped->first, world.get());
+        else
+            layout.mount(e->instance, world.get(), placed);
         unplacedSelected.clear();
         refresh();
         publish();
@@ -2787,7 +2842,14 @@ void Runtime::toolClick(const std::string &action) {
             return;
         }
         if (!tagged.empty())
-            if (auto e = capture.find(tagged))
+            if (auto e = capture.find(tagged)) {
+                if (auto snapped = mountTarget(*e)) {
+                    layout.placeOnMount(e->instance, *snapped->first, world.get());
+                    tagged.clear();
+                    refresh();
+                    publish();
+                    return;
+                }
                 if (auto wall = worldHit()) {
                     auto s = e->surface;
                     s.yaw = 0;
@@ -2801,6 +2863,7 @@ void Runtime::toolClick(const std::string &action) {
                     }
                     return;
                 }
+            }
         return;
     }
     if (action == "path.add") {
@@ -3042,6 +3105,28 @@ void Runtime::toolsTick() {
         renderer.collisionChanged();
     }
     renderer.lines.clear();
+    // A compatible tool mount under the aim lights up while a client is being placed.
+    snapTarget.clear();
+    Capture::Entry *placing = hands.gesture == interaction::Gesture::Carry ? capture.find(hands.pose.id)
+                              : editor.slot == 5 && !freeCursor && layout.unplaced.contains(unplacedSelected)
+                                  ? capture.find(unplacedSelected)
+                              : editor.slot == 2 && !tagged.empty() ? capture.find(tagged)
+                                                                    : nullptr;
+    if (placing)
+        if (auto snapped = mountTarget(*placing)) {
+            snapTarget = snapped->first->at("id");
+            auto &f = snapped->second;
+            auto decode = [](float v) { return v <= .04045f ? v / 12.92f : std::pow((v + .055f) / 1.055f, 2.4f); };
+            auto c = renderer.overlayStyle["promptColor"];
+            Vec3 glow{decode(c[0]), decode(c[1]), decode(c[2])};
+            auto r = f.right() * (f.width * .5f + .05f), u = f.up() * (f.height * .5f + .05f);
+            auto o = f.center + f.normal() * .03f;
+            std::array<Vec3, 4> corner{o - r - u, o + r - u, o + r + u, o - r + u};
+            for (int k = 0; k < 4; k++) {
+                renderer.lines.push_back({corner[k], corner[(k + 1) % 4], glow * .35f, .04f}); // soft halo
+                renderer.lines.push_back({corner[k], corner[(k + 1) % 4], glow, .012f});
+            }
+        }
     for (auto &path : editor.paths)
         if (path["worldId"] == world->id) {
             auto lines = interaction::pathLines(path);
@@ -4116,6 +4201,8 @@ int luaCamera(lua_State *state) {
         {"captureDirectory", runtime->captureDirectory.string()},
         {"instances", runtime->layout.instances},
         {"aim", aim() ? aim()->first : ""},
+        {"mountTarget", runtime->snapTarget},
+        {"backdrops", runtime->capture.backdropDiagnostics()},
         {"gestureId", runtime->hands.pose.id},
         {"mode", runtime->typing ? "typing" : "movement"},
         {"tool", runtime->tool},

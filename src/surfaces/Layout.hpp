@@ -31,6 +31,8 @@ class Layout {
     const Json *contentFor(const Instance &, const world::World *) const;
     bool spawn(const Instance &, const world::World *, const sim::Camera &, Surface, float aspect = 16.f / 9);
     void mount(const Instance &, const world::World *, Surface);
+    // Fit into an authored tool-mount frame (room clients too); RFC-0005 snap targets.
+    void placeOnMount(const Instance &, const Json &mount, const world::World *);
     void invalidateCollision() { recovered.clear(); }
     Json desktop = nullptr;
     Json state(const world::World *) const;
@@ -67,4 +69,6 @@ bool overlaps(const Surface &, std::span<const Triangle>, float margin = .04f);
 bool pushOut(Surface &, std::span<const Triangle>);
 Surface carryPlane(const sim::Camera &, float width, float height, std::span<const Triangle>, int index = 0);
 void anchorPlane(Surface &, const Json &, int width, int height);
+// Aspect-fit, centred and flush in a tool mount's frame without intersecting geometry.
+std::optional<Surface> fitToMount(const Json &mount, int width, int height, std::span<const Triangle> collision);
 } // namespace hyprune::surfaces

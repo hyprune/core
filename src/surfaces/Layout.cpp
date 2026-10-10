@@ -567,11 +567,19 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
             s = carryPlane(camera, pw * windowScale, ph * windowScale, w->collision);
         }
     } else if (p) {
+        // Room clients have no binding: their tool-mount placement names its own area.
+        const Json home = b ? b->at("areaId") : p->at("areaId");
+        auto fit = [&](const Json &mount) {
+            auto fitted = fitToMount(mount, pw, ph, w->collision);
+            if (fitted)
+                s = *fitted;
+            return fitted.has_value();
+        };
         anchorId = temporaryAnchors.contains(i.id) ? temporaryAnchors[i.id] : p->at("anchorId").get<std::string>();
         auto a = anchor(anchorId, w);
         bool valid = false;
         auto area =
-            std::find_if(w->areas.begin(), w->areas.end(), [&](auto &a) { return a.at("id") == b->at("areaId"); });
+            std::find_if(w->areas.begin(), w->areas.end(), [&](auto &a) { return a.at("id") == home; });
         if (area != w->areas.end())
             for (auto &id : area->value("freePlacementZones", Json::array()))
                 for (auto &zone : w->placementZones)
@@ -589,28 +597,20 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
         });
         if (occupied)
             valid = false;
-        if (a && !occupied && a->at("areaId") == b->at("areaId") && a->at("mount").at("role") == "tool-mount")
-            try {
-                anchorPlane(s, *a, pw, ph);
-                valid = pushOut(s, w->collision);
-            } catch (const ipc::Error &) {
-            }
+        if (a && !occupied && a->at("areaId") == home && a->at("mount").at("role") == "tool-mount")
+            valid = fit(*a);
         if (!valid) {
             const Json *free = nullptr;
             for (const auto &candidate : w->anchors) {
-                if (candidate.at("areaId") != b->at("areaId") || candidate.at("mount").at("role") != "tool-mount")
+                if (candidate.at("areaId") != home || candidate.at("mount").at("role") != "tool-mount")
                     continue;
                 if (std::any_of(instances.begin(), instances.end(), [&](auto &v) {
                         return candidate.at("id") == v.value("anchorId", "") && v.at("surfaceId") != i.id;
                     }))
                     continue;
-                try {
-                    anchorPlane(s, candidate, pw, ph);
-                    if (pushOut(s, w->collision)) {
-                        free = &candidate;
-                        break;
-                    }
-                } catch (const ipc::Error &) {
+                if (fit(candidate)) {
+                    free = &candidate;
+                    break;
                 }
             }
             if (free) {
@@ -625,12 +625,12 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                 events.push_back({"runtime.notice",
                                   {{"level", "warning"},
                                    {"code", "placement.relocated"},
-                                   {"message", "Relocated " + i.title + " in " + b->at("areaId").get<std::string>() +
+                                   {"message", "Relocated " + i.title + " in " + home.get<std::string>() +
                                                    " from " + old}}});
             } else {
                 bool zoned = false;
                 auto area = std::find_if(w->areas.begin(), w->areas.end(),
-                                         [&](auto &a) { return a.at("id") == b->at("areaId"); });
+                                         [&](auto &a) { return a.at("id") == home; });
                 if (area != w->areas.end())
                     for (auto &id : area->value("freePlacementZones", Json::array()))
                         for (auto &zone : w->placementZones)
@@ -682,13 +682,63 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
     occupiedPoses[i.id] = s;
     instances.push_back({{"surfaceId", i.id},
                          {"workspaceId", i.workspaceId},
-                         {"areaId", b ? b->at("areaId") : Json(spawnAreas.contains(i.id) ? spawnAreas.at(i.id) : "")},
+                         {"areaId", b                    ? b->at("areaId")
+                                    : p && !anchorId.empty() ? p->at("areaId")
+                                    : Json(spawnAreas.contains(i.id) ? spawnAreas.at(i.id) : "")},
                          {"anchorId", anchorId},
                          {"status", carried == i.id           ? "carried"
                                     : recalled.contains(i.id) ? "recalled"
                                                               : "placed"}});
     if (instances.back()["areaId"] == "") instances.back().erase("areaId");
     return s;
+}
+std::optional<Surface> fitToMount(const Json &mount, int pw, int ph, std::span<const Triangle> collision) {
+    Surface s;
+    try {
+        anchorPlane(s, mount, pw, ph); // aspect-fit and centred in the authored frame
+    } catch (const ipc::Error &) {
+        return {}; // aspect outside the mount's limits
+    }
+    // Flush with the face, just past the collision margin, same orientation. A frame
+    // bezel may not intersect: shrink a little rather than float off the surface.
+    auto base = s;
+    for (float scale : {1.f, .96f, .92f, .88f}) {
+        s.width = base.width * scale;
+        s.height = base.height * scale;
+        s.center = base.center + base.normal() * .05f;
+        if (!overlaps(s, collision))
+            return s;
+    }
+    // Frames resting on furniture may need the normal collision recovery, but only a
+    // short way: a far push (a bezel lip ahead) leaves the client floating off the mount.
+    s = base;
+    if (pushOut(s, collision) && length(s.center - base.center) <= .3f)
+        return s;
+    return {};
+}
+void Layout::placeOnMount(const Instance &i, const Json &mount, const world::World *w) {
+    need(w && mount.at("mount").at("role") == "tool-mount", -32003, "not a tool mount");
+    auto b = binding(i.workspaceId, w);
+    need(!b || b->at("areaId") == mount.at("areaId"), -32004, "tool mount belongs to another area");
+    for (auto &live : instances)
+        need(live.value("anchorId", "") != mount.at("id").get<std::string>() || live.at("surfaceId") == i.id, -32004,
+             "tool mount occupied");
+    // One placement per client and world (room clients) or per home area (homed clients).
+    std::erase_if(placements.get_ref<Json::array_t &>(), [&](auto &p) {
+        return p.at("worldId") == w->id && (!b || p.at("areaId") == b->at("areaId")) && matches(p, i);
+    });
+    need(placements.size() < 128, -32008, "placement budget");
+    placements.push_back({{"worldId", w->id}, {"areaId", mount.at("areaId")}, {"anchorId", mount.at("id")}, {"rule", rule(i)}});
+    if (content.contains(i.id))
+        placements.back()["content"] = content.at(i.id);
+    freePoses.erase(i.id);
+    occupiedPoses.erase(i.id);
+    unplaced.erase(i.id);
+    spawnAreas[i.id] = mount.at("areaId");
+    if (carried == i.id)
+        carried.clear();
+    recalled.erase(i.id);
+    temporaryAnchors.erase(i.id);
 }
 void Layout::mount(const Instance &i, const world::World *w, Surface s) {
     s.rotation = quaternionProduct(s.rotation, {0, std::sin(s.yaw / 2), 0, std::cos(s.yaw / 2)});
