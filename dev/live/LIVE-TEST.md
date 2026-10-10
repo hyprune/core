@@ -170,3 +170,19 @@ hardware cursor here:
   capture only, no prompt, the mode is unchanged.
 - [ ] Hold Tab while the prompt is open: the Director replaces it (typed text is
   kept as the note); Esc closes the Director as usual.
+
+## Static world and carrying from behind
+
+World package geometry no longer moves with gestures; a window can be carried
+from behind. No new cursor, focus or workspace calls (the carry press already
+runs in the deferred input path).
+
+- [ ] In Lumen Reach aim at a building (e.g. the Sun Court hall) and try
+  Super+Wheel, Super+Ctrl+Wheel, Super+Shift+Wheel, Super+LMB/RMB drags and the
+  Position tool (4): nothing moves, and walking into the building still collides.
+- [ ] After loading, a building moved before this fix is back in place.
+- [ ] Walk behind a window and Super+click it: it turns to face you smoothly
+  (immediately with reduced motion), the spot you grabbed stays under the
+  reticle, and it drags like a front grab. The hardware cursor does not appear
+  or flicker during the turn; no crash.
+- [ ] A plain click on the back of a window does nothing.

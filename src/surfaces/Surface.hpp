@@ -25,6 +25,9 @@ struct Surface {
 };
 struct Hit {
     float distance, u, v;
+    bool back = false; // seen from behind (only with backFace); u/v stay in surface coordinates
 };
-std::optional<Hit> intersect(const Surface &, Vec3 origin, Vec3 direction, bool clip = true);
+// Front faces only, unless backFace: clicks never reach a window from behind, but a
+// carry gesture may grab it there (and turns it to face the player).
+std::optional<Hit> intersect(const Surface &, Vec3 origin, Vec3 direction, bool clip = true, bool backFace = false);
 } // namespace hyprune::surfaces

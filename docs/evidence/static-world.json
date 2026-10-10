@@ -1,0 +1,139 @@
+{
+  "nestedOnly": true,
+  "world": "com.hyprune.lumen-reach",
+  "checks": [
+    {
+      "name": "a persisted move of static geometry is dropped on load",
+      "evidence": {
+        "saved": []
+      }
+    },
+    {
+      "name": "reported pose aims at static world geometry",
+      "evidence": {
+        "aim": ""
+      }
+    },
+    {
+      "name": "Super+Wheel on a building moves nothing",
+      "evidence": {
+        "transforms": 0,
+        "collision": [
+          -2777276.563692093,
+          -2777276.563692093
+        ]
+      }
+    },
+    {
+      "name": "Super+Ctrl+Wheel on a building moves nothing",
+      "evidence": {
+        "transforms": 0,
+        "collision": [
+          -2777276.563692093,
+          -2777276.563692093
+        ]
+      }
+    },
+    {
+      "name": "Super+Shift+Wheel on a building moves nothing",
+      "evidence": {
+        "transforms": 0,
+        "collision": [
+          -2777276.563692093,
+          -2777276.563692093
+        ]
+      }
+    },
+    {
+      "name": "Super+LMB drag on a building moves nothing",
+      "evidence": {
+        "transforms": 0,
+        "collision": [
+          -2777276.563692093,
+          -2777276.563692093
+        ]
+      }
+    },
+    {
+      "name": "Super+RMB drag on a building moves nothing",
+      "evidence": {
+        "transforms": 0,
+        "collision": [
+          -2777276.563692093,
+          -2777276.563692093
+        ]
+      }
+    },
+    {
+      "name": "Position tool cannot select or move static geometry",
+      "evidence": {
+        "selected": [
+          "",
+          null
+        ]
+      }
+    },
+    {
+      "name": "the frame is identical after every gesture",
+      "evidence": {
+        "changedFraction": 0.0
+      }
+    },
+    {
+      "name": "a plain click from behind does not reach the window",
+      "evidence": null
+    },
+    {
+      "name": "Super+LMB on the back face grabs the window",
+      "evidence": null
+    },
+    {
+      "name": "it turns to face the player",
+      "evidence": {
+        "facing": 1.0
+      }
+    },
+    {
+      "name": "the turn is animated, not a snap",
+      "evidence": {
+        "normalDotOriginal": [
+          -0.695,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0,
+          -1.0
+        ]
+      }
+    },
+    {
+      "name": "it can be dragged like a front grab",
+      "evidence": {
+        "from": [
+          -8.0,
+          1.7000000476837158,
+          7.0
+        ],
+        "to": [
+          -9.14991283416748,
+          1.7000000476837158,
+          6.675553321838379
+        ]
+      }
+    }
+  ]
+}

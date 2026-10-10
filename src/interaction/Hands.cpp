@@ -116,6 +116,22 @@ void Hands::facing(bool enabled, const sim::Camera &camera) {
     grabYaw = camera.yaw;
     facePlayer = enabled;
 }
+void Hands::flipFrom(const surfaces::Surface &from, float seconds) {
+    // Signed yaw from the target orientation back to the starting one (pure yaw pair).
+    auto t = start.rotation, f = from.rotation;
+    std::array<float, 4> inverse{-t[0], -t[1], -t[2], t[3]};
+    auto relative = quaternionProduct(f, inverse);
+    float angle = 2 * std::atan2(relative[1], relative[3]);
+    angle = std::remainder(angle, 6.2831853f);
+    flip = seconds > 0 ? angle : 0;
+    flipRate = seconds > 0 ? std::abs(angle) / seconds : 0;
+    if (!flip)
+        return;
+    std::array<float, 4> turn{0, std::sin(flip / 2), 0, std::cos(flip / 2)};
+    auto grab = pose.center + offset;
+    pose.rotation = quaternionProduct(turn, start.rotation);
+    pose.center = grab - rotate(turn, offset);
+}
 void Hands::wheel(float steps) {
     targetDistance = std::clamp(targetDistance * std::pow(1.06f, std::clamp(steps, -2.f, 2.f)), .08f, 100.f);
 }
@@ -125,7 +141,11 @@ bool Hands::update(const sim::Camera &camera, Vec3 ray, float dt, std::span<cons
     auto next = pose;
     if (gesture == Gesture::Carry) {
         distance += (targetDistance - distance) * (1 - std::exp(-dt / .06f));
-        float angle = facePlayer ? (grabYaw - camera.yaw) * .5f : 0;
+        if (flip) {
+            float step = flipRate * dt;
+            flip = std::abs(flip) <= step ? 0 : flip - std::copysign(step, flip);
+        }
+        float angle = (facePlayer ? (grabYaw - camera.yaw) * .5f : 0) + flip * .5f;
         std::array<float, 4> delta{0, std::sin(angle), 0, std::cos(angle)};
         next.rotation = quaternionProduct(delta, start.rotation);
         next.yaw = 0;

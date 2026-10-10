@@ -1,10 +1,12 @@
-"""Static world geometry: dev/nested/run.sh --static-world.
+"""Static world geometry and back-face window grab: dev/nested/run.sh --static-world.
 
 Nested only (run.sh holds /tmp/worldshell-nested.lock). Lumen Reach from ../worlds/dist.
 1. At the pose of the owner's report (Sun Court building, tool 1), every transform gesture
    (Super+Wheel, Super+Ctrl+Wheel, Super+Shift+Wheel, Super+LMB drag, tool 4 select/drag/
    wheel/carry) aimed at static geometry changes nothing: no object transform, collision
    checksum and editor objects unchanged, the frame identical.
+2. A real window seen from behind: Super+LMB carries it, it turns to face the player over
+   windows.transition_seconds, and dragging moves it.
 """
 import json, math, os, shutil, subprocess, time
 import session as s
@@ -83,5 +85,35 @@ def acceptance(client, children, args, shell_token, socketpath):
     changed = sum(diff.histogram()[255:]) / (diff.width * diff.height)
     check('the frame is identical after every gesture', changed < .001, {'changedFraction': changed})
 
+    # 2. A window seen from behind: Super+LMB carries it and it turns to face us.
+    camera(-8, 1.7, 12, 0, 0)
+    children.append(s.envrun('kitty', '--title', 'Back-Grab', '--override', 'font_size=24', 'bash', '--noprofile', '--norc', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+    cap = wait(lambda: next((c for c in s.camera()['captures'] if c['title'] == 'Back-Grab' and c['visible']), None), timeout=20)
+    time.sleep(1); cap = next(c for c in s.camera()['captures'] if c['id'] == cap['id'])
+    def normal(c):
+        x, y, z, w = c['rotation']; return [2 * (x * z + w * y), 2 * (y * z - w * x), 1 - 2 * (x * x + y * y)]
+    n, p = normal(cap), cap['position']
+    eye = [p[0] - n[0] * 2.2, p[1], p[2] - n[2] * 2.2]
+    camera(*eye, math.atan2(n[0], -n[2]), 0)
+    pointer('button', 272); time.sleep(.3)
+    check('a plain click from behind does not reach the window', s.camera()['gesture'] == 0)
+    held = s.envrun('wtype', '-P', 'Super_L', '-s', '1600', '-p', 'Super_L'); children.append(held); time.sleep(.15)
+    pointer('button', 272, 1)
+    trace = []
+    for _ in range(20):
+        c = next(c for c in s.camera()['captures'] if c['id'] == cap['id']); trace.append(round(sum(normal(c)[i] * n[i] for i in range(3)), 3))
+
+    wait(lambda: s.camera()['gesture'] == 1, timeout=3); time.sleep(.6)
+    now = next(c for c in s.camera()['captures'] if c['id'] == cap['id'])
+    to_eye = [eye[i] - now['position'][i] for i in range(3)]; length = math.hypot(*to_eye)
+    facing = sum(normal(now)[i] * to_eye[i] / length for i in range(3))
+    check('Super+LMB on the back face grabs the window', s.camera()['gestureId'] == cap['id'])
+    check('it turns to face the player', facing > .95, {'facing': facing})
+    check('the turn is animated, not a snap', any(-.98 < v < .98 for v in trace) and trace[-1] < -.98, {'normalDotOriginal': trace})
+    start = now['position']; pointer(220, 0); time.sleep(.4)
+    moved = next(c for c in s.camera()['captures'] if c['id'] == cap['id'])['position']
+    pointer('button', 272, 0); held.wait(timeout=5); wait(lambda: s.camera()['gesture'] == 0)
+    check('it can be dragged like a front grab', math.dist(start, moved) > .3, {'from': start, 'to': moved})
+    shot('back-grab-after.png')
     (s.ROOT / 'docs/evidence/static-world.json').write_text(json.dumps({'nestedOnly': True, 'world': LUMEN, 'checks': results}, indent=2) + '\n')
-    print('PASS static world:', len(results), 'checks', flush=True)
+    print('PASS static world and back grab:', len(results), 'checks', flush=True)

@@ -516,10 +516,10 @@ Vec3 pointerRay() {
     bool pointer = runtime->layerCursor || runtime->typing || runtime->editor.activeHandle >= 0;
     return runtime->pointerCamera().ray(pointer ? runtime->pointerX : .5f, pointer ? runtime->pointerY : .5f, aspect);
 }
-std::optional<std::pair<std::string, surfaces::Hit>> aim() {
+std::optional<std::pair<std::string, surfaces::Hit>> aim(bool backFaces = false) {
     std::optional<std::pair<std::string, surfaces::Hit>> best;
     for (auto &surface : runtime->capture.visible())
-        if (auto h = surfaces::intersect(surface, runtime->pointerCamera().position, pointerRay());
+        if (auto h = surfaces::intersect(surface, runtime->pointerCamera().position, pointerRay(), true, backFaces);
             h && (!best || h->distance < best->second.distance))
             best = {{surface.id, *h}};
     if (best && runtime->world) {
@@ -1613,6 +1613,10 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         (event.button == config["input"]["carry_button"].get<uint32_t>() ||
          event.button == config["input"]["resize_button"].get<uint32_t>() ||
          event.button == config["input"]["roll_button"].get<uint32_t>())) {
+        // A window seen from behind can still be carried (never clicked): it turns to face us.
+        if (!hit && event.button == config["input"]["carry_button"].get<uint32_t>())
+            if (auto back = aim(true); back && back->second.back && !capture.workspace(back->first))
+                hit = back;
         if (!hit)
             return;
         auto e = capture.find(hit->first);
@@ -1665,10 +1669,14 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         hands.begin(g, e->surface, hit->second, camera);
         if (g == interaction::Gesture::Carry) {
             auto previous = hands.pose;
-            hands.facing(config["windows"]["carry_face_player"], camera);
+            bool fromBehind = hit->second.back;
+            hands.facing(fromBehind || config["windows"]["carry_face_player"].get<bool>(), camera);
             if (!interaction::sweepSafe(previous, hands.pose, world->collision)) {
                 hands.pose = previous;
                 hands.facing(false, camera);
+            } else if (fromBehind) {
+                bool reduced = config["graphics"]["reduced_motion"] == true;
+                hands.flipFrom(previous, reduced ? 0.f : config["windows"]["transition_seconds"].get<float>());
             }
         }
         layout.freePoses[e->surface.id] = hands.pose;
