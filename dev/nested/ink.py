@@ -49,7 +49,7 @@ def acceptance(client,children,args,shell_token,socketpath):
             before=set(captures.glob('*.png'));keys('-k','u');wait(lambda:bool(set(captures.glob('*.png'))-before),timeout=20)
             png=next(iter(set(captures.glob('*.png'))-before));wait(lambda:png.with_suffix('.json').exists(),timeout=20);target=destination/(world+'-'+tier+'.png')
             shutil.copyfile(png,target);shutil.copyfile(png.with_suffix('.json'),target.with_suffix('.json'))
-            report['captures'].append(str(target.relative_to(s.ROOT)))
+            report['captures'].append(str(target.relative_to(s.ROOT) if target.is_relative_to(s.ROOT) else target))
         # Exercise live MSAA/tier changes with a held camera; no reload or app loss.
         for samples in [2,4,1]:
             client.call('graphics.set',{'patch':{'msaa':samples,'outline_quality':'smooth'}});time.sleep(.3)

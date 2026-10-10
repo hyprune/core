@@ -255,6 +255,14 @@ def run(args):
         state={'pid':process.pid,'startTime':pathlib.Path(f'/proc/{process.pid}/stat').read_text().split()[21],'config':config,'runtime':str(runtime),'signature':signature,'wayland':wayland,'cacheHome':environment['XDG_CACHE_HOME'],'stateHome':environment['XDG_STATE_HOME'],'outerSignature':environment.get('HYPRLAND_INSTANCE_SIGNATURE',''),'outerWayland':environment.get('WAYLAND_DISPLAY','')}
         (STATE/'session.json').write_text(json.dumps(state));verified()
         ctl('output','create','headless');time.sleep(.3)
+        if os.environ.get('HYPRUNE_NESTED_INSTANCE'):
+            # Headless parents have no input devices, so the seat's pointer capability
+            # existed only while an injected virtual pointer did: it flapped with every
+            # one-shot nested-pointer and Qt clients dropped their wl_pointer (the Director
+            # never saw a click). One idle virtual pointer lives as long as the session.
+            # Hyprland registers a virtual pointer with its first event: send a null motion.
+            idle=envrun(str(ROOT/'build/nested-pointer'),'serve',stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,text=True)
+            idle.stdin.write('0 0\n');idle.stdin.flush();children.append(idle)
         ctl('eval','hl.dispatch(hl.dsp.focus({ monitor = "HEADLESS-1" }))')
         if args.live:
             from live_check import acceptance
