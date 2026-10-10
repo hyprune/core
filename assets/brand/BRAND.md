@@ -4,6 +4,11 @@ Copied from the meta repo **hyprune/hyprune at `352e777`**
 (`352e7777f7707aba1e990277ff630db1c20d72d0`, "Add the brand folder"). Rules
 and the original files are in that repo's `brand/README.md`.
 
+Licence: the artwork (SVGs, the derived mask PNGs and `src/render/BrandMasks.hpp`)
+is **CC-BY-4.0**, not MIT. Attribution: "Hyprune logo by Hyprune contributors,
+CC-BY-4.0". The licence grants no trademark rights; don't use the mark in a way
+that suggests endorsement. `dev/brand-masks.py` is MIT source.
+
 | File here | Source (meta repo) | SHA-256 (from `brand/SHA256SUMS`) |
 |---|---|---|
 | `lockup-bold-horizontal-mono.svg` | `brand/svg/bold/lockup-bold-horizontal-mono.svg` | `eee1094a0e513f90b67ac9eeea43236a0cce2939117f491b4269a32688aec034` |
@@ -22,7 +27,7 @@ Core has no SVG renderer and doesn't get one: the masks are pre-rasterised and
 drawn width at capture time. The full lockup is used at 240–1024 px, the small
 one at 160–239 px (brand size rules), so the masters are always downscaled.
 
-Regenerate (light; laptop is fine) after a brand change:
+Regenerate (light, seconds) after a brand change:
 
 ```sh
 python3 dev/brand-masks.py --meta ../hyprune --commit <meta-commit>
