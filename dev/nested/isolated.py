@@ -18,8 +18,8 @@ Usage: isolated.py [session.py args] | isolated.py dev/nested/<script>.py [args]
 
 GPU choice: with several render nodes and bwrap installed, auto gives each
 instance the GPU with the fewest live instances and runs the whole instance
-(parent, Hyprland, clients) in a mount namespace whose /dev holds only that
-GPU's render node (plus NVIDIA's shared control nodes). EGL, GBM and the
+(parent, Hyprland, clients) in a mount namespace whose /dev/dri holds only that
+GPU's render node (all /dev/nvidia* nodes stay, NVENC needs them). EGL, GBM and the
 parent's dmabuf feedback then all agree, and no instance sees a card (KMS)
 node. `all` keeps every GPU visible (cross-GPU offload tests). The choice
 and nvidia-smi load samples (whole-GPU, 1 Hz) go to instance.json.
@@ -79,7 +79,9 @@ def sandbox(gpu):
     args=['bwrap','--dev-bind','/','/','--dev','/dev','--dev-bind','/dev/shm','/dev/shm','--die-with-parent']
     nodes=['/dev/dri/'+gpu['node']]
     if gpu['nvidiaMinor'] is not None:
-        nodes+=[f"/dev/nvidia{gpu['nvidiaMinor']}"]+[d for d in ('/dev/nvidiactl','/dev/nvidia-modeset','/dev/nvidia-uvm','/dev/nvidia-uvm-tools') if os.path.exists(d)]
+        # Only the render node steers EGL/GBM/the parent. Every /dev/nvidiaN stays:
+        # NVENC (wf-recorder, ffmpeg) won't open an encode session without them all.
+        nodes+=sorted(str(d) for d in pathlib.Path('/dev').glob('nvidia[0-9]*'))+[d for d in ('/dev/nvidiactl','/dev/nvidia-modeset','/dev/nvidia-uvm','/dev/nvidia-uvm-tools') if os.path.exists(d)]
     for node in nodes:args+=['--dev-bind',node,node]
     return args
 
