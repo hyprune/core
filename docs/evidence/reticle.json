@@ -147,7 +147,7 @@
           "distance": 3.059999942779541,
           "hint": "",
           "reach": 12.0,
-          "spread": 0.26903825998306274,
+          "spread": 0.2702069580554962,
           "state": "invalid"
         },
         "wire": {
@@ -164,7 +164,7 @@
           "distance": 3.0,
           "hint": "",
           "reach": 12.0,
-          "spread": 8.081053159969542e-09,
+          "spread": 9.95835858219607e-09,
           "state": "valid"
         },
         "wire": {
@@ -181,7 +181,7 @@
           "distance": 3.0,
           "hint": "3.0 m",
           "reach": 2.0,
-          "spread": 4.321123903139323e-09,
+          "spread": 5.3204365357828465e-09,
           "state": "out_of_range"
         },
         "wire": {
@@ -202,7 +202,7 @@
           "distance": 3.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 1.5834791787392105e-15,
+          "spread": 1.2629708053441295e-15,
           "state": "valid"
         },
         "wire": {
@@ -231,7 +231,7 @@
           "distance": 8.239073753356934,
           "hint": "",
           "reach": 12.0,
-          "spread": 0.6211544275283813,
+          "spread": 0.7535445690155029,
           "state": "valid"
         },
         "wire": {
@@ -248,7 +248,7 @@
           "distance": 8.239073753356934,
           "hint": "8.2 m",
           "reach": 1.0,
-          "spread": 0.4159867763519287,
+          "spread": 0.41073501110076904,
           "state": "out_of_range"
         },
         "wire": {
@@ -276,7 +276,7 @@
           "distance": 8.239073753356934,
           "hint": "8.2 m",
           "reach": 1.0,
-          "spread": 6.285173185460735e-06,
+          "spread": 6.005925570207182e-06,
           "state": "out_of_range"
         },
         "aim": "",
@@ -293,7 +293,7 @@
           "distance": 8.239073753356934,
           "hint": "",
           "reach": 12.0,
-          "spread": 1.024831135509885e-06,
+          "spread": 1.7445083813072415e-06,
           "state": "valid"
         },
         "wire": {
@@ -310,7 +310,7 @@
           "distance": 3.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 6.849223410654304e-09,
+          "spread": 9.698153391468622e-09,
           "state": "target"
         },
         "wire": {
@@ -327,7 +327,7 @@
           "distance": -1.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 3.994967222213745,
+          "spread": 3.9538486003875732,
           "state": "neutral"
         },
         "wire": {
@@ -344,7 +344,7 @@
           "distance": 3.0,
           "hint": "",
           "reach": 15.0,
-          "spread": 0.0035366241354495287,
+          "spread": 0.0034544519148766994,
           "state": "valid"
         },
         "wire": {
@@ -360,7 +360,7 @@
         "distance": 3.0,
         "hint": "",
         "reach": 15.0,
-        "spread": 0.0035366241354495287,
+        "spread": 0.0034544519148766994,
         "state": "valid"
       }
     },
@@ -372,7 +372,7 @@
           "distance": 3.0,
           "hint": "3.0 m",
           "reach": 2.0,
-          "spread": 2.6512136212143276e-17,
+          "spread": 4.680038682442526e-17,
           "state": "out_of_range"
         },
         "wire": {
@@ -393,7 +393,7 @@
           "distance": -1.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 0.06269700080156326,
+          "spread": 0.07490468770265579,
           "state": "holding"
         },
         "wire": {
@@ -427,7 +427,7 @@
           "distance": 3.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 0.00035854149609804153,
+          "spread": 0.0003990931436419487,
           "state": "target"
         },
         "wire": {
@@ -444,7 +444,7 @@
           "distance": -1.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 3.5711061627807794e-06,
+          "spread": 3.99767577619059e-06,
           "state": "hidden"
         },
         "wire": {
@@ -461,7 +461,7 @@
           "distance": 3.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 4.312165202691176e-08,
+          "spread": 4.860767077730088e-08,
           "state": "target"
         },
         "wire": {
@@ -473,8 +473,8 @@
     {
       "name": "dynamic reticle opens while moving and settles",
       "evidence": {
-        "moving": 3.9999923706054688,
-        "still": 1.281072059100552e-06
+        "moving": 3.99999737739563,
+        "still": 1.4713493783347076e-06
       }
     },
     {
@@ -488,9 +488,9 @@
     {
       "name": "walk speed about 4 m/s",
       "evidence": {
-        "minBob": -0.0067987460643053055,
+        "minBob": -0.006798727437853813,
         "maxBob": 0.0,
-        "peakSpeed": 3.9964792728424072,
+        "peakSpeed": 3.9964797496795654,
         "rest": [
           0.0,
           0.0,
@@ -501,9 +501,9 @@
     {
       "name": "subtle bob while walking, never above eye height, settles",
       "evidence": {
-        "minBob": -0.0067987460643053055,
+        "minBob": -0.006798727437853813,
         "maxBob": 0.0,
-        "peakSpeed": 3.9964792728424072,
+        "peakSpeed": 3.9964797496795654,
         "rest": [
           0.0,
           0.0,
@@ -514,9 +514,9 @@
     {
       "name": "run speed about 10 m/s (or a wall first)",
       "evidence": {
-        "minBob": -0.0034363504964858294,
+        "minBob": -0.0034376312978565693,
         "maxBob": 0.0,
-        "peakSpeed": 8.823987007141113,
+        "peakSpeed": 9.349138259887695,
         "rest": [
           0.0,
           0.0,
@@ -527,16 +527,16 @@
     {
       "name": "running bobs less than walking",
       "evidence": {
-        "walk": -0.0067987460643053055,
-        "run": -0.0034363504964858294
+        "walk": -0.006798727437853813,
+        "run": -0.0034376312978565693
       }
     },
     {
       "name": "walk speed applies live",
       "evidence": {
-        "minBob": -0.009687739424407482,
-        "maxBob": -7.695975000387989e-06,
-        "peakSpeed": 2.000026226043701,
+        "minBob": -0.009940849617123604,
+        "maxBob": -2.2703002855450904e-07,
+        "peakSpeed": 2.000030755996704,
         "rest": [
           0.0,
           0.0,
@@ -549,7 +549,7 @@
       "evidence": {
         "minBob": 0.0,
         "maxBob": 0.0,
-        "peakSpeed": 3.9964821338653564,
+        "peakSpeed": 3.9964308738708496,
         "rest": [
           0.0,
           0.0,
@@ -562,7 +562,7 @@
       "evidence": {
         "minBob": 0.0,
         "maxBob": 0.0,
-        "peakSpeed": 3.9966249465942383,
+        "peakSpeed": 3.9965415000915527,
         "rest": [
           0.0,
           0.0,
@@ -573,8 +573,8 @@
     {
       "name": "normal bob is larger than subtle",
       "evidence": {
-        "normal": -0.019959699362516403,
-        "subtle": -0.0067987460643053055
+        "normal": -0.02001584693789482,
+        "subtle": -0.006798727437853813
       }
     },
     {
@@ -582,7 +582,7 @@
       "evidence": {
         "minBob": 0.0,
         "maxBob": 0.0,
-        "peakSpeed": 4.981307029724121,
+        "peakSpeed": 4.976955890655518,
         "rest": [
           0.0,
           0.0,

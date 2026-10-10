@@ -18,7 +18,7 @@
         "capSource": "profile",
         "device": {
           "drivesCompositor": false,
-          "enforcedLimitW": 135.0,
+          "enforcedLimitW": 134.014,
           "name": "NVIDIA GeForce RTX 5090 Laptop GPU",
           "node": "renderD129",
           "pci": "0000:02:00.0",
@@ -38,7 +38,7 @@
         "capSource": "profile",
         "device": {
           "drivesCompositor": false,
-          "enforcedLimitW": 135.0,
+          "enforcedLimitW": 134.014,
           "name": "NVIDIA GeForce RTX 5090 Laptop GPU",
           "node": "renderD129",
           "pci": "0000:02:00.0",
@@ -58,7 +58,7 @@
         "capSource": "profile",
         "device": {
           "drivesCompositor": false,
-          "enforcedLimitW": 135.0,
+          "enforcedLimitW": 134.014,
           "name": "NVIDIA GeForce RTX 5090 Laptop GPU",
           "node": "renderD129",
           "pci": "0000:02:00.0",
@@ -70,8 +70,8 @@
     {
       "name": "offload=auto: the world keeps rendering",
       "evidence": [
-        15,
-        16
+        14,
+        15
       ]
     },
     {
@@ -85,7 +85,7 @@
         "capSource": "profile",
         "device": {
           "drivesCompositor": false,
-          "enforcedLimitW": 135.0,
+          "enforcedLimitW": 134.014,
           "name": "NVIDIA GeForce RTX 5090 Laptop GPU",
           "node": "renderD129",
           "pci": "0000:02:00.0",
@@ -105,7 +105,7 @@
         "capSource": "profile",
         "device": {
           "drivesCompositor": false,
-          "enforcedLimitW": 135.0,
+          "enforcedLimitW": 134.014,
           "name": "NVIDIA GeForce RTX 5090 Laptop GPU",
           "node": "renderD129",
           "pci": "0000:02:00.0",
@@ -125,7 +125,7 @@
         "capSource": "profile",
         "device": {
           "drivesCompositor": false,
-          "enforcedLimitW": 135.0,
+          "enforcedLimitW": 134.014,
           "name": "NVIDIA GeForce RTX 5090 Laptop GPU",
           "node": "renderD129",
           "pci": "0000:02:00.0",
