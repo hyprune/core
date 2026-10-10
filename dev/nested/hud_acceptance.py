@@ -45,9 +45,13 @@ PanelWindow {
     assert 10<=len(poses)<=61, len(poses)
     assert 3<=len(frames)<=9, len(frames)
     assert all(p['subscriptionId']==hs and p['zone']['homeName']=='Sun Court' for p in poses)
-    # One physical press, regardless of repeat; no tool mutation.
+    # 5 is tool 5 (Placement) since the IPC 0.15 owner corrections; hud.cycle is unbound by
+    # default. Bind it to a free key, then one physical press, regardless of repeat.
+    config=client.call('input.get',{})['config']
+    assert not config['modes']['world'].get('hud.cycle'),config['modes']['world'].get('hud.cycle')
+    config['modes']['world']['hud.cycle']=['7'];client.call('input.set',{'config':config})
     before=state()['editor']['tool']
-    keys('-P','5','-s','900','-p','5');client.call('session.ping',{})
+    keys('-P','7','-s','900','-p','7');client.call('session.ping',{})
     cycles=[e for e in client.events if e.get('method')=='ui.hud.cycle']
     assert len(cycles)==1, cycles
     assert cycles[0]['params']['leaseId']==lease and cycles[0]['params']['outputId']==output
@@ -58,9 +62,9 @@ PanelWindow {
     assert any(e.get('method')=='zone.entered' and e['params']['zone']['id']=='array-hall' for e in client.events)
     assert any(e.get('method')=='zone.exited' and e['params']['zone']['id']=='sun-court' for e in client.events)
     # Rebind without compositor reload, and verify the former key stops cycling.
-    config=client.call('input.get',{})['config'];assert 'tool5' not in config['modes']['world']
+    config=client.call('input.get',{})['config']
     config['modes']['world']['hud.cycle']=['6'];client.call('input.set',{'config':config})
-    keys('-k','5');keys('-k','6');client.call('session.ping',{})
+    keys('-k','7');keys('-k','6');client.call('session.ping',{})
     assert len([e for e in client.events if e.get('method')=='ui.hud.cycle'])==2
     client.call('hud.unsubscribe',{'subscriptionId':hs});client.call('session.ping',{})
     start=len(client.events);time.sleep(.4);client.call('session.ping',{})

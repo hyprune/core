@@ -39,12 +39,13 @@ def acceptance(client,children,args,shell_token,socketpath):
         check('attached_windows_skip_root_placement',not any(v['surfaceId'] in [menu['id'],dialog['id']] for v in s.camera()['instances']))
         client.call('runtime.exit',{})
         (s.STATE/'review-x11.json').write_text(json.dumps(results,indent=2)+'\n');return
+    # Enter first: clients launched while the world is active open in its room (room 20 model).
+    s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")')
+    wait(lambda:s.camera()['active'],'world active')
     apps=[]
     for title in ['Audit first','Audit second']:
         app=s.envrun('kitty','--start-as','normal','--title',title,'--override','initial_window_width=640','--override','initial_window_height=480','bash','--noprofile','--norc',stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);children.append(app);apps.append(app)
     wait(lambda:len(json.loads(s.ctl('clients','-j')))>=2,'two clients mapped')
-    s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")')
-    wait(lambda:s.camera()['active'],'world active')
     def surface(title):return next((v for v in s.camera()['captures'] if v['title']==title),None)
     a=wait(lambda:surface('Audit first'),'first surface');b=wait(lambda:surface('Audit second'),'second surface')
     def fullscreen(title,action):

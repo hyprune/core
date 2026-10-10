@@ -52,9 +52,8 @@ def acceptance(client,children,args,shell_token,socketpath):
     for opt in [False,True]:
         client.call('recording.start',{'includeAppKeys':opt})
         client.call('surface.focus',{'surfaceId':surface['id'],'intent':'keyboard'})
-        keys('z');time.sleep(.15);keys('-M','logo','-P','Super_L','-s','40','-k','Tab','-p','Super_L','-m','logo');wait(lambda:state()['editor']['mode']=='cursor')
-        pointer('button',275);wait(lambda:state()['editor']['mode']=='interactive')
-        client.call('workspace.unfocus',{});wait(lambda:state()['editor']['mode']=='world')
+        # Back/Super+Tab from use exits directly to world (docs/OWNER-INTERACTIONS.md).
+        keys('z');time.sleep(.15);keys('-M','logo','-P','Super_L','-s','40','-k','Tab','-p','Super_L','-m','logo');wait(lambda:state()['editor']['mode']=='world')
         clip=client.call('recording.stop',{})
         private=[json.loads(line) for line in pathlib.Path(clip['path']).read_text().splitlines()]
         events=[v['event'] for v in private if v['kind']=='input']
