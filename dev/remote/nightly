@@ -77,7 +77,7 @@ def suites():
 
 
 def make_steps(target, cwd, logs, prefix):
-    """`make TARGET` with the bake host's ssh hop replaced by local Blender. Lines after
+    """`make TARGET` with the bake host's ssh hops run locally (Blender, the PVS kernel). Lines after
     a Blender build are expanded again, so paths derived from the new package resolve."""
     rows = []
     def lines():
@@ -95,6 +95,8 @@ def make_steps(target, cwd, logs, prefix):
             if blender.group(1) == 'lumen':  # remote-lumen.sh's fixed Blender command line
                 args = ' -b -t 12 --python-exit-code 1 --python lumen-reach/build.py --' + args
             line = 'HYPRUNE_REMOTE_BLENDER=1 flock .blender.lock blender' + args
+        elif line.startswith('python3 tools/derive-visibility.py') and '--local' not in line:
+            line += ' --local'  # its kernel would ssh to the bake host, which is this machine
         rows.append(step(f'{prefix}: {line[:90]}', line, cwd, logs, shell=True, timeout=7200))
         if rows[-1]['status'] != 'pass':
             break
@@ -173,7 +175,7 @@ def prune():
     for stem in sorted({p.stem for p in out.glob('????-??-??.*')}, reverse=True)[KEEP:]:
         for p in out.glob(stem + '.*'):
             p.unlink()
-    stamps = sorted({d.name.split('-scripts')[0] for d in RUNS.glob('nightly-*')}, reverse=True)
+    stamps = sorted({re.sub(r'-(scripts|perf)$', '', d.name) for d in RUNS.glob('nightly-*')}, reverse=True)
     for old in stamps[KEEP:]:
         for d in RUNS.glob(old + '*'):
             shutil.rmtree(d, ignore_errors=True)
@@ -201,12 +203,18 @@ def run():
         env = {'HYPRUNE_REMOTE_CORE': str(WS / 'core'), 'HYPRUNE_PERF_WORLD': str(WS / 'worlds/dist/com.hyprune.lumen-reach')}
         # Harness scripts that predate per-instance state roots share dev/nested/.m3b-state:
         # run them one at a time after the parallel pass.
-        passes = [('', ['--parallel', '4'], [n for n in names if not n.endswith('.py')]),
-                  ('-scripts', ['--parallel', '1', '--no-build'], [n for n in names if n.endswith('.py')])]
+        # One nested instance per GPU: at four, Lumen Reach loads hit the harness's 5 s IPC timeouts.
+        # perf measures at native 4K, alone.
+        gpus = max(1, len(list(pathlib.Path('/sys/class/drm').glob('renderD*'))))
+        passes = [('', ['--parallel', str(gpus)], [n for n in names if not n.endswith('.py') and n != 'perf'], {}),
+                  ('-scripts', ['--parallel', '1', '--no-build'], [n for n in names if n.endswith('.py')], {}),
+                  ('-perf', ['--parallel', '1', '--no-build'], [n for n in names if n == 'perf'], {'HYPRUNE_NESTED_4K': '1'})]
         summaries = []
-        for suffix, options, chosen in passes:
+        for suffix, options, chosen, extra in passes:
+            if not chosen:
+                continue
             core = subprocess.run([sys.executable, str(HERE / 'run'), '--run-id', f'nightly-{stamp}{suffix}', *options, *chosen],
-                                  env={**os.environ, **env}, capture_output=True, text=True)
+                                  env={**os.environ, **env, **extra}, capture_output=True, text=True)
             (logs / f'runner{suffix}.stderr.log').write_text(core.stderr)
             try:
                 summaries.append(json.loads(core.stdout))

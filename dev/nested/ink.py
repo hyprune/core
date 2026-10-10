@@ -1,5 +1,5 @@
 """IPC 0.14 live ink quality/capture acceptance. Called only under run.sh's flock."""
-import json,statistics,time,subprocess,shutil
+import json,pathlib,statistics,time,subprocess,shutil
 import session as s
 from m2 import wait,keys
 
@@ -42,7 +42,10 @@ def acceptance(client,children,args,shell_token,socketpath):
                   'totalGpuMs':statistics.median(sum(t['gpuPassMs']) for t in samples),
                   'upscaleMs':statistics.median(t['gpuEffectsMs']['upscale_sharpen'] for t in samples)}
             report['measurements'].append(item);print('MEASURE ink',json.dumps(item),flush=True)
-            check(world+' '+tier+' Intel', 'Intel' in str(last['renderer']))
+            # The tiers are measured for the Intel (laptop iGPU) budget; hosts without one record only.
+            if any(pathlib.Path(f'/sys/class/drm/{n.name}/device/vendor').read_text().strip()=='0x8086' for n in pathlib.Path('/sys/class/drm').glob('renderD*')):
+                check(world+' '+tier+' Intel', 'Intel' in str(last['renderer']))
+            else:print('SKIP ink:',world,tier,'Intel renderer check (no Intel GPU on this host)',flush=True)
             before=set(captures.glob('*.png'));keys('-k','u');wait(lambda:bool(set(captures.glob('*.png'))-before),timeout=20)
             png=next(iter(set(captures.glob('*.png'))-before));wait(lambda:png.with_suffix('.json').exists(),timeout=20);target=destination/(world+'-'+tier+'.png')
             shutil.copyfile(png,target);shutil.copyfile(png.with_suffix('.json'),target.with_suffix('.json'))
