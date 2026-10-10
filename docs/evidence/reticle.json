@@ -1,0 +1,594 @@
+{
+  "nestedOnly": true,
+  "protocol": "0.19",
+  "checks": [
+    {
+      "name": "hidden before entering",
+      "evidence": null
+    },
+    {
+      "name": "overlay style carries the reticle colours (0.19)",
+      "evidence": null
+    },
+    {
+      "name": "player defaults",
+      "evidence": {
+        "reach_grab": 15.0,
+        "reach_mount": 8.0,
+        "reach_placement": 12.0,
+        "reticle_colour": "theme",
+        "reticle_dynamic": true,
+        "reticle_gap": 4.0,
+        "reticle_opacity": 0.9,
+        "reticle_outline": true,
+        "reticle_size": 18.0,
+        "reticle_style": "cross_dot",
+        "reticle_thickness": 2.0,
+        "run_speed": 10.0,
+        "view_bob": "subtle",
+        "walk_speed": 4.0
+      }
+    },
+    {
+      "name": "graphics fov default 65, accepts 120",
+      "evidence": null
+    },
+    {
+      "name": "out-of-range player setting rejected",
+      "evidence": null
+    },
+    {
+      "name": "player.set applies live and persists overrides only",
+      "evidence": {
+        "reticle_style": "circle_dot",
+        "walk_speed": 2.5
+      }
+    },
+    {
+      "name": "null resets to the default",
+      "evidence": null
+    },
+    {
+      "name": "tool 5 on a free wall in reach: valid place",
+      "evidence": {
+        "diagnostics": {
+          "action": "place",
+          "distance": 1.5,
+          "hint": "",
+          "reach": 12.0,
+          "spread": 0.0,
+          "state": "valid"
+        },
+        "wire": {
+          "action": "place",
+          "state": "valid"
+        }
+      }
+    },
+    {
+      "name": "placement reach reported",
+      "evidence": {
+        "action": "place",
+        "distance": 1.5,
+        "hint": "",
+        "reach": 12.0,
+        "spread": 0.0,
+        "state": "valid"
+      }
+    },
+    {
+      "name": "beyond placement reach: out of range",
+      "evidence": {
+        "diagnostics": {
+          "action": "place",
+          "distance": 1.5,
+          "hint": "1.5 m",
+          "reach": 1.0,
+          "spread": 0.0,
+          "state": "out_of_range"
+        },
+        "wire": {
+          "action": "place",
+          "state": "out_of_range"
+        }
+      }
+    },
+    {
+      "name": "out of range shows the distance hint",
+      "evidence": {
+        "action": "place",
+        "distance": 1.5,
+        "hint": "1.5 m",
+        "reach": 1.0,
+        "spread": 0.0,
+        "state": "out_of_range"
+      }
+    },
+    {
+      "name": "surface placement beyond reach is refused",
+      "evidence": [
+        {
+          "jsonrpc": "2.0",
+          "method": "runtime.notice",
+          "params": {
+            "code": "placement.out_of_range",
+            "level": "info",
+            "message": "Too far: 1.5 m (reach 1 m)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "reach restored: valid again",
+      "evidence": {
+        "diagnostics": {
+          "action": "place",
+          "distance": 1.5,
+          "hint": "",
+          "reach": 12.0,
+          "spread": 0.0,
+          "state": "valid"
+        },
+        "wire": {
+          "action": "place",
+          "state": "valid"
+        }
+      }
+    },
+    {
+      "name": "surface placement in reach works",
+      "evidence": null
+    },
+    {
+      "name": "aiming at the placed window: no room, invalid",
+      "evidence": {
+        "diagnostics": {
+          "action": "place",
+          "distance": 3.059999942779541,
+          "hint": "",
+          "reach": 12.0,
+          "spread": 0.26903825998306274,
+          "state": "invalid"
+        },
+        "wire": {
+          "action": "place",
+          "state": "invalid"
+        }
+      }
+    },
+    {
+      "name": "tool 5, empty queue, window in reach: valid pocket",
+      "evidence": {
+        "diagnostics": {
+          "action": "pocket",
+          "distance": 3.0,
+          "hint": "",
+          "reach": 12.0,
+          "spread": 8.081053159969542e-09,
+          "state": "valid"
+        },
+        "wire": {
+          "action": "pocket",
+          "state": "valid"
+        }
+      }
+    },
+    {
+      "name": "pocket beyond reach: out of range",
+      "evidence": {
+        "diagnostics": {
+          "action": "pocket",
+          "distance": 3.0,
+          "hint": "3.0 m",
+          "reach": 2.0,
+          "spread": 4.321123903139323e-09,
+          "state": "out_of_range"
+        },
+        "wire": {
+          "action": "pocket",
+          "state": "out_of_range"
+        }
+      }
+    },
+    {
+      "name": "pocket beyond reach is refused",
+      "evidence": null
+    },
+    {
+      "name": "tool 2 on a window: valid select",
+      "evidence": {
+        "diagnostics": {
+          "action": "select",
+          "distance": 3.0,
+          "hint": "",
+          "reach": -1.0,
+          "spread": 1.5834791787392105e-15,
+          "state": "valid"
+        },
+        "wire": {
+          "action": "select",
+          "state": "valid"
+        }
+      }
+    },
+    {
+      "name": "found a clear wall for mounting",
+      "evidence": [
+        [
+          0,
+          2.3,
+          0
+        ],
+        2.1707963267948966,
+        0
+      ]
+    },
+    {
+      "name": "tool 2 with a tagged window on a wall in reach: valid mount",
+      "evidence": {
+        "diagnostics": {
+          "action": "mount",
+          "distance": 8.239073753356934,
+          "hint": "",
+          "reach": 12.0,
+          "spread": 0.6211544275283813,
+          "state": "valid"
+        },
+        "wire": {
+          "action": "mount",
+          "state": "valid"
+        }
+      }
+    },
+    {
+      "name": "mount on a wall beyond reach: out of range",
+      "evidence": {
+        "diagnostics": {
+          "action": "mount",
+          "distance": 8.239073753356934,
+          "hint": "8.2 m",
+          "reach": 1.0,
+          "spread": 0.4159867763519287,
+          "state": "out_of_range"
+        },
+        "wire": {
+          "action": "mount",
+          "state": "out_of_range"
+        }
+      }
+    },
+    {
+      "name": "wall mount beyond reach is refused",
+      "evidence": {
+        "from": [
+          1.440000057220459,
+          2.299999952316284,
+          -1.1324685544877866e-07
+        ],
+        "to": [
+          1.440000057220459,
+          2.299999952316284,
+          -1.1324685544877866e-07
+        ],
+        "notices": 1,
+        "reticle": {
+          "action": "mount",
+          "distance": 8.239073753356934,
+          "hint": "8.2 m",
+          "reach": 1.0,
+          "spread": 6.285173185460735e-06,
+          "state": "out_of_range"
+        },
+        "aim": "",
+        "tagged": "surface-1",
+        "first": "surface-1",
+        "tool": 2
+      }
+    },
+    {
+      "name": "tool 3 on a wall in reach: valid path point",
+      "evidence": {
+        "diagnostics": {
+          "action": "path",
+          "distance": 8.239073753356934,
+          "hint": "",
+          "reach": 12.0,
+          "spread": 1.024831135509885e-06,
+          "state": "valid"
+        },
+        "wire": {
+          "action": "path",
+          "state": "valid"
+        }
+      }
+    },
+    {
+      "name": "tool 1 on a window: target click",
+      "evidence": {
+        "diagnostics": {
+          "action": "click",
+          "distance": 3.0,
+          "hint": "",
+          "reach": -1.0,
+          "spread": 6.849223410654304e-09,
+          "state": "target"
+        },
+        "wire": {
+          "action": "click",
+          "state": "target"
+        }
+      }
+    },
+    {
+      "name": "tool 1 on the sky: neutral",
+      "evidence": {
+        "diagnostics": {
+          "action": "",
+          "distance": -1.0,
+          "hint": "",
+          "reach": -1.0,
+          "spread": 3.994967222213745,
+          "state": "neutral"
+        },
+        "wire": {
+          "action": "",
+          "state": "neutral"
+        }
+      }
+    },
+    {
+      "name": "Super on a window in reach: valid grab",
+      "evidence": {
+        "diagnostics": {
+          "action": "grab",
+          "distance": 3.0,
+          "hint": "",
+          "reach": 15.0,
+          "spread": 0.0035366241354495287,
+          "state": "valid"
+        },
+        "wire": {
+          "action": "grab",
+          "state": "valid"
+        }
+      }
+    },
+    {
+      "name": "grab reach reported",
+      "evidence": {
+        "action": "grab",
+        "distance": 3.0,
+        "hint": "",
+        "reach": 15.0,
+        "spread": 0.0035366241354495287,
+        "state": "valid"
+      }
+    },
+    {
+      "name": "Super on a window beyond grab reach: out of range",
+      "evidence": {
+        "diagnostics": {
+          "action": "grab",
+          "distance": 3.0,
+          "hint": "3.0 m",
+          "reach": 2.0,
+          "spread": 2.6512136212143276e-17,
+          "state": "out_of_range"
+        },
+        "wire": {
+          "action": "grab",
+          "state": "out_of_range"
+        }
+      }
+    },
+    {
+      "name": "Super+LMB beyond grab reach does not grab",
+      "evidence": null
+    },
+    {
+      "name": "carrying, release leaves it in place: holding",
+      "evidence": {
+        "diagnostics": {
+          "action": "",
+          "distance": -1.0,
+          "hint": "",
+          "reach": -1.0,
+          "spread": 0.06269700080156326,
+          "state": "holding"
+        },
+        "wire": {
+          "action": "",
+          "state": "holding"
+        }
+      }
+    },
+    {
+      "name": "typing mode (E use): typing",
+      "evidence": {
+        "diagnostics": {
+          "action": "",
+          "distance": -1.0,
+          "hint": "",
+          "reach": -1.0,
+          "spread": 0.0,
+          "state": "typing"
+        },
+        "wire": {
+          "action": "",
+          "state": "typing"
+        }
+      }
+    },
+    {
+      "name": "typing off (exit): back to target",
+      "evidence": {
+        "diagnostics": {
+          "action": "click",
+          "distance": 3.0,
+          "hint": "",
+          "reach": -1.0,
+          "spread": 0.00035854149609804153,
+          "state": "target"
+        },
+        "wire": {
+          "action": "click",
+          "state": "target"
+        }
+      }
+    },
+    {
+      "name": "free cursor: hidden",
+      "evidence": {
+        "diagnostics": {
+          "action": "",
+          "distance": -1.0,
+          "hint": "",
+          "reach": -1.0,
+          "spread": 3.5711061627807794e-06,
+          "state": "hidden"
+        },
+        "wire": {
+          "action": "",
+          "state": "hidden"
+        }
+      }
+    },
+    {
+      "name": "back from the free cursor",
+      "evidence": {
+        "diagnostics": {
+          "action": "click",
+          "distance": 3.0,
+          "hint": "",
+          "reach": -1.0,
+          "spread": 4.312165202691176e-08,
+          "state": "target"
+        },
+        "wire": {
+          "action": "click",
+          "state": "target"
+        }
+      }
+    },
+    {
+      "name": "dynamic reticle opens while moving and settles",
+      "evidence": {
+        "moving": 3.9999923706054688,
+        "still": 1.281072059100552e-06
+      }
+    },
+    {
+      "name": "dynamic off: constant reticle",
+      "evidence": 0.0
+    },
+    {
+      "name": "reduced motion: constant reticle",
+      "evidence": 0.0
+    },
+    {
+      "name": "walk speed about 4 m/s",
+      "evidence": {
+        "minBob": -0.0067987460643053055,
+        "maxBob": 0.0,
+        "peakSpeed": 3.9964792728424072,
+        "rest": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    {
+      "name": "subtle bob while walking, never above eye height, settles",
+      "evidence": {
+        "minBob": -0.0067987460643053055,
+        "maxBob": 0.0,
+        "peakSpeed": 3.9964792728424072,
+        "rest": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    {
+      "name": "run speed about 10 m/s (or a wall first)",
+      "evidence": {
+        "minBob": -0.0034363504964858294,
+        "maxBob": 0.0,
+        "peakSpeed": 8.823987007141113,
+        "rest": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    {
+      "name": "running bobs less than walking",
+      "evidence": {
+        "walk": -0.0067987460643053055,
+        "run": -0.0034363504964858294
+      }
+    },
+    {
+      "name": "walk speed applies live",
+      "evidence": {
+        "minBob": -0.009687739424407482,
+        "maxBob": -7.695975000387989e-06,
+        "peakSpeed": 2.000026226043701,
+        "rest": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    {
+      "name": "view bob off",
+      "evidence": {
+        "minBob": 0.0,
+        "maxBob": 0.0,
+        "peakSpeed": 3.9964821338653564,
+        "rest": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    {
+      "name": "reduced motion turns the bob off",
+      "evidence": {
+        "minBob": 0.0,
+        "maxBob": 0.0,
+        "peakSpeed": 3.9966249465942383,
+        "rest": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    {
+      "name": "normal bob is larger than subtle",
+      "evidence": {
+        "normal": -0.019959699362516403,
+        "subtle": -0.0067987460643053055
+      }
+    },
+    {
+      "name": "no bob in flight",
+      "evidence": {
+        "minBob": 0.0,
+        "maxBob": 0.0,
+        "peakSpeed": 4.981307029724121,
+        "rest": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    }
+  ]
+}

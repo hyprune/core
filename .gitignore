@@ -29,3 +29,4 @@ tests/fixtures/m3b/
 /dev/nested/.watermark-state/
 /dev/nested/.instances/
 /tests/fixtures/.prepare.lock
+/dev/nested/.reticle-state/

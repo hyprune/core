@@ -71,6 +71,7 @@ def run(args):
     if getattr(args,'long_titles',False): args.m3b=True
     if getattr(args,'live_findings',False): args.m3b=True
     if getattr(args,'placement',False): args.m3b=True
+    if getattr(args,'reticle',False): args.m3b=True
     if getattr(args,'ink',False): args.authoring=True
     if getattr(args,'watermark',False): args.authoring=True
     if getattr(args,'perf',False):
@@ -101,8 +102,12 @@ def run(args):
         STATE=STATE_ROOT/'.m2-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if getattr(args,'watermark',False):
         STATE=STATE_ROOT/'.watermark-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+    if getattr(args,'reticle',False):
+        STATE=STATE_ROOT/'.reticle-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     STATE.mkdir(exist_ok=True);os.chmod(STATE,0o700)
-    if getattr(args,'placement',False) or getattr(args,'playable',False) or getattr(args,'workspace_homes',False) or getattr(args,'long_titles',False) or getattr(args,'live_findings',False): (STATE/'layout.json').unlink(missing_ok=True)
+    # Player settings (IPC 0.19) start from defaults in every run.
+    (STATE/'player.json').unlink(missing_ok=True)
+    if getattr(args,'placement',False) or getattr(args,'reticle',False) or getattr(args,'playable',False) or getattr(args,'workspace_homes',False) or getattr(args,'long_titles',False) or getattr(args,'live_findings',False): (STATE/'layout.json').unlink(missing_ok=True)
     if args.m3b:
         (STATE/'input.json').unlink(missing_ok=True);(STATE/'editor.json').unlink(missing_ok=True)
         for name in ['acceptance.json','transcript.json','notifications.json']:
@@ -204,7 +209,7 @@ def run(args):
         from long_titles import grants as extra
         args.extra_grants=extra();grants+=args.extra_grants
     read,write=os.pipe();os.write(write,json.dumps(grants).encode());os.close(write)
-    environment=os.environ.copy();environment.update(HYPRUNE_VALIDATE_IPC='1',AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read),HYPRUNE_LAYOUT_FILE=str(STATE/"layout.json"),HYPRUNE_INPUT_FILE=str(STATE/"input.json"),HYPRUNE_GRAPHICS_FILE=str(STATE/"graphics.json"),HYPRUNE_EDITOR_FILE=str(STATE/"editor.json"),XDG_STATE_HOME=str(STATE/"statehome"),XDG_CACHE_HOME=str(STATE/"cache"/secrets.token_hex(8)))
+    environment=os.environ.copy();environment.update(HYPRUNE_VALIDATE_IPC='1',AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read),HYPRUNE_LAYOUT_FILE=str(STATE/"layout.json"),HYPRUNE_INPUT_FILE=str(STATE/"input.json"),HYPRUNE_GRAPHICS_FILE=str(STATE/"graphics.json"),HYPRUNE_PLAYER_FILE=str(STATE/"player.json"),HYPRUNE_EDITOR_FILE=str(STATE/"editor.json"),XDG_STATE_HOME=str(STATE/"statehome"),XDG_CACHE_HOME=str(STATE/"cache"/secrets.token_hex(8)))
     if args.integration: environment['HYPRUNE_WORKSPACE_LOCATIONS']=str(STATE/'locations.json')
     config=str(HERE/'hyprland.lua')
     if os.environ.get('HYPRUNE_NESTED_4K')=='1':
@@ -253,7 +258,7 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,"0.16" if getattr(args,"upscaler",False) or getattr(args,"live_findings",False) else "0.15" if getattr(args,"perf",False) or getattr(args,"autodrive",False) or getattr(args,"static_world",False) or getattr(args,"feel",False) or getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) or getattr(args,"workspace_homes",False) or getattr(args,"long_titles",False) or getattr(args,"watermark",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.19" if getattr(args,"reticle",False) else "0.16" if getattr(args,"upscaler",False) or getattr(args,"live_findings",False) else "0.15" if getattr(args,"perf",False) or getattr(args,"autodrive",False) or getattr(args,"static_world",False) or getattr(args,"feel",False) or getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) or getattr(args,"workspace_homes",False) or getattr(args,"long_titles",False) or getattr(args,"watermark",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
         if getattr(args,"feel",False):
             from feel import acceptance
@@ -316,6 +321,10 @@ def run(args):
             acceptance(client,children,args,shell_token,socketpath)
             (STATE/'transcript.json').write_text(json.dumps(client.transcript))
             (STATE/'notifications.json').write_text(json.dumps(client.events))
+            return
+        if getattr(args,"reticle",False):
+            from reticle import acceptance
+            acceptance(client,children,args,shell_token,socketpath)
             return
         if getattr(args,"placement",False):
             from placement import acceptance
@@ -552,6 +561,6 @@ def m1(client):
     print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--ipc-warp',action='store_true');parser.add_argument('--perf',action='store_true');parser.add_argument('--upscaler',action='store_true');parser.add_argument('--autodrive',action='store_true');parser.add_argument('--static-world',action='store_true');parser.add_argument('--feel',action='store_true');parser.add_argument('--playable',action='store_true');parser.add_argument('--workspace-homes',action='store_true');parser.add_argument('--long-titles',action='store_true');parser.add_argument('--live-findings',action='store_true');parser.add_argument('--render-fail',action='store_true');parser.add_argument('--placement',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--watermark',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--ipc-warp',action='store_true');parser.add_argument('--perf',action='store_true');parser.add_argument('--upscaler',action='store_true');parser.add_argument('--autodrive',action='store_true');parser.add_argument('--static-world',action='store_true');parser.add_argument('--feel',action='store_true');parser.add_argument('--playable',action='store_true');parser.add_argument('--workspace-homes',action='store_true');parser.add_argument('--long-titles',action='store_true');parser.add_argument('--live-findings',action='store_true');parser.add_argument('--render-fail',action='store_true');parser.add_argument('--placement',action='store_true');parser.add_argument('--reticle',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--watermark',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
     try:run(args)
     except KeyboardInterrupt:print("Nested session stopped.",flush=True)
