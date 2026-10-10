@@ -1,6 +1,7 @@
 {
   "nestedOnly": true,
   "checks": [
+    "hidden workspace keyboard focus refused (-32007)",
     "sun-court wall 21 aimable",
     "wall 21 shows the wallpaper behind its window",
     "wallpaper changes recompose the wall (bounded, not per frame)",

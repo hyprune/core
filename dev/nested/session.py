@@ -457,7 +457,7 @@ def failures(client,plugin,socketpath,pid):
     after=camera()['captures']
     assert any(e['commits']>next(b['commits'] for b in before if b['id']==e['id']) for e in after),'hidden captures stopped committing'
     # Keyboard focus to a window in the hidden room brings the room back. Hidden
-    # non-room workspaces still refuse it (-32007; covered by --integration).
+    # bound, unpulled workspaces still refuse it (-32007; covered by --live-findings).
     client.call('surface.focus',{'surfaceId':after[0]['id'],'intent':'keyboard'})
     shown=lambda:next(m for m in json.loads(ctl('monitors','-j')) if m['name']=='HEADLESS-1')['activeWorkspace']['id']
     wait_for(lambda:shown()==workspace)

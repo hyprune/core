@@ -59,6 +59,12 @@ def acceptance(client,children,args,shell_token,socketpath):
     children.append(wallpaper);time.sleep(1.5)
     s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")');wait(lambda:s.camera()['active'])
     client.call('movement.set',{'modeId':'com.hyprune.fly'})
+    # 0. Keyboard focus to a window on a hidden, bound but unpulled workspace is refused and
+    # changes nothing (room windows are covered by the plain smoke run).
+    shown=workspace();wall=next(v for v in state()['surfaces'] if v['title']=='Wall-21')
+    try:client.call('surface.focus',{'surfaceId':wall['id'],'intent':'keyboard'});refused=None
+    except RuntimeError as error:refused=error.args[0]['code']
+    check('hidden workspace keyboard focus refused (-32007)',refused==-32007 and workspace()==shown,{'code':refused,'shown':workspace()})
     mounts=state()['mounts'];anchors={a['id']:a for a in mounts['anchors']};areas={a['id']:a for a in mounts['areas']}
     def normal(a):
         x,y,z,w=a['pose']['rotation'];return [2*(x*z+w*y),2*(y*z-w*x),1-2*(x*x+y*y)]
