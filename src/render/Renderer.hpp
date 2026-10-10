@@ -36,6 +36,8 @@ class Renderer {
     // since the last rendered frame. draw() then re-presents the cached native
     // frame (one output pass) instead of rendering the world again.
     bool reuseFrame = false;
+    // Feel diagnostics: per presentation {steady ms, 0 new / 1 repeated / 2 idle, yaw, pitch, x, y, z}.
+    std::deque<std::array<double, 7>> presentLog;
     bool srgbDecodeAllowed = true; // Tests force the two-copy fallback.
     // graphics.upscaler (IPC 0.16): "fsr1" = AMD FSR 1 EASU+RCAS when the world
     // renders below output size; "bilinear" = bilinear + bounded unsharp mask,

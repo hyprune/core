@@ -25,4 +25,5 @@ tests/fixtures/m3b/
 /dev/nested/.perf-state/
 /dev/nested/.autodrive-state/
 /dev/nested/.static-world-state/
+/dev/nested/.feel-state/
 /dev/nested/.watermark-state/

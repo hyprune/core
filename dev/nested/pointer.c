@@ -51,6 +51,24 @@ static void command(struct wl_display *d, struct zwlr_virtual_pointer_v1 *p, int
         usleep(60000);
         zwlr_virtual_pointer_v1_button(p, now(), 272, 0);
         zwlr_virtual_pointer_v1_frame(p);
+    } else if (argc == 5 && !strcmp(argv[0], "stream")) {
+        // Steady relative motion like a real mouse: dx/dy per event at hz for ms, with
+        // absolute deadlines so the rate does not drift (motion-feel measurements).
+        double dx = atof(argv[1]), dy = atof(argv[2]);
+        long hz = atol(argv[3]), ms = atol(argv[4]), period = 1000000000L / (hz > 0 ? hz : 1);
+        struct timespec next;
+        clock_gettime(CLOCK_MONOTONIC, &next);
+        for (long i = 0; i < hz * ms / 1000; i++) {
+            next.tv_nsec += period;
+            while (next.tv_nsec >= 1000000000L) {
+                next.tv_nsec -= 1000000000L;
+                next.tv_sec++;
+            }
+            clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
+            zwlr_virtual_pointer_v1_motion(p, now(), wl_fixed_from_double(dx), wl_fixed_from_double(dy));
+            zwlr_virtual_pointer_v1_frame(p);
+            wl_display_flush(d);
+        }
     } else if (argc == 2) {
         zwlr_virtual_pointer_v1_motion(p, now(), wl_fixed_from_double(atof(argv[0])),
                                        wl_fixed_from_double(atof(argv[1])));

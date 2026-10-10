@@ -4259,6 +4259,10 @@ int luaCamera(lua_State *state) {
         for (auto &t : runtime->world->collision)
             collisionSum += t.a.x + t.a.y * 3 + t.a.z * 7 + t.b.x + t.c.z;
     j["objectTransforms"] = runtime->renderer.transforms.size();
+    j["presentLog"] = Json::array();
+    for (auto &p : runtime->renderer.presentLog)
+        j["presentLog"].push_back(Json(p));
+    runtime->renderer.presentLog.clear();
     j["collisionChecksum"] = collisionSum;
     j["workspaceFrames"] = Json::array();
     for (auto &f : runtime->capture.workspaces)

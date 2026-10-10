@@ -1296,7 +1296,14 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         frameFences_.pop_front();
     }
     bool idle = reuseFrame && !captureRequested && nativeFbo_ && w == width_ && h == height_;
+    auto logPresent = [&](int kind) {
+        presentLog.push_back({std::chrono::duration<double, std::milli>(now.time_since_epoch()).count(), double(kind),
+                              camera.yaw, camera.pitch, camera.position.x, camera.position.y, camera.position.z});
+        while (presentLog.size() > 1200)
+            presentLog.pop_front();
+    };
     if (frames && (captureRequested || frameFences_.size() >= 2 || idle)) {
+        logPresent(idle ? 2 : 1);
         GLState guard;
         glDisable(GL_SCISSOR_TEST);
         glDisable(GL_STENCIL_TEST);
@@ -1314,6 +1321,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             ++backlog_;
         return;
     }
+    logPresent(0);
     auto started = std::chrono::steady_clock::now();
     if (lastFrame_.time_since_epoch().count())
         frameMs_ = std::chrono::duration<double, std::milli>(started - lastFrame_).count();
