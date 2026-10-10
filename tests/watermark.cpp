@@ -205,6 +205,23 @@ int main(int argc, char **argv) {
             check(darkest == std::lround(15 * .55 + 226 * .45), "navy at 55%");
         }
         check(watermarkJson(false, {}) == Json{{"enabled", false}}, "disabled record");
+        // Wall placeholder: brand navy everywhere except a centred lockup in lettering mint.
+        {
+            int w = 1280, h = 720;
+            auto px = brandPlaceholder(w, h);
+            check(px.size() == size_t(w) * h * 4, "placeholder size");
+            auto at = [&](int x, int y) { return px.data() + (size_t(y) * w + x) * 4; };
+            for (auto [x, y] : {std::pair{0, 0}, {w - 1, 0}, {0, h - 1}, {w - 1, h - 1}, {w / 2, 8}})
+                check(at(x, y)[0] == 0x0f && at(x, y)[1] == 0x1a && at(x, y)[2] == 0x27 && at(x, y)[3] == 255,
+                      "placeholder background is brand navy");
+            long sx = 0, sy = 0, n = 0;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    if (at(x, y)[1] > 0x80) sx += x, sy += y, ++n;
+            check(n > 5000, "placeholder draws the lockup");
+            check(std::abs(sx / n - w / 2) < w / 20 && std::abs(sy / n - h / 2) < h / 10, "placeholder lockup centred");
+            check(brandPlaceholder(64, 36).size() == size_t(64) * 36 * 4, "tiny placeholder stays navy-only");
+        }
         std::cout << "watermark tests passed\n";
         return 0;
     } catch (const std::exception &e) {

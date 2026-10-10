@@ -1,8 +1,10 @@
 #include "Capture.hpp"
+#include <hyprland/src/protocols/LayerShell.hpp>
 #include "interaction/Hands.hpp"
 #include "ipc/Text.hpp"
 #include "render/GLState.hpp"
 #include "render/SurfaceSampler.hpp"
+#include "render/Watermark.hpp"
 #include <GLES3/gl3.h>
 #include <algorithm>
 #include <hyprland/src/desktop/Workspace.hpp>
@@ -220,6 +222,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
     if (layout)
         std::erase_if(layout->unplaced, [&](const auto &id) { return !refreshed.contains(id); });
     attach();
+    trackBackdrops(monitor);
     if (layout && world && !world->areas.empty())
         compose(monitor, world, *layout);
 }
@@ -240,6 +243,9 @@ void Capture::release() {
         glDeleteFramebuffers(1, &frame.fbo);
     }
     workspaces.clear();
+    backdrops_.clear();
+    glDeleteTextures(1, &placeholder_);
+    placeholder_ = 0;
     glDeleteProgram(program_);
     glDeleteVertexArrays(1, &vao_);
     glDeleteSamplers(1, &sampler_);
@@ -418,6 +424,37 @@ Capture::WorkspaceFrame *Capture::workspace(const std::string &id) {
             return &f;
     return nullptr;
 }
+void Capture::trackBackdrops(const PHLMONITOR &monitor) {
+    std::vector<Backdrop> next;
+    for (int level : {0, 1}) // ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND, _BOTTOM
+        for (auto &ref : monitor->m_layerSurfaceLayers[level]) {
+            auto layer = ref.lock();
+            if (!layer || !layer->m_mapped || !layer->m_layerSurface || !layer->m_layerSurface->m_surface)
+                continue;
+            auto old = std::find_if(backdrops_.begin(), backdrops_.end(), [&](auto &b) { return b.layer == layer; });
+            if (old != backdrops_.end()) {
+                next.push_back(std::move(*old));
+                continue;
+            }
+            Backdrop b{.layer = layer};
+            b.commitListener = layer->m_layerSurface->m_surface->m_events.commit.listen([count = b.commits] { ++*count; });
+            next.push_back(std::move(b));
+        }
+    backdrops_ = std::move(next);
+}
+nlohmann::json Capture::backdropDiagnostics() const {
+    auto out = nlohmann::json::array();
+    for (auto &b : backdrops_) {
+        auto layer = b.layer.lock();
+        auto surface = layer && layer->m_layerSurface ? layer->m_layerSurface->m_surface.lock() : nullptr;
+        auto box = layer ? layer->logicalBox() : std::nullopt;
+        out.push_back({{"namespace", layer ? layer->m_namespace : ""},
+                       {"commits", *b.commits},
+                       {"texture", surface && surface->m_current.texture ? surface->m_current.texture->m_texID : 0},
+                       {"box", box ? nlohmann::json{box->x, box->y, box->w, box->h} : nlohmann::json()}});
+    }
+    return out;
+}
 void Capture::compose(PHLMONITOR monitor, const world::World *world, surfaces::Layout &layout) {
     render::GLState state;
     if (!program_) {
@@ -436,8 +473,8 @@ void Capture::compose(PHLMONITOR monitor, const world::World *world, surfaces::L
         };
         auto v = compile(GL_VERTEX_SHADER, R"(#version 300 es
 precision highp float;
-uniform vec4 rect;out vec2 uv;
-void main(){vec2 p[6]=vec2[6](vec2(0,0),vec2(1,0),vec2(1,1),vec2(0,0),vec2(1,1),vec2(0,1));uv=p[gl_VertexID];gl_Position=vec4((rect.xy+uv*rect.zw)*2.-1.,0,1);}
+uniform vec4 rect;uniform vec4 crop;out vec2 uv;
+void main(){vec2 p[6]=vec2[6](vec2(0,0),vec2(1,0),vec2(1,1),vec2(0,0),vec2(1,1),vec2(0,1));uv=crop.xy+p[gl_VertexID]*crop.zw;gl_Position=vec4((rect.xy+p[gl_VertexID]*rect.zw)*2.-1.,0,1);}
 )");
         auto f = compile(GL_FRAGMENT_SHADER, R"(#version 300 es
 precision highp float;
@@ -455,6 +492,47 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
             throw std::runtime_error("workspace composite link failed");
         glGenVertexArrays(1, &vao_);
         sampler_ = render::createSurfaceSampler();
+    }
+    if (!placeholder_) {
+        auto pixels = render::brandPlaceholder(1280, 720);
+        glGenTextures(1, &placeholder_);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, placeholder_);
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1280, 720, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
+    // Wallpaper layers the walls sample: texture, crop (viewporter source) and output rect.
+    struct Backdrop {
+        const Capture::Backdrop *source;
+        uintptr_t identity; // the layer surface itself: stable across ticks
+        SP<Render::ITexture> texture;
+        CBox box;
+        std::array<float, 4> crop{0, 0, 1, 1};
+    };
+    std::vector<Backdrop> backdrops;
+    for (auto &b : backdrops_) {
+        auto layer = b.layer.lock();
+        auto surface = layer && layer->m_layerSurface ? layer->m_layerSurface->m_surface.lock() : nullptr;
+        auto box = layer ? layer->logicalBox() : std::nullopt;
+        if (!surface || !box || box->w <= 0 || box->h <= 0)
+            continue;
+        auto &current = surface->m_current;
+        auto texture = current.texture;
+        if (!texture || !texture->m_texID || texture->m_type == Render::TEXTURE_EXTERNAL ||
+            current.transform != WL_OUTPUT_TRANSFORM_NORMAL)
+            continue;
+        Backdrop d{&b, reinterpret_cast<uintptr_t>(layer.get()), texture, *box};
+        if (current.viewport.hasSource && current.bufferSize.x > 0 && current.bufferSize.y > 0) {
+            // Source rectangle in surface coordinates; the buffer spans bufferSize / scale.
+            Vector2D extent = current.bufferSize / std::max(1, current.scale);
+            d.crop = std::array<float, 4>{float(current.viewport.source.x / extent.x), float(current.viewport.source.y / extent.y),
+                                          float(current.viewport.source.w / extent.x), float(current.viewport.source.h / extent.y)};
+        }
+        backdrops.push_back(d);
     }
     std::set<int> live;
     for (const auto &b : layout.effectiveBindings()) {
@@ -519,6 +597,16 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         uint64_t key = 1469598103934665603ull;
         auto mix = [&](double v) { key = (key ^ std::hash<double>{}(v)) * 1099511628211ull; };
         mix(monitor->m_position.x), mix(monitor->m_position.y), mix(monitor->m_size.x), mix(monitor->m_size.y);
+        // What the user sees on that workspace: the wallpaper behind its windows. With no
+        // wallpaper surface, or no windows, the wall shows the Hyprune placeholder.
+        bool placeholder = stack.empty() || backdrops.empty();
+        mix(placeholder ? 1 : 2);
+        if (!placeholder)
+            for (auto &d : backdrops) {
+                mix(double(d.identity)), mix(double(*d.source->commits)), mix(d.texture->m_texID);
+                mix(d.box.x), mix(d.box.y), mix(d.box.w), mix(d.box.h);
+                for (float c : d.crop) mix(c);
+            }
         for (auto &[rank, item] : stack) {
             auto &entry = *item;
             auto box = entry.window.lock()->logicalBox();
@@ -553,6 +641,21 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         glEnable(GL_BLEND);
         glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
         glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        glUniform4f(glGetUniformLocation(program_, "crop"), 0, 0, 1, 1);
+        if (placeholder) {
+            glUniform4f(glGetUniformLocation(program_, "rect"), 0, 0, 1, 1);
+            glBindTexture(GL_TEXTURE_2D, placeholder_);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        } else
+            for (auto &d : backdrops) {
+                glUniform4f(glGetUniformLocation(program_, "rect"), (d.box.x - monitor->m_position.x) / monitor->m_size.x,
+                            (d.box.y - monitor->m_position.y) / monitor->m_size.y, d.box.w / monitor->m_size.x,
+                            d.box.h / monitor->m_size.y);
+                glUniform4f(glGetUniformLocation(program_, "crop"), d.crop[0], d.crop[1], d.crop[2], d.crop[3]);
+                glBindTexture(GL_TEXTURE_2D, d.texture->m_texID);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
+        glUniform4f(glGetUniformLocation(program_, "crop"), 0, 0, 1, 1);
         // Compose approved root texture leases at the compositor's actual window rectangles.
         // Shell layers/world pass never enter this source; no compositor rendering is called.
         for (auto &[rank, item] : stack) {

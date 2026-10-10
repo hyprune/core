@@ -61,6 +61,10 @@ struct WatermarkResult {
     float opacity = 0;
 };
 WatermarkResult applyWatermark(std::vector<uint8_t> &rgba, int width, int height, const WatermarkOptions & = {});
+// Hyprune placeholder (empty or background-less workspace walls): brand navy with the
+// Bold lockup centred in lettering mint, rows top-down RGBA. Built once on first use.
+inline constexpr std::array<uint8_t, 3> PlaceholderNavy{0x0f, 0x1a, 0x27}, PlaceholderInk{0xd4, 0xff, 0xe6};
+std::vector<uint8_t> brandPlaceholder(int width, int height);
 // Capture JSON record: {enabled, applied, ...}. Not part of any IPC contract.
 nlohmann::json watermarkJson(bool enabled, const WatermarkResult &);
 } // namespace hyprune::render

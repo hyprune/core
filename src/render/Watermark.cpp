@@ -159,6 +159,23 @@ void compositeInk(std::vector<uint8_t> &rgba, int width, int height, std::array<
     }
 }
 
+std::vector<uint8_t> brandPlaceholder(int width, int height) {
+    std::vector<uint8_t> rgba(size_t(std::max(0, width)) * std::max(0, height) * 4);
+    for (size_t i = 0; i < rgba.size(); i += 4)
+        rgba[i] = PlaceholderNavy[0], rgba[i + 1] = PlaceholderNavy[1], rgba[i + 2] = PlaceholderNavy[2], rgba[i + 3] = 255;
+    // The watermark plan rasterises the exact lockup; centre it instead of a corner.
+    WatermarkOptions o;
+    o.widthFraction = .38f, o.minWidth = 336, o.maxWidth = 1024, o.maxWidthShare = 1, o.maxHeightShare = 1;
+    auto p = planWatermark(width, height, o);
+    if (!p.fits)
+        return rgba;
+    float inkW = p.inkRight - p.inkLeft, inkH = p.inkBottom - p.inkTop;
+    int dx = int(std::lround((width - inkW) / 2 - p.inkLeft)), dy = int(std::lround((height - inkH) / 2 - p.inkTop));
+    p.rect[0] += dx, p.rect[1] += dy, p.inkLeft += dx, p.inkRight += dx, p.inkTop += dy, p.inkBottom += dy;
+    compositeInk(rgba, width, height, p.rect, watermarkCoverage(p), PlaceholderInk, 1.f);
+    return rgba;
+}
+
 WatermarkResult applyWatermark(std::vector<uint8_t> &rgba, int width, int height, const WatermarkOptions &o) {
     WatermarkResult r;
     r.opacity = o.opacity;

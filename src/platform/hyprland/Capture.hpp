@@ -2,6 +2,7 @@
 #include "surfaces/Layout.hpp"
 #include "surfaces/Surface.hpp"
 #include "world/World.hpp"
+#include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/protocols/core/Compositor.hpp>
 #include <hyprland/src/render/Texture.hpp>
@@ -67,7 +68,20 @@ class Capture {
         std::string id, worldId;
     };
     std::vector<AdoptedWindow> adoptedWindows_;
-    unsigned sequence_ = 0, program_ = 0, vao_ = 0, sampler_ = 0;
+    // Background/bottom layer-shell surfaces (wallpaper) on the world output, in the
+    // compositor's own order: drawn behind every wall's windows, like the real desktop.
+    struct Backdrop {
+        PHLLSREF layer;
+        std::shared_ptr<uint64_t> commits = std::make_shared<uint64_t>(0);
+        CHyprSignalListener commitListener;
+    };
+    std::vector<Backdrop> backdrops_;
+    void trackBackdrops(const PHLMONITOR &);
+
+  public:
+    nlohmann::json backdropDiagnostics() const; // nested checks only
+  private:
+    unsigned sequence_ = 0, program_ = 0, vao_ = 0, sampler_ = 0, placeholder_ = 0;
     void compose(PHLMONITOR, const world::World *, surfaces::Layout &);
 };
 } // namespace hyprune::platform
