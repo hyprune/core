@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Regenerate core's capture-watermark masks from the meta repo's brand SVGs.
 
-    python3 dev/brand-masks.py [--meta ../hyprune] [--commit ef0ce64]
+    python3 dev/brand-masks.py [--meta ../hyprune] [--commit 352e777]
 
 Reads the two Bold one-ink lockups at the given meta-repo commit (git show, so
 the working tree of the meta repo doesn't matter), verifies their SHA-256
@@ -28,7 +28,7 @@ VIEWBOX = (840, 256)
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--meta', default=str(ROOT.parent / 'hyprune'))
-    p.add_argument('--commit', default='ef0ce64')
+    p.add_argument('--commit', default='352e777')
     a = p.parse_args()
     meta = pathlib.Path(a.meta)
     commit = subprocess.check_output(['git', '-C', str(meta), 'rev-parse', a.commit + '^{commit}'], text=True).strip()

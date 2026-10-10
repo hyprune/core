@@ -1,7 +1,7 @@
 # Vendored brand assets (capture watermark)
 
-Copied from the meta repo **hyprune/hyprune at `ef0ce64`**
-(`ef0ce647f7707aba1e990277ff630db1c20d72d0`, "Add the brand folder"). Rules
+Copied from the meta repo **hyprune/hyprune at `352e777`**
+(`352e7777f7707aba1e990277ff630db1c20d72d0`, "Add the brand folder"). Rules
 and the original files are in that repo's `brand/README.md`.
 
 | File here | Source (meta repo) | SHA-256 (from `brand/SHA256SUMS`) |
