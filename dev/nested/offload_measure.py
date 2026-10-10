@@ -39,8 +39,10 @@ def stats(values):
 
 def phase(client, mode, perf):
     patch = {'offload': mode}
-    if os.environ.get('HYPRUNE_MEASURE_CAP_W'):  # only builds whose policy allows more than 80 W
+    if os.environ.get('HYPRUNE_MEASURE_CAP_W'):
         patch['offload_power_cap_w'] = float(os.environ['HYPRUNE_MEASURE_CAP_W'])
+    if os.environ.get('HYPRUNE_MEASURE_DEVICE'):  # IPC 0.18: explicit offload GPU (PCI address)
+        patch['offload_device'] = os.environ['HYPRUNE_MEASURE_DEVICE']
     client.call('graphics.set', {'patch': patch})
     if mode == 'on':
         try:
@@ -76,7 +78,8 @@ def phase(client, mode, perf):
             'worker': {k: stats(v) for k, v in worker.items()},
             'gpus': {bus: {k: stats(v) for k, v in d.items()} for bus, d in per_gpu.items()},
             'reason': p.get('reason'), 'effective': {k: p.get('effective', {}).get(k) for k in ('offload', 'target_fps', 'offload_power_cap_w')},
-            'costsMs': p.get('costsMs'), 'pid': p.get('pid')}
+            'costsMs': p.get('costsMs'), 'pid': p.get('pid'),
+            'capW': p.get('capW'), 'capSource': p.get('capSource'), 'device': p.get('device'), 'profile': p.get('profile')}
 
 
 def acceptance(client, children, args, shell_token, socketpath):
@@ -88,6 +91,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     s.ctl('eval', 'hl.plugin.hyprune.toggle("HEADLESS-1")')
     wait(lambda: state()['runtime']['active'])
     client.call('movement.set', {'modeId': 'com.hyprune.fly'})
+    legacy = s.Client(str(socketpath), shell_token, '0.15', 'com.hyprune.shell')
     pose(client, [-8, 2, 12]); time.sleep(2)
     info = json.loads((s.STATE / 'session.json').read_text())
     result = {'renderer': s.camera().get('timings', {}).get('renderer'), 'compositorNodes': dri_nodes(info['pid']),
@@ -99,15 +103,23 @@ def acceptance(client, children, args, shell_token, socketpath):
             result['workerNodes'] = dri_nodes(pid) if pid else []
         out.write_text(json.dumps(result, indent=2) + '\n')
     client.call('graphics.set', {'patch': {'offload': 'off'}})
+    # The pre-0.18 session (opened before its launch token expired) sees the frozen
+    # shape: numeric cap <= 100, no device. The wire audit checks it.
+    old = legacy.call('graphics.get', {})['performance']
+    result['legacy015'] = {'capW': old['capW'], 'requestedCap': old['requested']['offload_power_cap_w'],
+                           'effectiveCap': old['effective']['offload_power_cap_w'], 'hasDevice': 'device' in old}
+    legacy.close()
+    out.write_text(json.dumps(result, indent=2) + '\n')
     on = result['phases'][1]
     print('MEASURE', json.dumps({'compositor': result['compositorNodes'], 'worker': result.get('workerNodes'),
                                  'offFrameMs': (result['phases'][0]['frameMs'] or {}).get('median'),
                                  'onFrameMs': (on.get('frameMs') or {}).get('median'), 'onActive': on.get('activeFraction'),
-                                 'error': on.get('error')}), flush=True)
+                                 'error': on.get('error'), 'device': (on.get('device') or {}).get('pci'), 'capW': on.get('capW'),
+                                 'capSource': on.get('capSource'), 'reason': on.get('reason'), 'legacy015': result['legacy015']}), flush=True)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(); parser.add_argument('output'); a = parser.parse_args()
-    os.environ['HYPRUNE_NESTED_PROTOCOL'] = '0.10'
+    os.environ.setdefault('HYPRUNE_NESTED_PROTOCOL', '0.18')
     m3b.acceptance = acceptance
     s.run(argparse.Namespace(m3b=True, m3a=False, m2=False, m1=False, integration=False, live=False, serve=False, record=False, visible=False, output=a.output))

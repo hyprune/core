@@ -16,33 +16,51 @@ external-only, the client binds the slot as GL_TEXTURE_EXTERNAL_OES and copies
 it with a samplerExternalOES triangle instead of FBO + blit. The Mesa path is
 unchanged.
 
-## Not changed, but needed for these numbers
+## Policy fixes (IPC 0.18, same branch)
 
-- This desktop has no `/sys/class/power_supply` entries, so the policy reports
-  "power supply unknown" and fails closed. Runs bound a fake 300 W Mains `AC0`
-  in a bwrap namespace.
-- The renderer GPU idles at 37–45 W and draws 90–200 W while rendering, above the
-  hard 80 W full-AC cap. Core's watchdog then stops the worker, and the client's
-  "renderer transport EOF/truncation" masks the supervisor's real reason. The
-  numbers below come from a local experiment build whose watchdog threshold was
-  350 W (not committed); 75 °C stayed enforced.
-- `discreteDevice()` takes the first NVIDIA render node, so the renderer is
-  always GPU0. "Cross" means the compositor on GPU1 (the headless parent's
-  default) and the renderer on GPU0. A GPU1-only instance can't offload.
+The first runs below needed workarounds that IPC 0.18 removes:
 
-## Results (medians; on-phase active fraction 0.99–1.0 everywhere)
+- **No battery = mains.** This desktop has no `/sys/class/power_supply`
+  entries, which was "power supply unknown" (fail closed). Now it is `full-ac`.
+- **Device-scaled cap.** The renderer GPU idles at 37–45 W and draws 90–200 W
+  rendering, above the old hard 80 W cap, so the watchdog stopped the worker.
+  The automatic cap without a battery is 75 % of the GPU's enforced limit:
+  263 W for GPU0 (350 W limit), 293 W for GPU1 (390 W).
+- **Device selection.** `offload_device: auto` prefers a GPU that isn't the
+  compositor's, then the least utilised. Before, it was always the first
+  NVIDIA node.
+- **Real stop reason.** The supervisor's reason ("power/temperature watchdog")
+  is reported instead of "renderer transport EOF/truncation".
 
-| Output | Topology | Off: compositor GPU ms | On: compositor GPU ms | On: transfer ms | On: worker render GPU ms | On: producer ready ms (p95) | On: GPU util / W |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1080p | single GPU0 | 4.45 | 0.22 | 0.73 | 1.43 | 7.4 (10.3) | GPU0 25% / 92 W |
-| 1080p | cross GPU1→GPU0 | 4.41 | 0.80 | 1.45 | 3.60 | 10.3 (11.8) | GPU0 35% / 56 W, GPU1 34% / 51 W |
-| 4K | single GPU0 | 12.06 | 0.38 | 2.93 | 3.76 | 13.5 (18.0) | GPU0 71% / 198 W |
-| 4K | cross GPU1→GPU0 | 12.03 | 0.37 | 2.93 | 3.74 | 11.4 (13.3) | GPU0 41% / 185 W, GPU1 54% / 167 W |
+The raw JSON in `experiment-350w/` comes from the first runs: fake 300 W mains
+supply, uncommitted 350 W watchdog threshold, IPC 0.10 client.
 
-The compositor GPU ms is the sum of `gpuPassMs`. Off, the in-process renderer uses
-`render_scale: auto` (0.5 here); the worker renders at scale 1.0. Delivered
-60.0 FPS with offload on, in every row. With offload off, frames are damage-driven
-(about 7.5 FPS at the orbit's IPC rate), so frame intervals aren't comparable;
-use the GPU costs. Cross-GPU at 1080p doubles the transfer (0.73 → 1.45 ms) and
-the worker render; at 4K both topologies cost the same, and cross-GPU halves the
-p95 producer latency, because the compositor no longer shares GPU0.
+## Results with the real 0.18 policy (no workarounds)
+
+These are medians, at IPC 0.18. Every run was active 1.0 with offload on and
+delivered 60.0 FPS. The JSON in this directory also checks the 0.15 projection
+in each run (cap 100, no device), under the wire audit.
+
+| Output | Topology (compositor → offload GPU) | Device / selection / cap | Off: compositor GPU ms | On: compositor GPU ms | On: transfer ms | On: worker render GPU ms | Producer ready ms (p95) | GPU util / W / max °C |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1080p | GPU0 → GPU0 (only GPU visible) | 65:00.0, auto, 263 W device | 4.40 | 0.23 | 0.73 | 1.43 | 7.4 (10.2) | GPU0 25% / 92 W / 35 |
+| 1080p | GPU1 → GPU0 (auto avoids the compositor's GPU) | 65:00.0, auto, 263 W device | 4.35 | 0.76 | 1.45 | 3.62 | 10.6 (11.9) | GPU0 35% / 56 W, GPU1 34% / 52 W |
+| 1080p | GPU1 → GPU1 (explicit `0000:b3:00.0`) | b3:00.0, explicit, 293 W device | 4.36 | 0.19 | 1.47 | 1.94 | 8.7 (9.8) | GPU1 38% / 102 W / 38 |
+| 4K | GPU0 → GPU0 | 65:00.0, auto, 263 W device | 11.98 | 0.37 | 2.93 | 3.82 | 12.3 (16.7) | GPU0 72% / 197 W / 39 |
+| 4K | GPU1 → GPU0 | 65:00.0, auto, 263 W device | 11.88 | 0.37 | 2.93 | 3.74 | 12.5 (14.2) | GPU0 41% / 184 W, GPU1 55% / 168 W |
+
+The compositor GPU ms is the sum of `gpuPassMs`. With offload off, the
+in-process renderer uses `render_scale: auto` (0.5 here); the worker renders
+at 1.0. With offload off, frames are damage-driven (about 7.5 FPS at the
+orbit's IPC rate), so compare GPU costs, not frame intervals.
+
+What the numbers show:
+
+- At 1080p, cross-GPU doubles the transfer (0.73 → 1.45 ms) and the worker's
+  render time.
+- At 4K, cross-GPU costs the same as one GPU and lowers the p95 producer
+  latency (16.7 → 14.2 ms), because GPU0 no longer composites.
+- The explicit same-GPU run on GPU1 keeps a 1.47 ms transfer even though
+  compositor and worker share the GPU. So in the both-GPUs-visible topology,
+  the transfer cost isn't simply cross-device.
+- `discreteDevices()` still lists NVIDIA nodes only (NVML telemetry is required).

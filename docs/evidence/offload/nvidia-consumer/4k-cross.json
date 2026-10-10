@@ -12,34 +12,405 @@
       "seconds": 12.0,
       "activeFraction": 0.0,
       "frameMs": {
-        "n": 89,
-        "median": 128.918,
-        "p95": 197.081,
-        "mean": 168.591,
-        "max": 3086.128
+        "n": 92,
+        "median": 128.881,
+        "p95": 178.591,
+        "mean": 163.658,
+        "max": 3095.397
       },
       "cpuRenderMs": {
-        "n": 89,
-        "median": 1.44,
-        "p95": 13.642,
-        "mean": 2.563,
-        "max": 15.131
+        "n": 92,
+        "median": 1.446,
+        "p95": 13.834,
+        "mean": 2.534,
+        "max": 15.795
       },
       "gpuPassMsSum": {
-        "n": 89,
-        "median": 12.032,
-        "p95": 20.958,
-        "mean": 12.362,
-        "max": 27.166
+        "n": 92,
+        "median": 11.884,
+        "p95": 21.279,
+        "mean": 12.247,
+        "max": 27.809
       },
       "deliveredFPS": {
-        "n": 89,
-        "median": 7.327,
-        "p95": 7.636,
-        "mean": 6.733,
-        "max": 7.636
+        "n": 92,
+        "median": 7.559,
+        "p95": 7.806,
+        "mean": 6.937,
+        "max": 7.806
       },
       "worker": {},
+      "gpus": {
+        "00000000:65:00.0": {
+          "util": {
+            "n": 11,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean": 0.0,
+            "max": 0.0
+          },
+          "watts": {
+            "n": 11,
+            "median": 38.01,
+            "p95": 43.87,
+            "mean": 39.689,
+            "max": 43.87
+          },
+          "celsius": {
+            "n": 11,
+            "median": 33.0,
+            "p95": 33.0,
+            "mean": 33.0,
+            "max": 33.0
+          }
+        },
+        "00000000:b3:00.0": {
+          "util": {
+            "n": 11,
+            "median": 12.0,
+            "p95": 17.0,
+            "mean": 10.091,
+            "max": 17.0
+          },
+          "watts": {
+            "n": 11,
+            "median": 39.39,
+            "p95": 41.04,
+            "mean": 39.566,
+            "max": 41.04
+          },
+          "celsius": {
+            "n": 11,
+            "median": 33.0,
+            "p95": 33.0,
+            "mean": 33.0,
+            "max": 33.0
+          }
+        }
+      },
+      "reason": "inactive",
+      "effective": {
+        "offload": "off",
+        "target_fps": 60,
+        "offload_power_cap_w": 80.0
+      },
+      "costsMs": {
+        "bloom": 0.415744,
+        "msaa_resolve": 0.013312,
+        "native_surfaces_geometry": 0.167936,
+        "outline": 0.003072,
+        "output_markers": 1.149952,
+        "sky": 0.413696,
+        "upscale_sharpen": 4.52096,
+        "world_shading_shared": 2.695168
+      },
+      "pid": null,
+      "capW": 80.0,
+      "capSource": "fallback",
+      "device": null,
+      "profile": "full-ac"
+    },
+    {
+      "mode": "on",
+      "seconds": 12.0,
+      "activeFraction": 1.0,
+      "frameMs": {
+        "n": 97,
+        "median": 16.674,
+        "p95": 16.766,
+        "mean": 16.676,
+        "max": 16.794
+      },
+      "cpuRenderMs": {
+        "n": 97,
+        "median": 1.172,
+        "p95": 1.225,
+        "mean": 1.141,
+        "max": 1.501
+      },
+      "gpuPassMsSum": {
+        "n": 97,
+        "median": 0.369,
+        "p95": 0.4,
+        "mean": 0.375,
+        "max": 0.578
+      },
+      "deliveredFPS": {
+        "n": 97,
+        "median": 59.999,
+        "p95": 60.007,
+        "mean": 60.0,
+        "max": 60.007
+      },
+      "worker": {
+        "generation": {
+          "n": 97,
+          "median": 4,
+          "p95": 4,
+          "mean": 4.0,
+          "max": 4
+        },
+        "msaaSamples": {
+          "n": 97,
+          "median": 1,
+          "p95": 1,
+          "mean": 1.0,
+          "max": 1
+        },
+        "producerReadyMs": {
+          "n": 97,
+          "median": 12.489,
+          "p95": 14.2,
+          "mean": 12.553,
+          "max": 16.012
+        },
+        "renderGpuMs": {
+          "n": 97,
+          "median": 3.736,
+          "p95": 3.856,
+          "mean": 3.745,
+          "max": 3.879
+        },
+        "renderScale": {
+          "n": 97,
+          "median": 1.0,
+          "p95": 1.0,
+          "mean": 1.0,
+          "max": 1.0
+        },
+        "sent": {
+          "n": 97,
+          "median": 11327499.748,
+          "p95": 11332853.185,
+          "mean": 11327470.951,
+          "max": 11333331.477
+        },
+        "sequence": {
+          "n": 97,
+          "median": 447,
+          "p95": 768,
+          "mean": 445.247,
+          "max": 797
+        },
+        "slot": {
+          "n": 97,
+          "median": 1,
+          "p95": 1,
+          "mean": 0.598,
+          "max": 1
+        },
+        "transferGpuMs": {
+          "n": 97,
+          "median": 2.93,
+          "p95": 2.938,
+          "mean": 2.931,
+          "max": 2.941
+        },
+        "version": {
+          "n": 97,
+          "median": 1,
+          "p95": 1,
+          "mean": 1.0,
+          "max": 1
+        },
+        "workerDone": {
+          "n": 97,
+          "median": 11327512.344,
+          "p95": 11332864.577,
+          "mean": 11327483.506,
+          "max": 11333345.31
+        }
+      },
+      "gpus": {
+        "00000000:65:00.0": {
+          "util": {
+            "n": 11,
+            "median": 41.0,
+            "p95": 43.0,
+            "mean": 40.636,
+            "max": 43.0
+          },
+          "watts": {
+            "n": 11,
+            "median": 183.91,
+            "p95": 187.52,
+            "mean": 181.828,
+            "max": 187.52
+          },
+          "celsius": {
+            "n": 11,
+            "median": 38.0,
+            "p95": 38.0,
+            "mean": 38.0,
+            "max": 38.0
+          }
+        },
+        "00000000:b3:00.0": {
+          "util": {
+            "n": 11,
+            "median": 55.0,
+            "p95": 57.0,
+            "mean": 54.364,
+            "max": 57.0
+          },
+          "watts": {
+            "n": 11,
+            "median": 168.27,
+            "p95": 168.55,
+            "mean": 165.684,
+            "max": 168.55
+          },
+          "celsius": {
+            "n": 11,
+            "median": 39.0,
+            "p95": 39.0,
+            "mean": 38.818,
+            "max": 39.0
+          }
+        }
+      },
+      "reason": "ready",
+      "effective": {
+        "offload": "on",
+        "target_fps": 60,
+        "offload_power_cap_w": 263.0
+      },
+      "costsMs": {
+        "bloom": 0.050176,
+        "depth_reconstruction": 0.342016,
+        "msaa_resolve": 0.00512,
+        "native_surfaces_geometry": 0.007168,
+        "outline": 0.002048,
+        "output_markers": 0.048128,
+        "sky": 0.089088,
+        "transfer": 2.929216,
+        "upscale_sharpen": 0.159744,
+        "world_shading_shared": 0.869376
+      },
+      "pid": 50008,
+      "capW": 263.0,
+      "capSource": "device",
+      "device": {
+        "drivesCompositor": false,
+        "enforcedLimitW": 350.0,
+        "name": "NVIDIA GeForce RTX 3090",
+        "node": "renderD128",
+        "pci": "0000:65:00.0",
+        "selection": "auto"
+      },
+      "profile": "full-ac"
+    },
+    {
+      "mode": "off",
+      "seconds": 12.0,
+      "activeFraction": 0.0,
+      "frameMs": {
+        "n": 92,
+        "median": 128.839,
+        "p95": 176.07,
+        "mean": 139.868,
+        "max": 1025.928
+      },
+      "cpuRenderMs": {
+        "n": 92,
+        "median": 1.425,
+        "p95": 1.549,
+        "mean": 1.399,
+        "max": 1.631
+      },
+      "gpuPassMsSum": {
+        "n": 92,
+        "median": 9.987,
+        "p95": 10.443,
+        "mean": 8.352,
+        "max": 10.503
+      },
+      "deliveredFPS": {
+        "n": 92,
+        "median": 7.526,
+        "p95": 29.862,
+        "mean": 9.879,
+        "max": 29.862
+      },
+      "worker": {
+        "generation": {
+          "n": 92,
+          "median": 4.0,
+          "p95": 4,
+          "mean": 4.0,
+          "max": 4
+        },
+        "msaaSamples": {
+          "n": 92,
+          "median": 1.0,
+          "p95": 1,
+          "mean": 1.0,
+          "max": 1
+        },
+        "producerReadyMs": {
+          "n": 92,
+          "median": 13.475,
+          "p95": 13.475,
+          "mean": 13.475,
+          "max": 13.475
+        },
+        "renderGpuMs": {
+          "n": 92,
+          "median": 3.884,
+          "p95": 3.884,
+          "mean": 3.884,
+          "max": 3.884
+        },
+        "renderScale": {
+          "n": 92,
+          "median": 1.0,
+          "p95": 1.0,
+          "mean": 1.0,
+          "max": 1.0
+        },
+        "sent": {
+          "n": 92,
+          "median": 11333398.721,
+          "p95": 11333398.721,
+          "mean": 11333398.721,
+          "max": 11333398.721
+        },
+        "sequence": {
+          "n": 92,
+          "median": 801.0,
+          "p95": 801,
+          "mean": 801.0,
+          "max": 801
+        },
+        "slot": {
+          "n": 92,
+          "median": 0.0,
+          "p95": 0,
+          "mean": 0.0,
+          "max": 0
+        },
+        "transferGpuMs": {
+          "n": 92,
+          "median": 2.929,
+          "p95": 2.929,
+          "mean": 2.929,
+          "max": 2.929
+        },
+        "version": {
+          "n": 92,
+          "median": 1.0,
+          "p95": 1,
+          "mean": 1.0,
+          "max": 1
+        },
+        "workerDone": {
+          "n": 92,
+          "median": 11333412.197,
+          "p95": 11333412.197,
+          "mean": 11333412.197,
+          "max": 11333412.197
+        }
+      },
       "gpus": {
         "00000000:65:00.0": {
           "util": {
@@ -51,395 +422,39 @@
           },
           "watts": {
             "n": 12,
-            "median": 37.85,
-            "p95": 43.71,
-            "mean": 38.677,
-            "max": 43.71
+            "median": 39.43,
+            "p95": 165.83,
+            "mean": 57.578,
+            "max": 165.83
           },
           "celsius": {
             "n": 12,
             "median": 33.0,
-            "p95": 33.0,
-            "mean": 33.0,
-            "max": 33.0
-          }
-        },
-        "00000000:b3:00.0": {
-          "util": {
-            "n": 12,
-            "median": 10.0,
             "p95": 37.0,
-            "mean": 11.167,
+            "mean": 33.5,
             "max": 37.0
-          },
-          "watts": {
-            "n": 12,
-            "median": 39.38,
-            "p95": 40.43,
-            "mean": 39.383,
-            "max": 40.43
-          },
-          "celsius": {
-            "n": 12,
-            "median": 33.0,
-            "p95": 33.0,
-            "mean": 33.0,
-            "max": 33.0
-          }
-        }
-      },
-      "reason": "inactive",
-      "effective": {
-        "offload": "off",
-        "target_fps": 60,
-        "offload_power_cap_w": 80
-      },
-      "costsMs": {
-        "bloom": 0.421888,
-        "msaa_resolve": 0.014336,
-        "native_surfaces_geometry": 0.183296,
-        "outline": 0.004096,
-        "output_markers": 1.166336,
-        "sky": 0.402432,
-        "upscale_sharpen": 4.590592,
-        "world_shading_shared": 2.69824
-      },
-      "pid": null
-    },
-    {
-      "mode": "on",
-      "seconds": 12.0,
-      "activeFraction": 1.0,
-      "frameMs": {
-        "n": 96,
-        "median": 16.674,
-        "p95": 16.791,
-        "mean": 16.692,
-        "max": 16.827
-      },
-      "cpuRenderMs": {
-        "n": 96,
-        "median": 1.134,
-        "p95": 1.171,
-        "mean": 1.108,
-        "max": 1.442
-      },
-      "gpuPassMsSum": {
-        "n": 96,
-        "median": 0.371,
-        "p95": 0.404,
-        "mean": 0.374,
-        "max": 0.436
-      },
-      "deliveredFPS": {
-        "n": 96,
-        "median": 59.999,
-        "p95": 60.006,
-        "mean": 59.999,
-        "max": 60.006
-      },
-      "worker": {
-        "generation": {
-          "n": 96,
-          "median": 4.0,
-          "p95": 4,
-          "mean": 4.0,
-          "max": 4
-        },
-        "msaaSamples": {
-          "n": 96,
-          "median": 1.0,
-          "p95": 1,
-          "mean": 1.0,
-          "max": 1
-        },
-        "producerReadyMs": {
-          "n": 96,
-          "median": 11.361,
-          "p95": 13.301,
-          "mean": 11.605,
-          "max": 14.13
-        },
-        "renderGpuMs": {
-          "n": 96,
-          "median": 3.735,
-          "p95": 3.855,
-          "mean": 3.743,
-          "max": 3.889
-        },
-        "renderScale": {
-          "n": 96,
-          "median": 1.0,
-          "p95": 1.0,
-          "mean": 1.0,
-          "max": 1.0
-        },
-        "sent": {
-          "n": 96,
-          "median": 9479228.145,
-          "p95": 9484734.613,
-          "mean": 9479194.125,
-          "max": 9485201.528
-        },
-        "sequence": {
-          "n": 96,
-          "median": 440.5,
-          "p95": 771,
-          "mean": 438.5,
-          "max": 799
-        },
-        "slot": {
-          "n": 96,
-          "median": 1.0,
-          "p95": 1,
-          "mean": 0.583,
-          "max": 1
-        },
-        "transferGpuMs": {
-          "n": 96,
-          "median": 2.93,
-          "p95": 2.939,
-          "mean": 2.932,
-          "max": 2.945
-        },
-        "version": {
-          "n": 96,
-          "median": 1.0,
-          "p95": 1,
-          "mean": 1.0,
-          "max": 1
-        },
-        "workerDone": {
-          "n": 96,
-          "median": 9479239.33,
-          "p95": 9484747.176,
-          "mean": 9479205.732,
-          "max": 9485214.06
-        }
-      },
-      "gpus": {
-        "00000000:65:00.0": {
-          "util": {
-            "n": 11,
-            "median": 41.0,
-            "p95": 44.0,
-            "mean": 40.909,
-            "max": 44.0
-          },
-          "watts": {
-            "n": 11,
-            "median": 184.65,
-            "p95": 188.4,
-            "mean": 182.302,
-            "max": 188.4
-          },
-          "celsius": {
-            "n": 11,
-            "median": 38.0,
-            "p95": 38.0,
-            "mean": 37.909,
-            "max": 38.0
           }
         },
         "00000000:b3:00.0": {
           "util": {
-            "n": 11,
-            "median": 54.0,
-            "p95": 58.0,
-            "mean": 55.091,
-            "max": 58.0
+            "n": 12,
+            "median": 12.5,
+            "p95": 14.0,
+            "mean": 9.5,
+            "max": 14.0
           },
           "watts": {
-            "n": 11,
-            "median": 167.33,
-            "p95": 167.71,
-            "mean": 163.832,
-            "max": 167.71
+            "n": 12,
+            "median": 39.16,
+            "p95": 157.85,
+            "mean": 59.258,
+            "max": 157.85
           },
           "celsius": {
-            "n": 11,
-            "median": 38.0,
+            "n": 12,
+            "median": 34.0,
             "p95": 38.0,
-            "mean": 38.0,
-            "max": 38.0
-          }
-        }
-      },
-      "reason": "ready",
-      "effective": {
-        "offload": "on",
-        "target_fps": 60,
-        "offload_power_cap_w": 80.0
-      },
-      "costsMs": {
-        "bloom": 0.050176,
-        "depth_reconstruction": 0.34304,
-        "msaa_resolve": 0.00512,
-        "native_surfaces_geometry": 0.006144,
-        "outline": 0.001024,
-        "output_markers": 0.048128,
-        "sky": 0.089088,
-        "transfer": 2.930912,
-        "upscale_sharpen": 0.159744,
-        "world_shading_shared": 0.873472
-      },
-      "pid": 39169
-    },
-    {
-      "mode": "off",
-      "seconds": 12.0,
-      "activeFraction": 0.0,
-      "frameMs": {
-        "n": 89,
-        "median": 128.933,
-        "p95": 196.887,
-        "mean": 146.029,
-        "max": 1043.694
-      },
-      "cpuRenderMs": {
-        "n": 89,
-        "median": 1.428,
-        "p95": 12.247,
-        "mean": 2.22,
-        "max": 25.929
-      },
-      "gpuPassMsSum": {
-        "n": 89,
-        "median": 9.002,
-        "p95": 12.57,
-        "mean": 9.048,
-        "max": 25.981
-      },
-      "deliveredFPS": {
-        "n": 89,
-        "median": 7.413,
-        "p95": 23.973,
-        "mean": 8.85,
-        "max": 23.973
-      },
-      "worker": {
-        "generation": {
-          "n": 89,
-          "median": 4,
-          "p95": 4,
-          "mean": 4.0,
-          "max": 4
-        },
-        "msaaSamples": {
-          "n": 89,
-          "median": 1,
-          "p95": 1,
-          "mean": 1.0,
-          "max": 1
-        },
-        "producerReadyMs": {
-          "n": 89,
-          "median": 11.78,
-          "p95": 11.78,
-          "mean": 11.78,
-          "max": 11.78
-        },
-        "renderGpuMs": {
-          "n": 89,
-          "median": 3.876,
-          "p95": 3.876,
-          "mean": 3.876,
-          "max": 3.876
-        },
-        "renderScale": {
-          "n": 89,
-          "median": 1.0,
-          "p95": 1.0,
-          "mean": 1.0,
-          "max": 1.0
-        },
-        "sent": {
-          "n": 89,
-          "median": 9485268.559,
-          "p95": 9485268.559,
-          "mean": 9485268.559,
-          "max": 9485268.559
-        },
-        "sequence": {
-          "n": 89,
-          "median": 803,
-          "p95": 803,
-          "mean": 803.0,
-          "max": 803
-        },
-        "slot": {
-          "n": 89,
-          "median": 0,
-          "p95": 0,
-          "mean": 0.0,
-          "max": 0
-        },
-        "transferGpuMs": {
-          "n": 89,
-          "median": 2.938,
-          "p95": 2.938,
-          "mean": 2.938,
-          "max": 2.938
-        },
-        "version": {
-          "n": 89,
-          "median": 1,
-          "p95": 1,
-          "mean": 1.0,
-          "max": 1
-        },
-        "workerDone": {
-          "n": 89,
-          "median": 9485280.34,
-          "p95": 9485280.34,
-          "mean": 9485280.34,
-          "max": 9485280.34
-        }
-      },
-      "gpus": {
-        "00000000:65:00.0": {
-          "util": {
-            "n": 11,
-            "median": 0.0,
-            "p95": 1.0,
-            "mean": 0.091,
-            "max": 1.0
-          },
-          "watts": {
-            "n": 11,
-            "median": 40.39,
-            "p95": 149.99,
-            "mean": 59.995,
-            "max": 149.99
-          },
-          "celsius": {
-            "n": 11,
-            "median": 33.0,
-            "p95": 36.0,
-            "mean": 33.364,
-            "max": 36.0
-          }
-        },
-        "00000000:b3:00.0": {
-          "util": {
-            "n": 11,
-            "median": 6.0,
-            "p95": 15.0,
-            "mean": 7.818,
-            "max": 15.0
-          },
-          "watts": {
-            "n": 11,
-            "median": 39.78,
-            "p95": 149.82,
-            "mean": 59.367,
-            "max": 149.82
-          },
-          "celsius": {
-            "n": 11,
-            "median": 33.0,
-            "p95": 38.0,
-            "mean": 33.727,
+            "mean": 34.25,
             "max": 38.0
           }
         }
@@ -448,23 +463,40 @@
       "effective": {
         "offload": "off",
         "target_fps": 60,
-        "offload_power_cap_w": 80
+        "offload_power_cap_w": 263.0
       },
       "costsMs": {
-        "bloom": 0.31232,
-        "msaa_resolve": 0.012288,
-        "native_surfaces_geometry": 0.178176,
+        "bloom": 0.5632,
+        "msaa_resolve": 0.041984,
+        "native_surfaces_geometry": 0.161792,
         "outline": 0.003072,
-        "output_markers": 1.135616,
-        "sky": 0.342016,
-        "upscale_sharpen": 4.426752,
-        "world_shading_shared": 2.267136
+        "output_markers": 1.23392,
+        "sky": 0.509952,
+        "upscale_sharpen": 4.769792,
+        "world_shading_shared": 3.076096
       },
-      "pid": null
+      "pid": null,
+      "capW": 263.0,
+      "capSource": "device",
+      "device": {
+        "drivesCompositor": false,
+        "enforcedLimitW": 350.0,
+        "name": "NVIDIA GeForce RTX 3090",
+        "node": "renderD128",
+        "pci": "0000:65:00.0",
+        "selection": "auto"
+      },
+      "profile": "full-ac"
     }
   ],
   "workerNodes": [
     "/dev/dri/renderD128",
     "/dev/dri/renderD129"
-  ]
+  ],
+  "legacy015": {
+    "capW": 263.0,
+    "requestedCap": 100.0,
+    "effectiveCap": 100.0,
+    "hasDevice": false
+  }
 }
