@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, json, os, pathlib, secrets, shutil, signal, socket, struct, subprocess, sys, time
+import argparse, json, math, os, pathlib, secrets, shutil, signal, socket, struct, subprocess, sys, time
 HERE=pathlib.Path(__file__).resolve().parent;ROOT=HERE.parent.parent
 # Isolated instances (isolated.py) keep every .*-state dir under their own root.
 STATE_ROOT=pathlib.Path(os.environ.get('HYPRUNE_NESTED_STATE_ROOT',str(HERE)));STATE=STATE_ROOT/'.state'
@@ -376,21 +376,35 @@ def run(args):
             from long_titles import finish
             finish()
 
+def wait_for(test,timeout=10):
+    until=time.monotonic()+timeout
+    while not test():
+        if time.monotonic()>until:raise TimeoutError('nested condition')
+        time.sleep(.1)
+def face(title,distance=2.2):
+    """Eye (x, y, z, yaw) in front of a captured window, looking at its centre. Room
+    clients are placed by core, so tests aim at the real plane, not a fixed layout."""
+    plane=next(c for c in camera()['captures'] if title in c['title'])
+    x,y,z,w=plane['rotation'];n=[2*(x*z+w*y),2*(y*z-w*x),1-2*(x*x+y*y)];p=plane['position']
+    return p[0]+n[0]*distance,p[1],p[2]+n[2]*distance,math.atan2(-n[0],n[2])
 def smoke(client,children,args):
     assert 'state.subscribe' in client.hello['methods']
     loaded=client.call('world.load',{'worldId':'org.hyprune.atrium'});print('world loaded:',loaded,flush=True)
     subscription=client.call('state.subscribe',{'topics':['state']})['subscriptionId']
+    # Enter the world first: clients launched while it is active open floating in its
+    # room (windows.world_workspace, 20 by default) and become world surfaces.
+    print('toggle:' ,ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")'),flush=True)
+    wait_for(lambda:camera()['active'])
     # Real clients and real input within the verified nested Wayland session.
     children.append(envrun('kitty','--title','Hyprune workbench','--override','font_size=17','bash','--noprofile','--norc',stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
     children.append(envrun('kitty','--title','Hyprune event stream','--override','font_size=13','bash','-c',f'printf "HYPRUNE / IPC 0.1\\nLive state deltas\\n\\n"; tail -n 12 -f {STATE}/events.log',stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
     (STATE/'events.log').write_text('Waiting for subscription...\n')
-    time.sleep(1.5)
+    titles=('Hyprune workbench','Hyprune event stream')
+    wait_for(lambda:all(any(t in c['title'] for c in camera()['captures']) for t in titles),timeout=20)
     for window in json.loads(ctl('clients','-j')):
         address=window['address']
-        ctl('eval',f'hl.dispatch(hl.dsp.window.float({{ window = "address:{address}", action = "enable" }}))')
         ctl('eval',f'hl.dispatch(hl.dsp.window.resize({{ window = "address:{address}", x = 1100, y = 660 }}))')
-    time.sleep(.3)
-    print('toggle:' ,ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")'),flush=True);time.sleep(1.5)
+    time.sleep(1)
     print('camera:',camera(),flush=True)
     state=client.call('state.snapshot',{'subscriptionId':subscription})['snapshot']['state'];assert state['runtime']['active'];assert len(state['surfaces'])>=2,state
     assert camera()['frames']>0
@@ -401,15 +415,19 @@ def smoke(client,children,args):
     assert abs(after[2]-before[2])>.5,(before,after)
     print('walk:',before,'->',after,flush=True)
     surface=next(s for s in state['surfaces'] if 'workbench' in s['title'])
-    # Center the real picking ray on the first floating surface and click through the Wayland seat.
-    index=next(i for i,s in enumerate(state['surfaces']) if s['id']==surface['id'])
-    x=[0,-3.8,3.8][index]
-    ctl('eval',f'hl.plugin.hyprune.camera({x}, 1.7, 1.5, 0, 0)')
+    # Center the real picking ray on the workbench and click through the Wayland seat.
+    client.call('movement.set',{'modeId':'com.hyprune.fly'})
+    ctl('eval','hl.plugin.hyprune.camera({}, {}, {}, {}, 0)'.format(*face('workbench')))
+    time.sleep(.2)
     subprocess.run([str(HERE/'ctl.py'),'env',str(ROOT/'build/nested-pointer')],check=True)
     time.sleep(.15)
     focus_state=client.call('state.snapshot',{'subscriptionId':subscription})['snapshot']['state']
     assert next(s for s in focus_state['surfaces'] if s['id']==surface['id'])['focused'], focus_state
     print('surface click: passed',flush=True)
+    client.call('movement.set',{'modeId':'com.hyprune.walk'})
+    # A click focuses the window, but keys stay world bindings until Use (E) enters typing.
+    subprocess.run([str(HERE/'ctl.py'),'env','wtype','-k','e'],check=True)
+    wait_for(lambda:camera()['mode']=='typing')
     marker=STATE/'typed.txt';marker.unlink(missing_ok=True)
     subprocess.run([str(HERE/'ctl.py'),'env','wtype',f"printf 'surface input works\\n' > {marker}"],check=True)
     subprocess.run([str(HERE/'ctl.py'),'env','wtype','-k','Return'],check=True);time.sleep(.5)
@@ -438,11 +456,12 @@ def failures(client,plugin,socketpath,pid):
         time.sleep(.08)
     after=camera()['captures']
     assert any(e['commits']>next(b['commits'] for b in before if b['id']==e['id']) for e in after),'hidden captures stopped committing'
-    try:client.call('surface.focus',{'surfaceId':after[0]['id'],'intent':'keyboard'})
-    except RuntimeError as error:assert error.args[0]['code']==-32007,error
-    else:raise AssertionError('hidden workspace keyboard focus accepted')
-    ctl('dispatch',f'hl.dsp.focus({{ workspace = "{workspace}" }})');time.sleep(.2)
-    print('hidden workspace: captures live, keyboard focus safely rejected',flush=True)
+    # Keyboard focus to a window in the hidden room brings the room back. Hidden
+    # non-room workspaces still refuse it (-32007; covered by --integration).
+    client.call('surface.focus',{'surfaceId':after[0]['id'],'intent':'keyboard'})
+    shown=lambda:next(m for m in json.loads(ctl('monitors','-j')) if m['name']=='HEADLESS-1')['activeWorkspace']['id']
+    wait_for(lambda:shown()==workspace)
+    print('hidden room: captures live, keyboard focus returns to the room',flush=True)
     # Public read access cannot be acquired merely by claiming a client ID.
     anonymous=Client(str(socketpath));assert anonymous.hello['capabilities']==[]
     try:anonymous.call('state.subscribe',{'topics':['state']})
@@ -464,7 +483,9 @@ def failures(client,plugin,socketpath,pid):
         next_plugin=STATE/f'reload-{i}-{time.time_ns()}.so';shutil.copy2(ROOT/'build/hyprune-core.so',next_plugin)
         assert ctl('plugin','load',str(next_plugin))=='ok';plugin=next_plugin;time.sleep(.15)
         ping=Client(str(socketpath));ping.call('session.ping',{});ping.close()
-        ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")');time.sleep(.4);assert camera()['active'];assert camera()['error']==''
+        ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")')
+        # A fresh plugin warms its shaders first (seconds on a cold NVIDIA cache).
+        wait_for(lambda:camera()['active']);assert camera()['error']=='',camera()['error']
     assert ctl('plugin','unload',str(plugin))=='ok'
     print('PASS: rejected reload, modes, anonymous denial, watchdog, 3 active unload/reload cycles',flush=True)
 
@@ -504,9 +525,9 @@ def record_m0_tour(client,pause,type_keys,sample,started):
         type_keys('-P','a','-s','350','-p','a');pause(.5)
         # A short look around with relative pointer input, then face the workbench.
         for _ in range(8):subprocess.run([str(HERE/'ctl.py'),'env',str(ROOT/'build/nested-pointer'),'12','0'],check=True);pause(.12)
-        state=sample();surface=next(s for s in state['surfaces'] if 'workbench' in s['title']);index=next(i for i,s in enumerate(state['surfaces']) if s['id']==surface['id']);x=[0,-3.8,3.8][index]
-        ctl('eval',f'hl.plugin.hyprune.camera({x}, 1.7, 1.2, 0, 0)');pause(.5)
+        ctl('eval','hl.plugin.hyprune.camera({}, {}, {}, {}, 0)'.format(*face('workbench',1.9)));pause(.5)
         subprocess.run([str(HERE/'ctl.py'),'env',str(ROOT/'build/nested-pointer')],check=True)
+        type_keys('-k','e');pause(.3)  # Use: keys go to the terminal from here
         type_keys('-d','55',"printf '\\nHello from inside Hyprune.\\nA live terminal, in a world.\\n'")
         type_keys('-k','Return');pause(2)
         type_keys('-k','Escape')
