@@ -40,7 +40,7 @@ int main() {
         int fd = std::stoi(bridge);
         std::string epoch;
         hyprune::daemon::LayoutStore layouts;
-        bool layoutSent = false, persistReady = false;
+        bool layoutSent = false, persistReady = false, advertised = false;
         uint64_t command = 0;
         Server *server = nullptr;
         std::function<void()> renewGrants = [] {};
@@ -87,8 +87,10 @@ int main() {
             } else if (j.at("type") == "event") {
                 server->notify(j.at("event"), j.at("params"), j.value("actor", ""));
                 server->flush();
-            } else if (j.at("type") == "methods")
+            } else if (j.at("type") == "methods") {
                 server->advertise(j.at("methods").get<std::map<std::string, std::string>>());
+                advertised = true;
+            }
         };
         auto handler = [&](const std::string &method, const Json &params) -> Json {
             auto id = std::to_string(++command);
@@ -156,7 +158,11 @@ int main() {
             }
             renderer.tick();
             issuer.poll(endpoint);
-            endpoint.poll();
+            // The plugin flushes its method table on its next bridge tick. Until
+            // it arrives, clients wait in the listen backlog: a hello answered
+            // now would advertise no methods for the whole connection.
+            if (advertised)
+                endpoint.poll();
         }
         std::fprintf(stderr, "hypruned: stopping\n");
         close(fd);
