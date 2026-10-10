@@ -1246,3 +1246,15 @@ default. Found on the 2x RTX 3090 work host, where offload could never stay on.
 Shell: the Performance page can show `device.name`, `capW` and `capSource`, and
 offer `offload_device` (auto + the GPUs it learns from `device`) and a cap field
 that allows empty = automatic. SDK: types are in `53dd830`.
+
+### Laptop check of IPC 0.18 offload policy; shell UI (2026-10-10)
+
+Integration of remote/offload-nvidia-consumer on the owner's laptop (Intel iGPU
++ RTX 5090 Laptop GPU on USB-C PD): device selection picks the non-display
+NVIDIA GPU (`selection: auto`, `drivesCompositor: false`). `offload: auto` is
+refused cleanly on USB-C ("auto requires qualified full AC", `capSource:
+profile`, 50 W). An explicit `on` is admitted per policy and renders through
+the dGPU at the 50 W profile cap. `dev/nested/offload_policy.py` checks this
+for whatever supply the machine is on. The shell vendors 0.18 and shows the
+Automatic/Custom cap and the offload GPU on the Performance page
+(shell `576994e`).
