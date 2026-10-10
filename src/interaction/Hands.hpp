@@ -18,7 +18,7 @@ class Hands {
     // `seconds` (0 = at once, for reduced motion), around the grab point.
     void flipFrom(const surfaces::Surface &from, float seconds);
     void begin(Gesture, const surfaces::Surface &, surfaces::Hit, const sim::Camera & = {});
-    bool update(const sim::Camera &, Vec3 ray, float dt, std::span<const Triangle>);
+    bool update(const sim::Camera &, Vec3 ray, float dt, std::span<const Triangle>, const sim::TriangleIndex * = nullptr);
     void wheel(float steps);
     void end() { gesture = Gesture::None; }
 };
@@ -34,6 +34,7 @@ struct WorldHit {
 std::optional<WorldHit> raycast(Vec3 origin, Vec3 direction, std::span<const Triangle>,
                                 const sim::TriangleIndex * = nullptr);
 std::optional<WorldHit> raycast(Vec3 origin, Vec3 direction, const world::World &);
-bool sweepSafe(const surfaces::Surface &from, const surfaces::Surface &to, std::span<const Triangle>);
+bool sweepSafe(const surfaces::Surface &from, const surfaces::Surface &to, std::span<const Triangle>,
+               const sim::TriangleIndex * = nullptr);
 std::array<float, 4> orientation(Vec3 normal);
 } // namespace hyprune::interaction

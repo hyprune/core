@@ -55,7 +55,8 @@ std::array<float, 4> orientation(Vec3 n) {
     float l = std::sqrt(dot(axis, axis) + w * w);
     return {axis.x / l, axis.y / l, axis.z / l, w / l};
 }
-bool sweepSafe(const surfaces::Surface &a, const surfaces::Surface &b, std::span<const Triangle> mesh) {
+bool sweepSafe(const surfaces::Surface &a, const surfaces::Surface &b, std::span<const Triangle> mesh,
+               const sim::TriangleIndex *index) {
     // Adaptive linear/rotational sweep. Every intermediate full OBB must remain clear.
     float angle = 2 * std::acos(std::clamp(std::abs(a.rotation[0] * b.rotation[0] + a.rotation[1] * b.rotation[1] +
                                                     a.rotation[2] * b.rotation[2] + a.rotation[3] * b.rotation[3]),
@@ -69,17 +70,32 @@ bool sweepSafe(const surfaces::Surface &a, const surfaces::Surface &b, std::span
     // its half-diagonal of the segment between the two centres. Testing every world
     // triangle at every step took ~0.5 s for a 180 degree flip in Lumen Reach.
     const float w = std::max(a.width, b.width) + .08f, h = std::max(a.height, b.height) + .08f;
-    const float r = .5f * std::sqrt(w * w + h * h + .08f * .08f);
+    const float r = .5f * std::sqrt(w * w + h * h + .08f * .08f) + 1e-3f;
     const Vec3 low{std::min(a.center.x, b.center.x) - r, std::min(a.center.y, b.center.y) - r,
                    std::min(a.center.z, b.center.z) - r},
         high{std::max(a.center.x, b.center.x) + r, std::max(a.center.y, b.center.y) + r,
              std::max(a.center.z, b.center.z) + r};
-    std::vector<Triangle> near;
-    for (const auto &t : mesh)
-        if (std::max({t.a.x, t.b.x, t.c.x}) >= low.x && std::min({t.a.x, t.b.x, t.c.x}) <= high.x &&
-            std::max({t.a.y, t.b.y, t.c.y}) >= low.y && std::min({t.a.y, t.b.y, t.c.y}) <= high.y &&
-            std::max({t.a.z, t.b.z, t.c.z}) >= low.z && std::min({t.a.z, t.b.z, t.c.z}) <= high.z)
-            near.push_back(t);
+    struct Near {
+        Triangle t;
+        Vec3 low, high;
+        bool touches(Vec3 l, Vec3 h) const {
+            return high.x >= l.x && low.x <= h.x && high.y >= l.y && low.y <= h.y && high.z >= l.z && low.z <= h.z;
+        }
+    };
+    std::vector<Near> near;
+    auto keep = [&](const Triangle &t) {
+        Near n{t,
+               {std::min({t.a.x, t.b.x, t.c.x}), std::min({t.a.y, t.b.y, t.c.y}), std::min({t.a.z, t.b.z, t.c.z})},
+               {std::max({t.a.x, t.b.x, t.c.x}), std::max({t.a.y, t.b.y, t.c.y}), std::max({t.a.z, t.b.z, t.c.z})}};
+        if (n.touches(low, high))
+            near.push_back(n);
+    };
+    if (index && index->size() == mesh.size()) {
+        for (auto id : index->overlap(low, high))
+            keep(mesh[id]);
+    } else
+        for (const auto &t : mesh)
+            keep(t);
     if (near.empty())
         return true;
     float sign = 0;
@@ -99,8 +115,15 @@ bool sweepSafe(const surfaces::Surface &a, const surfaces::Surface &b, std::span
         for (auto &q : s.rotation)
             q /= std::sqrt(norm);
         s.yaw = a.yaw + (b.yaw - a.yaw) * t;
-        if (surfaces::overlaps(s, near))
-            return false;
+        // Only triangles touching this pose's own bounds reach the separating-axis test.
+        auto extent = [&](Vec3 axis, float half) {
+            return Vec3{std::abs(axis.x) * half, std::abs(axis.y) * half, std::abs(axis.z) * half};
+        };
+        auto e = extent(s.right(), s.width * .5f + .04f) + extent(s.up(), s.height * .5f + .04f) +
+                 extent(s.normal(), .04f) + Vec3{1e-3f, 1e-3f, 1e-3f};
+        for (const auto &n : near)
+            if (n.touches(s.center - e, s.center + e) && surfaces::overlaps(s, std::span<const Triangle>(&n.t, 1)))
+                return false;
     }
     return true;
 }
@@ -154,7 +177,8 @@ void Hands::flipFrom(const surfaces::Surface &from, float seconds) {
 void Hands::wheel(float steps) {
     targetDistance = std::clamp(targetDistance * std::pow(1.06f, std::clamp(steps, -2.f, 2.f)), .08f, 100.f);
 }
-bool Hands::update(const sim::Camera &camera, Vec3 ray, float dt, std::span<const Triangle> mesh) {
+bool Hands::update(const sim::Camera &camera, Vec3 ray, float dt, std::span<const Triangle> mesh,
+                   const sim::TriangleIndex *index) {
     if (gesture == Gesture::None)
         return false;
     auto next = pose;
@@ -202,7 +226,7 @@ bool Hands::update(const sim::Camera &camera, Vec3 ray, float dt, std::span<cons
             }
         }
     }
-    if (!sweepSafe(pose, next, mesh))
+    if (!sweepSafe(pose, next, mesh, index))
         return false;
     pose = next;
     return true;

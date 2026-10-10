@@ -1731,7 +1731,7 @@ void Runtime::handTick(float dt) {
         gestureButton = 0;
         return;
     }
-    if (hands.update(camera, pointerRay(), dt, world->collision)) {
+    if (hands.update(camera, pointerRay(), dt, world->collision, &world->collisionIndex)) {
         layout.freePoses[e->surface.id] = hands.pose;
         if ((hands.gesture == interaction::Gesture::Resize || hands.gesture == interaction::Gesture::CornerResize) &&
             e->window->m_target) {
@@ -1892,7 +1892,7 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
             auto previous = hands.pose;
             bool fromBehind = hit->second.back;
             hands.facing(fromBehind || config["windows"]["carry_face_player"].get<bool>(), camera);
-            if (!interaction::sweepSafe(previous, hands.pose, world->collision)) {
+            if (!interaction::sweepSafe(previous, hands.pose, world->collision, &world->collisionIndex)) {
                 hands.pose = previous;
                 hands.facing(false, camera);
             } else if (fromBehind) {
@@ -2442,7 +2442,7 @@ void Runtime::action(interaction::Action a) {
         if (a.pressed && a.edge && hands.gesture == interaction::Gesture::Carry) {
             auto old = hands;
             hands.facing(!hands.facePlayer, camera);
-            if (!interaction::sweepSafe(old.pose, hands.pose, world->collision))
+            if (!interaction::sweepSafe(old.pose, hands.pose, world->collision, &world->collisionIndex))
                 hands = old;
             layout.freePoses[hands.pose.id] = hands.pose;
             refresh();
@@ -2568,7 +2568,7 @@ void Runtime::action(interaction::Action a) {
             auto q = old.rotation;
             float s = std::sin(a.value * .1308997f), c = std::cos(a.value * .1308997f);
             next.rotation = {q[0] * c + q[1] * s, q[1] * c - q[0] * s, q[2] * c + q[3] * s, q[3] * c - q[2] * s};
-            if (interaction::sweepSafe(old, next, world->collision)) {
+            if (interaction::sweepSafe(old, next, world->collision, &world->collisionIndex)) {
                 layout.freePoses[e->surface.id] = next;
                 if (hands.gesture != interaction::Gesture::None) {
                     auto x = dot(hands.offset, old.right()), y = dot(hands.offset, old.up());
@@ -3215,7 +3215,7 @@ void Runtime::toolsTick() {
                 next.yaw = 0;
                 next.width = std::clamp(selectedTransform.scale.x, .1f, 12.f);
                 next.height = std::clamp(selectedTransform.scale.y, .1f, 8.f);
-                if (interaction::sweepSafe(e->surface, next, world->collision)) {
+                if (interaction::sweepSafe(e->surface, next, world->collision, &world->collisionIndex)) {
                     layout.freePoses[e->surface.id] = next;
                     layout.carried.clear();
                     if (editor.positionMode == 2 && e->window->m_target) {

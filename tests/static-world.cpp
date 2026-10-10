@@ -2,6 +2,7 @@
 // seen from behind is not clickable but can be carried, turning to face the player.
 #include "interaction/Hands.hpp"
 #include "world/World.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -100,6 +101,76 @@ int main(int argc, char **argv) {
         auto c = before.center;
         world.push_back({c + Vec3{-.3f, -.3f, .2f}, c + Vec3{.3f, -.3f, .2f}, c + Vec3{0, .3f, .2f}});
         check(!interaction::sweepSafe(before, hands.pose, world), "geometry in the flip's path still blocks it");
+        auto still = before;
+        still.rotation = interaction::orientation({0, 0, 1});
+        still.yaw = 0;
+        auto f = still.center + Vec3{0, 0, .03f};
+        std::vector<Triangle> sheet{{f + Vec3{-.1f, -.1f, 0}, f + Vec3{.1f, -.1f, 0}, f + Vec3{0, .1f, 0}}};
+        check(!interaction::sweepSafe(still, still, sheet), "a sheet within the 4 cm margin in front still blocks");
+        sim::TriangleIndex index(world);
+        t0 = std::chrono::steady_clock::now();
+        check(!interaction::sweepSafe(before, hands.pose, world, &index), "the indexed sweep sees it too");
+        ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        check(ms < 5, "the indexed flip sweep skips the far geometry (" + std::to_string(ms) + " ms)");
+
+        // Same answers as testing every triangle at every step, for random carries through clutter.
+        auto reference = [](const surfaces::Surface &a, const surfaces::Surface &b, std::span<const Triangle> mesh) {
+            float angle = 2 * std::acos(std::clamp(std::abs(a.rotation[0] * b.rotation[0] + a.rotation[1] * b.rotation[1] +
+                                                            a.rotation[2] * b.rotation[2] + a.rotation[3] * b.rotation[3]),
+                                                   0.f, 1.f));
+            int steps = std::max(1, int(std::ceil((length(b.center - a.center) + angle * std::max(a.width, a.height) +
+                                                   std::abs(b.width - a.width) + std::abs(b.height - a.height)) /
+                                                  .015f)));
+            float sign = 0;
+            for (int j = 0; j < 4; j++)
+                sign += a.rotation[j] * b.rotation[j];
+            for (int i = 1; i <= steps; i++) {
+                float t = float(i) / steps, norm = 0;
+                auto s = b;
+                s.center = a.center + (b.center - a.center) * t;
+                s.width = a.width + (b.width - a.width) * t;
+                s.height = a.height + (b.height - a.height) * t;
+                for (int j = 0; j < 4; j++) {
+                    s.rotation[j] = a.rotation[j] * (1 - t) + b.rotation[j] * (sign < 0 ? -t : t);
+                    norm += s.rotation[j] * s.rotation[j];
+                }
+                for (auto &q : s.rotation)
+                    q /= std::sqrt(norm);
+                s.yaw = a.yaw + (b.yaw - a.yaw) * t;
+                if (surfaces::overlaps(s, mesh))
+                    return false;
+            }
+            return true;
+        };
+        unsigned seed = 12345;
+        auto random = [&](float lo, float hi) {
+            seed = seed * 1664525u + 1013904223u;
+            return lo + (hi - lo) * float(seed >> 8) / float(1u << 24);
+        };
+        std::vector<Triangle> clutter;
+        for (int i = 0; i < 120; i++) {
+            Vec3 p{random(-3, 3), random(0, 3), random(-3, 3)};
+            float size = random(.05f, .6f);
+            clutter.push_back({p, p + Vec3{random(-size, size), random(-size, size), random(-size, size)},
+                               p + Vec3{random(-size, size), random(-size, size), random(-size, size)}});
+        }
+        sim::TriangleIndex clutterIndex(clutter);
+        int safe = 0, blocked = 0;
+        for (int i = 0; i < 300; i++) {
+            auto a = before, b = before;
+            a.center = {random(-2, 2), random(.5f, 2.5f), random(-2, 2)};
+            b.center = a.center + Vec3{random(-.6f, .6f), random(-.3f, .3f), random(-.6f, .6f)};
+            a.width = random(.3f, 1.6f), a.height = random(.2f, 1.f);
+            b.width = random(.3f, 1.6f), b.height = random(.2f, 1.f);
+            a.rotation = interaction::orientation({random(-1, 1), random(-.3f, .3f), random(-1, 1)});
+            b.rotation = interaction::orientation({random(-1, 1), random(-.3f, .3f), random(-1, 1)});
+            bool expect = reference(a, b, clutter);
+            check(interaction::sweepSafe(a, b, clutter) == expect && interaction::sweepSafe(a, b, clutter, &clutterIndex) == expect,
+                  "broad phase changed a sweep answer (case " + std::to_string(i) + ")");
+            (expect ? safe : blocked)++;
+        }
+        check(safe > 20 && blocked > 20, "random sweeps cover both answers (" + std::to_string(safe) + " safe, " +
+                                             std::to_string(blocked) + " blocked)");
         std::cout << "static world: collision-owning nodes only; back-face carry flips to face the player\n";
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';
