@@ -177,9 +177,36 @@ precision highp float;
 in vec2 uv;uniform sampler2D frame,bloomMap;uniform vec2 resolution,pointer;uniform int typing,toneMapping,scope;uniform float exposure,bloomStrength;out vec4 result;
 vec3 encode(vec3 x){return mix(12.92*x,1.055*pow(max(x,vec3(0)),vec3(1./2.4))-.055,step(vec3(.0031308),x));}
 void main(){vec2 st=vec2(uv.x,1.-uv.y);vec4 sampleColor=texture(frame,st);vec3 c=sampleColor.rgb;
- vec2 p=abs(gl_FragCoord.xy-resolution*pointer);if((p.x<1.&&p.y<7.)||(p.y<1.&&p.x<7.))c=typing!=0?vec3(.5,1.,.65):vec3(.9);
  if(scope!=0){vec2 q=(gl_FragCoord.xy/resolution-.5)*vec2(resolution.x/resolution.y,1.);c*=1.-.86*smoothstep(.24,.48,length(q));float ring=abs(length(q)-.28);if(ring<.001)c=mix(c,vec3(.5,.8,.65),.4);}
  result=vec4(c,1);}
+)";
+// The reticle as a signed distance field in output pixels (y down, origin at the aim
+// point), antialiased over one pixel, with an optional dark outline for contrast.
+const char *reticleFragment = R"(#version 300 es
+precision highp float;
+uniform vec2 centre;uniform vec3 color;uniform int style,state,outline;uniform float len,thick,gap,opacity,px;out vec4 result;
+float box(vec2 p,vec2 a,vec2 b){vec2 c=(a+b)*.5,e=abs(b-a)*.5;vec2 d=abs(p-c)-e;return length(max(d,0.))+min(max(d.x,d.y),0.);}
+float seg(vec2 p,vec2 a,vec2 b){vec2 pa=p-a,ba=b-a;float h=clamp(dot(pa,ba)/dot(ba,ba),0.,1.);return length(pa-ba*h);}
+float arms(vec2 p,bool top){float t=thick*.5,d=1e9;
+ d=min(d,box(p,vec2(gap,-t),vec2(len,t)));d=min(d,box(p,vec2(-len,-t),vec2(-gap,t)));
+ d=min(d,box(p,vec2(-t,gap),vec2(t,len)));if(top)d=min(d,box(p,vec2(-t,-len),vec2(t,-gap)));return d;}
+float brackets(vec2 p,float r){vec2 q=abs(p);float k=r*.42,t=thick*.5;
+ return min(box(q,vec2(r-k,r-t),vec2(r+t,r+t)),box(q,vec2(r-t,r-k),vec2(r+t,r+t)));}
+void main(){vec2 p=gl_FragCoord.xy-centre;float d=1e9,t=thick*.5;
+ bool hollow=state==3;
+ if(state==4){float c=.70710678;p=vec2(c*p.x-c*p.y,c*p.x+c*p.y);}
+ if(state==6||state==4){d=arms(p,true);} // typing: a plain cross; invalid: every style becomes an x
+ else if(style==0||style==1||style==4){d=arms(p,style!=1);}
+ else if(style==2){float r=max(gap+thick,len*.62);d=abs(length(p)-r)-t;}
+ else if(style==5){vec2 q=vec2(abs(p.x),p.y);d=seg(q,vec2(0.,gap*.35),vec2(len*.62,gap*.35+len*.55))-t;}
+ float dot=style==3?max(thick*1.25,1.6*px):max(thick*.75,1.1*px);
+ bool wantsDot=(style<=3)&&state!=4&&state!=6;
+ if(wantsDot)d=min(d,hollow?abs(length(p)-dot-px*.6)-px*.55:length(p)-dot);
+ if(state==2||state==5)d=min(d,brackets(p,len+gap*.5+3.*px));
+ float inner=clamp(.5-d,0.,1.),outer=outline!=0?clamp(.5-(d-px),0.,1.):0.;
+ float a=max(inner,outer*.6)*opacity*(hollow?.55:1.);
+ if(a<=0.)discard;
+ result=vec4(color*inner*opacity*(hollow?.55:1.),a);}
 )";
 const char *bloomFragment = R"(#version 300 es
 precision highp float;
@@ -536,6 +563,8 @@ void Renderer::init() {
         native_ = program(vertex, nativeFragment);
     if (!tone_)
         tone_ = program(screenVertex, toneFragment);
+    if (!reticle_)
+        reticle_ = program(screenVertex, reticleFragment);
     if (!upscale_)
         upscale_ = program(screenVertex, upscaleFragment);
     if (!bloom_)
@@ -1970,7 +1999,52 @@ void Renderer::present(GLuint target, int w, int h, bool typing) {
     }
     for (auto &sprite : icons_)
         icon(sprite, w, h);
+    drawReticle(w, h, typing);
     debugHUD(w, h);
+}
+void Renderer::drawReticle(int w, int h, bool typing) {
+    if (!reticle_ || !reticle.visible || pointerX < 0 || pointerY < 0)
+        return;
+    auto state = typing ? int(Reticle::Typing) : reticle.state;
+    auto color = typing ? Vec3{.5f, 1.f, .65f} : reticle.color;
+    float px = std::max(1.f, logicalScale);
+    float len = reticle.size * .5f * px, gap = (reticle.gap + reticle.spread) * px, thick = reticle.thickness * px;
+    if (state == Reticle::Target)
+        gap *= .6f; // tightens on a window that takes the click
+    if (state == Reticle::Typing) {
+        len = 7 * px;
+        gap = 0;
+        thick = std::max(1.f, px);
+    }
+    len = std::max(len, gap + thick);
+    float cx = pointerX * w, cy = pointerY * h, extent = len + gap + 8 * px + thick;
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(int(cx - extent), int(cy - extent), int(2 * extent) + 1, int(2 * extent) + 1);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+    glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(reticle_);
+    glUniform2f(location(reticle_, "centre"), cx, cy);
+    uniform(reticle_, "color", color);
+    uniform(reticle_, "style", reticle.style);
+    uniform(reticle_, "state", state);
+    uniform(reticle_, "outline", reticle.outline ? 1 : 0);
+    glUniform1f(location(reticle_, "len"), len);
+    glUniform1f(location(reticle_, "thick"), thick);
+    glUniform1f(location(reticle_, "gap"), gap);
+    glUniform1f(location(reticle_, "opacity"), reticle.opacity);
+    glUniform1f(location(reticle_, "px"), px);
+    glBindVertexArray(screenVao_);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDisable(GL_BLEND);
+    glDisable(GL_SCISSOR_TEST);
+    if (!reticle.hint.empty() && !typing) {
+        float scale = std::clamp(w / 1920.f, 1.f, 2.f), width = 0;
+        for (unsigned char c : reticle.hint)
+            width += glyphs_[c >= 32 && c < 127 ? c : '?'].advance * scale;
+        text(cx - width / 2, cy + extent, reticle.hint, reticle.color * (.75f * reticle.opacity), w, h, scale);
+    }
 }
 void Renderer::panel(float x, float y, float width, float height) {
     glEnable(GL_SCISSOR_TEST);
@@ -2545,6 +2619,7 @@ void Renderer::destroy() {
     glDeleteSamplers(1, &repeat_);
     glDeleteSamplers(1, &mipClamp_);
     glDeleteSamplers(1, &clamp_);
+    deleteProgram(reticle_);
     native_ = scene_ = tone_ = bloom_ = sky_ = quadVbo_ = quadVao_ = screenVao_ = repeat_ = clamp_ = mipClamp_ = 0;
 }
 } // namespace hyprune::render

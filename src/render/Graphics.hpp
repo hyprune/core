@@ -23,7 +23,7 @@ inline Json graphicsDefaults() {
             {"render_scale", "auto"},
             {"target_fps", 60},
             {"sharpen", .35},
-            {"fov", 60.},
+            {"fov", 65.},
             {"exposure", 1.},
             {"bloom_strength", .15},
             {"reduced_motion", false}};

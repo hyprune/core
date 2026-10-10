@@ -149,7 +149,7 @@ void inheritance(const std::string &runtime) {
           "surfaces.recall", "placements.list",     "placements.remove", "data.object.bind",   "camera.fov",
           "atmosphere.get",  "atmosphere.set",      "shell.bind",        "workspace.activate", "overlay.style",
           "graphics.get",    "graphics.set",        "input.get",         "input.preview",      "input.set",
-          "input.capture",   "input.capture.cancel"})
+          "input.capture",   "input.capture.cancel", "player.get",       "player.set"})
         methods[m] = "state.read"; // Version eligibility is independent of grants.
     const std::set<std::string> allGrants{"state.read",      "world.control", "surface.control", "movement.control",
                                           "runtime.control", "shell.control", "data.publish",    "input.control", "camera.author"};
@@ -168,7 +168,7 @@ void inheritance(const std::string &runtime) {
                     {"workspaces", Json::object()},
                     {"mounts", mounts},
                     {"presentation", {{"fov", 10},{"profile",{{"outline",{{"enabled",true}}}}}}},
-                    {"interaction", {{"mode", "cursor"}}},
+                    {"interaction", {{"mode", "cursor"}, {"reticle", {{"state", "valid"}, {"action", "place"}}}}},
                     {"apps", Json::array_t(17, Json::object())},
                     {"editor", {{"mode", "cursor"}}},
                     {"keymap", {{"holds", Json::array({Json{{"action", "menu.open"}}})}}}});
@@ -236,7 +236,9 @@ void inheritance(const std::string &runtime) {
         if (atLeast(version, "0.6")) {
             check(state["editor"]["mode"] == (atLeast(version, "0.12") ? "cursor" : "interactive"), "cursor editor projection");
             check(state["interaction"]["mode"] == (atLeast(version, "0.12") ? "cursor" : "typing"), "cursor interaction projection");
+            check(state["interaction"].contains("reticle") == atLeast(version, "0.19"), "reticle state version projection");
         }
+        check(methodAvailable(version, "player.set") == atLeast(version, "0.19"), "player settings floor");
         previousMethods = advertised;
         previousEvents = events;
         if (atLeast(version,"0.4")) check(state["presentation"]["profile"].contains("outline")==atLeast(version,"0.13"),"ink compatibility projection");

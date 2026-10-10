@@ -1,5 +1,6 @@
 #include "Config.hpp"
 #include "render/Graphics.hpp"
+#include <algorithm>
 #include <cmath>
 #include <regex>
 #include <set>
@@ -26,16 +27,29 @@ Json defaultConfig() {
             {"zoom", "c"}}}}},
         {"movement", {{"climb_mode", "grab"}}},
         {"player",
-         {{"walk_speed", 3.5},
+         {{"walk_speed", 4.0},
+          {"run_speed", 10.0},
           {"fly_speed", 5.0},
           {"fly_bounds_allowance", 0.5},
-          {"run_multiplier", 1.8},
           {"jump_speed", 5.0},
           {"look_sensitivity", .0025},
           {"look_inertia", .03},
           {"move_inertia", .05},
           {"step_height", .35},
-          {"respawn_below", 30.0}}},
+          {"respawn_below", 30.0},
+          // Player settings on the wire (player.get/set, IPC 0.19); Lua can set them too.
+          {"view_bob", "subtle"},
+          {"reticle_style", "cross_dot"},
+          {"reticle_size", 18.0},
+          {"reticle_thickness", 2.0},
+          {"reticle_gap", 4.0},
+          {"reticle_opacity", .9},
+          {"reticle_outline", true},
+          {"reticle_colour", "theme"},
+          {"reticle_dynamic", true},
+          {"reach_grab", 15.0},
+          {"reach_mount", 8.0},
+          {"reach_placement", 12.0}}},
         {"windows",
          {{"world_workspace", 20},
           {"workspace_base", 20},
@@ -49,6 +63,23 @@ Json defaultConfig() {
         {"tools", {{"enabled", true}, {"slots", Json::array({"pointer", "mount", "path", "position", "placement"})}}},
         {"graphics", render::graphicsDefaults()}};
 }
+Json playerOptions() {
+    return {{"view_bob", {"off", "subtle", "normal"}},
+            {"reticle_style", {"cross_dot", "t_dot", "circle_dot", "dot", "cross", "chevron"}}};
+}
+Json playerRanges() {
+    return {{"walk_speed", {.5, 20}},       {"run_speed", {.5, 30}},        {"reticle_size", {6, 64}},
+            {"reticle_thickness", {1, 6}},  {"reticle_gap", {0, 20}},       {"reticle_opacity", {.2, 1}},
+            {"reach_grab", {1, 100}},       {"reach_mount", {1, 100}},      {"reach_placement", {1, 100}}};
+}
+Json playerSettingsKeys() {
+    Json keys = Json::array();
+    for (auto &[key, value] : playerRanges().items())
+        keys.push_back(key);
+    for (auto key : {"view_bob", "reticle_style", "reticle_outline", "reticle_colour", "reticle_dynamic"})
+        keys.push_back(key);
+    return keys;
+}
 Json configPatch(const Json &current, const Json &patch) {
     if (!patch.is_object())
         throw std::runtime_error("config must be a table");
@@ -57,6 +88,31 @@ Json configPatch(const Json &current, const Json &patch) {
         if (!result.contains(section) || !value.is_object())
             throw std::runtime_error("unknown config section: " + section);
         for (auto &[key, v] : value.items()) {
+            if (section == "player" && key == "run_multiplier") {
+                // Deprecated Lua alias from before run_speed: run = walk x multiplier.
+                if (!v.is_number() || !std::isfinite(v.get<double>()) || v < 1 || v > 4)
+                    throw std::runtime_error("run_multiplier outside supported range");
+                double walk = value.contains("walk_speed") && value["walk_speed"].is_number() ? value["walk_speed"].get<double>()
+                                                                                               : result["player"]["walk_speed"].get<double>();
+                result["player"]["run_speed"] = std::clamp(walk * v.get<double>(), .5, 30.);
+                continue;
+            }
+            if (section == "player" && playerOptions().contains(key)) {
+                auto options = playerOptions().at(key);
+                if (std::find(options.begin(), options.end(), v) == options.end())
+                    throw std::runtime_error("unsupported player." + key);
+                result[section][key] = v;
+                continue;
+            }
+            if (section == "player" && key == "reticle_colour") {
+                bool valid = v == "theme";
+                if (v.is_array() && v.size() == 3)
+                    valid = std::all_of(v.begin(), v.end(), [](const Json &c) { return c.is_number() && std::isfinite(c.get<double>()) && c >= 0 && c <= 1; });
+                if (!valid)
+                    throw std::runtime_error("reticle_colour must be \"theme\" or RGB 0..1");
+                result[section][key] = v;
+                continue;
+            }
             if (!result[section].contains(key))
                 throw std::runtime_error("unknown config option: " + section + "." + key);
             if (section == "input" && key == "bindings") {
@@ -147,13 +203,13 @@ Json configPatch(const Json &current, const Json &patch) {
                     if (!v.is_number_integer())
                         throw std::runtime_error("target_fps must be integer");
                 }
-                if (key == "walk_speed" || key == "fly_speed") {
+                if (key == "fly_speed") {
                     min = .1;
                     max = 20;
                 }
-                if (key == "run_multiplier") {
-                    min = 1;
-                    max = 4;
+                if (playerRanges().contains(key)) {
+                    min = playerRanges().at(key)[0];
+                    max = playerRanges().at(key)[1];
                 }
                 if (key == "jump_speed") {
                     min = 0;
@@ -186,7 +242,7 @@ Json configPatch(const Json &current, const Json &patch) {
                 }
                 if (key == "fov") {
                     min = 30;
-                    max = 110;
+                    max = 120;
                 }
                 if (key == "exposure") {
                     min = .01;

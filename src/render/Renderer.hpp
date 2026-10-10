@@ -88,6 +88,17 @@ class Renderer {
     int targetFPS = 60;
     float pointerX = .5f, pointerY = .5f;
     bool scopeVignette = false;
+    // The aiming reticle, drawn crisp at native output resolution in present(). Sizes in
+    // logical px. State changes shape as well as colour (colour-blind safe).
+    struct Reticle {
+        enum Style { CrossDot, TDot, CircleDot, Dot, Cross, Chevron };
+        enum State { Neutral, Target, Valid, OutOfRange, Invalid, Holding, Typing };
+        int style = CrossDot, state = Neutral;
+        float size = 18, thickness = 2, gap = 4, opacity = .9f, spread = 0;
+        bool outline = true, visible = true;
+        Vec3 color{.95f, .95f, .95f};
+        std::string hint; // e.g. "18 m" when out of range
+    } reticle;
     std::vector<interaction::Line> lines;
     std::map<unsigned, Mat4> transforms;
     bool materialDetails = true; // Also permits like-for-like benchmark comparisons.
@@ -135,7 +146,7 @@ class Renderer {
     size_t gpuBytes_ = 0;
     GLuint materialUbo_ = 0; // one std140 Material range per world material
     GLsizei materialStride_ = 0;
-    GLuint scene_ = 0, tone_ = 0, quadVao_ = 0, quadVbo_ = 0, screenVao_ = 0, repeat_ = 0, clamp_ = 0, mipClamp_ = 0;
+    GLuint scene_ = 0, tone_ = 0, reticle_ = 0, quadVao_ = 0, quadVbo_ = 0, screenVao_ = 0, repeat_ = 0, clamp_ = 0, mipClamp_ = 0;
     GLuint environment_ = 0, bloom_ = 0, sky_ = 0, native_ = 0, depthProgram_ = 0;
     GLuint inkComposite_ = 0, inkNormals_ = 0, inkProgram_ = 0, inkFbo_ = 0, inkNormal_ = 0, inkDepth_ = 0;
     size_t submittedBatches_ = 0, culledBatches_ = 0, frustumCulled_ = 0;
@@ -183,6 +194,7 @@ class Renderer {
     void textAtlas();
     void debugHUD(int, int);
     void text(float x, float y, const std::string &, Vec3 color, int w, int h, float scale = 1);
+    void drawReticle(int w, int h, bool typing);
     void panel(float x, float y, float width, float height);
     void present(GLuint, int, int, bool);
     void debugGeometry(const sim::Camera &, std::span<const surfaces::Surface>);

@@ -477,9 +477,11 @@ int main(int argc, char **argv) {
               {{"path", atlasPath.string()}, {"cellSize", 32}, {"waypointIndex", 0}, {"promptIndex", 0}}}});
         glFinish();
         renderer.waypoint = {{"position", {0, 1.7, -4}}, {"label", "ICON"}};
+        renderer.reticle.visible = false; // the reticle draws above icons at the centre
         renderer.draw(fbo, 320, 180, camera, {}, false);
         glReadPixels(160, 90, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
         check(pixel[0] > 240 && pixel[1] < 10, "themed core icon missing");
+        renderer.reticle.visible = true;
         renderer.applyOverlayStyle({{"iconAtlas", nullptr}});
         std::filesystem::remove(atlasPath);
         renderer.waypoint = nullptr;

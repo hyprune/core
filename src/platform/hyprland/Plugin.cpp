@@ -8,6 +8,7 @@
 #include "../../../dev/live/Bootstrap.hpp"
 #endif
 #include "interaction/Tools.hpp"
+#include "sim/ViewBob.hpp"
 #include "world/Mounts.hpp"
 #include "world/Spatial.hpp"
 #include <hyprland/src/Compositor.hpp>
@@ -147,6 +148,33 @@ struct Runtime {
                                                                      {{"graphics", patch}});
                                             return patch;
                                         }};
+    // Player settings (IPC 0.19 player.get/set): persisted overrides win over Lua config.
+    interaction::InputFile playerFile{"player", Json::object(), [](const Json &patch) {
+                                          if (!patch.is_object())
+                                              throw std::runtime_error("player settings must be an object");
+                                          auto keys = interaction::playerSettingsKeys();
+                                          for (auto &[key, value] : patch.items())
+                                              if (std::find(keys.begin(), keys.end(), key) == keys.end())
+                                                  throw std::runtime_error("unknown player setting: " + key);
+                                          interaction::configPatch(interaction::defaultConfig(), {{"player", patch}});
+                                          return patch;
+                                      }};
+    void applyPlayer(const Json &patch) { config["player"] = interaction::configPatch(configured, {{"player", patch}})["player"]; }
+    Json playerSettings() const {
+        Json defaults = Json::object(), effective = Json::object(), ranges = Json::object();
+        auto all = interaction::defaultConfig()["player"];
+        for (auto &key : interaction::playerSettingsKeys()) {
+            defaults[key.get<std::string>()] = all[key.get<std::string>()];
+            effective[key.get<std::string>()] = config["player"][key.get<std::string>()];
+        }
+        return {{"config", effective},
+                {"defaults", defaults},
+                {"overrides", playerFile.current},
+                {"options", interaction::playerOptions()},
+                {"ranges", interaction::playerRanges()},
+                {"path", ipc::boundedText(playerFile.path.string(), ipc::PathLimit)},
+                {"error", ipc::boundedText(playerFile.error, ipc::MessageLimit)}};
+    }
     void applyGraphics(const Json &patch) {
         auto next = interaction::configPatch(configured, {{"graphics", patch}});
         config["graphics"] = next["graphics"];
@@ -175,7 +203,7 @@ struct Runtime {
     bool outsidePlayable = false;
     bool superHeld = false, altHeld = false, noclip = false, freeCursor = false, layerCursor = false, zoomHeld = false,
          cursorWarpPending = false;
-    float zoom = 1, baseFov = 60, lookX = 0, lookY = 0;
+    float zoom = 1, baseFov = 65, lookX = 0, lookY = 0;
     sim::Intent smoothIntent;
     int tool = 1;
     std::map<std::string, std::string> toolPressActions;
@@ -239,6 +267,7 @@ struct Runtime {
     void button(IPointer::SButtonEvent, bool super);
     void axis(IPointer::SAxisEvent);
     void handTick(float);
+    void motionTick(float);
     struct Handover {
         int phase = 0, workspace = 0;
         float elapsed = 0;
@@ -273,6 +302,17 @@ struct Runtime {
     sim::Fly fly;
     sim::MotionStrategy *movement = &walk;
     sim::Climbing climbing;
+    sim::ViewBob viewBob;
+    // What the reticle tells the player (IPC 0.19 interaction.reticle); distance/reach in m, -1 = none.
+    struct ReticleView {
+        std::string state = "hidden", action;
+        float distance = -1, reach = -1;
+        bool operator==(const ReticleView &) const = default;
+    } reticle;
+    void reticleTick();
+    bool tooFar(float distance, const char *reachKey);
+    Vec3 motionLast{};
+    float motionYaw = 0, motionSpeed = 0, motionTurn = 0; // smoothed m/s and rad/s, for the bob and reticle
     std::shared_ptr<world::World> world;
     std::unique_ptr<ipc::Bridge> ipc;
     PHLMONITORREF monitor;
@@ -1019,7 +1059,8 @@ void Runtime::publish() {
           {"tools", config["tools"]["slots"]},
           {"noclip", noclip},
           {"cursor", cursorState},
-          {"taggedSurfaceId", tagged.empty() ? Json(nullptr) : Json(tagged)}}},
+          {"taggedSurfaceId", tagged.empty() ? Json(nullptr) : Json(tagged)},
+          {"reticle", {{"state", reticle.state}, {"action", reticle.action}}}}},
         {"keymap",
          {{"config", input.config},
           {"path", ipc::boundedText(inputFile.path.string(), ipc::PathLimit)},
@@ -1549,6 +1590,138 @@ void Runtime::focusWall(const std::string &id) {
     handover.elapsed = 0;
     handover.phase = 1;
 }
+void Runtime::motionTick(float dt) {
+    // Measured motion (not intent): walking into a wall neither bobs nor spreads the reticle.
+    // Teleports (spawn, travel, scripted poses) read as standing still.
+    if (dt > 0) {
+        Vec3 d = camera.position - motionLast;
+        float step = std::hypot(d.x, d.z), yaw = std::abs(std::remainder(camera.yaw - motionYaw, 6.2831853f));
+        bool teleport = step > 3 || yaw > 1.2f; // poses, spawn, travel: no player motion in one tick
+        float speed = teleport ? 0 : step / dt, turn = teleport ? 0 : yaw / dt;
+        float blend = 1 - std::exp(-dt / .08f);
+        motionSpeed += (speed - motionSpeed) * blend;
+        motionTurn += (turn - motionTurn) * blend;
+    }
+    motionLast = camera.position;
+    motionYaw = camera.yaw;
+    bool reduced = config["graphics"]["reduced_motion"] == true;
+    bool walking = movement == &walk && !noclip && camera.grounded && !climbing.active() && !typing && !loading &&
+                   !control.driving() && !control.uiVisible() && !control.photoHeld() && !handover.phase &&
+                   fullscreen.phase == 0 && !layerCursor;
+    auto level = reduced ? sim::ViewBob::Off : sim::ViewBob::level(config["player"]["view_bob"].get<std::string>());
+    viewBob.update(dt, motionSpeed, config["player"]["walk_speed"], config["player"]["run_speed"], level, walking, camera.yaw);
+    camera.viewBob = viewBob.offset;
+}
+bool Runtime::tooFar(float distance, const char *reachKey) {
+    float reach = config["player"][reachKey];
+    if (distance <= reach)
+        return false;
+    ipc->notify("runtime.notice", {{"level", "info"},
+                                   {"code", "placement.out_of_range"},
+                                   {"message", distance < 10 ? std::format("Too far: {:.1f} m (reach {:g} m)", distance, reach)
+                                                           : std::format("Too far: {:.0f} m (reach {:g} m)", distance, reach)}});
+    return true;
+}
+void Runtime::reticleTick() {
+    ReticleView next;
+    auto ranged = [&](float distance, const char *reachKey, const char *action) {
+        float reach = config["player"][reachKey];
+        next = {distance <= reach ? "valid" : "out_of_range", action, distance, reach};
+    };
+    auto movable = [&](const Capture::Entry *e) {
+        return e && e->parentId.empty() && !(world && editor.locked(world->id, e->instance));
+    };
+    if (!active || layerCursor || !world || loading)
+        next.state = "hidden";
+    else if (typing)
+        next.state = "typing";
+    else if (hands.gesture == interaction::Gesture::Carry) {
+        // What releasing the carried window does: the same tests as the release itself.
+        next = {"holding", "", -1, -1};
+        float heldDepth = dot(hands.pose.center - pointerCamera().position, pointerRay());
+        for (auto &f : capture.workspaces)
+            if (auto h = surfaces::intersect(f.surface, pointerCamera().position, pointerRay());
+                h && h->distance < 12 && h->distance <= heldDepth + .5f)
+                next = {"valid", "drop", h->distance, 12};
+        if (next.state == "holding")
+            if (auto held = capture.find(hands.pose.id))
+                if (mountTarget(*held))
+                    next = {"valid", "mount", -1, config["player"]["reach_mount"]};
+    } else if (hands.gesture != interaction::Gesture::None)
+        next = {"holding", "", -1, -1};
+    else if (superHeld) {
+        auto h = aim();
+        if (!h)
+            if (auto back = aim(true); back && back->second.back && !capture.workspace(back->first))
+                h = back;
+        if (h) {
+            auto e = capture.find(h->first);
+            if (capture.workspace(h->first) || movable(e))
+                ranged(h->second.distance, "reach_grab", "grab");
+            else if (e)
+                next = {"invalid", "grab", h->second.distance, config["player"]["reach_grab"]};
+            else
+                next.state = "neutral";
+        } else
+            next.state = "neutral";
+    } else {
+        next.state = "neutral";
+        auto blocker = interaction::raycast(pointerCamera().position, pointerRay(), world->collision, &world->collisionIndex);
+        auto unplaced = capture.find(unplacedSelected);
+        if (unplaced && !layout.unplaced.contains(unplaced->surface.id))
+            unplaced = nullptr;
+        switch (editor.slot) {
+        case 1:
+            if (auto h = aim(); h && !capture.workspace(h->first))
+                next = {"target", "click", h->second.distance, -1};
+            break;
+        case 2:
+            // The click's own order: a window under the reticle is (re)selected first.
+            if (auto h = aim(); h && movable(capture.find(h->first)))
+                next = {"valid", "select", h->second.distance, -1};
+            else if (auto e = tagged.empty() ? nullptr : capture.find(tagged)) {
+                if (mountTarget(*e))
+                    next = {"valid", "mount", -1, config["player"]["reach_mount"]};
+                else if (blocker)
+                    ranged(blocker->distance, "reach_placement", "mount");
+            }
+            break;
+        case 3:
+            if (blocker)
+                ranged(blocker->distance, "reach_placement", "path");
+            break;
+        case 5:
+            if (unplaced) {
+                if (mountTarget(*unplaced))
+                    next = {"valid", "mount", -1, config["player"]["reach_mount"]};
+                else if (blocker) {
+                    ranged(blocker->distance, "reach_placement", "place");
+                    if (next.state == "valid") {
+                        // The surface placement's own test: room for the window here.
+                        auto placed = unplaced->surface;
+                        placed.yaw = 0;
+                        placed.rotation = interaction::orientation(blocker->normal);
+                        placed.center = blocker->point + blocker->normal * .06f;
+                        if (!surfaces::pushOut(placed, world->collision) || !layout.vacant(placed, placed.id))
+                            next.state = "invalid";
+                    }
+                }
+            } else if (auto h = aim(); h && !capture.workspace(h->first)) {
+                if (movable(capture.find(h->first)))
+                    ranged(h->second.distance, "reach_placement", "pocket");
+                else
+                    next = {"invalid", "pocket", h->second.distance, config["player"]["reach_placement"]};
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    bool changed = next.state != reticle.state || next.action != reticle.action;
+    reticle = next;
+    if (changed)
+        publish();
+}
 void Runtime::handTick(float dt) {
     if (hands.gesture == interaction::Gesture::None)
         return;
@@ -1665,8 +1838,8 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         if (!hit && event.button == config["input"]["carry_button"].get<uint32_t>())
             if (auto back = aim(true); back && back->second.back && !capture.workspace(back->first))
                 hit = back;
-        if (!hit)
-            return;
+        if (!hit || hit->second.distance > config["player"]["reach_grab"].get<float>())
+            return; // beyond reach: the reticle shows out of range
         auto e = capture.find(hit->first);
         if (auto wall = capture.workspace(hit->first)) {
             // Pull the actual topmost native client under the workspace-wall hit.
@@ -2647,7 +2820,7 @@ std::optional<std::pair<const Json *, surfaces::Surface>> Runtime::mountTarget(c
         frame.width = mount.at("size")[0].get<float>() + .3f;
         frame.height = mount.at("size")[1].get<float>() + .3f;
         auto hit = surfaces::intersect(frame, origin, ray);
-        if (!hit || hit->distance > 8 || hit->distance >= nearest || (blocker && blocker->distance < hit->distance - .35f))
+        if (!hit || hit->distance > config["player"]["reach_mount"].get<float>() || hit->distance >= nearest || (blocker && blocker->distance < hit->distance - .35f))
             continue;
         auto fitted = surfaces::fitToMount(mount, e.surface.pixelWidth, e.surface.pixelHeight, world->collision);
         if (!fitted)
@@ -2785,7 +2958,7 @@ void Runtime::toolInput(const std::string &slot, interaction::Action event) {
     if (action == "placement.pocket") {
         auto h = aim();
         auto e = h ? capture.find(h->first) : nullptr;
-        if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance))
+        if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance) || tooFar(h->second.distance, "reach_placement"))
             return;
         cancelGrab();
         layout.stash(e->instance, e->surface);
@@ -2844,7 +3017,7 @@ void Runtime::toolClick(const std::string &action) {
             // Into the tool mount's frame: its own anchored placement, at the client's size.
         } else if (action == "placement.surface") {
             auto hit = worldHit();
-            if (!hit)
+            if (!hit || tooFar(hit->distance, "reach_placement"))
                 return;
             placed.yaw = 0;
             placed.rotation = interaction::orientation(hit->normal);
@@ -2894,6 +3067,8 @@ void Runtime::toolClick(const std::string &action) {
                     return;
                 }
                 if (auto wall = worldHit()) {
+                    if (tooFar(wall->distance, "reach_placement"))
+                        return;
                     auto s = e->surface;
                     s.yaw = 0;
                     s.rotation = interaction::orientation(wall->normal);
@@ -2910,7 +3085,7 @@ void Runtime::toolClick(const std::string &action) {
         return;
     }
     if (action == "path.add") {
-        if (auto h = worldHit()) {
+        if (auto h = worldHit(); h && !tooFar(h->distance, "reach_placement")) {
             auto b =
                 layout.binding(monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
             editor.point(world->id, b ? b->at("areaId").get<std::string>() : "", h->point + h->normal * .03f);
@@ -3296,6 +3471,9 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                 if (patch.contains("offload_device") || !cap.is_number() || cap.get<double>() > 100)
                     throw ipc::Error(-32602, "setting requires IPC 0.18");
             }
+            if (!ipc::protocol::atLeast(protocol, "0.19") && params["patch"].contains("fov") &&
+                params["patch"]["fov"].is_number() && params["patch"]["fov"].get<double>() > 110)
+                throw ipc::Error(-32602, "setting requires IPC 0.19");
             auto merged = graphicsFile.current;
             merged.update(params["patch"]);
             try {
@@ -3316,6 +3494,10 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                       {"options", render::graphicsOptions()},
                       {"unsupported", {"ssr", "runtime_shadows", "contact_shadows"}},
                       {"timings", renderer.timings()}};
+        if (!ipc::protocol::atLeast(protocol, "0.19")) // fov above 110 arrived with IPC 0.19
+            for (auto section : {"config", "effective", "overrides"})
+                if (response[section].contains("fov") && response[section]["fov"].is_number())
+                    response[section]["fov"] = std::min(110., response[section]["fov"].get<double>());
         if (ipc::protocol::atLeast(protocol, "0.10")) response["performance"] = performance();
         else for (auto section : {"config", "effective", "overrides", "options"})
             for (auto key : {"offload", "offload_power_cap_w", "scale_min", "scale_max"}) response[section].erase(key);
@@ -3365,6 +3547,32 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         }
         return response;
     }
+    if (method == "player.get" || method == "player.set") {
+        if (method == "player.set") {
+            if (params.size() != 1 || !params.contains("patch") || !params["patch"].is_object() || params["patch"].empty())
+                throw ipc::Error(-32602, "player patch required");
+            auto merged = playerFile.current;
+            auto keys = interaction::playerSettingsKeys();
+            for (auto &[key, value] : params["patch"].items()) {
+                if (std::find(keys.begin(), keys.end(), key) == keys.end())
+                    throw ipc::Error(-32602, "unknown player setting: " + key);
+                if (value.is_null())
+                    merged.erase(key); // back to the default
+                else
+                    merged[key] = value;
+            }
+            try {
+                interaction::configPatch(configured, {{"player", merged}});
+            } catch (const std::exception &e) {
+                throw ipc::Error(-32602, e.what());
+            }
+            playerFile.save(merged);
+            applyPlayer(merged);
+            publish();
+        } else if (!params.empty())
+            throw ipc::Error(-32602, "unexpected params");
+        return playerSettings();
+    }
     if (method == "input.get") {
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
@@ -3380,9 +3588,19 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (renderPass.active() || params.size() != 2 || !params.contains("leaseId") || !params["leaseId"].is_string() ||
             !control.ownsLease(actor, params["leaseId"]) || !params.contains("style"))
             throw ipc::Error(-32602, "overlay style needs owning shell lease");
+        static constexpr std::array reticleColours{"reticleColor", "validColor", "invalidColor"};
+        bool reticleAware = ipc::protocol::atLeast(protocol, "0.19");
+        if (!reticleAware && params["style"].is_object())
+            for (auto key : reticleColours)
+                if (params["style"].contains(key))
+                    throw ipc::Error(-32602, "setting requires IPC 0.19");
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         renderer.applyOverlayStyle(params["style"]);
-        return Json{{"style", renderer.overlayStyle}};
+        auto style = renderer.overlayStyle;
+        if (!reticleAware)
+            for (auto key : reticleColours)
+                style.erase(key);
+        return Json{{"style", style}};
     }
     if (method == "input.set" || method == "input.preview") {
         if (params.size() != 1 || !params.contains("config"))
@@ -3744,6 +3962,8 @@ void Runtime::tick() {
     ipc->poll();
     if (auto next = graphicsFile.poll())
         applyGraphics(*next);
+    if (auto next = playerFile.poll())
+        applyPlayer(*next);
     if (!session.playing) if (auto next = inputFile.poll())
         applyInput(*next);
     renderer.debug = debug;
@@ -3853,9 +4073,11 @@ void Runtime::tick() {
             intent.crouch = keys.contains(KEY_LEFTCTRL) && movement == &walk;
             intent.jumpSpeed = config["player"]["jump_speed"];
             intent.stepHeight = config["player"]["step_height"];
-            intent.speed = (movement == &walk ? config["player"]["walk_speed"].get<float>() / 3.5f
-                                              : config["player"]["fly_speed"].get<float>() / 5.f) *
-                           (keys.contains(KEY_LEFTSHIFT) ? config["player"]["run_multiplier"].get<float>() : 1.f);
+            // Walking runs at run_speed with Shift; flight scales by the same run/walk ratio.
+            float walkSpeed = config["player"]["walk_speed"], runSpeed = config["player"]["run_speed"];
+            bool running = keys.contains(KEY_LEFTSHIFT);
+            intent.speed = movement == &walk ? (running ? runSpeed : walkSpeed) / 3.5f
+                                             : config["player"]["fly_speed"].get<float>() / 5.f * (running ? runSpeed / walkSpeed : 1.f);
         }
         float lookT = config["player"]["look_inertia"];
         float blend = lookT > 0 ? 1 - std::exp(-dt / lookT) : 1;
@@ -3927,8 +4149,10 @@ void Runtime::tick() {
             smoothIntent = {};
             cancelGrab();
         }
+        motionTick(dt);
         handTick(dt);
         toolsTick();
+        reticleTick();
         auto captureStarted = std::chrono::steady_clock::now();
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         captureGPU.begin();
@@ -3962,6 +4186,37 @@ void Runtime::tick() {
                     g_pSeatManager->setKeyboardFocus(e->window->resource());
         renderer.pointerX = layerCursor ? -1.f : (typing || editor.activeHandle >= 0) ? pointerX : .5f;
         renderer.pointerY = layerCursor ? -1.f : (typing || editor.activeHandle >= 0) ? pointerY : .5f;
+        {
+            auto &r = renderer.reticle;
+            auto &player = config["player"];
+            static const std::map<std::string, int> states{
+                {"neutral", r.Neutral}, {"target", r.Target},   {"valid", r.Valid},  {"out_of_range", r.OutOfRange},
+                {"invalid", r.Invalid}, {"holding", r.Holding}, {"typing", r.Typing}};
+            auto styles = interaction::playerOptions()["reticle_style"];
+            r.style = int(std::find(styles.begin(), styles.end(), player["reticle_style"]) - styles.begin());
+            r.visible = states.contains(reticle.state);
+            r.state = r.visible ? states.at(reticle.state) : r.Neutral;
+            r.size = player["reticle_size"];
+            r.thickness = player["reticle_thickness"];
+            r.gap = player["reticle_gap"];
+            r.opacity = player["reticle_opacity"];
+            r.outline = player["reticle_outline"];
+            auto colour = [&](const char *key) {
+                auto &c = renderer.overlayStyle[key];
+                return Vec3{c[0], c[1], c[2]};
+            };
+            r.color = r.state == r.Valid    ? colour("validColor")
+                      : r.state == r.Invalid ? colour("invalidColor")
+                      : r.state == r.Typing  ? Vec3{.5f, 1.f, .65f}
+                      : player["reticle_colour"].is_array()
+                          ? Vec3{player["reticle_colour"][0], player["reticle_colour"][1], player["reticle_colour"][2]}
+                          : colour("reticleColor");
+            // Dynamic: opens up while moving or turning, settles when still (motion is smoothed).
+            bool dynamic = player["reticle_dynamic"] == true && config["graphics"]["reduced_motion"] != true;
+            float motion = std::clamp(motionSpeed / std::max(.5f, player["run_speed"].get<float>()) + motionTurn / 4.f, 0.f, 1.f);
+            r.spread = dynamic && r.state != r.Typing ? motion * (6 + r.gap * .5f) : 0;
+            r.hint = reticle.state == "out_of_range" && reticle.distance > 0 ? (reticle.distance < 10 ? std::format("{:.1f} m", reticle.distance) : std::format("{:.0f} m", reticle.distance)) : "";
+        }
         auto pointerHit = aim();
         if (!grabbed.empty()) {
             pointerHit.reset();
@@ -4249,6 +4504,7 @@ int luaConfig(lua_State *L) {
             runtime->tagged.clear();
         }
         runtime->config = next;
+        runtime->applyPlayer(runtime->playerFile.current);
         runtime->deriveHomes();
         runtime->applyGraphics(runtime->graphicsFile.current);
         runtime->cursor();
@@ -4296,6 +4552,24 @@ int luaCamera(lua_State *state) {
         {"captureDirectory", runtime->captureDirectory.string()},
         {"instances", runtime->layout.instances},
         {"aim", aim() ? aim()->first : ""},
+        {"reticle",
+         {{"state", runtime->reticle.state},
+          {"action", runtime->reticle.action},
+          {"distance", runtime->reticle.distance},
+          {"reach", runtime->reticle.reach},
+          {"spread", runtime->renderer.reticle.spread},
+          {"hint", runtime->renderer.reticle.hint}}},
+        {"viewBob", {runtime->camera.viewBob.x, runtime->camera.viewBob.y, runtime->camera.viewBob.z}},
+        {"motion", {{"speed", runtime->motionSpeed}, {"turn", runtime->motionTurn}}},
+        {"reticle",
+         {{"state", runtime->reticle.state},
+          {"action", runtime->reticle.action},
+          {"distance", runtime->reticle.distance},
+          {"reach", runtime->reticle.reach},
+          {"spread", runtime->renderer.reticle.spread},
+          {"hint", runtime->renderer.reticle.hint}}},
+        {"viewBob", {runtime->camera.viewBob.x, runtime->camera.viewBob.y, runtime->camera.viewBob.z}},
+        {"motion", {{"speed", runtime->motionSpeed}, {"turn", runtime->motionTurn}}},
         {"mountTarget", runtime->snapTarget},
         {"renderPasses", runtime->renderPass.passes()},
         {"renderPassesLeaked", runtime->renderPass.leaked()},
@@ -4453,6 +4727,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     {"recording.mark", "input.control"}, {"recording.status", "input.control"},
                     {"replay.start", "input.control"}, {"replay.stop", "input.control"}, {"replay.status", "input.control"},
                     {"input.get", "state.read"},
+                    {"player.get", "state.read"},
+                    {"player.set", "movement.control"},
                     {"input.preview", "state.read"},
                     {"input.set", "input.control"},
                     {"input.capture", "input.control"},
@@ -4460,7 +4736,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     {"movement.set", "movement.control"},
                     {"runtime.exit", "runtime.control"}});
     runtime->ipc->advertise(std::move(methods));
-    runtime->deferInput([] { runtime->applyGraphics(runtime->graphicsFile.current); });
+    runtime->deferInput([] {
+        runtime->applyGraphics(runtime->graphicsFile.current);
+        runtime->applyPlayer(runtime->playerFile.current);
+    });
     HyprlandAPI::addDispatcherV2(handle, "hyprune.toggle", [](std::string arg) {
         deferToggle(arg);
         return SDispatchResult{};

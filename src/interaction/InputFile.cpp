@@ -1,4 +1,5 @@
 #include "InputFile.hpp"
+#include <algorithm>
 #include <fcntl.h>
 #include <sys/inotify.h>
 #include <sys/stat.h>
@@ -73,8 +74,9 @@ InputFile::InputFile(std::string name, Json defaults, std::function<Json(const J
                 throw std::runtime_error("conflicting Hyprune actions in one mode");
             return next;
         };
-    auto environment = name == "input" ? "HYPRUNE_INPUT_FILE" : "HYPRUNE_GRAPHICS_FILE";
-    if (auto p = getenv(environment))
+    std::string environment = "HYPRUNE_" + name + "_FILE"; // HYPRUNE_INPUT_FILE, _GRAPHICS_FILE, _PLAYER_FILE
+    std::transform(environment.begin(), environment.end(), environment.begin(), [](unsigned char c) { return std::toupper(c); });
+    if (auto p = getenv(environment.c_str()))
         path = p;
     else if (auto p = getenv("XDG_CONFIG_HOME"))
         path = std::filesystem::path(p) / ("hyprune/" + name + ".json");

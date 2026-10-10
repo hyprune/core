@@ -38,7 +38,7 @@ inline bool exactly(std::string_view value, std::string_view expected) {
 // This is the only supported-version inventory. Capability gates use floors,
 // not this list: adding a negotiated version inherits existing functionality.
 inline constexpr std::array Supported{"0.1", "0.2",  "0.3",  "0.4",  "0.5",  "0.6",  "0.7", "0.8",
-                                      "0.9", "0.10", "0.11", "0.12", "0.13", "0.14", "0.15", "0.16", "0.17", "0.18"};
+                                      "0.9", "0.10", "0.11", "0.12", "0.13", "0.14", "0.15", "0.16", "0.17", "0.18", "0.19"};
 inline constexpr std::string_view Latest = Supported.back();
 template <class Offers> std::optional<std::string_view> negotiate(const Offers &offers) {
     std::optional<std::string_view> selected;
@@ -51,6 +51,8 @@ template <class Offers> std::optional<std::string_view> negotiate(const Offers &
 inline bool methodAvailable(std::string_view version, std::string_view method) {
     if (!atLeast(version, "0.1"))
         return false;
+    if (method.starts_with("player."))
+        return atLeast(version, "0.19");
     if (method.starts_with("capture."))
         return atLeast(version, "0.17");
     if (method == "camera.photo" || method == "camera.release")
