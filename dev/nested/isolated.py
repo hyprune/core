@@ -11,6 +11,8 @@ Environment:
   HYPRUNE_NESTED_PARENT_SIZE  parent output, default 3840x2160
   HYPRUNE_NESTED_STATE_ROOT   state root; default dev/nested/.instances/<id>
   HYPRUNE_NESTED_KEEP_RUNTIME 1 keeps the runtime dir (logs) after exit
+Usage: isolated.py [session.py args] | isolated.py dev/nested/<script>.py [args]
+
   HYPRUNE_NESTED_GPU          auto (default), all, or a render node / PCI
                               address / index from /sys/class/drm/renderD*
 
@@ -149,7 +151,9 @@ def main():
         if shutil.which('nvidia-smi'):
             sampler=subprocess.Popen(['nvidia-smi','--query-gpu=pci.bus_id,utilization.gpu,memory.used,power.draw','--format=csv,noheader,nounits','-lms','1000'],stdout=open(root/'gpu-load.csv','w'),stderr=subprocess.DEVNULL)
         lock=str(runtime/'nested.lock')
-        code=subprocess.call(['flock',lock,sys.executable,str(HERE/'session.py'),*sys.argv[1:]],env=child)
+        # A dev/nested script that drives session.run itself (offload_acceptance.py, ...) may come first.
+        script,rest=(sys.argv[1],sys.argv[2:]) if sys.argv[1:] and sys.argv[1].endswith('.py') and os.path.isfile(sys.argv[1]) else (str(HERE/'session.py'),sys.argv[1:])
+        code=subprocess.call(['flock',lock,sys.executable,script,*rest],env=child)
         if sampler:sampler.terminate();sampler.wait()
         info['gpuLoad']=load_summary(root/'gpu-load.csv');info['exitCode']=code
         (root/'instance.json').write_text(json.dumps(info,indent=2)+'\n')
