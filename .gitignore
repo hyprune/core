@@ -26,3 +26,5 @@ tests/fixtures/m3b/
 /dev/nested/.autodrive-state/
 /dev/nested/.static-world-state/
 /dev/nested/.watermark-state/
+/dev/nested/.instances/
+/tests/fixtures/.prepare.lock

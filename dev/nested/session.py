@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse, json, os, pathlib, secrets, shutil, signal, socket, struct, subprocess, sys, time
-HERE=pathlib.Path(__file__).resolve().parent;ROOT=HERE.parent.parent;STATE=HERE/'.state'
+HERE=pathlib.Path(__file__).resolve().parent;ROOT=HERE.parent.parent
+# Isolated instances (isolated.py) keep every .*-state dir under their own root.
+STATE_ROOT=pathlib.Path(os.environ.get('HYPRUNE_NESTED_STATE_ROOT',str(HERE)));STATE=STATE_ROOT/'.state'
 sys.path.insert(0,str(HERE))
 # Keep dynamically imported integration helpers on this exact harness module.
 sys.modules.setdefault('session',sys.modules[__name__])
@@ -67,31 +69,31 @@ def run(args):
     if getattr(args,'ink',False): args.authoring=True
     if getattr(args,'watermark',False): args.authoring=True
     if getattr(args,'perf',False):
-        STATE=HERE/'.perf-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+        STATE=STATE_ROOT/'.perf-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if getattr(args,'autodrive',False):
-        STATE=HERE/'.autodrive-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+        STATE=STATE_ROOT/'.autodrive-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if getattr(args,'static_world',False):
-        STATE=HERE/'.static-world-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+        STATE=STATE_ROOT/'.static-world-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if not hasattr(args,'authoring'): args.authoring=False
     if args.authoring: args.m3b=True
     if not hasattr(args,'climbing'): args.climbing=False
     if not hasattr(args,'integration'): args.integration=False
     if args.integration:
-        STATE=HERE/'.integration-state'
+        STATE=STATE_ROOT/'.integration-state'
         # Prior Lumen acceptance can leave workspace bindings in this test directory.
         # First-session integration starts from its authored Switchyard locations.
         (STATE/'layout.json').unlink(missing_ok=True)
         os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if args.climbing:
-        STATE=HERE/'.climbing-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+        STATE=STATE_ROOT/'.climbing-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if args.m3b:
-        STATE=HERE/'.m3b-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+        STATE=STATE_ROOT/'.m3b-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     elif args.m3a:
-        STATE=HERE/'.m3a-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+        STATE=STATE_ROOT/'.m3a-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     elif args.m2:
-        STATE=HERE/'.m2-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+        STATE=STATE_ROOT/'.m2-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if getattr(args,'watermark',False):
-        STATE=HERE/'.watermark-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+        STATE=STATE_ROOT/'.watermark-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     STATE.mkdir(exist_ok=True);os.chmod(STATE,0o700)
     if getattr(args,'placement',False) or getattr(args,'playable',False) or getattr(args,'workspace_homes',False) or getattr(args,'long_titles',False) or getattr(args,'live_findings',False): (STATE/'layout.json').unlink(missing_ok=True)
     if args.m3b:
@@ -100,6 +102,8 @@ def run(args):
             (STATE/name).unlink(missing_ok=True)
         if args.record:
             (STATE/'video-temp.json').unlink(missing_ok=True)
+    # Fixtures are regenerated in place; parallel isolated instances take turns.
+    import fcntl;prepare_lock=open(ROOT/'tests/fixtures/.prepare.lock','w');fcntl.flock(prepare_lock,fcntl.LOCK_EX)
     subprocess.run([sys.executable,str(ROOT/'tests/fixtures/generate.py')],check=True,stdout=subprocess.DEVNULL)
     installed=STATE/'worlds';installed.mkdir(exist_ok=True)
     package=installed/'org.hyprune.atrium'
@@ -206,6 +210,7 @@ def run(args):
         text=pathlib.Path(config).read_text().replace('1920x1080@60','3840x2160@60');config=str(STATE/'4k-hyprland.lua');pathlib.Path(config).write_text(text)
     if os.environ.get('HYPRUNE_NESTED_SMALL')=='1':
         text=pathlib.Path(config).read_text().replace('1920x1080@60','640x480@60');config=str(STATE/'small-hyprland.lua');pathlib.Path(config).write_text(text)
+    prepare_lock.close()
     log=open(STATE/'hyprland.log','w')
     if args.live: environment.pop('HYPRUNE_LAUNCH_FD',None)
     process=subprocess.Popen(['Hyprland','-c',config],env=environment,pass_fds=(read,),stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True);os.close(read)
