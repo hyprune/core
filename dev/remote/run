@@ -146,10 +146,12 @@ def run(args):
         summary['gpus'] = gpus()
         before = evidence_snapshot(tree)
         nested = [s for s in args.suites if s != 'ctest']
-        results = []
+        # CTest first and alone: nested runs regenerate tests/fixtures in place,
+        # which races the CTest suites that read them (render, core, control...).
+        results = [run_suite(tree, 'ctest', root / 'ctest')] if 'ctest' in args.suites else []
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.parallel)) as pool:
-            futures = [pool.submit(run_suite, tree, s, root / s) for s in args.suites]
-            results = [f.result() for f in futures]
+            futures = [pool.submit(run_suite, tree, s, root / s) for s in nested]
+            results += [f.result() for f in futures]
         # Suites rewrite docs/evidence; keep them with the run, restore files that were clean.
         changed = evidence_snapshot(tree) - before
         for name in changed:
