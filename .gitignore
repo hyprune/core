@@ -23,4 +23,5 @@ tests/fixtures/m3b/
 /tests/fixtures/visibility/
 
 /dev/nested/.perf-state/
+/dev/nested/.autodrive-state/
 /dev/nested/.watermark-state/
