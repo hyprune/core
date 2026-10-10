@@ -1,3 +1,83 @@
+# Core handoff, 2026-10-10 (remote work host: headless nested on 2x RTX 3090)
+
+Host: 10.2.2.2, Arch, Hyprland 0.56.2 / aquamarine 0.15.1, NVIDIA 615.78.08 open,
+2x RTX 3090, no iGPU, no desktop session. Everything ran headless, in isolated
+instances (`dev/nested/isolated.py`; `run.sh` picks it when there's no
+WAYLAND_DISPLAY). Lumen Reach 0.9.0 and Switchyard 0.1.1 come from the
+releases, checked against their SHA-256.
+
+## Results versus the laptop
+
+| Check | Laptop (latest handoff) | Remote host |
+| --- | --- | --- |
+| CTest | 25/25, later 26/26 | 26/26 (main 724e7c3 and `remote/offload-nvidia-consumer`) |
+| `run.sh` (smoke) | not in recent handoffs | FAIL at "surface click": the atrium terminals open on workspaces 1/2 and aren't in the world view since room 20 became the default, so the smoke's positional lookup is stale (likely the same on the laptop) |
+| `--workspace-homes` | PASS | PASS (35 lines) |
+| `--placement` | 37 PASS | 37 PASS |
+| `--playable` | 15 PASS | 15 PASS |
+| `--static-world` | PASS | FAIL at check 13, "the turn is animated, not a snap" (deterministic) |
+| `--live-findings` | 12 PASS | 12 PASS (13 PASS lines) |
+| `--ipc-warp` | PASS | PASS (29 lines) |
+
+**static-world:** the Super+LMB press on a window's back face stalls the
+nested main thread for about 0.5 s (the press roundtrip takes 0.60 s, the
+first sample lands at 0.99 s), so the 0.35 s dt-driven flip has already
+finished.
+
+- **Not the cause:** a cold shader cache (a warm `__GL_SHADER_DISK_CACHE`
+  fails the same way), wtype keyboards, or plain/Super clicks in the atrium
+  (1–106 ms).
+- **Open:** profile the back-face carry start (`sweepSafe`/facing) on Lumen
+  Reach. There's no `perf` on the host. The Xeon W-3175X has lower
+  single-thread speed than the laptop.
+
+## What changed for headless/NVIDIA (all merged in 724e7c3 unless noted)
+
+- sway 1.12 can't be the parent: it offers xdg_wm_base v5, and aquamarine
+  binds v6. The parent is `kwin_wayland --virtual`.
+- NVIDIA-only hosts:
+  - no Mesa EGL pin;
+  - `nested-nvidia-headless.so` gives HEADLESS-1 renderable buffers (NVIDIA
+    can't render LINEAR, and aquamarine assumes LINEAR).
+- Fixed: hypruned answered `session.hello` before the method table arrived.
+- Fixed: the world upload blamed GL errors the compositor had left pending.
+- RENDER_PRE-without-POST leak: found here, fixed by the lead (9dfb841). The
+  original scenario reran clean.
+- One GPU per isolated instance, least-loaded first, in a bwrap `/dev/dri`
+  view. KWin's virtual backend ignores KWIN_RENDER_NODES.
+- `dev/remote/run`: the one-command runner (JSON summary, `--detach`,
+  `--status`, `--ref` worktrees); see `dev/remote/README.md`.
+- Branch `remote/runner-video`, not merged yet:
+  - the runner runs CTest before the nested suites (they rewrite
+    `tests/fixtures` in place, and render-tests failed once);
+  - `walkthrough.py`;
+  - the GPU view keeps every `/dev/nvidiaN` (NVENC needs them).
+
+## Offload on NVIDIA and IPC 0.18 (branch `remote/offload-nvidia-consumer`)
+
+- NVIDIA consumers can now accept offload frames. LINEAR dmabufs are
+  external-only on NVIDIA; they're now imported as GL_TEXTURE_EXTERNAL_OES.
+- IPC 0.18, following the lead's decisions:
+  - no battery means mains;
+  - the automatic cap is 75 % of the GPU's NVML enforced limit, and is
+    configurable;
+  - `offload_device`: auto avoids the compositor's GPU, then picks the least
+    loaded;
+  - `performance.reason` reports the supervisor's real stop reason.
+  - Contract: schema 53c86f4, sdk 53dd830, docs 03fee67/3d6a5e5 (branches
+    `remote/ipc-0.18-offload-device`).
+- The wire audit no longer aborts hypruned on a forced stop.
+- Five-config matrix: active 1.0 at 60 FPS everywhere, caps 263/293 W from
+  the enforced limits. Results in
+  `docs/evidence/offload/nvidia-consumer/README.md`.
+
+## Video
+
+`videos/lumen-reach-0.9.0-walkthrough-4k.mp4` (+ .json) is in this host's
+gallery clone, uncommitted. Per the lead, the gallery isn't pushed from here.
+
+---
+
 # Core handoff — 2026-10-10 (render-pass tracking)
 
 Branch `fix/render-pass-tracking` from main `821ce9c`, worktree `core-renderpass`.
