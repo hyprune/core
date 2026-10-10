@@ -11,12 +11,22 @@ Environment:
   HYPRUNE_NESTED_PARENT_SIZE  parent output, default 3840x2160
   HYPRUNE_NESTED_STATE_ROOT   state root; default dev/nested/.instances/<id>
   HYPRUNE_NESTED_KEEP_RUNTIME 1 keeps the runtime dir (logs) after exit
+  HYPRUNE_NESTED_GPU          auto (default), all, or a render node / PCI
+                              address / index from /sys/class/drm/renderD*
+
+GPU choice: with several render nodes and bwrap installed, auto gives each
+instance the GPU with the fewest live instances and runs the whole instance
+(parent, Hyprland, clients) in a mount namespace whose /dev holds only that
+GPU's render node (plus NVIDIA's shared control nodes). EGL, GBM and the
+parent's dmabuf feedback then all agree, and no instance sees a card (KMS)
+node. `all` keeps every GPU visible (cross-GPU offload tests). The choice
+and nvidia-smi load samples (whole-GPU, 1 Hz) go to instance.json.
 
 sway 1.12 advertises xdg_wm_base v5, but aquamarine 0.15 binds v6 and aborts
 ("invalid version for global xdg_wm_base"), so auto prefers kwin_wayland's
 virtual backend. sway stays selectable for wlroots builds that offer v6.
 """
-import json, os, pathlib, secrets, shutil, signal, subprocess, sys, time
+import fcntl, json, os, pathlib, secrets, shutil, signal, subprocess, sys, time
 HERE=pathlib.Path(__file__).resolve().parent
 # Nested Hyprland puts <runtime>/hypr/<62-char signature>/.socket2.sock next
 # to the runtime dir; sun_path holds 107 bytes, so the instance dir stays short.
@@ -36,6 +46,53 @@ def make_runtime():
             except FileExistsError:continue
             return path
     raise RuntimeError('no runtime base short enough for nested Hyprland sockets')
+
+def gpus():
+    found=[]
+    for path in sorted(pathlib.Path('/sys/class/drm').glob('renderD*'),key=lambda p:int(p.name[7:])):
+        pci=os.path.basename(os.path.realpath(path/'device'));minor=None
+        info=pathlib.Path('/proc/driver/nvidia/gpus')/pci/'information'
+        if info.is_file():
+            minor=next((int(l.split(':')[1]) for l in info.read_text().splitlines() if l.startswith('Device Minor:')),None)
+        vendor=(path/'device/vendor').read_text().strip() if (path/'device/vendor').is_file() else ''
+        found.append({'index':len(found),'node':path.name,'pci':pci,'vendor':vendor,'nvidiaMinor':minor})
+    return found
+
+def choose_gpu(base):
+    want=os.environ.get('HYPRUNE_NESTED_GPU','auto');found=gpus()
+    if want=='all' or len(found)<2:return None
+    if want!='auto':
+        match=[g for g in found if want in (g['node'],g['pci'],str(g['index']),'/dev/dri/'+g['node'])]
+        if not match:raise RuntimeError(f'HYPRUNE_NESTED_GPU={want}: no such render node')
+        return match[0]
+    if not shutil.which('bwrap'):return None
+    live={g['node']:0 for g in found}
+    for claim in pathlib.Path(base).glob('hn*/gpu'):
+        try:node,pid=claim.read_text().split()
+        except (OSError,ValueError):continue
+        if node in live and pathlib.Path(f'/proc/{pid}').exists():live[node]+=1
+    return min(found,key=lambda g:live[g['node']])
+
+def sandbox(gpu):
+    args=['bwrap','--dev-bind','/','/','--dev','/dev','--dev-bind','/dev/shm','/dev/shm','--die-with-parent']
+    nodes=['/dev/dri/'+gpu['node']]
+    if gpu['nvidiaMinor'] is not None:
+        nodes+=[f"/dev/nvidia{gpu['nvidiaMinor']}"]+[d for d in ('/dev/nvidiactl','/dev/nvidia-modeset','/dev/nvidia-uvm','/dev/nvidia-uvm-tools') if os.path.exists(d)]
+    for node in nodes:args+=['--dev-bind',node,node]
+    return args
+
+def gpu_name(pci):
+    if not shutil.which('nvidia-smi'):return ''
+    result=subprocess.run(['nvidia-smi','--query-gpu=name','--format=csv,noheader','-i',pci],capture_output=True,text=True)
+    return result.stdout.strip() if result.returncode==0 else ''
+
+def load_summary(path):
+    rows={}
+    for line in path.read_text().splitlines() if path.is_file() else []:
+        try:bus,util,memory,power=[v.strip() for v in line.split(',')];rows.setdefault(bus.lower(),[]).append((float(util),float(memory),float(power)))
+        except ValueError:continue
+    return {bus:{'samples':len(r),'utilMeanPct':round(sum(x[0] for x in r)/len(r),1),'utilMaxPct':max(x[0] for x in r),
+                 'memMaxMiB':max(x[1] for x in r),'powerMeanW':round(sum(x[2] for x in r)/len(r),1)} for bus,r in rows.items()}
 
 def parent_command(kind,runtime,socket,size):
     width,height=size.split('x')
@@ -57,7 +114,16 @@ def clean_env(runtime):
     env['XDG_RUNTIME_DIR']=str(runtime);return env
 
 def main():
-    runtime=make_runtime();ident=runtime.name
+    if os.environ.get('HYPRUNE_NESTED_RUNTIME'):  # re-executed inside the GPU sandbox
+        runtime=pathlib.Path(os.environ.pop('HYPRUNE_NESTED_RUNTIME'));gpu=json.loads(os.environ.pop('HYPRUNE_NESTED_GPU_INFO','null'))
+    else:
+        base=next(runtime_base());lock=open(pathlib.Path(base)/'hyprune-nested.lock','w');fcntl.flock(lock,fcntl.LOCK_EX)
+        runtime=make_runtime();gpu=choose_gpu(runtime.parent)
+        (runtime/'gpu').write_text(f"{gpu['node'] if gpu else 'all'} {os.getpid()}\n");lock.close()
+        if gpu:
+            os.environ.update(HYPRUNE_NESTED_RUNTIME=str(runtime),HYPRUNE_NESTED_GPU_INFO=json.dumps(gpu))
+            os.execvp('bwrap',sandbox(gpu)+[sys.executable,str(pathlib.Path(__file__).resolve()),*sys.argv[1:]])
+    ident=runtime.name
     root=pathlib.Path(os.environ.get('HYPRUNE_NESTED_STATE_ROOT',str(HERE/'.instances'/ident)))
     root.mkdir(parents=True,exist_ok=True)
     kind=choose_parent();size=os.environ.get('HYPRUNE_NESTED_PARENT_SIZE','3840x2160')
@@ -65,7 +131,7 @@ def main():
     if kind=='sway':env.pop('WAYLAND_DISPLAY',None)
     log=open(root/'parent.log','w')
     parent=subprocess.Popen(command,env=env,cwd=str(runtime),stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
-    code=1
+    code=1;sampler=None
     try:
         socket=None
         for _ in range(100):
@@ -76,12 +142,19 @@ def main():
             time.sleep(.1)
         if not socket:raise RuntimeError(f'{kind} parent socket timed out')
         child=clean_env(runtime);child.update(WAYLAND_DISPLAY=socket,HYPRUNE_NESTED_STATE_ROOT=str(root),HYPRUNE_NESTED_INSTANCE=ident)
-        info={'instance':ident,'runtime':str(runtime),'stateRoot':str(root),'parent':kind,'parentPid':parent.pid,'parentSize':size,'parentWayland':socket,'args':sys.argv[1:]}
+        if gpu:gpu['name']=gpu_name(gpu['pci'])
+        info={'instance':ident,'runtime':str(runtime),'stateRoot':str(root),'parent':kind,'parentPid':parent.pid,'parentSize':size,'parentWayland':socket,'args':sys.argv[1:],'gpu':gpu or 'all'}
         (root/'instance.json').write_text(json.dumps(info,indent=2)+'\n')
-        print(f'isolated: {kind} {size} instance {ident} state {root}',flush=True)
+        print(f"isolated: {kind} {size} instance {ident} gpu {gpu['node']+' '+gpu['pci'] if gpu else 'all'} state {root}",flush=True)
+        if shutil.which('nvidia-smi'):
+            sampler=subprocess.Popen(['nvidia-smi','--query-gpu=pci.bus_id,utilization.gpu,memory.used,power.draw','--format=csv,noheader,nounits','-lms','1000'],stdout=open(root/'gpu-load.csv','w'),stderr=subprocess.DEVNULL)
         lock=str(runtime/'nested.lock')
         code=subprocess.call(['flock',lock,sys.executable,str(HERE/'session.py'),*sys.argv[1:]],env=child)
+        if sampler:sampler.terminate();sampler.wait()
+        info['gpuLoad']=load_summary(root/'gpu-load.csv');info['exitCode']=code
+        (root/'instance.json').write_text(json.dumps(info,indent=2)+'\n')
     finally:
+        if sampler and sampler.poll() is None:sampler.terminate()
         os.killpg(parent.pid,signal.SIGTERM) if parent.poll() is None else None
         try:parent.wait(timeout=8)
         except subprocess.TimeoutExpired:os.killpg(parent.pid,signal.SIGKILL);parent.wait()
