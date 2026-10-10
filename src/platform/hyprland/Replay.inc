@@ -69,7 +69,7 @@ std::vector<interaction::Action> Runtime::inputEvent(const std::string &mode, co
     return actions;
 }
 Json Runtime::sessionMethod(const std::string &method, const Json &params) {
-    if (renderDepth)
+    if (renderPass.active())
         throw ipc::Error(-32004, "record/replay inside frame");
     auto allowed = [&](std::initializer_list<const char *> names) {
         for (auto &[key, _] : params.items())

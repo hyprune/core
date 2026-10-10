@@ -1193,3 +1193,13 @@ Owner live findings. Branch `fix/live-walls-mounts`, docs RFC-0005 amendment.
   `mounts.placements`/`instances` show `anchorId` and its `areaId`, including
   for room clients. No new hint or field. A shell that wants a "Snap to
   mount" label could derive it later; not needed now.
+
+## Render-pass tracking survives failed frames (2026-10-10, no wire change)
+
+Found on the NVIDIA-only bake host: Hyprland 0.56.2 emits `RENDER_PRE` and
+returns without `RENDER_POST` when `beginRender` fails (buffer allocation on
+hotplug/DPMS). Core's pass counter leaked, every tick threw "deferred work
+inside compositor render pass", and IPC stopped for good: the shell would see a
+silent, permanent disconnect with no error. Core now recovers on the next tick
+and logs once (branch `fix/render-pass-tracking`). Shell/SDK: nothing to change.
+A HUD that went quiet after a monitor hotplug on older cores was this bug.
