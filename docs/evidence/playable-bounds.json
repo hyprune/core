@@ -38,7 +38,7 @@
       "name": "noclip escapes box",
       "passed": true,
       "evidence": [
-        7.083311557769775,
+        6.999978542327881,
         1.7000000476837158,
         4.0
       ]
@@ -71,7 +71,7 @@
       "name": "fly returns gradually after noclip",
       "passed": true,
       "evidence": [
-        3.40000057220459,
+        3.450000524520874,
         1.7000000476837158,
         4.0
       ]

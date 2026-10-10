@@ -1175,3 +1175,21 @@ grabs exclusive input like the Director and shows a one-line prompt in a
 it with no note; the capture binding in the prompt (Super+U) saves the pending text
 as-is and moves the prompt to the new capture. Captures taken while typing in an
 app, in focus or in the free cursor do not prompt.
+
+## Wall backgrounds and tool-mount snapping (2026-10-10, no wire change)
+
+Owner live findings. Branch `fix/live-walls-mounts`, docs RFC-0005 amendment.
+
+- **Walls:** a workspace wall composes the output's background and bottom
+  layer-shell surfaces behind its windows. An empty or wallpaper-less wall
+  shows the Hyprune placeholder (navy + lockup). The shell's own wallpaper, if
+  it is a background layer, appears on walls automatically. Nothing to change
+  in the shell. Hyprland's built-in background is not a layer surface and
+  isn't sampled.
+- **Mounts:** while carrying, pocket-placing (tool 5) or with a tagged window
+  (tool 2), the tool mount under the aim is outlined in `overlayStyle.promptColor`
+  (core-drawn). The pocket ghost shows the fitted result. Placing fits the
+  client into the mount frame. Placements are ordinary anchored placements, so
+  `mounts.placements`/`instances` show `anchorId` and its `areaId`, including
+  for room clients. No new hint or field. A shell that wants a "Snap to
+  mount" label could derive it later; not needed now.

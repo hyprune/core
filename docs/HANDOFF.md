@@ -1,3 +1,63 @@
+# Core handoff — 2026-10-10 (live findings: walls, mounts)
+
+Branch `fix/live-walls-mounts`, rebased onto main `d4eecb4` (carry from behind,
+static world geometry), worktree `core-findings`.
+Nested only and nothing pushed. The live session was down, and `dev/live/*`
+was not run. core-render (input bugs) was left alone; this branch touches the
+Capture compositor, Layout placement, Plugin placement paths and nested files.
+
+| Commit | What |
+| --- | --- |
+| `251223b` | Walls compose wallpaper (background/bottom layer surfaces) behind windows; placeholder when empty or wallpaper-less |
+| `956729a` | Tool mounts are snap targets: highlight + flush aspect-fit placement (pocket, carry, tagged) |
+| `c942410` | `dev/nested/run.sh --live-findings` (12 checks) + test wallpaper client |
+| `bd35343` | Playable check: Lumen Reach now declares playable volumes (stale expectation) |
+| this commit | CHANGES, LIVE-TEST item, handoff |
+| docs `132bb40` | RFC-0005 amendment (no wire change) |
+
+**Walls:** the cause was that `Capture::compose` drew only window leases on
+dark navy.
+- **Fix:** it now tracks the output's background and bottom layer surfaces
+  (commit listeners, like windows) and draws them first at their real
+  rectangles, honouring viewporter crops.
+- **Recomposition key:** layer identity, commits, texture, box and crop. A
+  first version keyed on a per-tick vector address and recomposed every frame
+  (caught by the nested bound).
+- **Placeholder:** empty or wallpaper-less walls get `render::brandPlaceholder`
+  (navy `#0f1a27`, lockup `#d4ffe6`, from the embedded brand masks).
+- **Not sampled:** Hyprland's own non-layer background.
+
+**Mounts:** the cause was that surface placement aligned to the aimed normal,
+then collision push-out (sweeping up to 4 m ahead) shoved the window 0.59 m
+off the lectern face, past its bezel. Authored frames were never used.
+- **`mountTarget`:** finds the free, compatible `tool-mount` under the aim
+  (frame + 15 cm rim, occlusion-checked, own area for homed clients).
+- **`fitToMount`:** aspect-fit, centred, same orientation, 5 cm proud. It
+  shrinks up to 12% or uses recovery within 30 cm; it never intersects.
+- **`placeOnMount`:** stores an ordinary anchored placement, now valid for room
+  clients too.
+- **Highlight:** a two-stroke outline in `promptColor`, plus the pocket ghost
+  in the frame.
+
+Validation (worktree build):
+
+```sh
+flock /tmp/worldshell-nested.lock ctest --test-dir build   # 25/25 (after rebase)
+dev/nested/run.sh --live-findings    # 12 PASS; stills in gallery screenshots/live-findings-2026-10-10/
+dev/nested/run.sh --placement / --static-world / --workspace-homes / --m2 / --long-titles / --ipc-warp   # PASS
+dev/nested/run.sh --playable         # 15 PASS after the stale-expectation fix
+flock /tmp/worldshell-nested.lock python3 dev/nested/world_workspace.py   # PASS
+```
+
+Open:
+- The carried window lags behind a teleported camera in the nested test. Real
+  turning is gradual, and the snap follows the aim ray either way.
+- The empty-wall placeholder replaces the wallpaper by design (lead's spec);
+  easy to change to "wallpaper + small mark" if the owner prefers.
+- Live checklist item added: hardware-cursor paths are untested nested.
+
+---
+
 # Core lead handoff — 2026-10-09 (kits, carry drop)
 
 Nested only and nothing pushed. `build/live` was not rebuilt, the core-render
