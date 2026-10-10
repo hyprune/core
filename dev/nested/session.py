@@ -49,10 +49,15 @@ def camera():
     ctl('eval',f'local f = assert(io.open({json.dumps(str(path))}, "w")); f:write(hl.plugin.hyprune.camera()); f:close()')
     return json.loads(path.read_text())
 
+def nvidia_only():
+    drivers={os.path.basename(os.path.realpath(p/'device/driver')) for p in pathlib.Path('/sys/class/drm').glob('renderD*')}
+    return bool(drivers) and drivers<={'nvidia'}
+
 def pin_mesa_egl():
     """Nested Hyprland and its clients use Mesa (the iGPU), not the NVIDIA EGL
     vendor glvnd prefers. Offload tests opt out (HYPRUNE_NESTED_ALLOW_DGPU=1)."""
     if os.environ.get('HYPRUNE_NESTED_ALLOW_DGPU')=='1' or '__EGL_VENDOR_LIBRARY_FILENAMES' in os.environ:return
+    if nvidia_only():return  # Mesa has no driver for any node; keep glvnd's choice
     for d in ['/usr/share/glvnd/egl_vendor.d','/etc/glvnd/egl_vendor.d','/run/opengl-driver/share/glvnd/egl_vendor.d']:
         if (pathlib.Path(d)/'50_mesa.json').is_file():
             os.environ['__EGL_VENDOR_LIBRARY_FILENAMES']=str(pathlib.Path(d)/'50_mesa.json');return
@@ -213,6 +218,8 @@ def run(args):
     prepare_lock.close()
     log=open(STATE/'hyprland.log','w')
     if args.live: environment.pop('HYPRUNE_LAUNCH_FD',None)
+    shim=ROOT/'build/nested-nvidia-headless.so'
+    if nvidia_only() and shim.is_file():environment['LD_PRELOAD']=':'.join(filter(None,[str(shim),environment.get('LD_PRELOAD')]))
     process=subprocess.Popen(['Hyprland','-c',config],env=environment,pass_fds=(read,),stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True);os.close(read)
     children=[];client=None
     try:
