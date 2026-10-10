@@ -187,3 +187,18 @@ runs in the deferred input path).
   reticle, and it drags like a front grab. The hardware cursor does not appear
   or flicker during the turn; no crash.
 - [ ] A plain click on the back of a window does nothing.
+
+## Motion feel: presentation-driven tick, pacing, native walls
+
+The tick now runs right after each presented frame (deferred with doLater, never in the
+render pass) and moves by the frame's real time; the 16 ms timer only covers idle. Nested
+tests cannot show hardware-cursor or real-DRM presentation behaviour:
+
+- [ ] Walk and turn in Lumen Reach: motion is even, nothing stalls when you stop and start
+  again (idle switches to the timer and back), the hardware cursor never flickers.
+- [ ] Turn quickly at the default settings and with `target_fps` 30 (Settings, Performance):
+  30 looks steady (no stutter), 60 stays smooth.
+- [ ] Turn the monitor off (DPMS) and on, and unplug/replug a second monitor while the
+  world is active: no freeze or crash; walking still works afterwards.
+- [ ] Walls with windows (e.g. a terminal on the Sun Court wall) read as crisp up close as
+  on the desktop; moving across the court does not shimmer.

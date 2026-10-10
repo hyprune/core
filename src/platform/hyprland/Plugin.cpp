@@ -286,6 +286,14 @@ struct Runtime {
     bool toggleAfterLoad = false;
     std::chrono::steady_clock::time_point loadDeadline;
     double accumulator = 0;
+    // Motion follows presentation, as frames are shown: a tick runs right after each
+    // presented frame and moves by the time that really passed, so every frame advances
+    // by its own interval (a free 16 ms timer beat against vblank: 0, 1 or 2 fixed steps
+    // per shown frame). The timer only drives ticks while nothing is presented (idle).
+    CHyprSignalListener presentedListener;
+    PHLMONITORREF presentedMonitor;
+    std::chrono::steady_clock::time_point lastPresented{};
+    void framePresented();
     std::string focused, focusedParent, lastError, grabbed;
     std::set<uint32_t> buttons, appKeys;
     WP<CWLSurfaceResource> appKeyResource;
@@ -3704,6 +3712,13 @@ void Runtime::tick() {
     finishLoad();
     if (locked() && active)
         exit();
+    if (auto m = monitor.lock(); m && presentedMonitor != monitor) {
+        presentedListener = m->m_events.presented.listen([](Time::steady_tp) {
+            if (runtime)
+                runtime->framePresented();
+        });
+        presentedMonitor = monitor;
+    }
     auto now = std::chrono::steady_clock::now();
     float dt = std::chrono::duration<float>(now - lastTick).count();
     lastTick = now;
@@ -3805,27 +3820,33 @@ void Runtime::tick() {
         if (climbing.active() && (typing || !ownsInput() || control.uiVisible() || control.driving() ||
                                   handover.phase || fullscreen.phase || movement != &walk || noclip))
             climbing.reset(camera);
-        accumulator = std::min(accumulator + double(dt), 4.0 / 60.0);
-        while (accumulator >= 1.0 / 60.0) {
+        // Recording and replay keep exact fixed steps; live motion moves by the frame's dt
+        // (the walker and flight sub-step at 2 ms themselves).
+        const bool fixedSteps = session.recording || session.playing;
+        accumulator = fixedSteps ? std::min(accumulator + double(dt), 4.0 / 60.0) : std::min(double(dt), 4.0 / 60.0);
+        while (fixedSteps ? accumulator >= 1.0 / 60.0 : accumulator > 1e-6) {
+            const float h = fixedSteps ? 1.f / 60.f : float(std::min(accumulator, .05));
             if (!layerCursor && !loading && !control.driving() && !control.uiVisible() && !handover.phase && fullscreen.phase == 0) {
                 const auto beforeMove = camera.position;
                 if (noclip) {
                     auto speed = intent.speed;
                     intent.speed = config["player"]["fly_speed"].get<float>() / 5.f;
-                    fly.step(camera, intent, 1.f / 60.f, {});
+                    fly.step(camera, intent, h, {});
                     intent.speed = speed;
                 } else if (movement == &walk && !typing && ownsInput())
-                    climbing.step(camera, intent, 1.f / 60.f, world->climbables,
+                    climbing.step(camera, intent, h, world->climbables,
                                   sim::climbMode(config["movement"]["climb_mode"].get<std::string>()),
                                   config["graphics"]["reduced_motion"], world->collision, &world->collisionIndex);
                 else
-                    movement->step(camera, intent, 1.f / 60.f, world->collision, &world->collisionIndex);
+                    movement->step(camera, intent, h, world->collision, &world->collisionIndex);
                 if (movement == &fly && !noclip && !typing && ownsInput() && !control.photoHeld())
                     camera.position = world->playable.constrain(
-                        beforeMove, camera.position, config["player"]["fly_bounds_allowance"].get<float>(), 1.f / 60.f);
+                        beforeMove, camera.position, config["player"]["fly_bounds_allowance"].get<float>(), h);
             }
-            accumulator -= 1.0 / 60.0;
+            accumulator -= h;
         }
+        if (!fixedSteps)
+            accumulator = 0;
         const bool outside = noclip && !world->playable.contains(camera.position);
         if (outside && !outsidePlayable)
             ipc->notify("runtime.notice", {{"level", "warning"},
@@ -3974,6 +3995,17 @@ struct FrameHash {
     FrameHash &operator()(const Json &j) { return (*this)(j.dump()); }
 };
 } // namespace
+void Runtime::framePresented() {
+    // Called from the backend's presentation feedback: never tick here, defer it.
+    lastPresented = std::chrono::steady_clock::now();
+    if (!tickDeferred)
+        tickDeferred = g_pEventLoopManager->doLater([] {
+            if (!runtime)
+                return;
+            runtime->tickDeferred = 0;
+            safe([] { runtime->tick(); });
+        });
+}
 bool Runtime::frameForced() {
     // Time-driven or externally produced frames always render. The environment
     // switch keeps GPU clocks steady for fixed-scale profiling (dev/nested/perf.py).
@@ -4835,7 +4867,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     runtime->timer = makeShared<CEventLoopTimer>(
         std::chrono::milliseconds(16),
         [](SP<CEventLoopTimer> self, void *) {
-            if (!runtime->tickDeferred)
+            // Presentations drive ticks while frames flow; the timer covers idle and startup.
+            bool framesDrive = std::chrono::steady_clock::now() - runtime->lastPresented < std::chrono::milliseconds(30);
+            if (!framesDrive && !runtime->tickDeferred)
                 runtime->tickDeferred = g_pEventLoopManager->doLater([] {
                     if (!runtime)
                         return;
