@@ -547,6 +547,24 @@ void Renderer::init() {
     glGenVertexArrays(1, &screenVao_);
     glGenSamplers(1, &repeat_);
     glGenSamplers(1, &clamp_);
+    // Composed walls are magnified up close and minified across a court: trilinear + anisotropic.
+    glGenSamplers(1, &mipClamp_);
+    glSamplerParameteri(mipClamp_, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glSamplerParameteri(mipClamp_, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glSamplerParameteri(mipClamp_, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glSamplerParameteri(mipClamp_, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    {
+        GLint count = 0;
+        glGetIntegerv(GL_NUM_EXTENSIONS, &count);
+        for (GLint i = 0; i < count; ++i) {
+            std::string ext = reinterpret_cast<const char *>(glGetStringi(GL_EXTENSIONS, i));
+            if (ext == "GL_EXT_texture_filter_anisotropic" || ext == "GL_ARB_texture_filter_anisotropic") {
+                GLfloat max = 1;
+                glGetFloatv(0x84FF, &max);
+                glSamplerParameterf(mipClamp_, 0x84FE, std::min(8.f, max));
+            }
+        }
+    }
     for (auto s : {repeat_, clamp_}) {
         glSamplerParameteri(s, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glSamplerParameteri(s, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -1794,6 +1812,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
                     border ? (s.focused ? Vec3{.08f, .9f, .45f} : Vec3{.1f, .4f, .55f}) : Vec3{1, 1, 1});
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, border ? 0 : s.texture);
+            glBindSampler(0, !border && s.mipmapped ? mipClamp_ : clamp_);
             glBindVertexArray(quadVao_);
             glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
             glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(world::Vertex), vertices.data(), GL_STREAM_DRAW);
@@ -2499,7 +2518,8 @@ void Renderer::destroy() {
     glDeleteVertexArrays(1, &quadVao_);
     glDeleteVertexArrays(1, &screenVao_);
     glDeleteSamplers(1, &repeat_);
+    glDeleteSamplers(1, &mipClamp_);
     glDeleteSamplers(1, &clamp_);
-    native_ = scene_ = tone_ = bloom_ = sky_ = quadVbo_ = quadVao_ = screenVao_ = repeat_ = clamp_ = 0;
+    native_ = scene_ = tone_ = bloom_ = sky_ = quadVbo_ = quadVao_ = screenVao_ = repeat_ = clamp_ = mipClamp_ = 0;
 }
 } // namespace hyprune::render

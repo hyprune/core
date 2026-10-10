@@ -552,19 +552,6 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
             WorkspaceFrame frame;
             frame.workspaceId = id;
             glGenFramebuffers(1, &frame.fbo);
-            glGenTextures(1, &frame.texture);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, frame.texture);
-            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1280, 720, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glBindFramebuffer(GL_FRAMEBUFFER, frame.fbo);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, frame.texture, 0);
-            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-                throw std::runtime_error("workspace composite FBO unavailable");
             workspaces.push_back(frame);
             it = workspaces.end() - 1;
         }
@@ -572,7 +559,6 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         it->surface.title = area->at("theme").get<std::string>() + " / workspace " + std::to_string(id);
         it->surface.pixelWidth = 1280;
         it->surface.pixelHeight = 720;
-        it->surface.texture = it->texture;
         surfaces::anchorPlane(it->surface, *anchor, 1280, 720);
         // The workspace's windows in native stacking order: tiled, floating, pinned,
         // fullscreen; within a layer by the compositor's window list (a raise moves a
@@ -601,6 +587,31 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         // wallpaper surface, or no windows, the wall shows the Hyprune placeholder.
         bool placeholder = stack.empty() || backdrops.empty();
         mix(placeholder ? 1 : 2);
+        // Windows are composed at the monitor's own pixel size, so a wall seen up close is
+        // as sharp as the desktop (a fixed 1280x720 was magnified ~3x at 8 m on 4K). Mips
+        // keep it clean across a court. A wall without windows (placeholder) stays small.
+        int width = stack.empty() ? 1280 : std::clamp(int(monitor->m_pixelSize.x), 1, 4096),
+            height = stack.empty() ? 720 : std::clamp(int(monitor->m_pixelSize.y), 1, 4096);
+        mix(width), mix(height);
+        if (it->width != width || it->height != height) {
+            glDeleteTextures(1, &it->texture);
+            glGenTextures(1, &it->texture);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, it->texture);
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+            glTexStorage2D(GL_TEXTURE_2D, 1 + int(std::floor(std::log2(std::max(width, height)))), GL_RGBA8, width, height);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glBindFramebuffer(GL_FRAMEBUFFER, it->fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, it->texture, 0);
+            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+                throw std::runtime_error("workspace composite FBO unavailable");
+            it->width = width;
+            it->height = height;
+            it->key = 0;
+        }
+        it->surface.texture = it->texture;
+        it->surface.mipmapped = true;
         if (!placeholder)
             for (auto &d : backdrops) {
                 mix(double(d.identity)), mix(double(*d.source->commits)), mix(d.texture->m_texID);
@@ -624,7 +635,7 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         it->key = key;
         ++it->composed;
         glBindFramebuffer(GL_FRAMEBUFFER, it->fbo);
-        glViewport(0, 0, 1280, 720);
+        glViewport(0, 0, it->width, it->height);
         glDisable(GL_SCISSOR_TEST);
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_STENCIL_TEST);
@@ -677,6 +688,8 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
                     glDrawArrays(GL_TRIANGLES, 0, 6);
                 }
         }
+        glBindTexture(GL_TEXTURE_2D, it->texture);
+        glGenerateMipmap(GL_TEXTURE_2D);
     }
     std::erase_if(workspaces, [&](auto &f) {
         if (live.contains(f.workspaceId))

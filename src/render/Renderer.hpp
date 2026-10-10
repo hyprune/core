@@ -132,7 +132,7 @@ class Renderer {
     size_t gpuBytes_ = 0;
     GLuint materialUbo_ = 0; // one std140 Material range per world material
     GLsizei materialStride_ = 0;
-    GLuint scene_ = 0, tone_ = 0, quadVao_ = 0, quadVbo_ = 0, screenVao_ = 0, repeat_ = 0, clamp_ = 0;
+    GLuint scene_ = 0, tone_ = 0, quadVao_ = 0, quadVbo_ = 0, screenVao_ = 0, repeat_ = 0, clamp_ = 0, mipClamp_ = 0;
     GLuint environment_ = 0, bloom_ = 0, sky_ = 0, native_ = 0, depthProgram_ = 0;
     GLuint inkComposite_ = 0, inkNormals_ = 0, inkProgram_ = 0, inkFbo_ = 0, inkNormal_ = 0, inkDepth_ = 0;
     size_t submittedBatches_ = 0, culledBatches_ = 0, frustumCulled_ = 0;

@@ -52,6 +52,7 @@ class Capture {
         surfaces::Surface surface;
         uint64_t key = 0; // inputs of the last composition; unchanged = no redraw
         uint64_t composed = 0; // redraw count (nested diagnostics)
+        int width = 0, height = 0; // composite texture size (monitor pixels with windows)
     };
     std::vector<WorkspaceFrame> workspaces;
     void refresh(PHLMONITOR monitor, const world::World *world = nullptr, surfaces::Layout *layout = nullptr,
