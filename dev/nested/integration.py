@@ -37,6 +37,10 @@ def first_session(client,children,args,shell_token,socketpath):
     def state():return client.call('state.snapshot',{'subscriptionId':subscription})['snapshot']['state']
     snapshot=state();assert snapshot['spatial']['map']['svg'].startswith('<svg')
     assert len(snapshot['spatial']['world']['places'])==7
+    # Open the apps in the world's room (windows.world_workspace, 20 by default) before
+    # entering: room clients present at activation take the area-less world's docks in
+    # order. Clients on other workspaces are not adopted; ones opened later spawn freely.
+    ctl('dispatch','hl.dsp.focus({ workspace = "20" })')
     # Live root-surface applications: nested environment only.
     children.append(envrun('kitty','--title','Switchyard / Build terminal','--override','font_size=18','--override','initial_window_width=1200','--override','initial_window_height=675','bash','--noprofile','--norc',stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
     (STATE/'btop.conf').write_text('shown_boxes = "cpu mem proc"\nupdate_ms = 1000\n')
@@ -44,13 +48,21 @@ def first_session(client,children,args,shell_token,socketpath):
     # Chromium uses a private profile and an original local static page; no network.
     page=STATE/'welcome.html';page.write_text('<!doctype html><meta charset="utf-8"><style>body{background:#14232b;color:#e7dfca;font:24px sans-serif;padding:50px}h1{color:#dcac61}p{line-height:1.7}</style><h1>SWITCHYARD</h1><p>A place for your projects.<br>Build · Research · Commons<br>Studio · Systems · Archive</p><hr><p>Hyprune / first session<br>Live applications, within a world.</p>')
     if pathlib.Path('/usr/bin/chromium').exists():children.append(envrun('chromium','--ozone-platform=wayland','--no-first-run','--disable-gpu','--disable-dev-shm-usage','--disable-background-networking','--user-data-dir='+str(STATE/'browser-profile'),'--app=file://'+str(page),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
-    time.sleep(2)
+    wait_for(lambda:sum(w['workspace']['id']==20 for w in json.loads(ctl('clients','-j')))>=2,20)
+    time.sleep(1)
     for window in json.loads(ctl('clients','-j')):
         address=window['address']
         ctl('eval',f'hl.dispatch(hl.dsp.window.float({{ window = "address:{address}", action = "enable" }}))')
         ctl('eval',f'hl.dispatch(hl.dsp.window.resize({{ window = "address:{address}", x = 1200, y = 675 }}))')
+    ctl('dispatch','hl.dsp.focus({ workspace = "10" })')
     ctl('eval',f'hl.plugin.hyprune.toggle("{world_output}")')
     wait_for(lambda:state()['runtime']['active'])
+    # They take Switchyard's docks and are drawn there. A client without a dock waits in
+    # the pocket, and no hidden window is ever reported at a dock pose.
+    docks=[a['pose']['position'] for a in json.loads((STATE/'worlds/com.hyprune.switchyard/world.json').read_text())['anchors'] if a.get('screenType')=='com.hyprune.window']
+    at_dock=lambda c:any(sum((c['position'][k]-d[k])**2 for k in range(3))<1e-4 for d in docks)
+    wait_for(lambda:all(any(t in c['title'] and c['visible'] and at_dock(c) for c in camera()['captures']) for t in ['Build terminal','Systems btop']))
+    assert not any(at_dock(c) and not c['visible'] for c in camera()['captures']),camera()['captures']
     # Credential/namespace impersonation is rejected even for our own direct child.
     output=state()['runtime']['outputs'][0]
     lease=client.call('shell.claim',{'outputs':[output]})['leaseId']
