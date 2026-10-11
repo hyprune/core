@@ -3,6 +3,9 @@
 #
 #   HYPRLAND_VERSION=0.56.2 dev/release/build.sh OUT_DIR [VERSION]
 #
+# HYPRUNE_REV names the commit when building from a source archive (no .git);
+# JOBS limits parallel compile jobs (default: all cores).
+#
 # Two builds: the session plugin, and the supervised live plugin used by
 # dev/live (HYPRUNE_LIVE_BUILD). Helper paths are compiled for the build tree,
 # so callers name them at run time: HYPRUNE_DAEMON for the plugin and
@@ -22,7 +25,7 @@ out=$(realpath -m "${1:?usage: build.sh OUT_DIR [VERSION]}")
 want=${HYPRLAND_VERSION:?set HYPRLAND_VERSION, e.g. 0.56.2}
 have=$(pkg-config --modversion hyprland)
 [[ $have == "$want" ]] || { echo "Hyprland headers are $have, need $want" >&2; exit 1; }
-rev=$(git -C "$root" rev-parse HEAD)
+rev=${HYPRUNE_REV:-$(git -C "$root" rev-parse HEAD 2>/dev/null || echo unknown)}
 plugin=$(sed -n 's/.*return {"hyprune-core", .*"\([0-9.]*\)"};/\1/p' "$root/src/platform/hyprland/Plugin.cpp")
 version=${2:-$plugin-g${rev:0:7}}
 arch=$(uname -m)
@@ -33,7 +36,7 @@ trap 'rm -rf "$work"' EXIT
 build() { # build DIR [cmake args...]
     local dir=$1; shift
     cmake -S "$root" -B "$dir" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF "$@"
-    cmake --build "$dir" -j "$(nproc)"
+    cmake --build "$dir" -j "${JOBS:-$(nproc)}"
 }
 build "$work/session"
 build "$work/live" -DHYPRUNE_LIVE_BUILD=ON
@@ -60,8 +63,12 @@ find "$pkg/licenses/third_party" -type d -empty -delete
 python3 - "$pkg" "$version" "$rev" "$want" <<'EOF'
 import json, subprocess, sys
 pkg, version, rev, hyprland = sys.argv[1:]
-query = lambda *names: subprocess.run(['pacman', '-Q', *names], capture_output=True, text=True).stdout.split('\n')
-packages = dict(line.split() for line in query('hyprland', 'aquamarine', 'hyprutils', 'hyprgraphics', 'hyprcursor', 'hyprlang') if line)
+try:
+    query = subprocess.run(['pacman', '-Q', 'hyprland', 'aquamarine', 'hyprutils', 'hyprgraphics', 'hyprcursor', 'hyprlang'],
+                           capture_output=True, text=True).stdout
+except OSError:  # not Arch
+    query = ''
+packages = dict(line.split() for line in query.splitlines() if line)
 info = dict(version=version, rev=rev, hyprland=hyprland, abi=json.load(open(f'{pkg}/abi.json')), packages=packages)
 open(f'{pkg}/BUILDINFO.json', 'w').write(json.dumps(info, indent=2) + '\n')
 EOF
