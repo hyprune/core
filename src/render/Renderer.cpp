@@ -168,9 +168,11 @@ void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));uv=p;gl_
 )";
 // Bilinear reconstruction with bounded unsharp masking. Depth is nearest-sampled
 // (never interpolated across a wall edge), preserving native window occlusion.
+// Samplers default to lowp in GLSL ES: NVIDIA then returns depth at fp16 (steps of
+// ~1 m at 10 m), which hid walls 3 cm in front of their world panel.
 const char *upscaleFragment = R"(#version 300 es
 precision highp float;
-in vec2 uv;uniform sampler2D image,depthImage,bloomMap;uniform float sharpness,exposure,bloomStrength;uniform int toneMapping;out vec4 result;
+in vec2 uv;uniform sampler2D image,bloomMap;uniform highp sampler2D depthImage;uniform float sharpness,exposure,bloomStrength;uniform int toneMapping;out vec4 result;
 void main(){vec2 st=uv,d=1./vec2(textureSize(image,0));
  vec4 c=texture(image,st);result=c;
  if(sharpness>0.){vec3 a=texture(image,st+vec2(d.x,0)).rgb,b=texture(image,st-vec2(d.x,0)).rgb;
