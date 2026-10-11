@@ -958,6 +958,16 @@ void roomAnchorPose(Surface &s, const Json &a) {
     s.width = std::min(a.at("size")[0].get<float>(), a.at("size")[1].get<float>() * ratio);
     s.height = s.width / ratio;
 }
+std::set<int> worldWorkspaces(int room, const Json &bindings, const Json &locations) {
+    std::set<int> owned;
+    if (room > 0)
+        owned.insert(room);
+    for (const auto *list : {&bindings, &locations})
+        for (const auto &entry : *list)
+            if (entry.is_object() && entry.contains("id") && entry["id"].is_number_integer() && entry["id"].get<int>() > 0)
+                owned.insert(entry["id"].get<int>());
+    return owned;
+}
 RoomAdoption adoptRoomClient(const world::World &w, size_t index, bool existing, bool pocketed) {
     if (pocketed)
         return RoomAdoption::Pocket;

@@ -113,5 +113,9 @@ void roomAnchorPose(Surface &, const Json &anchor);
 // client present at activation takes its authored room anchor, visible, or waits in the
 // pocket (hidden, never posed at an anchor). A client opened later spawns.
 enum class RoomAdoption { Anchor, Spawn, Pocket };
+// Workspaces Hyprune owns: the room, every home binding (explicit ones and the loaded world's
+// defaults) and configured world locations ({id,...}). Switching to or from one is a world
+// transition, so it never plays the desktop's workspace animation.
+std::set<int> worldWorkspaces(int room, const Json &bindings, const Json &locations);
 RoomAdoption adoptRoomClient(const world::World &, size_t index, bool existing, bool pocketed);
 } // namespace hyprune::surfaces

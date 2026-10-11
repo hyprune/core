@@ -175,7 +175,25 @@ def acceptance(client,children,args,shell_token,socketpath):
     client.call('world.load',{'worldId':LUMEN})
     check('reloading recomputes homes',wait(lambda:homes()==[(21,'signal-rise'),(22,'array-hall'),(23,'rime-vault')]),homes())
     check('explicit bind still the only persisted home',saved()==[{'id':21,'worldId':LUMEN,'areaId':'signal-rise'}],saved())
-    client.call('runtime.exit',{})
+    client.call('runtime.exit',{});wait(lambda:not s.camera()['active'])
+
+    # World workspaces switch without Hyprland's slide/fade; desktop ones keep it. Read right
+    # after the dispatch, before the animation could have run its course.
+    s.ctl('eval','hl.config({animations={enabled=true}})')
+    s.ctl('eval','hl.animation({leaf="workspaces",enabled=true,speed=8,bezier="default",style="slide"})')
+    s.ctl('eval','hl.dispatch(hl.dsp.focus({ monitor = "HEADLESS-1" }))')
+    def switch(src,dst):
+        s.ctl('dispatch',f'hl.dsp.focus({{workspace="{src}"}})');time.sleep(1.5)
+        s.ctl('dispatch',f'hl.dsp.focus({{workspace="{dst}"}})')
+        shown={w['id']:w for w in s.camera()['workspaceAnimations']}
+        return {k:shown.get(k) for k in (src,dst)},workspace()
+    seen,now=switch(2,3)
+    check('a desktop switch (2 -> 3) still animates',now==3 and seen[3] and seen[3]['animating'],seen)
+    for src,dst in [(3,21),(21,22),(22,20),(20,3)]:
+        seen,now=switch(src,dst)
+        check(f'world switch {src} -> {dst} is final at once',now==dst and all(v is None or not v['animating'] for v in seen.values())
+              and seen[dst]['alpha']==1.0 and seen[dst]['offset']==[0.0,0.0],seen)
+    s.ctl('eval','hl.config({animations={enabled=false}})')
     evidence={'nestedOnly':True,'lock':'/tmp/worldshell-nested.lock','world':LUMEN,'checks':checks}
     (s.ROOT/'docs/evidence/workspace-homes.json').write_text(json.dumps(evidence,indent=2)+'\n')
     print('PASS default workspace homes:',len(checks),'checks',flush=True)

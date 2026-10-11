@@ -80,14 +80,28 @@
       "passed": true,
       "evidence": {
         "frame": {
-          "composed": 9,
+          "composed": 4,
           "id": "workspace-21",
           "position": [
             8.0,
             10.100000381469727,
             -23.114999771118164
           ],
+          "right": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            16.0,
+            9.0
+          ],
           "title": "sun-court / workspace 21",
+          "up": [
+            0.0,
+            1.0,
+            0.0
+          ],
           "workspaceId": 21
         },
         "anchor": "sun-court-slot-01-facade-wall-01"
@@ -103,14 +117,28 @@
       "passed": true,
       "evidence": {
         "frame": {
-          "composed": 29,
+          "composed": 8,
           "id": "workspace-22",
           "position": [
             8.0,
             10.0,
             -47.94499969482422
           ],
+          "right": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            16.0,
+            9.0
+          ],
           "title": "array-hall / workspace 22",
+          "up": [
+            0.0,
+            1.0,
+            0.0
+          ],
           "workspaceId": 22
         },
         "anchor": "array-hall-slot-02-hanging-wall-01"
@@ -139,19 +167,19 @@
       "name": "an idle wall is not recomposed",
       "passed": true,
       "evidence": {
-        "before": 62,
-        "after": 62
+        "before": 27,
+        "after": 27
       }
     },
     {
       "name": "raising an overlapping window recomposes its wall",
       "passed": true,
       "evidence": {
-        "redMinusBlueBefore": -207.8695987654321,
-        "after": 191.87962962962965,
+        "redMinusBlueBefore": -207.78669945987656,
+        "after": 191.80237268518516,
         "composed": [
-          62,
-          63
+          27,
+          28
         ]
       }
     },
@@ -160,7 +188,7 @@
       "passed": true,
       "evidence": [
         -8.0,
-        1.7000000476837158,
+        1.7002222537994385,
         12.0
       ]
     },
@@ -169,7 +197,7 @@
       "passed": true,
       "evidence": [
         8.0,
-        1.7000000476837158,
+        1.7002222537994385,
         -34.0
       ]
     },
@@ -178,7 +206,7 @@
       "passed": true,
       "evidence": [
         38.0,
-        -4.299999713897705,
+        -4.300204753875732,
         -79.0
       ]
     },
@@ -187,7 +215,7 @@
       "passed": true,
       "evidence": [
         54.0,
-        1.7095996141433716,
+        1.7096105813980103,
         -124.99950408935547
       ]
     },
@@ -197,12 +225,12 @@
       "evidence": {
         "native": [
           -8.0,
-          1.7000000476837158,
+          1.7002222537994385,
           12.000007629394531
         ],
         "director": [
           -8.0,
-          1.7000000476837158,
+          1.7002222537994385,
           12.0
         ]
       }
@@ -213,12 +241,12 @@
       "evidence": {
         "native": [
           8.0,
-          1.7000000476837158,
+          1.7002222537994385,
           -34.0
         ],
         "director": [
           8.0,
-          1.7000000476837158,
+          1.7002222537994385,
           -34.0
         ]
       }
@@ -229,12 +257,12 @@
       "evidence": {
         "native": [
           38.0,
-          -4.299999713897705,
+          -4.300204753875732,
           -79.0
         ],
         "director": [
           38.0,
-          -4.299999713897705,
+          -4.300204753875732,
           -79.0
         ]
       }
@@ -244,7 +272,7 @@
       "passed": true,
       "evidence": [
         54.0,
-        1.7095996141433716,
+        1.7096105813980103,
         -124.99950408935547
       ]
     },
@@ -253,7 +281,7 @@
       "passed": true,
       "evidence": [
         54.0,
-        1.7095996141433716,
+        1.7096105813980103,
         -124.99950408935547
       ]
     },
@@ -262,7 +290,7 @@
       "passed": true,
       "evidence": [
         38.0,
-        -4.299999713897705,
+        -4.300204753875732,
         -79.0
       ]
     },
@@ -300,7 +328,7 @@
       "passed": true,
       "evidence": [
         54.0,
-        1.7095996141433716,
+        1.7096105813980103,
         -124.99950408935547
       ]
     },
@@ -309,14 +337,28 @@
       "passed": true,
       "evidence": {
         "frame": {
-          "composed": 56,
+          "composed": 46,
           "id": "workspace-21",
           "position": [
             63.0,
             10.699999809265137,
             -147.09500122070312
           ],
+          "right": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            18.399999618530273,
+            10.34999942779541
+          ],
           "title": "signal-rise / workspace 21",
+          "up": [
+            0.0,
+            1.0,
+            0.0
+          ],
           "workspaceId": 21
         },
         "anchor": "signal-rise-slot-04-blast-door-screen-01"
@@ -382,6 +424,102 @@
           "worldId": "com.hyprune.lumen-reach"
         }
       ]
+    },
+    {
+      "name": "a desktop switch (2 -> 3) still animates",
+      "passed": true,
+      "evidence": {
+        "2": null,
+        "3": {
+          "alpha": 1.0,
+          "animating": true,
+          "id": 3,
+          "offset": [
+            915.4811096191406,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "name": "world switch 3 -> 21 is final at once",
+      "passed": true,
+      "evidence": {
+        "3": null,
+        "21": {
+          "alpha": 1.0,
+          "animating": false,
+          "id": 21,
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "name": "world switch 21 -> 22 is final at once",
+      "passed": true,
+      "evidence": {
+        "21": {
+          "alpha": 1.0,
+          "animating": false,
+          "id": 21,
+          "offset": [
+            -1920.0,
+            0.0
+          ]
+        },
+        "22": {
+          "alpha": 1.0,
+          "animating": false,
+          "id": 22,
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "name": "world switch 22 -> 20 is final at once",
+      "passed": true,
+      "evidence": {
+        "22": {
+          "alpha": 1.0,
+          "animating": false,
+          "id": 22,
+          "offset": [
+            1920.0,
+            0.0
+          ]
+        },
+        "20": {
+          "alpha": 1.0,
+          "animating": false,
+          "id": 20,
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "name": "world switch 20 -> 3 is final at once",
+      "passed": true,
+      "evidence": {
+        "20": null,
+        "3": {
+          "alpha": 1.0,
+          "animating": false,
+          "id": 3,
+          "offset": [
+            0.0,
+            0.0
+          ]
+        }
+      }
     }
   ]
 }

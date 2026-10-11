@@ -339,6 +339,13 @@ int main() {
         world::World bare;
         assert(!surfaces::roomAnchor(bare, 0) && surfaces::adoptRoomClient(bare, 0, true, false) == A::Pocket);
     }
+    {
+        // World-owned workspaces: room, homes (explicit and derived), world locations.
+        auto owned = surfaces::worldWorkspaces(20, {{{"id", 21}, {"worldId", "w"}, {"areaId", "a"}}, {{"id", 24}}},
+                                               {{{"id", 30}, {"label", "Switchyard"}}, {{"id", "x"}}, {{"label", "none"}}});
+        assert((owned == std::set<int>{20, 21, 24, 30}));
+        assert((surfaces::worldWorkspaces(0, world::Json::array(), world::Json::array()).empty()));
+    }
     spawnReachability();
     std::cout << "PASS spawn in front of the player on reachable floor, zone fallback at viewing height\n";
     homeArrivals();

@@ -374,6 +374,9 @@ struct Runtime {
     uint64_t deferred = 0, tickDeferred = 0;
     std::vector<uint64_t> inputDeferred;
     void deferInput(std::function<void()>);
+    // The workspace each output showed last, so a switch knows what it leaves.
+    std::map<const void *, int> shownWorkspaces;
+    void settleWorkspaceSwitch(const PHLWORKSPACE &);
     std::chrono::steady_clock::time_point lastTick = std::chrono::steady_clock::now();
     std::filesystem::path installed;
     struct Binding {
@@ -622,6 +625,33 @@ void Runtime::settleRenderPass() {
     // run inside renderMonitor). Rule 2 holds: a real pass is never settled.
     if (renderPass.settle())
         renderPassLeaked();
+}
+// A switch to or from a world workspace (room, homes, world locations) is a world transition,
+// not a desktop one: finish Hyprland's slide/fade at once, as its own instant switches do.
+// The user's other workspaces keep their configured animation and no setting is changed,
+// so unloading leaves nothing to restore.
+void Runtime::settleWorkspaceSwitch(const PHLWORKSPACE &to) {
+    auto output = to ? to->m_monitor.lock() : nullptr;
+    if (!output || to->m_isSpecialWorkspace)
+        return;
+    int from = std::exchange(shownWorkspaces[output.get()], int(to->m_id));
+    auto owned = surfaces::worldWorkspaces(config["windows"]["world_workspace"].get<int>(), layout.effectiveBindings(),
+                                           locations);
+    if (!owned.contains(int(to->m_id)) && !owned.contains(from))
+        return;
+    auto settle = [output = PHLMONITORREF{output}] {
+        for (auto &workspace : State::workspaceState()->workspaces())
+            if (workspace && !workspace->m_isSpecialWorkspace && workspace->m_monitor == output) {
+                workspace->m_renderOffset->warp();
+                workspace->m_alpha->warp();
+            }
+    };
+    // Switches come from dispatchers and core's deferred work, outside rendering; if one
+    // ever arrives inside a pass, settle on the next event-loop turn (rule 2).
+    if (renderPass.active())
+        deferInput(settle);
+    else
+        settle();
 }
 void Runtime::deferInput(std::function<void()> operation) {
     auto id = std::make_shared<uint64_t>(0);
@@ -4908,6 +4938,16 @@ int luaCamera(lua_State *state) {
              {"position", {child.surface.center.x, child.surface.center.y, child.surface.center.z}},
              {"size", {child.surface.width, child.surface.height}},
              {"pixels", {child.surface.pixelWidth, child.surface.pixelHeight}}});
+    j["workspaceAnimations"] = Json::array();
+    for (auto &workspace : State::workspaceState()->workspaces())
+        if (workspace && !workspace->m_isSpecialWorkspace) {
+            auto offset = workspace->m_renderOffset->value();
+            j["workspaceAnimations"].push_back(
+                {{"id", workspace->m_id},
+                 {"offset", {offset.x, offset.y}},
+                 {"alpha", workspace->m_alpha->value()},
+                 {"animating", workspace->m_renderOffset->isBeingAnimated() || workspace->m_alpha->isBeingAnimated()}});
+        }
     j["uncaptured"] = Json::array();
     for (auto &[title, why] : runtime->capture.skipped)
         j["uncaptured"].push_back({{"title", title}, {"reason", why}});
@@ -5530,6 +5570,12 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
             });
         });
     }));
+    for (auto &workspace : State::workspaceState()->workspaces())
+        if (workspace && workspace->m_visible && !workspace->m_isSpecialWorkspace)
+            if (auto output = workspace->m_monitor.lock())
+                runtime->shownWorkspaces[output.get()] = int(workspace->m_id);
+    runtime->listeners.push_back(Event::bus()->m_events.workspace.active.listen(
+        [](PHLWORKSPACE workspace) { safe([&] { runtime->settleWorkspaceSwitch(workspace); }); }));
     runtime->listeners.push_back(Event::bus()->m_events.monitor.removed.listen([](PHLMONITOR monitor) {
         runtime->deferInput([monitor] {
             if (runtime->monitor == monitor) {
