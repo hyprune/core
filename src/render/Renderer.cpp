@@ -619,7 +619,32 @@ bool Renderer::instanceVisible(const world::ObjectInstance &o, const std::array<
             return false;
     return true;
 }
+// NPC culling: rest bounds grown by 0.6 m for limbs in motion, then placed by the model.
+bool Renderer::npcVisible(const Npc &npc, const std::array<std::array<float, 4>, 6> &planes) const {
+    auto &c = *npc.character;
+    Vec3 lo = c.lo - Vec3{.6f, .6f, .6f}, hi = c.hi + Vec3{.6f, .6f, .6f}, a = npc.model.point(lo), b = a;
+    for (int corner = 1; corner < 8; ++corner) {
+        auto q = npc.model.point({corner & 1 ? hi.x : lo.x, corner & 2 ? hi.y : lo.y, corner & 4 ? hi.z : lo.z});
+        a = {std::min(a.x, q.x), std::min(a.y, q.y), std::min(a.z, q.z)};
+        b = {std::max(b.x, q.x), std::max(b.y, q.y), std::max(b.z, q.z)};
+    }
+    for (auto &p : planes)
+        if (p[0] * (p[0] > 0 ? b.x : a.x) + p[1] * (p[1] > 0 ? b.y : a.y) + p[2] * (p[2] > 0 ? b.z : a.z) + p[3] < 0)
+            return false;
+    return true;
+}
+bool Renderer::npcAnimationVisible(const sim::Camera &camera, float aspect) const {
+    if (pending_)
+        return false;
+    auto planes = frustumPlanes(camera.projection(aspect) * camera.view());
+    for (const auto &npc : npcs)
+        if (npc.moving && npc.character && npcVisible(npc, planes))
+            return true;
+    return false;
+}
 bool Renderer::animationVisible(const sim::Camera &camera, float aspect) const {
+    if (npcAnimationVisible(camera, aspect))
+        return true;
     if (!animating() || pending_)
         return false;
     auto planes = frustumPlanes(camera.projection(aspect) * camera.view());
@@ -2837,18 +2862,7 @@ void Renderer::drawNpcs(const std::array<std::array<float, 4>, 6> &planes, int t
         if (!npc.character || npc.skin.size() > 64)
             continue;
         auto &c = *npc.character;
-        // Conservative bounds: rest bounds grown by 0.6 m for limbs in motion, then the model.
-        Vec3 lo = c.lo - Vec3{.6f, .6f, .6f}, hi = c.hi + Vec3{.6f, .6f, .6f}, a = npc.model.point(lo), b = a;
-        for (int corner = 1; corner < 8; ++corner) {
-            auto q = npc.model.point({corner & 1 ? hi.x : lo.x, corner & 2 ? hi.y : lo.y, corner & 4 ? hi.z : lo.z});
-            a = {std::min(a.x, q.x), std::min(a.y, q.y), std::min(a.z, q.z)};
-            b = {std::max(b.x, q.x), std::max(b.y, q.y), std::max(b.z, q.z)};
-        }
-        bool inside = true;
-        for (auto &p : planes)
-            if (p[0] * (p[0] > 0 ? b.x : a.x) + p[1] * (p[1] > 0 ? b.y : a.y) + p[2] * (p[2] > 0 ? b.z : a.z) + p[3] < 0)
-                inside = false;
-        if (!inside)
+        if (!npcVisible(npc, planes))
             continue;
         auto &gpu = characterGPU(c);
         glBindBuffer(GL_UNIFORM_BUFFER, jointUbo_);

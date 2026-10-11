@@ -100,6 +100,7 @@ class Renderer {
         Mat4 model = Mat4::identity();
         std::vector<Mat4> skin;
         std::optional<Vec3> accent; // recolours the material named `accent`
+        bool moving = false;        // animating: keeps frames coming while in view
     };
     std::vector<Npc> npcs;
     int npcsDrawn = 0;
@@ -121,8 +122,10 @@ class Renderer {
     double animationSeconds() const;
     bool animating() const; // an animated object exists and motion is allowed
     // True while animating and an animated instance's swept bounds are in the
-    // view frustum and not region-culled: the owner keeps frames coming.
+    // view frustum and not region-culled, or a moving NPC is in the frustum: the
+    // owner keeps frames coming. The NPC half alone feeds diagnostics.
     bool animationVisible(const sim::Camera &, float aspect) const;
+    bool npcAnimationVisible(const sim::Camera &, float aspect) const;
     bool materialDetails = true; // Also permits like-for-like benchmark comparisons.
     static constexpr int lightmapMipLevels = 2; // Deepest lightmap mip sampled (4 px bake gutters).
     uint64_t frames = 0;
@@ -166,6 +169,7 @@ class Renderer {
     std::chrono::steady_clock::time_point animationEpoch_{};
     GLuint instanceVbo_ = 0; // per-frame instance records (model, probe lighting)
     size_t objectInstancesVisible_ = 0, objectDrawCalls_ = 0, objectInstancesDrawn_ = 0;
+    bool npcVisible(const Npc &, const std::array<std::array<float, 4>, 6> &planes) const;
     bool instanceVisible(const world::ObjectInstance &, const std::array<std::array<float, 4>, 6> &planes,
                          const std::vector<bool> &areas, bool regions) const;
     // textures_/colorTextures_ name the same texture unless an image needs two

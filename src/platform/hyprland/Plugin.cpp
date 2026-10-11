@@ -314,7 +314,7 @@ struct Runtime {
     std::vector<sim::NpcAgent> npcAgents;
     std::vector<std::optional<Vec3>> npcAccents;
     std::string npcState = "off"; // animating, paused (reason), still, off
-    bool npcForcesFrames = false, npcOnMains = true;
+    bool npcOnMains = true;
     std::chrono::steady_clock::time_point npcLastActive = std::chrono::steady_clock::now(), npcSupplyChecked{};
     std::vector<std::vector<Mat4>> npcSkins;
     void npcLoad();
@@ -1707,7 +1707,6 @@ void Runtime::npcLoad() {
     }
 }
 void Runtime::npcTick(float dt) {
-    npcForcesFrames = false;
     if (!npcCharacter || npcAgents.empty()) {
         npcState = "off";
         renderer.npcs.clear();
@@ -1744,7 +1743,6 @@ void Runtime::npcTick(float dt) {
     auto walk = c.clip("walk");
     float clipSpeed = walk && walk->speed > 0 ? walk->speed : 1.3f;
     bool animate = paused.empty();
-    float aspect = monitor ? monitor->m_size.x / float(monitor->m_size.y) : 16 / 9.f;
     renderer.npcs.resize(npcAgents.size());
     for (size_t i = 0; i < npcAgents.size(); ++i) {
         auto &agent = npcAgents[i];
@@ -1758,14 +1756,9 @@ void Runtime::npcTick(float dt) {
                 c.blend(c.clip(agent.previous), agent.previousTime, c.clip(agent.clip), agent.clipTime,
                         agent.previous.empty() ? 1.f : agent.fade, npcSkins[i]);
         }
-        renderer.npcs[i] = {npcCharacter, agent.model(), npcSkins[i], npcAccents[i]};
-        // In view (feet or head inside a slightly widened frustum): only then does it cost frames.
-        if (animate)
-            for (float y : {.1f, 1.7f}) {
-                auto at = camera.project(agent.position + Vec3{0, y, 0}, aspect);
-                if (at.depth > .01f && at.depth < 80 && at.x > -.15f && at.x < 1.15f && at.y > -.15f && at.y < 1.15f)
-                    npcForcesFrames = true;
-            }
+        // Moving NPCs in view keep frames coming through the world-object path
+        // (animationFrames); paused, still or out of view, they cost none.
+        renderer.npcs[i] = {npcCharacter, agent.model(), npcSkins[i], npcAccents[i], animate};
     }
 }
 void Runtime::motionTick(float dt) {
@@ -4608,8 +4601,7 @@ bool Runtime::frameForced() {
     // switch keeps GPU clocks steady for fixed-scale profiling (dev/nested/perf.py).
     static const bool continuous = getenv("HYPRUNE_CONTINUOUS_RENDER");
     return continuous || debug || animationFrames || loading || handover.phase || fullscreen.phase || capturePending || renderer.captureRequested ||
-           offload.connected() || session.recording || session.playing || control.driving() || !renderer.frames ||
-           npcForcesFrames;
+           offload.connected() || session.recording || session.playing || control.driving() || !renderer.frames;
 }
 uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     FrameHash h;
@@ -4617,9 +4609,9 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     h(reinterpret_cast<uintptr_t>(world.get()))(camera.position)(camera.yaw)(camera.pitch)(camera.roll)(camera.fov);
     h(camera.shiftX)(camera.shiftY)(camera.eyeHeight)(camera.climbBob);
     // NPCs: shown/hidden, placed and posed (a paused or still NPC keeps the key stable; an
-    // animating one out of view doesn't change the image).
+    // animating one out of view doesn't change the image, and in view frames are forced).
     h(r.npcs.size());
-    if (npcForcesFrames || npcState != "animating")
+    if (npcState != "animating")
         for (auto &npc : r.npcs) {
             h.bytes(npc.model.v.data(), sizeof npc.model.v);
             if (!npc.skin.empty())
@@ -4861,8 +4853,12 @@ int luaCamera(lua_State *state) {
                                    {"clipTime", a.clipTime},
                                    {"walkSpeed", a.walkSpeed},
                                    {"yielding", a.yielding}});
+             // Frames forced by the shared animation path because a moving NPC is in view.
+             auto m = runtime->monitor.lock();
+             float aspect = m ? float(m->m_pixelSize.x) / std::max(1.f, float(m->m_pixelSize.y)) : 16 / 9.f;
              return Json{{"state", runtime->npcState},
-                         {"forcesFrames", runtime->npcForcesFrames},
+                         {"forcesFrames", runtime->animationFrames &&
+                                              runtime->renderer.npcAnimationVisible(runtime->camera, aspect)},
                          {"drawn", runtime->renderer.npcsDrawn},
                          {"agents", agents}};
          }()},
