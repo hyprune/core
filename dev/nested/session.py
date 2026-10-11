@@ -7,6 +7,10 @@ sys.path.insert(0,str(HERE))
 # Keep dynamically imported integration helpers on this exact harness module.
 sys.modules.setdefault('session',sys.modules[__name__])
 from ctl import verified
+def video_dir():
+    """Finished demo videos land here; set HYPRUNE_VIDEO_DIR to publish elsewhere."""
+    path=pathlib.Path(os.environ.get('HYPRUNE_VIDEO_DIR') or pathlib.Path(os.environ.get('XDG_STATE_HOME') or pathlib.Path.home()/'.local/state')/'hyprune/videos')
+    path.mkdir(parents=True,exist_ok=True);return path
 class Client:
     def __init__(self,path,token=None,protocol="0.1",client_id="org.hyprune.nested"):
         self.socket=socket.socket(socket.AF_UNIX);self.socket.settimeout(5);self.socket.connect(path);self.count=0;self.events=[];self.transcript=[]
@@ -512,7 +516,7 @@ def failures(client,plugin,socketpath,pid):
     print('PASS: rejected reload, modes, anonymous denial, watchdog, 3 active unload/reload cycles',flush=True)
 
 def record(client,materials=False):
-    gallery=pathlib.Path.home()/'workspace/rick-the-alien/worldshell-gallery/videos';gallery.mkdir(parents=True,exist_ok=True)
+    gallery=video_dir()
     stem='hyprune-core-materials' if materials else 'hyprune-core-m0'
     output=gallery/(stem+'.mp4');raw=STATE/'capture.mkv'
     # The previous smoke leaves desktop mode active. Capture only HEADLESS-1.

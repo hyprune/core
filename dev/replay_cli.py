@@ -75,7 +75,8 @@ def main():
             recorder.send_signal(signal.SIGINT);recorder.wait(timeout=10)
             subprocess.run(['ffmpeg','-y','-loglevel','error','-i',str(temp/'raw.mp4'),'-c:v','libx264','-preset','medium','-crf','20','-pix_fmt','yuv420p','-movflags','+faststart',str(temp/'tour.mp4')],check=True)
             dest=pathlib.Path(args.video).resolve();dest.parent.mkdir(parents=True,exist_ok=True)
-            stage_dir=dest.parents[2] if dest.parent.name=='videos' and dest.parent.parent.name=='worldshell-gallery' else dest.parent
+            # A videos/ directory at a watched git repo root stages outside that repo.
+            stage_dir=dest.parents[2] if dest.parent.name=='videos' and (dest.parent.parent/'.git').exists() else dest.parent
             staging=stage_dir/('.'+dest.name+'.complete');shutil.copyfile(temp/'tour.mp4',staging);os.replace(staging,dest)
     fixture=s.STATE_ROOT/'.m3b-state';fixture.mkdir(exist_ok=True)
     for name in ['input.json','layout.json','editor.json']:(fixture/name).unlink(missing_ok=True)

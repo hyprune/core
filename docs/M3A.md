@@ -177,7 +177,7 @@ and three active unload/reload cycles. M2 validates 98 responses / 601 notificat
 against IPC 0.4, including durable relaunch mounts, stock focus and travel.
 
 The finished, visually inspected **57.9 s, 1920×1080, 30 fps H.264** recording is
-`~/workspace/rick-the-alien/worldshell-gallery/videos/hyprune-core-m3a.mp4`, with
+`$HYPRUNE_VIDEO_DIR/hyprune-core-m3a.mp4`, with
 `hyprune-core-m3a.json`. [Video metadata](evidence/m3a-video.json) records the
 SHA-256, timeline, reference-world attribution and tested implementation commit.
 It shows all requested interactions, then both unchanged author packages. Encoding
@@ -210,7 +210,7 @@ safety remains pending the supervised owner test, even after all nested checks p
 
 ## Prototype lessons carried forward
 
-The behavioral reference is `hypr3d-rick-concept-oracle/src/main.cpp` and its crash,
+The behavioral reference is the earlier Hypr3D prototype plugin and its crash,
 focus, popup and cursor/input fixes. The implementation uses independent gesture,
 config and layout modules. Carry retains the hit offset; roll uses a signed angular
 sweep; resize clears native maximization before real configures. Full window focus

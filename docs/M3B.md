@@ -119,7 +119,7 @@ The final wire corpus validates **182 responses and 1436 notifications**.
 100 checks / implementation `8407595`, independently of the final corpus.
 
 The inspected **59.9 s, 1920×1080, 30 fps** demo is at
-`~/workspace/rick-the-alien/worldshell-gallery/videos/hyprune-core-m3b.mp4`, with
+`$HYPRUNE_VIDEO_DIR/hyprune-core-m3b.mp4`, with
 `hyprune-core-m3b.json`. It includes E window/workspace in place, F window/workspace
 fullscreen, Super+Tab exits, Q scope, real Settings capture with a native conflict,
 move/rotate/scale handles, window lock and six path types, Lumen Reach and Switchyard.

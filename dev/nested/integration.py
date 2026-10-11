@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Real-core/real-shell acceptance and showcase, always inside run.sh's flock."""
 import json, os, pathlib, signal, subprocess, time
-from session import HERE, ROOT, STATE, ctl, envrun, camera
+from session import HERE, ROOT, STATE, ctl, envrun, camera, video_dir
 from ctl import verified
 
 def keys(*args): subprocess.run([str(HERE/'ctl.py'),'env','wtype',*args],check=True)
@@ -167,7 +167,7 @@ def first_session(client,children,args,shell_token,socketpath):
 
 def showcase(client,state,ui,status,pos):
     import math
-    gallery=pathlib.Path.home()/'workspace/rick-the-alien/worldshell-gallery/videos';gallery.mkdir(parents=True,exist_ok=True)
+    gallery=video_dir()
     output=gallery/'hyprune-first-session.mp4';raw=STATE/'first-session.mkv'
     def pause(seconds):
         end=time.monotonic()+seconds

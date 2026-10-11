@@ -3,7 +3,7 @@
   "failures": [],
   "frame": 225,
   "mode": "input",
-  "path": "/home/rick/workspace/hyprune/core/docs/evidence/replay/scripted.jsonl",
+  "path": "$WORKSPACE/core/docs/evidence/replay/scripted.jsonl",
   "playing": false,
   "recording": false
 }

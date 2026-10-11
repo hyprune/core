@@ -135,7 +135,7 @@
   },
   "U_debug_capture": {
     "passed": true,
-    "evidence": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/captures"
+    "evidence": "$WORKSPACE/core/dev/nested/.m3b-state/statehome/hyprune/captures"
   },
   "move_k": {
     "passed": true,

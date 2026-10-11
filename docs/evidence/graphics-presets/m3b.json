@@ -207,7 +207,7 @@
       "active": true,
       "activeHandle": -1,
       "aim": "",
-      "captureDirectory": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/captures",
+      "captureDirectory": "$WORKSPACE/core/dev/nested/.m3b-state/statehome/hyprune/captures",
       "captures": [
         {
           "collision": false,
@@ -507,7 +507,7 @@
         "active": true,
         "activeHandle": -1,
         "aim": "surface-1",
-        "captureDirectory": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/captures",
+        "captureDirectory": "$WORKSPACE/core/dev/nested/.m3b-state/statehome/hyprune/captures",
         "captures": [
           {
             "collision": false,
@@ -875,7 +875,7 @@
         "active": true,
         "activeHandle": -1,
         "aim": "surface-1",
-        "captureDirectory": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/captures",
+        "captureDirectory": "$WORKSPACE/core/dev/nested/.m3b-state/statehome/hyprune/captures",
         "captures": [
           {
             "collision": false,
@@ -1269,7 +1269,7 @@
   },
   "U_debug_capture": {
     "passed": true,
-    "evidence": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/captures"
+    "evidence": "$WORKSPACE/core/dev/nested/.m3b-state/statehome/hyprune/captures"
   },
   "move_k": {
     "passed": true,
@@ -1361,7 +1361,7 @@
         "active": true,
         "activeHandle": -1,
         "aim": "workspace-10",
-        "captureDirectory": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/captures",
+        "captureDirectory": "$WORKSPACE/core/dev/nested/.m3b-state/statehome/hyprune/captures",
         "captures": [
           {
             "collision": false,
@@ -1709,7 +1709,7 @@
       "active": true,
       "activeHandle": -1,
       "aim": "workspace-10",
-      "captureDirectory": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/captures",
+      "captureDirectory": "$WORKSPACE/core/dev/nested/.m3b-state/statehome/hyprune/captures",
       "captures": [
         {
           "collision": false,
@@ -2357,7 +2357,7 @@
       "active": true,
       "activeHandle": 3,
       "aim": "surface-1",
-      "captureDirectory": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/captures",
+      "captureDirectory": "$WORKSPACE/core/dev/nested/.m3b-state/statehome/hyprune/captures",
       "captures": [
         {
           "collision": false,

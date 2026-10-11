@@ -1,4 +1,4 @@
-Test project /home/rick/workspace/hyprune/core/build
+Test project $WORKSPACE/core/build
     Start 1: render
 1/8 Test #1: render ...........................   Passed    3.02 sec
     Start 2: ipc

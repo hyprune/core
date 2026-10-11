@@ -1,4 +1,4 @@
-Test project /home/rick/workspace/hyprune/core-round3-scale/build
+Test project $WORKSPACE/core-round3-scale/build
     Start 1: render
 1/8 Test #1: render ...........................   Passed    5.91 sec
     Start 2: ipc

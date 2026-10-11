@@ -14,5 +14,5 @@
   },
   "sha256": "91d6982a725d802f5aa9141b181459cdf56279cce6f3c23e77be861691ff1120",
   "chapters": "0.0s GRAB | W/S up/down - release to hold | 36.0s LOOK-TO-CLIMB | Look up/down + forward | 72.0s AUTO-TRAVERSE | E takes you to the other exit",
-  "path": "/home/rick/workspace/rick-the-alien/worldshell-gallery/videos/hyprune-climbing.mp4"
+  "path": "$HYPRUNE_VIDEO_DIR/hyprune-climbing.mp4"
 }

@@ -132,7 +132,7 @@ def record(client, children, pose, mode, hold, state):
     subprocess.run(['ffmpeg','-y','-i',str(raw),'-vf',','.join(filters),'-r','30','-c:v','libx264','-preset','fast','-crf','20','-pix_fmt','yuv420p','-movflags','+faststart','-an',str(encoded)],check=True,stdout=subprocess.DEVNULL,stderr=(temp/'encode.log').open('w'))
     meta={'title':'Hyprune climbing: three mechanics','description':'Grab, look-to-climb and accessible E auto-traverse. 36 seconds each. Hatch fall catch, tall rope, wide chain-link wall and angled vines in an original CC0 procedural world. Verified isolated nested session only.','duration':f'{duration:.2f}','chapters':' | '.join(f'{when:.1f}s {title}' for when,title in chapters),'source':'hyprune/core feature/climbing','license':'CC0-1.0 fixture; MIT source','date':time.strftime('%Y-%m-%d')}
     sidecar=temp/'hyprune-climbing.json';sidecar.write_text(json.dumps(meta,indent=2)+'\n')
-    gallery=pathlib.Path.home()/'workspace/rick-the-alien/worldshell-gallery/videos'
+    gallery=s.video_dir()
     # Encode entirely in /tmp, then atomically publish the finished artifacts.
     import shutil
     for source in [encoded,sidecar]:

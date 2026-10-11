@@ -1,7 +1,8 @@
-Vendored source, unmodified, licenses embedded in each header:
+Vendored source, unmodified, licenses embedded in each header or kept beside it:
 
 - cgltf v1.15, https://github.com/jkuhlmann/cgltf/tree/v1.15 (MIT).
-- nlohmann/json v3.12.0, https://github.com/nlohmann/json/tree/v3.12.0 (MIT).
+- nlohmann/json v3.12.0, https://github.com/nlohmann/json/tree/v3.12.0 (MIT). The
+  header carries only SPDX tags, so upstream `LICENSE.MIT` is kept as `json.LICENSE.MIT`.
 - stb_image, commit f0569113c93ad095470c54bf34a17b36646bbbb5,
   https://github.com/nothings/stb (MIT/public domain).
 - meshoptimizer v0.25 (tag commit 6daea4695c48338363b08022d2fb15deaef6ac09),

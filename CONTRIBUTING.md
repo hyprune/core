@@ -15,7 +15,8 @@ copy.
 Before submitting:
 
 ```sh
-python3 tests/fixtures/materials.py
+python3 tests/fixtures/m2.py
+python3 tests/fixtures/climbing.py
 cmake -S . -B build -G Ninja
 cmake --build build -j 3
 ctest --test-dir build --output-on-failure

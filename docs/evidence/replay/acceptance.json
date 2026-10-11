@@ -5,7 +5,7 @@
       "failures": [],
       "frame": 225,
       "mode": "input",
-      "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-CKLgvw.jsonl",
+      "path": "$WORKSPACE/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-CKLgvw.jsonl",
       "playing": false,
       "recording": false
     },
@@ -14,7 +14,7 @@
       "failures": [],
       "frame": 225,
       "mode": "input",
-      "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-CKLgvw.jsonl",
+      "path": "$WORKSPACE/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-CKLgvw.jsonl",
       "playing": false,
       "recording": false
     }
@@ -24,7 +24,7 @@
     "failures": [],
     "frame": 225,
     "mode": "camera",
-    "path": "/home/rick/workspace/hyprune/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-CKLgvw.jsonl",
+    "path": "$WORKSPACE/core/dev/nested/.m3b-state/statehome/hyprune/recordings/session-CKLgvw.jsonl",
     "playing": false,
     "recording": false
   },

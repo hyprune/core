@@ -59,7 +59,7 @@ speed/volume bounds, nonfinite values and IPC version isolation.
 Recording produces three labelled 36-second sections (about 109 seconds total)
 with real nested footage. Encoding and labelling happen in `/tmp`; finished MP4
 and string-only JSON sidecar move into
-`~/workspace/rick-the-alien/worldshell-gallery/videos/hyprune-climbing.*`.
+`$HYPRUNE_VIDEO_DIR/hyprune-climbing.*`.
 The gallery autocommit process is never stopped or signalled.
 
 Results and the exact checks are saved under `tests/evidence/climbing/`.
