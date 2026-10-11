@@ -16,7 +16,7 @@ external-only, the client binds the slot as GL_TEXTURE_EXTERNAL_OES and copies
 it with a samplerExternalOES triangle instead of FBO + blit. The Mesa path is
 unchanged.
 
-## Policy fixes (IPC 0.18, same branch)
+## Policy fixes (IPC 0.18)
 
 The first runs below needed workarounds that IPC 0.18 removes:
 
