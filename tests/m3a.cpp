@@ -12,6 +12,18 @@ int main() {
 
     auto c = interaction::defaultConfig();
     assert(c["windows"]["world_workspace"] == 20);
+    // input.roll_button is gone (unreachable: MMB is the tools' Alternate). Older configs keep loading.
+    assert(!c["input"].contains("roll_button"));
+    assert(interaction::configPatch(c, {{"input", {{"roll_button", 274}}}}) == c);
+    {
+        bool rejected = false;
+        try {
+            interaction::configPatch(c, {{"input", {{"roll_button", "middle"}}}});
+        } catch (...) {
+            rejected = true;
+        }
+        assert(rejected);
+    }
     // An explicit user setting (including the old default 8) still wins over the default.
     assert(interaction::configPatch(c, {{"windows", {{"world_workspace", 18}}}})["windows"]["world_workspace"] == 18);
     assert(interaction::configPatch(c, {{"windows", {{"world_workspace", 8}}}})["windows"]["world_workspace"] == 8);

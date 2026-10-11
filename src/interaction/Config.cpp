@@ -12,7 +12,6 @@ Json defaultConfig() {
          {{"typing_button", 275},
           {"carry_button", 272},
           {"resize_button", 273},
-          {"roll_button", 274},
           {"typing_cursor", true},
           {"bindings",
            {{"forward", "w"},
@@ -111,6 +110,13 @@ Json configPatch(const Json &current, const Json &patch) {
                 if (!valid)
                     throw std::runtime_error("reticle_colour must be \"theme\" or RGB 0..1");
                 result[section][key] = v;
+                continue;
+            }
+            // Removed: Super+MMB never reached it (MMB is the tools' Alternate; rotation is
+            // Super+Ctrl+Wheel). Older configs that still set it keep loading; it has no effect.
+            if (section == "input" && key == "roll_button") {
+                if (!v.is_number_integer() || v.get<int>() < 0 || v.get<int>() > 767)
+                    throw std::runtime_error("roll_button must be an evdev integer");
                 continue;
             }
             if (!result[section].contains(key))
@@ -269,7 +275,7 @@ Json configPatch(const Json &current, const Json &patch) {
         }
     }
     std::set<int> buttons;
-    for (auto key : {"typing_button", "carry_button", "resize_button", "roll_button"}) {
+    for (auto key : {"typing_button", "carry_button", "resize_button"}) {
         int value = result["input"][key];
         if (value && !buttons.insert(value).second)
             throw std::runtime_error("duplicate mouse button");

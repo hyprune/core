@@ -1832,8 +1832,7 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
                 hit = {{grabbed, *h}};
     if (down && super &&
         (event.button == config["input"]["carry_button"].get<uint32_t>() ||
-         event.button == config["input"]["resize_button"].get<uint32_t>() ||
-         event.button == config["input"]["roll_button"].get<uint32_t>())) {
+         event.button == config["input"]["resize_button"].get<uint32_t>())) {
         // A window seen from behind can still be carried (never clicked): it turns to face us.
         if (!hit && event.button == config["input"]["carry_button"].get<uint32_t>())
             if (auto back = aim(true); back && back->second.back && !capture.workspace(back->first))
@@ -1880,9 +1879,8 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         smoothIntent = {};
         if (layout.binding(e->instance.workspaceId, world.get()))
             layout.pull(e->instance, world.get());
-        auto g = event.button == config["input"]["carry_button"].get<uint32_t>()    ? interaction::Gesture::Carry
-                 : event.button == config["input"]["resize_button"].get<uint32_t>() ? interaction::Gesture::CornerResize
-                                                                                    : interaction::Gesture::Roll;
+        auto g = event.button == config["input"]["carry_button"].get<uint32_t>() ? interaction::Gesture::Carry
+                                                                                 : interaction::Gesture::CornerResize;
         if ((g == interaction::Gesture::Resize || g == interaction::Gesture::CornerResize) &&
             Fullscreen::controller()->isFullscreen(e->window.lock(), Fullscreen::FSMODE_MAXIMIZED))
             Fullscreen::controller()->setFullscreenMode(e->window.lock(), Fullscreen::FSMODE_NONE,

@@ -58,7 +58,6 @@ core-owned controls. Keys in `input.bindings` are XKB symbol names.
 | input.typing_button | 275 | Integer 0–767, evdev button; 0 disables; 275 is back |
 | input.carry_button | 272 | Integer 0–767, Super+button carry |
 | input.resize_button | 273 | Integer 0–767, Super+button native resize |
-| input.roll_button | 274 | Integer 0–767, Super+button roll |
 | input.typing_cursor | true | Boolean; virtual pointer in typing mode; false keeps look motion |
 | input.bindings.forward | w | XKB symbol for forward |
 | input.bindings.back | s | XKB symbol for backward |
@@ -89,6 +88,10 @@ core-owned controls. Keys in `input.bindings` are XKB symbol names.
 | player.reach_grab | 15 | 1–100 m; Super+button window gestures |
 | player.reach_mount | 8 | 1–100 m; snapping into tool-mount frames |
 | player.reach_placement | 12 | 1–100 m; tool 5 surface placement and pocket, tool 2 wall mount, tool 3 path points |
+
+`input.roll_button` (Super+MMB roll) was removed: nothing could reach it, since MMB is the
+tools' Alternate. Rotation is Super+Ctrl+Wheel (`rotate` in the keymap). Configs that still set
+it keep loading; it has no effect.
 
 The player settings (walk/run speed, view bob, reticle, reach) are also on the wire
 from IPC 0.19 (`player.get` / `player.set`, Settings → Movement / Reticle in the shell)
