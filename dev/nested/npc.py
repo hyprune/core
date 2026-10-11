@@ -20,6 +20,8 @@ def prepare(installed):
     shutil.copytree(s.ROOT.parent / 'worlds/dist' / SWITCHYARD, installed / SWITCHYARD, dirs_exist_ok=True)
     glb = s.STATE / 'mannequin.glb'
     subprocess.run([sys.executable, str(s.ROOT / 'tests/fixtures/make-mannequin.py'), str(glb)], check=True, stdout=subprocess.DEVNULL)
+    if os.environ.get('HYPRUNE_NPC_CHARACTER'):  # e.g. a tools/npc-import output instead of the mannequin
+        glb = pathlib.Path(os.environ['HYPRUNE_NPC_CHARACTER'])
     spec = {'worldId': SWITCHYARD, 'character': str(glb), 'agents': [{'route': ROUTE, 'idleSeconds': 2.5, 'accent': [.95, .55, .15]}]}
     (s.STATE / 'npc-prototype.json').write_text(json.dumps(spec))
     os.environ['HYPRUNE_NPC_PROTOTYPE'] = str(s.STATE / 'npc-prototype.json')

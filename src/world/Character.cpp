@@ -23,6 +23,21 @@ Mat4 trs(Vec3 t, const std::array<float, 4> &q, Vec3 s) {
     m.v[12] = t.x, m.v[13] = t.y, m.v[14] = t.z;
     return m;
 }
+Mat4 affineInverse(const Mat4 &m) {
+    const auto &v = m.v; // column-major, affine
+    float a = v[0], b = v[4], c = v[8], d = v[1], e = v[5], f = v[9], g = v[2], h = v[6], i = v[10];
+    float det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+    Mat4 r = Mat4::identity();
+    if (std::abs(det) < 1e-12f)
+        return r;
+    float k = 1 / det;
+    r.v[0] = (e * i - f * h) * k, r.v[4] = (c * h - b * i) * k, r.v[8] = (b * f - c * e) * k;
+    r.v[1] = (f * g - d * i) * k, r.v[5] = (a * i - c * g) * k, r.v[9] = (c * d - a * f) * k;
+    r.v[2] = (d * h - e * g) * k, r.v[6] = (b * g - a * h) * k, r.v[10] = (a * e - b * d) * k;
+    for (int row = 0; row < 3; ++row)
+        r.v[12 + row] = -(r.v[row] * v[12] + r.v[4 + row] * v[13] + r.v[8 + row] * v[14]);
+    return r;
+}
 std::array<float, 4> nlerp(std::array<float, 4> a, std::array<float, 4> b, float u) {
     float d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
     if (d < 0)
@@ -78,8 +93,10 @@ std::string boneKey(std::string name) {
 }
 bool fingerBone(const std::string &name) {
     auto k = boneKey(name);
-    return k.find("finger") != std::string::npos || k.find("thumb") != std::string::npos ||
-           k.find("index") != std::string::npos || k.find("pinky") != std::string::npos;
+    for (auto part : {"finger", "thumb", "index", "middle", "ring", "pinky"}) // Mixamo: LeftHandMiddle1 ...
+        if (k.find(part) != std::string::npos)
+            return true;
+    return false;
 }
 } // namespace
 int Character::role(std::string_view r) const {
@@ -433,11 +450,12 @@ std::vector<CharacterProblem> checkCharacter(const Character &c, const Character
             error("the toes point to -Z: the character must face +Z");
         else if (!count)
             info("no `toe` bones: facing +Z could not be checked; check it in a viewer");
-        // Rest pose vs bind: a consistent rig skins to its authored positions.
+        // Rest pose vs bind: at rest every skinning matrix is the same (identity, or the
+        // dequantization transform of a quantized mesh).
         float worst = 0;
         for (auto &m : bind)
             for (int k = 0; k < 16; ++k)
-                worst = std::max(worst, std::abs(m.v[k] - Mat4::identity().v[k]));
+                worst = std::max(worst, std::abs(m.v[k] - bind[0].v[k]));
         if (worst > .01f)
             warn("the rest pose differs from the bind pose: export with the skeleton in its bind pose");
     }
@@ -501,7 +519,14 @@ std::vector<CharacterProblem> checkCharacter(const Character &c, const Character
             }
         int hips = c.role("hips");
         if (hips >= 0) {
-            float travel = std::hypot(b[hips].v[12] - a[hips].v[12], b[hips].v[14] - a[hips].v[14]);
+            // The hips joint itself: its rest global position carried by each pose's skin matrix.
+            Mat4 rest = Mat4::identity();
+            for (int j = hips; j >= 0; j = c.joints[j].parent)
+                rest = trs(c.joints[j].translation, c.joints[j].rotation, c.joints[j].scale) * rest;
+            rest = c.armature * rest;
+            Vec3 head{rest.v[12], rest.v[13], rest.v[14]}, from = affineInverse(bind[hips]).point(head);
+            Vec3 p0 = a[hips].point(from), p1 = b[hips].point(from);
+            float travel = std::hypot(p1.x - p0.x, p1.z - p0.z);
             if (travel > .05f * std::max(1.f, height))
                 error(std::format("clip `{}` moves the hips {:.2f} m: keep it in place (no root motion)", clip.name, travel));
         }
