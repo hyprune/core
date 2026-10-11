@@ -268,6 +268,7 @@ struct Runtime {
     void axis(IPointer::SAxisEvent);
     void handTick(float);
     void floatIntoWorld(PHLWINDOWREF);
+    std::string resumeUse; // surface typed into when a window gesture started
     std::map<const void *, Vector2D> arrivalSizes; // size before a move into the room
     void motionTick(float);
     struct Handover {
@@ -1869,6 +1870,11 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
             }
         refresh();
         publish();
+        if (auto id = std::exchange(resumeUse, ""); !id.empty() && capture.find(id))
+            try {
+                focus(id, true, true); // back to typing in the window the gesture started from
+            } catch (const std::exception &) {
+            }
         return;
     }
     if (!ownsInput())
@@ -1925,6 +1931,8 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         }
         if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance))
             return;
+        // A gesture started while typing into a window returns to typing there afterwards.
+        resumeUse = typing ? focused : "";
         cancelGrab();
         typing = false;
         keys.clear();
@@ -1933,6 +1941,14 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
             layout.pull(e->instance, world.get());
         auto g = event.button == config["input"]["carry_button"].get<uint32_t>() ? interaction::Gesture::Carry
                                                                                  : interaction::Gesture::CornerResize;
+        // Super+LMB on a window's edge band (about 10 cm) resizes from the nearest corner,
+        // as on the desktop; anywhere else it carries.
+        if (g == interaction::Gesture::Carry && !hit->second.back) {
+            float bu = std::clamp(.1f / std::max(e->surface.width, .01f), .03f, .12f),
+                  bv = std::clamp(.1f / std::max(e->surface.height, .01f), .03f, .12f);
+            if (hit->second.u < bu || hit->second.u > 1 - bu || hit->second.v < bv || hit->second.v > 1 - bv)
+                g = interaction::Gesture::CornerResize;
+        }
         if ((g == interaction::Gesture::Resize || g == interaction::Gesture::CornerResize) &&
             Fullscreen::controller()->isFullscreen(e->window.lock(), Fullscreen::FSMODE_MAXIMIZED))
             Fullscreen::controller()->setFullscreenMode(e->window.lock(), Fullscreen::FSMODE_NONE,

@@ -220,11 +220,21 @@ std::vector<Action> Input::event(const std::string &mode, const std::string &key
         return {{held.at(identity).action, !held.at(identity).hold || held.at(identity).fired, value, false}};
     if (!config["modes"].contains(mode))
         return {};
+    // In use mode (E) the Super window gestures work as in the world: carry, resize,
+    // push/pull, rotate, content scale (world bindings, unless use mode binds the chord).
+    static const std::set<std::string> windowGestures{"carry", "resize", "distance", "rotate", "content.scale",
+                                                      "window.reset"};
+    std::vector<std::pair<std::string, const Json *>> scopes{{mode, &config["modes"][mode]}};
+    if (mode == "interactive" && config["modes"].contains("world") && (mods & Super))
+        scopes.push_back({"world", &config["modes"]["world"]});
+    for (auto &[scope, table] : scopes)
     // Exact modifiers for chords; unmodified held movement actions accept Shift/Ctrl
     // so sprint and crouch can be combined with every movement variant.
     for (int pass = 0; pass < (gestureMovement && mode == "world" ? 2 : 1); ++pass)
-    for (auto &[action, bindings] : config["modes"][mode].items())
+    for (auto &[action, bindings] : table->items())
         for (auto &binding : bindings) {
+            if (scope != mode && !windowGestures.contains(action))
+                continue;
             // Modifier gestures are global and cannot be shadowed by tool slots.
             if ((action == "primary" || action == "secondary" || action == "alternate" || action == "cycle") &&
                 (mods & Super))

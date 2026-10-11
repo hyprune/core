@@ -64,6 +64,22 @@ int main() {
     slots.event("world", "LMB", 0, false, 6);
     assert(slots.event("world", "r", Super, true, 6, 0, true)[0].name == "carry.facing");
     slots.event("world", "r", 0, false, 7);
+    {
+        // Use mode (E): the Super window gestures work as in the world; plain buttons and
+        // Super chords that aren't window gestures still go to the window / use mode.
+        Input use;
+        auto carry = use.event("interactive", "LMB", Super, true, 8);
+        assert(carry.size() == 1 && carry[0].name == "carry" && carry[0].pressed);
+        assert(use.event("interactive", "LMB", 0, false, 9).size() == 1); // its release
+        assert(use.event("interactive", "RMB", Super, true, 10)[0].name == "resize");
+        use.event("interactive", "RMB", 0, false, 11);
+        assert(use.event("interactive", "WheelUp", Super, true, 12, 1)[0].name == "distance");
+        assert(use.event("interactive", "WheelUp", Super | Shift, true, 13, 1)[0].name == "content.scale");
+        assert(use.event("interactive", "LMB", 0, true, 14).empty());
+        use.event("interactive", "LMB", 0, false, 15);
+        assert(use.event("interactive", "Tab", Super, true, 16)[0].name == "exit");
+        assert(use.event("focus", "LMB", Super, true, 17).empty()); // F focus: native Super gestures
+    }
     auto rebound = slots.config;
     rebound["modes"]["world"]["primary"] = {"Super+MMB"};
     slots.apply(rebound);
