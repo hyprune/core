@@ -23,10 +23,10 @@ therefore tracks **pixels and memory traffic**, not draw count. Hand-authored
 visibility regions confirm this from the other side: they cut submissions 87→68 at
 best, with "no reliable FPS improvement" (`worlds/lumen-reach/VISIBILITY.md:47-61`).
 
-The standard fixes we lack are mostly about bytes per pixel: compressed textures,
+The missing standard fixes are mostly about bytes per pixel: compressed textures,
 mipmapped lightmaps, indexed and optimised meshes, and not rendering when nothing
 changed. The world-side failures (layout and perspective wrong once walked) are the
-problem that **blockout-first level design** exists to solve. We skipped that stage:
+problem that **blockout-first level design** exists to solve. Hyprune skipped that stage:
 geometry is born as final procedural Blender code, and the layout is only checked
 after a remote bake.
 
@@ -41,10 +41,10 @@ Top 5, ranked by playable impact against effort:
 | 5 | **Replace hand-made culling with standard, derived culling.** Per-batch AABB frustum culling (absent today) plus cell/portal visibility generated from the stage-1 plan (Teller & Séquin PVS, Luebke & Georges portals). Keep the current runtime format and generate it. | Medium today, because frames are fill-bound. It matters more as worlds grow and once batches are split per room or object. Mostly removes authoring work. | Low (frustum) to medium (portal generator). |
 
 **Not recommended now.** Embedding a third-party renderer in-process: they want
-their own context, thread and swapchain, which collides with render-pass safety. If we ever want
-an engine renderer, the place for it is behind the existing RFC-0009 process
+their own context, thread and swapchain, which collides with render-pass safety. If an engine
+renderer is ever wanted, the place for it is behind the existing RFC-0009 process
 boundary (dmabuf hand-off), not inside Hyprland's pass (§A.4). GPU-driven,
-meshlet, Hi-Z and HLOD techniques are standard too, but they target scenes 100× our
+meshlet, Hi-Z and HLOD techniques are standard too, but they target scenes 100× Hyprune's
 size; skip them.
 
 ---
@@ -53,7 +53,7 @@ size; skip them.
 
 ### A.1 Inventory: what core already does like everyone else
 
-Much of what we built is standard, and we should keep it. It is "reinvented" only in
+Much of what core does is standard and should be kept. It is "reinvented" only in
 the sense that it is in-house code, not that it is novel.
 
 | Technique | Core today | Standard equivalent | Verdict |
@@ -69,7 +69,7 @@ the sense that it is in-house code, not that it is novel.
 | Triangle BVH for pointer and collision queries | `src/sim/TriangleIndex.hpp` | Standard | Keep |
 | Client windows sampled directly from Hyprland textures (no copies) | `platform/hyprland/Capture.cpp:82-95` | Zero-copy compositing | Keep |
 
-### A.2 What we lack
+### A.2 What core lacks
 
 | Missing technique | Evidence | Why it matters here | Adopt |
 |---|---|---|---|
@@ -81,10 +81,10 @@ the sense that it is in-house code, not that it is novel.
 | **Uniform blocks / cached locations** | About 25 `glGetUniformLocation` string lookups per batch (`Renderer.cpp:1002-1069`) | CPU cost per draw; it grows with instancing and objects | Cache locations at link time; one std140 UBO per material |
 | **Instancing** | None; scene has 295 nodes and 295 meshes, 1:1 | Needed by the object library (§B) | `EXT_mesh_gpu_instancing` → `glDrawElementsInstanced` with a per-instance transform and lightmap-rect attribute |
 | **Light probes for non-lightmapped objects** | None (one sun, 0.24 ambient floor, `Renderer.cpp:117-128`) | Small props and the player's held objects would match baked lighting | A baked L1 SH probe grid (3D texture) from the bake host; Godot LightmapGI and Unity Light Probes do exactly this |
-| **Standard upscaler** | Custom 4-tap sharpen in the upscale pass (`Renderer.cpp:180-182,1177-1200`) | We always run at 0.375–0.5 scale on Intel 4K, so upscale quality *is* the image | AMD FidelityFX **FSR 1** (EASU + RCAS; MIT, plain fragment shaders, GLES-portable). Spatial-only: no motion vectors or history, so it fits our pass structure. |
+| **Standard upscaler** | Custom 4-tap sharpen in the upscale pass (`Renderer.cpp:180-182,1177-1200`) | Core always runs at 0.375–0.5 scale on Intel 4K, so upscale quality *is* the image | AMD FidelityFX **FSR 1** (EASU + RCAS; MIT, plain fragment shaders, GLES-portable). Spatial-only: no motion vectors or history, so it fits core's pass structure. |
 | **Engine-style debug view modes** | None. Image checks rely on beauty renders and human contact sheets | They make image-space checks deterministic (see §C) | Debug outputs: node/object ID, lightmap texel density, overdraw, collision. Unreal "buffer visualization" and Godot debug draw modes are the precedent. |
 
-### A.3 What we reinvented, and the standard to replace or derive it from
+### A.3 What core reinvented, and the standard to replace or derive it from
 
 | In-house system | Standard | Recommendation |
 |---|---|---|
@@ -99,16 +99,16 @@ the sense that it is in-house code, not that it is novel.
 | Option | Licence | Fit under the compositor constraints |
 |---|---|---|
 | Filament | Apache-2.0 | Supports a shared GL context plus a headless swapchain, rendering into an FBO texture. It still wants its own context and render thread, and gltfio has no lightmap path (custom materials needed). Possible **only out of process**. |
-| bgfx | BSD-2 | Can be driven single-threaded, but owns GL state. Inside Hyprland's pass we would still need GLState save/restore around a foreign renderer that we don't control. |
+| bgfx | BSD-2 | Can be driven single-threaded, but owns GL state. Inside Hyprland's pass core would still need GLState save/restore around a foreign renderer it doesn't control. |
 | Godot as a library (libgodot) | MIT | Has everything (lightmaps, probes, occlusion, navmesh), but is a whole engine, input loop and scene system. Only viable behind the offload boundary, and doubles the stack. |
 
 **Conclusion.** In-process, no. Render-pass safety (deferred cursor and
 workspace changes, GL state restore) and two past SIGSEGVs make a foreign GL renderer
-inside Hyprland's pass the riskiest change we could make. Out of process, an engine
+inside Hyprland's pass the riskiest change core could make. Out of process, an engine
 could live in the RFC-0009 `hyprune-renderer` slot, which already hands a dmabuf to
 core. But RFC-0009 itself found offload "is not needed merely to reach 60 FPS on this
-Intel device" (RFC-0009 `:92-93`), and our renderer is about 2k lines doing a small,
-well-understood job. The industry-standard move at our scale is to **adopt libraries,
+Intel device" (RFC-0009 `:92-93`), and core's renderer is about 2k lines doing a small,
+well-understood job. The industry-standard move at this scale is to **adopt libraries,
 not engines**: meshoptimizer, Basis/libktx, FSR 1, Recast, and optionally xatlas
 for lightmap UVs.
 
@@ -123,12 +123,12 @@ for lightmap UVs.
 | [FidelityFX FSR 1](https://github.com/GPUOpen-Effects/FidelityFX-FSR) | Upscale plus sharpen | MIT |
 | [Recast & Detour](https://recastnav.com/) / [recast-navigation-js](https://github.com/isaac-mason/recast-navigation-js) | Navmesh generation and queries for build checks | zlib / MIT |
 | [xatlas](https://github.com/jpcy/xatlas) | Lightmap UV charting and packing (Blender `smart_project` alternative when tiny parts exhaust gutters, `RENDER-REVIEW.md:40-42`) | MIT |
-| [Jolt Physics](https://github.com/jrouwe/JoltPhysics) (`CharacterVirtual`) | *Optional, later*: a standard character controller if walking and climbing outgrow the custom BVH. Not now; ours works and is tested. | MIT |
+| [Jolt Physics](https://github.com/jrouwe/JoltPhysics) (`CharacterVirtual`) | *Optional, later*: a standard character controller if walking and climbing outgrow the custom BVH. Not now; the current one works and is tested. | MIT |
 | cgltf (already used) | glTF loading | MIT |
 
 ---
 
-## B. World pipeline: standard practice and our gaps
+## B. World pipeline: standard practice and Hyprune's gaps
 
 ### B.1 What established pipelines do
 
@@ -175,7 +175,7 @@ for lightmap UVs.
 
 ### B.2 Hyprune today vs that practice
 
-| Practice | We have | We lack | Adopt |
+| Practice | Hyprune has | Hyprune lacks | Adopt |
 |---|---|---|---|
 | Metrics | Capsule 0.3/1.8 m, eye +1.7 m, slope ≤0.4, window sizes 1.6×0.9 and 3.2×1.8, approaches 4/16 m (`RFC-0004:132-186`, `check-walking.py:47-54`) | Door width, corridor width, ceiling, stair riser/tread, screen viewing depth as **named constants checked before geometry** | A single `metrics.json` shared by plan checks, the greybox generator and `check-*` |
 | Blockout | None. Layout is coordinates inside `court()`/`hall()`/`vault()`/`rise()` (`build.py:300-680`), first seen after a remote bake (about 5 min) | A plan stage and an unbaked greybox that core can load | Stages 1–2 below |
@@ -410,7 +410,7 @@ greybox walk (stage 2a) and the final art review, where only people can judge.
 - Unity `lightmapScaleOffset`: https://docs.unity3d.com/ScriptReference/CombineInstance-lightmapScaleOffset.html
 - `MOZ_lightmap` and web lightmapping notes: https://hackmd.io/@XR/lightmapping-web
 - Unreal dynamic resolution: https://dev.epicgames.com/documentation/unreal-engine/dynamic-resolution-in-unreal-engine
-- Hi-Z / GPU culling overview (not recommended at our scale): https://vkguide.dev/docs/gpudriven/compute_culling/
+- Hi-Z / GPU culling overview (not recommended at Hyprune's scale): https://vkguide.dev/docs/gpudriven/compute_culling/
 - meshoptimizer / gltfpack: https://github.com/zeux/meshoptimizer
 - glTF-Transform CLI: https://gltf-transform.dev/cli
 - Basis Universal: https://github.com/BinomialLLC/basis_universal
