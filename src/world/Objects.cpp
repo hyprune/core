@@ -59,6 +59,10 @@ void loadObjects(World &w, const std::filesystem::path &root, const std::string 
         require(!scene.meshes.empty(), label + ": no rendered meshes");
         a.meshes = std::move(scene.meshes);
         a.nodeParents = scene.parents;
+        a.nodeNames = scene.names;
+        a.nodeOrigins = scene.origins;
+        a.materialNames = scene.materialNames;
+        a.firstMaterial = scene.materialBase;
         a.collision = std::move(scene.collision);
         if (a.unlit)
             for (size_t m = firstMaterial; m < w.materials.size(); ++m)

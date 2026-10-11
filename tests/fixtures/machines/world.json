@@ -1,0 +1,139 @@
+{
+  "formatVersion": "0.8",
+  "id": "org.hyprune.machines",
+  "version": "1.0.0",
+  "name": "Machines laboratory",
+  "license": "CC0-1.0",
+  "scene": "scene.gltf",
+  "defaultSpawn": "arrival",
+  "spawns": [
+    {
+      "id": "arrival",
+      "pose": {
+        "position": [
+          0,
+          0,
+          6
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ]
+      }
+    }
+  ],
+  "collision": [
+    {
+      "node": 0,
+      "shape": "mesh",
+      "layer": "static"
+    }
+  ],
+  "objectAssets": [
+    {
+      "id": "mini-conveyor",
+      "scene": "objects/mini-conveyor.gltf",
+      "animations": [
+        {
+          "node": "spinner",
+          "type": "spin",
+          "axis": [
+            0,
+            1,
+            0
+          ],
+          "pivot": [
+            0,
+            1.5,
+            0
+          ],
+          "period": 2
+        },
+        {
+          "node": "lift",
+          "type": "bob",
+          "axis": [
+            0,
+            1,
+            0
+          ],
+          "amplitude": 0.4,
+          "period": 4
+        }
+      ]
+    },
+    {
+      "id": "token",
+      "scene": "objects/token.gltf"
+    },
+    {
+      "id": "spark",
+      "scene": "objects/spark.gltf",
+      "lighting": {
+        "mode": "unlit"
+      }
+    }
+  ],
+  "objects": [
+    {
+      "id": "machine-a",
+      "asset": "mini-conveyor",
+      "pose": {
+        "position": [
+          -3,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "id": "machine-b",
+      "asset": "mini-conveyor",
+      "pose": {
+        "position": [
+          3,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0.7071068,
+          0,
+          0.7071068
+        ]
+      }
+    },
+    {
+      "id": "plain",
+      "asset": "mini-conveyor",
+      "pose": {
+        "position": [
+          0,
+          0,
+          -5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ]
+      }
+    }
+  ],
+  "attribution": [
+    {
+      "path": ".",
+      "author": "Hyprune contributors",
+      "license": "CC0-1.0"
+    }
+  ]
+}

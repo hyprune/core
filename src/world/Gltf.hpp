@@ -12,6 +12,8 @@ struct GltfScene {
     std::vector<int> parents;              // per node, -1 for roots
     std::vector<std::string> names;        // per node, "" when unnamed
     std::vector<Vec3> origins;             // per node, origin after node transforms
+    std::vector<std::string> materialNames; // per glTF material, "" when unnamed
+    size_t materialBase = 0;               // World::materials index of the first glTF material
 };
 // lightmaps: world.json lightmaps[] (the world scene only); collision:
 // world.json collision[] by node index; collisionName: a node named once.

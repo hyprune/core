@@ -1,0 +1,103 @@
+{
+ "worldId": "org.hyprune.machines",
+ "staleMs": 3000,
+ "effectAsset": "spark",
+ "manifests": {
+  "mini-conveyor": "objects/mini-conveyor.json",
+  "token": "objects/token.json"
+ },
+ "instances": {
+  "machine-a": {
+   "inputs": {
+    "status": {
+     "source": "org.hyprune.test.line",
+     "key": "status",
+     "map": {
+      "cases": [
+       {
+        "equals": "success",
+        "to": "ok"
+       },
+       {
+        "in": [
+         "failed",
+         "error"
+        ],
+        "to": "fail"
+       },
+       {
+        "in": [
+         "pending",
+         "running"
+        ],
+        "to": "running"
+       }
+      ],
+      "else": "idle"
+     }
+    },
+    "stage": {
+     "source": "org.hyprune.test.line",
+     "key": "stage.{n}",
+     "map": {
+      "cases": [
+       {
+        "equals": "success",
+        "to": "ok"
+       },
+       {
+        "equals": "failed",
+        "to": "fail"
+       },
+       {
+        "equals": "running",
+        "to": "running"
+       }
+      ],
+      "else": "idle"
+     }
+    },
+    "started": {
+     "source": "org.hyprune.test.line",
+     "key": "jobsStarted",
+     "map": {
+      "counter": true
+     }
+    },
+    "queued": {
+     "source": "org.hyprune.test.line",
+     "key": "depth",
+     "map": {
+      "scale": {
+       "from": [
+        0,
+        100
+       ],
+       "to": [
+        0,
+        6
+       ]
+      },
+      "round": "floor"
+     }
+    },
+    "progress": {
+     "source": "org.hyprune.test.line",
+     "key": "progress"
+    },
+    "name": {
+     "source": "org.hyprune.test.line",
+     "key": "lastJob"
+    }
+   }
+  },
+  "machine-b": {
+   "inputs": {
+    "status": {
+     "source": "org.hyprune.test.other",
+     "key": "status"
+    }
+   }
+  }
+ }
+}

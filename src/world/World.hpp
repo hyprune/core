@@ -74,6 +74,10 @@ struct ObjectAsset {
     bool unlit = false;                // lighting.mode "unlit": every material drawn unlit
     std::vector<Mesh> meshes;          // rendered meshes; Mesh::node is the asset's node index
     std::vector<int> nodeParents;
+    std::vector<std::string> nodeNames;     // per asset node, "" when unnamed
+    std::vector<Vec3> nodeOrigins;          // per asset node, asset space
+    std::vector<std::string> materialNames; // per glTF material of the asset
+    size_t firstMaterial = 0;               // World::materials index of the asset's first material
     std::vector<Animation> animations; // Animation::node is the asset's node index
     std::vector<int> nodeAnimation;    // asset node -> animation index (whole subtree), else -1
     std::vector<Triangle> collision;   // static proxy, asset space

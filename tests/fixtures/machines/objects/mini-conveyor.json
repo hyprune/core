@@ -1,0 +1,454 @@
+{
+ "formatVersion": "0.11",
+ "id": "mini-conveyor",
+ "version": "1.0.0",
+ "name": "Mini conveyor",
+ "category": "machines",
+ "scene": "mini-conveyor.gltf",
+ "license": "CC0-1.0",
+ "attribution": [
+  {
+   "path": ".",
+   "author": "Hyprune contributors",
+   "license": "CC0-1.0"
+  }
+ ],
+ "bounds": {
+  "min": [
+   -2,
+   0,
+   -0.5
+  ],
+  "max": [
+   2,
+   2.05,
+   0.5
+  ]
+ },
+ "traits": {
+  "decorative": {
+   "animations": [
+    {
+     "node": "spinner",
+     "type": "spin",
+     "axis": [
+      0,
+      1,
+      0
+     ],
+     "pivot": [
+      0,
+      1.5,
+      0
+     ],
+     "period": 2
+    },
+    {
+     "node": "lift",
+     "type": "bob",
+     "axis": [
+      0,
+      1,
+      0
+     ],
+     "amplitude": 0.4,
+     "period": 4
+    }
+   ]
+  },
+  "machine": {
+   "primary": "status",
+   "positions": [
+    {
+     "node": "lift",
+     "range": [
+      0.75,
+      1.25
+     ]
+    }
+   ],
+   "inputs": [
+    {
+     "id": "status",
+     "type": "enum",
+     "values": [
+      "idle",
+      "running",
+      "ok",
+      "fail"
+     ],
+     "default": "idle",
+     "label": "Status",
+     "explain": "Lamps and spinner."
+    },
+    {
+     "id": "stage",
+     "type": "enum",
+     "values": [
+      "idle",
+      "running",
+      "ok",
+      "fail"
+     ],
+     "default": "idle",
+     "repeat": 2,
+     "label": "Stage",
+     "explain": "Per lamp."
+    },
+    {
+     "id": "started",
+     "type": "event",
+     "label": "Started",
+     "explain": "A token per start."
+    },
+    {
+     "id": "queued",
+     "type": "int",
+     "min": 0,
+     "max": 12,
+     "default": 0,
+     "label": "Queued",
+     "explain": "Crates."
+    },
+    {
+     "id": "progress",
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0,
+     "label": "Progress",
+     "explain": "Lift height."
+    },
+    {
+     "id": "name",
+     "type": "text",
+     "maxLength": 12,
+     "label": "Name",
+     "explain": "Panel."
+    }
+   ],
+   "drives": [
+    {
+     "input": "stage.{n}",
+     "target": "state:lamp_{n}"
+    },
+    {
+     "input": "status",
+     "target": "animation:spinner",
+     "map": {
+      "cases": [
+       {
+        "equals": "running",
+        "to": 1
+       }
+      ],
+      "else": 0
+     }
+    },
+    {
+     "input": "status",
+     "target": "visible:alarm",
+     "map": {
+      "cases": [
+       {
+        "equals": "fail",
+        "to": true
+       }
+      ],
+      "else": false
+     }
+    },
+    {
+     "input": "status",
+     "target": "effect:cheer",
+     "map": {
+      "becomes": "ok",
+      "from": "running"
+     }
+    },
+    {
+     "input": "status",
+     "target": "emission:lamp_1",
+     "map": {
+      "cases": [
+       {
+        "equals": "fail",
+        "to": 2
+       }
+      ],
+      "else": 1
+     }
+    },
+    {
+     "input": "started",
+     "target": "spawn:in"
+    },
+    {
+     "input": "queued",
+     "target": "count:waiting"
+    },
+    {
+     "input": "progress",
+     "target": "position:lift"
+    },
+    {
+     "input": "name",
+     "target": "label:sign"
+    }
+   ]
+  }
+ },
+ "slots": {
+  "states": [
+   {
+    "id": "lamp_1",
+    "materials": [
+     "lamp_1"
+    ],
+    "palette": [
+     {
+      "id": "idle",
+      "colour": [
+       0.3,
+       0.3,
+       0.32
+      ],
+      "emission": 0.2
+     },
+     {
+      "id": "running",
+      "colour": [
+       1,
+       0.6,
+       0.2
+      ],
+      "emission": 3
+     },
+     {
+      "id": "ok",
+      "colour": [
+       0.3,
+       1,
+       0.6
+      ],
+      "emission": 3
+     },
+     {
+      "id": "fail",
+      "colour": [
+       1,
+       0.2,
+       0.1
+      ],
+      "emission": 4
+     },
+     {
+      "id": "stale",
+      "colour": [
+       0.25,
+       0.25,
+       0.25
+      ],
+      "emission": 0.1
+     }
+    ]
+   },
+   {
+    "id": "lamp_2",
+    "nodes": [
+     "lamp_2"
+    ],
+    "palette": [
+     {
+      "id": "idle",
+      "colour": [
+       0.3,
+       0.3,
+       0.32
+      ],
+      "emission": 0.2
+     },
+     {
+      "id": "running",
+      "colour": [
+       1,
+       0.6,
+       0.2
+      ],
+      "emission": 3
+     },
+     {
+      "id": "ok",
+      "colour": [
+       0.3,
+       1,
+       0.6
+      ],
+      "emission": 3
+     },
+     {
+      "id": "fail",
+      "colour": [
+       1,
+       0.2,
+       0.1
+      ],
+      "emission": 4
+     },
+     {
+      "id": "stale",
+      "colour": [
+       0.25,
+       0.25,
+       0.25
+      ],
+      "emission": 0.1
+     }
+    ]
+   }
+  ],
+  "labels": [
+   {
+    "id": "sign",
+    "pose": {
+     "position": [
+      0,
+      1.9,
+      0.011
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ]
+    },
+    "size": [
+     1,
+     0.25
+    ],
+    "maxChars": 12
+   }
+  ],
+  "tracks": [
+   {
+    "id": "belt",
+    "speed": 1,
+    "points": [
+     {
+      "position": [
+       -2,
+       0.8,
+       0
+      ],
+      "type": "line"
+     },
+     {
+      "position": [
+       0,
+       0.8,
+       0
+      ],
+      "type": "line"
+     },
+     {
+      "position": [
+       2,
+       0.8,
+       0
+      ],
+      "type": "line"
+     }
+    ],
+    "items": {
+     "assets": [
+      "token"
+     ],
+     "max": 4,
+     "spacing": 0.5,
+     "overflow": "drop-oldest"
+    },
+    "sink": true,
+    "stops": [
+     {
+      "point": 1,
+      "seconds": 1
+     }
+    ]
+   }
+  ],
+  "spawns": [
+   {
+    "id": "in",
+    "pose": {
+     "position": [
+      -2,
+      0.8,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ]
+    },
+    "track": "belt",
+    "maxRate": 2
+   }
+  ],
+  "stacks": [
+   {
+    "id": "waiting",
+    "node": "crate",
+    "cap": 6,
+    "layout": {
+     "grid": [
+      3,
+      2,
+      1
+     ],
+     "spacing": [
+      0.3,
+      0.3,
+      0.3
+     ],
+     "fill": "xyz"
+    }
+   }
+  ],
+  "toggles": [
+   {
+    "id": "alarm",
+    "nodes": [
+     "alarm"
+    ]
+   }
+  ],
+  "effects": [
+   {
+    "id": "cheer",
+    "pose": {
+     "position": [
+      0,
+      2.2,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ]
+    },
+    "kind": "burst",
+    "colour": [
+     0.3,
+     1,
+     0.6
+    ],
+    "durationMs": 1000
+   }
+  ]
+ }
+}

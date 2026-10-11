@@ -40,8 +40,13 @@ inline Mat4 rotation(Vec3 k, double angle) {
 //  spin:  rotate about the line (pivot, axis);
 //  orbit: carry the target origin around that line, orientation kept;
 //  bob:   translate along the axis by amplitude · sin(angle).
+inline Mat4 matrixAt(const Animation &a, double cycle);
 inline Mat4 matrix(const Animation &a, double t, double speed = 1, double instancePhase = 0) {
-    double theta = angle(a, t, speed, instancePhase);
+    return matrixAt(a, cycle(a, t, speed, instancePhase));
+}
+// The same pose at a cycle position (fraction of a turn), for clocks kept elsewhere.
+inline Mat4 matrixAt(const Animation &a, double cycle) {
+    double theta = (cycle - std::floor(cycle)) * 6.283185307179586;
     auto m = Mat4::identity();
     Vec3 offset{};
     if (a.type == Animation::Bob)

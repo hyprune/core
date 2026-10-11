@@ -528,6 +528,9 @@ GltfScene loadGltf(World &into, const std::filesystem::path &root, const std::st
                 loaded.meshes.push_back(std::move(mesh));
         }
     }
+    loaded.materialBase = materialBase;
+    for (size_t i = 0; i < raw->materials_count; i++)
+        loaded.materialNames.push_back(raw->materials[i].name ? raw->materials[i].name : "");
     loaded.parents.assign(raw->nodes_count, -1);
     loaded.origins.resize(raw->nodes_count);
     for (size_t i = 0; i < raw->nodes_count; i++) {
