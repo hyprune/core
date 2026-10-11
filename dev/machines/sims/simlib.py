@@ -4,6 +4,7 @@ Every simulator is a pure function of a time (Unix seconds), a seed and an epoch
 running one on an interval tells a continuous story and any moment can be reproduced:
 
 - MACHINES_SIM_TIME   overrides the current time (Unix seconds, float)
+- MACHINES_SIM_SHIFT  seconds added to the current time (slides the story; demos)
 - MACHINES_SIM_SEED   picks the story (default "hyprune")
 - MACHINES_SIM_EPOCH  start of the story in Unix seconds (default 0); counters count
                       from here and are 0 before it
@@ -36,7 +37,8 @@ def epoch():
 
 def now():
     value = os.environ.get("MACHINES_SIM_TIME")
-    return float(value) if value is not None else time.time()
+    # MACHINES_SIM_SHIFT slides the whole story in time (demos: put an event in a window).
+    return float(value) if value is not None else time.time() + float(os.environ.get("MACHINES_SIM_SHIFT", "0"))
 
 
 def rng(*parts):

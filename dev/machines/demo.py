@@ -23,6 +23,14 @@ def catmull(p0, p1, p2, p3, u):
             for a, b, c, d in zip(p0, p1, p2, p3)]
 
 
+def aim(key):
+    """A key or still with a "target" point gets yaw and pitch looking at it (yaw 0 looks along -Z)."""
+    if 'target' in key:
+        d = [b - a for a, b in zip(key['position'], key['target'])]
+        key = dict(key, yaw=math.atan2(d[0], -d[2]), pitch=math.atan2(d[1], math.hypot(d[0], d[2])))
+    return key
+
+
 def pose_at(keys, t):
     if t <= keys[0]['t']:
         k = keys[0]; return k['position'], k['yaw'], k['pitch']
@@ -46,7 +54,10 @@ def run(client, s, source):
         s.ctl('eval', f'hl.plugin.hyprune.camera({p[0]},{p[1]},{p[2]},{yaw},{pitch})')
     def machines():
         return s.camera()['machines']
-    keys = shots['keys']
+    keys = [aim(k) for k in shots.get('keys', [])]
+    shots['stills'] = [aim(k) for k in shots.get('stills', [])]
+    if not keys:
+        keys = [dict(shots['stills'][0], t=0)]
     camera(*pose_at(keys, 0))
     time.sleep(shots.get('warmup', 8))  # uploads, shader warm-up, notices fade, sims fill the machines
     if os.environ.get('HYPRUNE_MACHINES_STILLS'):

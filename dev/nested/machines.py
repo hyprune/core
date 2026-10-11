@@ -63,8 +63,10 @@ def prepare(installed):
 def helper(socketpath, only=None):
     """Starts the source helper with its own token, every simulator or only some."""
     config = json.loads((s.ROOT / 'dev/machines/sources.example.json').read_text())
-    config['sources'] = [dict(src, argv=[str(s.ROOT / 'dev/machines' / src['argv'][0])]) for src in config['sources']
-                         if src.get('kind') == 'command' and (only is None or src['id'] in only)]
+    # HYPRUNE_MACHINES_SIM_ENV: {"<source id>": {"MACHINES_SIM_SHIFT": "..."}} per simulator (demos).
+    extra = json.loads(os.environ.get('HYPRUNE_MACHINES_SIM_ENV', '{}'))
+    config['sources'] = [dict(src, argv=[str(s.ROOT / 'dev/machines' / src['argv'][0])], env={**src.get('env', {}), **extra.get(src['id'], {})})
+                         for src in config['sources'] if src.get('kind') == 'command' and (only is None or src['id'] in only)]
     (s.STATE / 'sources.json').write_text(json.dumps(config, indent=1))
     token = s.STATE / 'helper.token'
     token.write_text(HELPER_TOKEN + '\n'); token.chmod(0o600)

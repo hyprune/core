@@ -194,6 +194,7 @@ second tells a continuous story and any moment can be reproduced.
 | Variable | Meaning |
 | --- | --- |
 | `MACHINES_SIM_TIME` | Time to simulate, Unix seconds (default: now). |
+| `MACHINES_SIM_SHIFT` | Seconds added to the current time: slides the whole story (for demos that need an event in a window). |
 | `MACHINES_SIM_SEED` | Story seed (default `hyprune`). |
 | `MACHINES_SIM_EPOCH` | Start of the story, Unix seconds (default 0). Counters count from it and are 0 before it. |
 
