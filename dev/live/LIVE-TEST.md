@@ -242,3 +242,21 @@ has no DRM or hardware cursor, so check on the real session:
   is hidden while in E and F and comes back on exit.
 - [ ] Super+click a window far away: the reticle turns the warning colour with "Too far:
   N m" and a notice says so; same for E beyond the use distance.
+
+## Spawns, home arrivals, hidden-home windows, world switches (2026-10-11)
+
+Workspace switches touching world workspaces now finish Hyprland's slide/fade from the
+workspace event (deferred if a render pass is active). Hidden home windows keep receiving
+frames. Nested can't show hardware cursor or real-output behaviour, so check on the real
+session:
+
+- [ ] Super+Enter in the Sun Court plaza and in a hall: the terminal appears ahead of you,
+  over floor you can reach, never in mid-air or off a terrace edge.
+- [ ] Launch Chrome normally (into your running browser, no flags) and move it to an area
+  home: it paints live on that wall, with one output and with two outputs.
+- [ ] Move two or three windows onto one home workspace: the first takes the wall, the next
+  ones take the area's tool anchors in order. Focus into the wall and back: nothing swaps,
+  no "Relocated" notice.
+- [ ] Warp between areas, Super+1..9 between homes, focus into a wall and back, enter and
+  leave the world: no slide or fade, and no cursor flicker or crash. A normal 1 -> 2 switch
+  on your desktop still animates with your own settings.
