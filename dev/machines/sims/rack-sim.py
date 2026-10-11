@@ -66,12 +66,12 @@ def simulate(t):
         if i in failed or i == off:
             load, health = 0.0, "fail" if i in failed else "off"
         else:
-            load = simlib.clamp(base_load(t, s, i) + share, 0.02, 1.0)
+            load = round(simlib.clamp(base_load(t, s, i) + share, 0.02, 1.0), 3)
             health = "warn" if load > WARN_LOAD else "ok"
         values[f"health.{i + 1}"] = health
         loads.append(load)
     for i, load in enumerate(loads):
-        values[f"load.{i + 1}"] = round(load, 3)
+        values[f"load.{i + 1}"] = load
     values["load"] = round(sum(loads) / UNITS, 3)
     values["down"] = len(failed)
     values["name"] = os.environ.get("MACHINES_SIM_NAME", "rack-a")

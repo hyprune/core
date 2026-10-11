@@ -115,7 +115,7 @@ def simulate(t):
     values["jobsSucceeded"] = prefix["succeeded"] + ok
     values["jobsFailed"] = prefix["failed"] + len(finished) - ok
     values["queued"] = sum(1 for j in started if x < j.start[0])
-    values["active"] = sum(1 for j in started if x < j.end)
+    values["active"] = sum(1 for j in started if x < j.finish)  # = started - succeeded - failed
     if started:
         values["progress"] = round(job_progress(started[-1], x), 3)
     elif block > 0:
