@@ -45,7 +45,7 @@ class Engine {
     Paths paths_;
     double scale_;
     int64_t questsDirtyAt_ = -1, lastExpire_ = INT64_MIN / 2, lastBoot_ = 0, lastMono_ = 0;
-    bool sessionDirty_ = false;
+    bool sessionDirty_ = false, syncDirty_ = true; // sync is rebuilt only after a change
     FocusSession::Facts facts_;
     std::set<std::string> inside_, resolved_;
     Json markers_ = Json::array(), eye_ = nullptr, lastSync_ = nullptr, breakMarker_ = nullptr;

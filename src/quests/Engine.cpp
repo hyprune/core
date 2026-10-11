@@ -110,6 +110,7 @@ void Engine::questEvents(const std::vector<Json> &list) {
 }
 void Engine::questsChanged(int64_t now) {
     changed = true;
+    syncDirty_ = true;
     if (questsDirtyAt_ < 0)
         questsDirtyAt_ = now;
 }
@@ -162,6 +163,7 @@ void Engine::focusOutcomes(const std::vector<FocusSession::Outcome> &outcomes, i
         events.push_back({"focus.phase", o.phase});
     }
     sessionDirty_ = true;
+    syncDirty_ = true;
     changed = true;
 }
 Json Engine::history(int days, std::time_t wall) const {
@@ -209,6 +211,7 @@ Json Engine::call(const std::string &method, const Json &raw, int64_t now, std::
             throw Error(-32603, std::string("guidance not saved: ") + e.what());
         }
         changed = true;
+        syncDirty_ = true;
         return guidance.snapshot();
     }
     if (method == "quests.list")
@@ -404,6 +407,9 @@ Json Engine::decorate(Json state, int64_t now) const {
     return state;
 }
 std::optional<Json> Engine::sync() {
+    if (!syncDirty_)
+        return std::nullopt;
+    syncDirty_ = false;
     auto markers = book.markers();
     if (focus.state != "idle" && focus.target.is_object() && focus.target.contains("workspaceId")) {
         auto ws = focus.target["workspaceId"].get<int64_t>();
