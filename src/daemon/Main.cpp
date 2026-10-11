@@ -66,7 +66,8 @@ int main() {
             if (::send(fd, bytes.data(), bytes.size(), MSG_NOSIGNAL) != (ssize_t)bytes.size())
                 throw std::runtime_error("bridge write failed");
         };
-        hyprune::offload::Supervisor renderer(HYPRUNE_RENDERER_PATH, [&](Json j, int channel) {
+        const char *rendererPath = getenv("HYPRUNE_RENDERER");
+        hyprune::offload::Supervisor renderer(rendererPath && rendererPath[0] == '/' ? rendererPath : HYPRUNE_RENDERER_PATH, [&](Json j, int channel) {
             j["epoch"] = epoch;
             if (!hyprune::offload::sendPacket(fd, j, channel >= 0 ? std::vector<int>{channel} : std::vector<int>{}))
                 throw std::runtime_error("renderer bridge backpressure");

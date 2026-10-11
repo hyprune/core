@@ -5033,8 +5033,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     const char *sig = getenv("HYPRLAND_INSTANCE_SIGNATURE");
     if (!dir || !sig)
         throw std::runtime_error("Hyprune: missing session environment");
+    // Relocated builds (release archives) name their helper at run time.
+    const char *daemon = getenv("HYPRUNE_DAEMON");
     runtime->ipc = std::make_unique<hyprune::ipc::Bridge>(
-        HYPRUNE_DAEMON_PATH, [](auto &method, auto &params) { return runtime->method(method, params); });
+        daemon && daemon[0] == '/' ? daemon : HYPRUNE_DAEMON_PATH,
+        [](auto &method, auto &params) { return runtime->method(method, params); });
     if (const char *file = getenv("HYPRUNE_WORKSPACE_LOCATIONS")) {
         std::ifstream input(file);
         input >> runtime->locations;

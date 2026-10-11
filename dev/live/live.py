@@ -3,7 +3,8 @@
 import argparse, re, contextlib, fcntl, json, os, pathlib, secrets, shutil, signal, socket, struct, subprocess, sys, time
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HERE = ROOT / 'dev/live'
-BUILD = ROOT / 'build/live'
+# A release archive ships prebuilt live binaries; a checkout builds them with preflight.
+BUILD = pathlib.Path(os.environ.get('HYPRUNE_LIVE_BUILD_DIR', ROOT / 'build/live'))
 SHELL = pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR', ROOT.parent / 'shell'))
 DEFAULT_WORLD_ID = 'com.hyprune.lumen-reach'
 GRANTS = ['state.read', 'world.control', 'surface.control', 'movement.control', 'shell.control', 'runtime.control', 'input.control']
@@ -300,7 +301,8 @@ def up(args, path):
     atomic(path, state)
     settings = {'pid':s['pid'], 'state':str(path), 'daemon':str(BUILD/'hypruned'), 'environment':{
         'HYPRUNE_CAPTURE_DIR':str(path.parent.parent/'captures'), 'HYPRUNE_WORLD_DIR':str(installed), 'HYPRUNE_INPUT_FILE':str(runroot/'input.json'), 'HYPRUNE_EDITOR_FILE':str(runroot/'editor.json'),
-        'HYPRUNE_LAYOUT_FILE':str(runroot/'layout.json'), 'HYPRUNE_LIVE_ROOT':str(root), 'HYPRUNE_WORKSPACE_LOCATIONS':None}}
+        'HYPRUNE_LAYOUT_FILE':str(runroot/'layout.json'), 'HYPRUNE_LIVE_ROOT':str(root), 'HYPRUNE_WORKSPACE_LOCATIONS':None,
+        'HYPRUNE_DAEMON':str(HERE/'daemon'), 'HYPRUNE_RENDERER':str(BUILD/'hyprune-renderer')}}
     atomic(root/'bootstrap.json', settings)
     try:
         for candidate in candidates:
