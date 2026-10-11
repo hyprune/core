@@ -1,0 +1,307 @@
+# Machines prototype: source helper and simulators
+
+`source-helper.py` publishes data for live objects ("machines"): it runs commands, polls
+HTTP(S) endpoints and keeps timers, and publishes each as one data source through the
+existing `data.publish` IPC method. `sims/` holds five simulators that stand in for real
+systems (a CI pipeline, a queue, a server rack, a deployment train and a build server) so
+machines can be developed and demonstrated without any external service.
+
+## Why it lives here
+
+This is a **prototype** for the source helper described in the RFC-0013 (live objects)
+draft. It runs out of process and uses only the `data.publish` contract that core already
+has (IPC 0.2+): no new methods, fields or limits. It sits in `dev/` beside the nested
+harness that drives it because it is a development tool, not a shipped component. The
+shipped helper is expected to become a bundled, supervised extension as the draft
+describes (privilege split, user-confirmed commands, secret storage, a Sources page);
+this script exists to exercise the data model and the limits before that is built.
+
+Everything is Python 3 standard library.
+
+## Running
+
+```sh
+# Fetch every source once and print what would be published (no socket).
+dev/machines/source-helper.py --config dev/machines/sources.example.json --once
+
+# Run the loop, printing publications instead of sending them.
+dev/machines/source-helper.py --config dev/machines/sources.example.json --dry-run
+
+# Publish to a running core.
+dev/machines/source-helper.py --config dev/machines/sources.example.json \
+    --socket "$HYPRUNE_SOCKET" --token-file /path/to/token -v
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--config FILE` | Sources configuration (below). Relative paths in it resolve against its directory. |
+| `--socket PATH` | Core's IPC socket, `$XDG_RUNTIME_DIR/hyprune/<instance>/control.sock`. Default `$HYPRUNE_SOCKET`. There is deliberately no other default, so the helper never attaches to a session by accident. |
+| `--token-file FILE` | File holding the launch token. Re-read on every connection attempt. |
+| `--token-fd N` | Read the token once from an inherited descriptor. |
+| (neither) | `$HYPRUNE_SOURCES_TOKEN` (or `$HYPRUNE_MACHINES_TOKEN`). |
+| `--protocol V` | Protocol to offer in `session.hello` (default: config `protocol`, else `0.2`, the first with `data.publish`). |
+| `--dev` | Same as `"devFastIntervals": true` (below). |
+| `--once` | Fetch each source once, print `{"sourceId", "values"}` lines, exit (1 if any failed). |
+| `--dry-run` | Run the loop; print each publication and the removals at exit. |
+| `-v`, `--verbose` | Log one line per publication. Logs go to stderr. |
+
+The helper says hello as `com.hyprune.sources` with the single capability `data.publish`.
+Core grants a capability only through a launch token issued for that client ID, so the
+session that starts core must carry a launch grant such as
+`{"token": "<64 hex>", "client": "com.hyprune.sources", "capabilities": ["data.publish"]}`
+in its launch manifest. Initial launch tokens are **one-use and expire 30 s after core
+starts**: start the helper promptly, and to reconnect after a dropped connection write a
+fresh token into the token file. Without the grant the helper logs
+`no data.publish grant` and retries with back-off.
+
+### Against a nested session
+
+The nested harness (`dev/nested`) records the nested instance's signature in its state
+directory (`session.json`, field `signature`). With a launch grant for
+`com.hyprune.sources` in the nested session's manifest:
+
+```sh
+sig=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["signature"])' dev/nested/.state/session.json)
+dev/machines/source-helper.py --config dev/machines/sources.example.json \
+    --socket "$XDG_RUNTIME_DIR/hyprune/$sig/control.sock" --token-file "$TOKEN_FILE" -v
+```
+
+On `SIGTERM` or `SIGINT` the helper kills running commands, calls `data.remove` for each
+source it published and exits 0. Core also drops a connection's sources when it closes.
+
+## Configuration
+
+```json
+{
+  "client": {"id": "com.hyprune.sources", "name": "Source helper (prototype)"},
+  "protocol": "0.2",
+  "devFastIntervals": false,
+  "sources": [
+    {"id": "ci", "kind": "command", "argv": ["sims/ci-sim.py"], "intervalS": 5, "timeoutS": 2},
+    {"id": "ci-main", "kind": "http", "url": "https://ci.example.com/api/summary",
+     "headers": {"Authorization": {"prefix": "Bearer ", "secret": "ci-token"}},
+     "intervalS": 30, "timeoutS": 10,
+     "fields": [{"name": "status", "pointer": "/pipelines/0/status", "type": "string"},
+                {"name": "queued", "countWhere": {"array": "/jobs", "pointer": "/status", "equals": "queued"}, "type": "int"},
+                {"name": "jobsStarted", "pointer": "/pipelines/0/jobs_started", "type": "counter"}]},
+    {"id": "minutes", "kind": "timer", "timer": "pulse", "everyS": 60}
+  ]
+}
+```
+
+Each source publishes source ID `<client id>.<id>` (`id` is a slug, `[a-z][a-z0-9-]*`).
+
+| Key | Kinds | Meaning |
+| --- | --- | --- |
+| `id` | all | Slug; unique. |
+| `kind` | all | `command`, `http` or `timer`. |
+| `enabled` | all | `false` skips the source. |
+| `intervalS` | all | Seconds between fetches. Command: ≥ 5, default 60. HTTP: ≥ 10 (≥ 2 for a loopback host), default 60, ±10% jitter. Timer: ≥ 1, default 1. |
+| `timeoutS` | command, http | Command 1–60, HTTP 1–30; default 10 (or the interval if shorter). |
+| `ttlMs` | all | `data.publish` TTL, 100–60000; default 10 × the interval, at most 60000. |
+| `fields` | command (`json`), http | Picked values (below). Without `fields`, every top-level scalar is published. |
+| `argv` | command | Argument vector, run without a shell (use `["sh", "-c", "..."]` explicitly if needed). A relative program path with a `/` resolves against `cwd`. |
+| `cwd` | command | Working directory, relative to the config file's directory (default: that directory). |
+| `env` | command | Extra environment variables (strings). |
+| `output` | command | `json` (default), `number` (first line), `text` (first line), `lines` (count of non-empty lines). |
+| `key` | command (non-`json`), timer | Value name for single-value outputs (default `value`; timers `pulse`/`remaining`). |
+| `url` | http | `https://`, or `http://` for a loopback host or a source marked `"local": true`. |
+| `local` | http | Allows plain HTTP and private addresses. A public host name that resolves to a loopback or private address is refused otherwise. |
+| `method`, `body` | http | `GET` (default) or `POST` with a fixed JSON `body`. |
+| `headers` | http | Strings, or `{"secret": "name", "prefix": "Bearer "}`. |
+| `timer` | timer | `pulse`: a counter that grows every `everyS` seconds (counted from `fromS`, default the Unix epoch). `countdown`: whole seconds left until `untilS` (Unix seconds) / `until` (ISO 8601), or of a `durationS` started when the helper starts. |
+
+`devFastIntervals` (or `--dev`) is a **prototype-only override**: it lowers the command and
+HTTP interval floors to 1 s so the simulators can drive smooth demos. Never use it for real
+endpoints or expensive commands; the shipped helper has no such switch.
+
+Secrets in this prototype come from environment variables:
+`{"secret": "ci-token"}` reads `HYPRUNE_SOURCES_SECRET_CI_TOKEN`. They are sent only in the
+request header and are removed from error messages.
+
+### Fields
+
+```json
+{"name": "queued", "type": "int", "countWhere": {"array": "/jobs", "pointer": "/status", "equals": "queued"}}
+```
+
+Each field has a `name` (not starting with `_`, ≤ 128 bytes), an optional `type`, an
+optional scalar `default` (used when the selection does not resolve), and exactly one
+selection:
+
+| Selection | Value |
+| --- | --- |
+| `"pointer": "/a/0/b"` | The value at an [RFC 6901](https://www.rfc-editor.org/rfc/rfc6901) JSON Pointer (`~1` = `/`, `~0` = `~`; `""` is the whole document). It must be a scalar. |
+| `"length": "/jobs"` | Length of the array at the pointer. |
+| `"countWhere": {"array", "pointer", "equals"}` | Number of array elements whose sub-pointer equals the value. |
+| `"first": {"array", "pointer"?, "equals"?, "select"?}` | The first element passing the test (or the first element), then the `select` sub-pointer. |
+
+| Type | Accepts | Publishes |
+| --- | --- | --- |
+| (none) | any scalar | as is |
+| `string` | any scalar | text, cut to 256 bytes |
+| `number` | number or numeric string | number |
+| `int` | number or numeric string | rounded integer |
+| `bool` | bool, `"true"`/`"false"`, number | bool |
+| `counter` | non-negative integer (or integral string) | integer; a decrease is logged (core treats it as a reset and fires nothing) |
+
+A field that fails (missing pointer, non-scalar target, type mismatch) keeps its last good
+value; the source reports `_status: "error"` with the field errors in `_error`.
+
+## Script contract (command sources)
+
+- Run without a shell in a new process group, stdin closed, working directory `cwd`.
+- `output: "json"`: stdout is **one JSON object**, or **JSON lines** (one object per line,
+  merged in order, later keys win). Without `fields`, top-level scalars (bool, finite
+  number, string) are published; other values are dropped with a warning. Strings are cut
+  to 256 bytes; keys starting with `_` are reserved and dropped; at most 29 keys are kept
+  (32 minus the metadata keys).
+- stdout over **64 KiB** is an error (not truncated). The last **4 KiB** of stderr is kept
+  for the log and the error message.
+- A run longer than `timeoutS` is an error: the whole process group is killed (`SIGKILL`).
+- A non-zero exit is an error; `_exitCode` carries the code (negative: killed by a signal).
+
+## Errors, back-off and metadata
+
+Every publication carries reserved keys: `_status` (`ok` or `error`), `_error` on an error
+(≤ 256 characters, without URL query strings, fragments or secret values), and
+`_exitCode` (command) or `_httpStatus` (HTTP). On an error the last good values stay in the
+publication, so a machine dims rather than resets.
+
+A failed fetch retries after interval × 2ⁿ (±20% jitter, n = consecutive failures), at most
+10 minutes; a success resets it. HTTP `429`/`503` with `Retry-After` waits at least that
+long (at most an hour). HTTP bodies over 1 MiB are errors; redirects are followed only
+within the same origin; no cookies are kept. At most four fetches run at once and a source
+never overlaps itself.
+
+## Publishing
+
+- A source is published when its values (including metadata) change, and otherwise as a
+  keep-alive every `ttlMs / 2`, so data does not expire while the helper runs.
+- At most one publication per source per 100 ms (core's 10 Hz limit). A `-32008` rate
+  refusal is retried after 200 ms; other `-32008` refusals (source or size limits) after 5 s.
+- `sequence` is wall-clock milliseconds, bumped by one when equal or behind, so it is
+  strictly increasing per source and a restarted helper is never stale.
+- A lost connection reconnects with back-off (1 s doubling to 60 s) and republishes every
+  source.
+
+## Simulators
+
+Each simulator prints **one JSON object** of scalars and exits. They are stateless and
+deterministic: the output is a pure function of the time and a seed, so running one every
+second tells a continuous story and any moment can be reproduced.
+
+| Variable | Meaning |
+| --- | --- |
+| `MACHINES_SIM_TIME` | Time to simulate, Unix seconds (default: now). |
+| `MACHINES_SIM_SEED` | Story seed (default `hyprune`). |
+| `MACHINES_SIM_EPOCH` | Start of the story, Unix seconds (default 0). Counters count from it and are 0 before it. |
+
+```sh
+dev/machines/sims/ci-sim.py                          # now
+dev/machines/sims/ci-sim.py --at 1800000000          # a given moment
+dev/machines/sims/ci-sim.py --timeline 1800000000 1800000600 1 --with-time   # JSON lines
+```
+
+`--timeline FROM TO STEP` helps pick demo seeds, for example a seed where CI fails inside a
+given minute:
+
+```sh
+for seed in a b c d e; do
+  MACHINES_SIM_SEED=$seed dev/machines/sims/ci-sim.py --timeline 1800000000 1800000060 1 |
+    grep -q '"status":"failed"' && echo "$seed"
+done
+```
+
+Simulators with counters (ci, deploy, build) play fixed blocks of time from seeded
+templates that start and end idle. A counter is closed-form (whole template groups plus the
+blocks before it), so it never decreases, across any boundary, and each run takes a few
+milliseconds. Display numbers (job numbers, versions) wrap after long periods.
+
+Keys are camelCase; indexed keys are `name.N`. The vocabulary is what a real system would
+report; bindings map it onto machine inputs.
+
+### `ci-sim.py` → `com.hyprune.sources.ci`
+
+A four-stage pipeline (build 4–7 s, test 5–9 s, package 2–4 s, deploy 3–6 s). Jobs arrive
+every 5–9 s in busy spells (occasional quick pushes build a queue), one job per stage at a
+time; a job that finished a stage waits there while the next stage is busy. About 10% of
+jobs fail at some stage (shown for 3 s); a passed job shows `success` on the deploy stage
+for 2 s.
+
+| Key | Values |
+| --- | --- |
+| `status` | Pipeline overall: `failed` while a stage shows a failure, `running` while a stage runs, `pending` when jobs only wait, `success` while a pass shows, otherwise the last outcome. |
+| `stage.1` … `stage.4` | `pending` (empty), `running`, `success` (done; waiting or showing a pass), `failed` |
+| `jobsStarted`, `jobsSucceeded`, `jobsFailed` | Counters |
+| `queued` | Jobs waiting to enter the build stage, 0–12 |
+| `active` | Jobs started and not finished (= started − succeeded − failed) |
+| `progress` | Newest job, 0–1 |
+| `lastJob` | Newest job, e.g. `main #1432` |
+| `lastResult` | `success`, `failed` or `none` |
+
+### `queue-sim.py` → `com.hyprune.sources.queue`
+
+Arrivals follow slow waves (1.5–5.5 items/s); depth rides waves up to about 55. Now and
+then the consumer stalls and a backlog builds to 300–480, then the consumer catches up.
+
+| Key | Values |
+| --- | --- |
+| `depth` | Items waiting, 0–500 |
+| `oldestAgeS` | Age of the oldest item (FIFO), seconds |
+| `rateIn`, `rateOut` | Items per second |
+| `level` | `ok`, `warn` (oldest > 30 s), `fail` (oldest > 90 s) |
+
+### `rack-sim.py` → `com.hyprune.sources.rack`
+
+Eight units with phase-shifted load waves and noise. Every few minutes a unit fails for
+20–60 s (at most two at once) and the others pick up its load; now and then a unit is off
+for 2–5 minutes of maintenance.
+
+| Key | Values |
+| --- | --- |
+| `health.1` … `health.8` | `ok`, `warn` (load > 0.85), `fail` (down), `off` (maintenance) |
+| `load.1` … `load.8` | 0–1 (0 when `fail` or `off`) |
+| `load` | Mean of the eight loads |
+| `down` | Units in `fail` |
+| `name` | `rack-a` (`MACHINES_SIM_NAME` overrides) |
+
+### `deploy-sim.py` → `com.hyprune.sources.deploy`
+
+A cycle every 60–90 s: `queued` 5–10 s, `building`, `rolling`, `live` 15–25 s. About 15% of
+cycles fail while rolling: `failed` holds 8 s, then the same version waits `queued` for
+the next cycle.
+
+| Key | Values |
+| --- | --- |
+| `phase` | `queued`, `building`, `rolling`, `live`, `failed` |
+| `progress` | 0 while queued, 0–0.4 building, 0.4–1 rolling, 1 live; held where it stopped while failed |
+| `version` | Version in flight, or the live one, e.g. `v2.14.3` |
+| `environment` | `production` (`MACHINES_SIM_ENVIRONMENT` overrides) |
+| `deploys` | Counter of successful deploys (grows as `live` starts) |
+
+### `build-sim.py` → `com.hyprune.sources.build`
+
+One build at a time: `idle` 6–25 s, `running` 8–20 s, then `success` or `failed` (about 1 in
+5) for 4–8 s. Now and then a burst of 3–6 quick builds (3–6 s each) passes in a row.
+
+| Key | Values |
+| --- | --- |
+| `status` | `idle`, `running`, `success`, `failed` |
+| `progress` | 0–1 while running, 1 while a result shows, 0 when idle |
+| `successes`, `failures` | Counters |
+| `streak` | Consecutive successes up to now |
+| `lastJob` | Current or latest build, e.g. `web #4821` |
+
+## Tests
+
+```sh
+python3 -m unittest dev/machines/test_machines.py
+```
+
+They cover output parsing and caps, timeouts (process group killed), back-off, JSON
+pointers and fields, sequencing, publish-on-change and keep-alive, HTTP behaviour against a
+local server, 30-minute timelines of every simulator (exact keys, value domains, monotonic
+counters, failures, outages, bursts), and the helper against a fake core socket (hello,
+`data.publish` parameters, a rate refusal, reconnecting with a fresh token, `data.remove`
+on `SIGTERM`).
