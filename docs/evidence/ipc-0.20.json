@@ -1,0 +1,65 @@
+{
+  "nestedOnly": true,
+  "checks": [
+    {
+      "name": "IPC 0.20 negotiated with the pocket methods",
+      "evidence": "0.20"
+    },
+    {
+      "name": "the window is placed and drawn before pocketing",
+      "evidence": "surface-1"
+    },
+    {
+      "name": "surface.pocket returns a revision",
+      "evidence": {
+        "revision": 11
+      }
+    },
+    {
+      "name": "a pocketed window is listed in editor.unplaced and not drawn",
+      "evidence": [
+        "surface-1"
+      ]
+    },
+    {
+      "name": "pocketing again changes nothing",
+      "evidence": {
+        "revision": 13
+      }
+    },
+    {
+      "name": "surface.unpocket places it in front of the player",
+      "evidence": {
+        "placed": true,
+        "revision": 14
+      }
+    },
+    {
+      "name": "an unpocketed window is drawn and no longer listed",
+      "evidence": []
+    },
+    {
+      "name": "with no free spot it stays pocketed, selected for the Placement tool",
+      "evidence": {
+        "result": {
+          "placed": false,
+          "revision": 22
+        },
+        "tool": 5,
+        "selected": "surface-1"
+      }
+    },
+    {
+      "name": "unpocketing a window that is not pocketed answers -32004",
+      "evidence": null
+    },
+    {
+      "name": "an unknown window answers -32003",
+      "evidence": null
+    },
+    {
+      "name": "bad params answer -32602",
+      "evidence": null
+    }
+  ]
+}
