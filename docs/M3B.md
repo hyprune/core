@@ -1,6 +1,6 @@
 # M3B: keymap v2
 
-The owner's `../NOTES.md` is the spec and is unchanged. Defaults are compiled
+Defaults are compiled
 from `config/input.default.json`; docs generates its Keymap page from those same
 bytes (`python3 ../docs/scripts/generate-keymap.py --check`). HJKL is listed first.
 
@@ -34,7 +34,7 @@ carry/resize and gizmo edits, and display a gold lock badge. Paths, transforms a
 locks persist in `$XDG_STATE_HOME/hyprune/editor.json` by world/area; no authored
 package is rewritten. Paths are limited to 128 paths, 256 points/path and 2048
 points total. Editor state is bounded; debug capture allows 4 MiB. Z transport
-summon and tool 5 remain explicitly reserved, as requested.
+summon and tool 5 remain explicitly reserved.
 
 Settings is a real Director tab: mode selector, all actions, three capture boxes,
 clear, conflict/stealing feedback, long-hold slider and vignette checkbox. Shell
@@ -101,7 +101,7 @@ successive scale gestures verify stable client configure acknowledgements.
 | Native collision descriptions for keycode/multi-key binds | Partial | actual interception works; description matching requires manual review as described above |
 | Window place/lock, path segments and position gizmo | Done | arbitrary-wall mount, locked carry refusal, client resize, object transform/snap, six persisted path types |
 | Render-pass safety / cursor transitions | Nested verified; hardware pending | render-depth guards, GL restore, exhaustive checklist below; software cursor cannot prove hardware behavior |
-| Generated docs and 45–75 s nested demo | Done | `/keymap/`, default-file SHA/drift check, gallery MP4/JSON |
+| Generated docs and 45–75 s nested demo | Done | `/keymap/`, default-file SHA/drift check, recorded MP4/JSON |
 
 Core CTest passes **8/8**, with assertions enabled even in RelWithDebInfo; the
 bridge suite starts a helper from a parent that blocks SIGTERM and verifies the
@@ -123,8 +123,8 @@ The inspected **59.9 s, 1920×1080, 30 fps** demo is at
 `hyprune-core-m3b.json`. It includes E window/workspace in place, F window/workspace
 fullscreen, Super+Tab exits, Q scope, real Settings capture with a native conflict,
 move/rotate/scale handles, window lock and six path types, Lumen Reach and Switchyard.
-Transport Z and slot 5 remain the requested stubs. Hardware cursor validation is
-pending the owner's supervised test below; the real session was never touched.
+Transport Z and slot 5 remain reserved stubs. Hardware cursor validation is
+pending the supervised test below; no live session was touched.
 
 To use Settings, start the shell with exact `--protocol 0.6` (or
 `HYPRUNE_PROTOCOL=0.6`) and grant `input.control` through the trusted launcher.
@@ -135,7 +135,7 @@ independent input file; no compositor reload is needed for edits.
 
 All cursor/focus/workspace changes run in doLater with a render-depth guard.
 Visibility changes are coalesced, no custom native cursor image is installed,
-and GL state is saved/restored. Test each transition under owner supervision;
+and GL state is saved/restored. Test each transition in a supervised session;
 confirm no reentrant render / CMonitor::useFP16 crash, stuck cursor or leaked input:
 
 - Desktop → active world: save prior visibility; hide native cursor; draw reticle.
@@ -158,8 +158,8 @@ confirm no reentrant render / CMonitor::useFP16 crash, stuck cursor or leaked in
 - Live tooling panic/down → desktop: `live_stop` queues exit and a visibility reset after the frame, changing no cursor shape; unload waits for inactive/visible state. A second down performs no cursor transition. See [LIVE-TEST.md](../dev/live/LIVE-TEST.md).
 - Live binding reload during hold/grab and while Director is open: balanced releases; no cursor change inside render; settings-only reload preserves active hold.
 
-Video is encoded and inspected outside gallery, then moved as a completed MP4/JSON
-pair into gallery/videos. The gallery autocommit watcher is never signalled.
+Video is encoded and inspected in `/tmp`, then published for review as a completed
+MP4/JSON pair.
 
 ## Supervised live follow-up (2026-10-08)
 
@@ -205,7 +205,7 @@ workspace.activate. The IPC 0.6 apps inventory includes mapped native toplevels
 on all outputs, up to 128, independently of the 16 world texture leases. The
 schema 0.6 amendment and all validators are updated together; 0.5 stays at 16.
 
-Both owner's Quickshell crash reports (`kcex3galmt`, `kcexelalmt`) and coredumpctl
+Two Quickshell crash reports and their coredumpctl
 backtraces identify Qt 6.11 StackLayout size-hint traversal, including
 qmlAttachedPropertiesObject/QQuickLayout/QQuickStackLayout on page change.
 Director pages now have explicit anchored geometry. The trusted launcher keeps
@@ -216,18 +216,18 @@ argv or files. A nonzero top-level QML exit is relaunched through that bridge.
 
 `hypruned.log` formerly recorded errors only. It now records session startup,
 IPC readiness, shutdown and bridge errors in the existing live log; secrets and
-raw input are not logged. Unspecified graphical glitches remain pending owner
-observations; this follow-up makes no claim to have diagnosed those.
+raw input are not logged. Unspecified graphical glitches reported in live
+testing are not diagnosed by this follow-up.
 
 ### Supervised live test checklist additions
 
 - [ ] World control → Back: real cursor becomes visible; virtual cursor disappears;
-      camera stops moving. Click the owner's bar/launcher, type into its search,
+      camera stops moving. Click the desktop bar/launcher, type into its search,
       open its popup and scroll it.
 - [ ] Move from a layer over the world: hidden desktop windows get no hover,
       click or scroll. Move to another output: normal desktop pointer still works.
 - [ ] Layer cursor → Back and → Super+Tab: cursor hide and return/warp are deferred;
-      movement/reticle resume; the owner's colliding overview bind is stolen.
+      movement/reticle resume; a colliding native overview bind is stolen.
 - [ ] Layer cursor → Super+Tab → TAB-held Director → Esc: deferred cursor/focus
       transitions remain balanced and restore world control.
 - [ ] Layer cursor → toggle out, helper loss or unload: saved cursor visibility
@@ -282,7 +282,7 @@ its world timing sample refers to the last world frame there.
 U stages a core-owned RGBA8 tonemap of the last completed world resolve FBO
 **after** the compositor frame, restores GL state including pack/unpack/PBO
 state, and reads that own FBO. It never asks Hyprland to render or snapshot.
-PNG encoding and atomic private file persistence run in a worker; the owner loop
+PNG encoding and atomic private file persistence run in a worker; the main event loop
 posts the success/error notice. The bootstrap pins the state directory at load:
 `$XDG_STATE_HOME/hyprune/captures/`, or `~/.local/state/hyprune/captures/`.
 A JSON/PNG pair has the same timestamp stem. JSON records the frame camera,
@@ -328,8 +328,8 @@ also shown as its own substage. IPC and renderer CPU timings are separate. GPU
 scene/windows/resolve+bloom/output queries and deferred capture/composition queries
 never wait for unfinished results. Texture capture uses native imported leases,
 not CPU screenshot uploads. U's one-shot readback and worker PNG persistence are
-reported separately in its JSON. GPU timings share the machine with the owner's
-still-active session and can include scheduling contention; they are not an
+reported separately in its JSON. GPU timings share the machine with an active
+desktop session and can include scheduling contention; they are not an
 exclusive-GPU benchmark. Bloom was already half resolution; disabled/zero-strength
 bloom now clears its target and skips all three extraction/blur draws.
 
@@ -371,7 +371,7 @@ Native texture refresh is part of CPU update. GPU capture upload was 0 ms in
 this world because surfaces used imported native leases. The previous 16.7 ms
 "frame" value measured CPU submissions even while GPU work queued; the bounded
 run measured an 83.2 ms median interval between new world renders and at
-most two frames in flight. The owner session shared the GPU during nested tests,
+most two frames in flight. A desktop session shared the GPU during nested tests,
 so these numbers cannot establish exclusive 4K throughput. The scene pass is the
 largest measured cost. IPC publication work fell roughly 75% on the sampled
 mean; per-frame CPU update and render work remained below 1 ms combined.
@@ -398,8 +398,8 @@ Changing quality at runtime reallocates same-sized targets when sample tier
 changes; high remains explicitly selectable. Nested cleanup now closes native
 clients before destroying Hyprland's monitor/workspace controllers: 0.56's
 shutdown-only fullscreen cleanup otherwise produced SIGSEGV coredumps, unrelated
-to a render-pass crash. Those backtraces were inspected from nested PID 1677404;
-no debugger or mutation targeted the owner's session.
+to a render-pass crash. Those backtraces were inspected from the nested compositor;
+no debugger or mutation targeted a live session.
 
 ## Live round 3: direct clicks, carry, and logical client size
 
@@ -418,7 +418,7 @@ metres per current logical client unit on both axes. A configure acknowledgement
 replaces stale pending dimensions; buffer/output scale is not a geometry factor.
 Authored tool mounts retain their explicit fit-to-mount sizing contract.
 
-The owner's three round-3 captures were inspected read-only. The first shows
+Three round-3 live captures were inspected read-only. The first shows
 surface-15 at logical 576×670 but a 2.35262×1.34842 m quad, and surface-17 at
 573×548 with a 2.39409×1.09586 m quad: stale resize width was stretching content.
 The second confirms the Intel PTL device and GPU-bound frame times. The third's
@@ -428,7 +428,7 @@ floating amber strip is `Entry light` at Blender (2.8,23.07,1.55), authored in
 (2.7625,0.2,-23.095)–(2.8375,2.9,-23.045). It stands in the open entrance gap;
 worlds should move it onto a pier or remove it. Its 60 exported triangles contain
 no exact duplicates, and its material is opaque. A still capture cannot establish
-the cause of temporal flicker; that remains unconfirmed. Worlds was not edited.
+the cause of temporal flicker; that remains unconfirmed.
 
 ### Supervised live test checklist additions
 
@@ -477,7 +477,7 @@ scene/windows/bloom+upscale/output: 5.74/3.38/1.51/0.83 ms, versus
 22.38/3.25/7.20/0.84 ms at fixed native world resolution. Median frame interval
 16.67 ms versus 66.62 ms. Auto p95 was 33.40 ms, with 91 reused presentations
 during the 80-sample interval; sustained ≥60 FPS is **not yet demonstrated**.
-The owner session was not altered to obtain exclusive GPU access.
+The desktop session was not altered to obtain exclusive GPU access.
 CPU render/update/capture/IPC medians: 0.30/3.82/3.32/0.001 ms. The capture metric
 covers texture leasing and placement refresh, not PNG capture. Snapshot readback
 remains an explicit U-only operation. GPU tests preserve native client stripe
@@ -493,7 +493,7 @@ See [GRAPHICS.md](GRAPHICS.md) and the IPC 0.7 entry in the
 The core-only work adds no cursor state transitions. Graphics file/IPC changes
 run outside the render pass and do not switch focus, workspaces or input mode.
 
-Supervised live checklist additions (not exercised against the owner's session):
+Supervised live checklist additions (not exercised against a live session):
 
 - [ ] Auto reports Low on Intel; F3 reports delivered FPS, internal/native size,
   the chosen effect values and disjoint GPU stage timings on a readable panel.
@@ -507,7 +507,7 @@ Supervised live checklist additions (not exercised against the owner's session):
   selected preset, per-pass costs, new/reused frame counts and native-size PNG.
 
 
-Live shell handoff: the supervised launcher now uses IPC 0.8 with shell 98b677a
+Live shell integration: the supervised launcher now uses IPC 0.8 with shell 98b677a
 or later, including graphics controls and animated hold timing. Supervised checklist: E enters virtual
 cursor typing; Super+Tab exits to reticle; TAB hold enters Director cursor;
 release before threshold stays reticle. Timing publication itself never moves,
@@ -525,7 +525,7 @@ Supervised live test checklist — review audit additions:
   world glass blends over windows and background glass stays behind them.
 
 All automated cursor checks use a nested software cursor. Hardware behavior
-still requires the owner's supervised test; no live session was changed.
+still requires a supervised test; no live session was changed.
 
 
 Supervised live test checklist — dedicated workspace and IPC 0.8:
@@ -557,7 +557,7 @@ Validation for the dedicated-room change: 9/9 CTests, 10 live-tool unit tests,
 shell 98b677a IPC 0.8 hold/Director/graphics acceptance all pass. The live-tool
 run includes helper SIGKILL and idempotent TTY cleanup. Raw evidence is under
 `docs/evidence/protocol-workspace/`. All nested lifetimes held the shared flock;
-no owner-session mutation or gallery watcher control occurred.
+no live-session mutation occurred.
 
 ### HUD 0.9 supervised check
 
@@ -601,10 +601,10 @@ no owner-session mutation or gallery watcher control occurred.
 Historical 0.12 entry/return semantics below are superseded by the IPC 0.15
 checklist at the end of this page. Use/focus now exits directly to world.
 
-Nested testing uses a software cursor; the owner must verify hardware cursors:
+Nested testing uses a software cursor; hardware cursors need supervised verification:
 
 - [ ] Walking → Back and Super+Tab: reticle hidden, native cursor visible, camera
-  and gravity frozen; neither shortcut triggers the owner's overview binding.
+  and gravity frozen; neither shortcut triggers a native overview binding.
 - [ ] E-use window and E-use workspace → free cursor: virtual cursor disappears,
   real cursor appears. Toggle back restores the same relative cursor and target.
 - [ ] F-window and F-workspace → free cursor: focus handover finishes after the
@@ -613,14 +613,14 @@ Nested testing uses a software cursor; the owner must verify hardware cursors:
 - [ ] Cross each physical output boundary and return: real cursor remains visible;
   no automatic recapture. Back/Super+Tab on another output returns to the saved
   world mode and warps to the world output after the frame.
-- [ ] Launcher/bar/notification and the owner's shell receive native clicks and
+- [ ] Launcher/bar/notification and the desktop shell receive native clicks and
   keyboard. World windows receive projected clicks/drags/scroll; empty world
   swallows pointer input. Movement/debug/menu keys type normally while free.
 - [ ] Return from free cursor to walking hides native cursor; E restores virtual
   cursor; F restores native 2D cursor. No extra shape change on every frame.
 - [ ] Close the saved client while free: returning safely falls back to world.
 - [ ] Deactivate/unload while free: restore desktop cursor ownership and original
-  visibility, discard saved target, restore the owner's Super+Tab binding.
+  visibility, discard saved target, restore the native Super+Tab binding.
 
 Every transition runs via `deferInput`/the deferred tick. Native pointer motion
 passes through Hyprland; core never warps, focuses or hides a cursor in a pass.
@@ -653,4 +653,4 @@ passes through Hyprland; core never warps, focuses or hides a cursor in a pass.
 
 All visibility/focus/workspace changes above occur on deferred input/tick paths,
 never inside a render pass. Nested software cursors cannot validate hardware cursor
-behaviour; the checklist still requires the owner's supervised DRM session.
+behaviour; the checklist still requires a supervised DRM session.
