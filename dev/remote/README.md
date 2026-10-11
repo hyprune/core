@@ -5,13 +5,17 @@ prints **one JSON summary on stdout** (progress on stderr). It is meant to be
 called over SSH from the lead's laptop, so the laptop can sleep while the host
 tests.
 
+The host is yours to choose: set `HYPRUNE_BUILD_HOST` in the environment or in
+`~/.config/hyprune/dev.env` (see CONTRIBUTING.md), then:
+
 ```sh
+host=$(dev/devenv.py HYPRUNE_BUILD_HOST | cut -d= -f2-)
 # Synchronous (keep the SSH session open), default suites:
-ssh 10.2.2.2 workspace/hyprune/core/dev/remote/run --ref origin/remote/headless-nested
+ssh "$host" workspace/hyprune/core/dev/remote/run --ref origin/main
 
 # Detached: returns {runId, unit, summary, poll} at once; survives SSH drops
-ssh 10.2.2.2 workspace/hyprune/core/dev/remote/run --detach --ref origin/main ctest placement
-ssh 10.2.2.2 workspace/hyprune/core/dev/remote/run --status 20261010-213000-ab12
+ssh "$host" workspace/hyprune/core/dev/remote/run --detach --ref origin/main ctest placement
+ssh "$host" workspace/hyprune/core/dev/remote/run --status 20261010-213000-ab12
 ```
 
 Default suites: `ctest workspace-homes placement playable static-world
@@ -109,8 +113,11 @@ Each run (`nightly run`, or `systemctl --user start hyprune-nightly`):
    (`tools/remote-*.sh`) becomes the same local Blender call, because this is
    the bake host.
 5. Writes `pages/nightly/<date>.json`, `<date>.html` and `index.html` into the
-   gallery clone, plus a top-level `pages/nightly.html` link. It never commits
-   or pushes. It keeps the last 14 runs: pages, runner artifacts
-   (`~/hyprune-remote-runs/nightly-*`) and logs (`~/hyprune-nightly/logs/`).
+   gallery (`HYPRUNE_GALLERY_DIR` from the environment or the host's
+   `~/.config/hyprune/dev.env`; `HYPRUNE_NIGHTLY_GALLERY` overrides it), plus
+   a top-level `pages/nightly.html` link. Unset, it warns and writes under
+   `~/.local/state/hyprune/gallery`. It never commits or pushes. It keeps the
+   last 14 runs: pages, runner artifacts (`~/hyprune-remote-runs/nightly-*`)
+   and logs (`~/hyprune-nightly/logs/`).
 
 `nightly status` prints the latest result.

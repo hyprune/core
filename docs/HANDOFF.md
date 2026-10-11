@@ -1,6 +1,6 @@
 # Core handoff, 2026-10-10 (remote work host: headless nested on 2x RTX 3090)
 
-Host: 10.2.2.2, Arch, Hyprland 0.56.2 / aquamarine 0.15.1, NVIDIA 615.78.08 open,
+Host: the remote work host (`HYPRUNE_BUILD_HOST`), Arch, Hyprland 0.56.2 / aquamarine 0.15.1, NVIDIA 615.78.08 open,
 2x RTX 3090, no iGPU, no desktop session. Everything ran headless, in isolated
 instances (`dev/nested/isolated.py`; `run.sh` picks it when there's no
 WAYLAND_DISPLAY). Lumen Reach 0.9.0 and Switchyard 0.1.1 come from the
