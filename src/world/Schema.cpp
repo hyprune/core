@@ -95,6 +95,8 @@ void validate(const Json &value, const Json &schema, const Json &common, const s
             require(n > schema["exclusiveMinimum"].get<double>(), path, "below exclusive minimum");
         if (schema.contains("maximum"))
             require(n <= schema["maximum"].get<double>(), path, "above maximum");
+        if (schema.contains("exclusiveMaximum"))
+            require(n < schema["exclusiveMaximum"].get<double>(), path, "above exclusive maximum");
     }
 }
 } // namespace
@@ -103,7 +105,7 @@ void validateManifest(const Json &value) {
     struct Pinned {
         const char *version, *world, *common;
     };
-    static constexpr Pinned pinned[]{{"0.7", worldSchema07, commonSchema07}, {"0.6", worldSchema06, commonSchema06},
+    static constexpr Pinned pinned[]{{"0.8", worldSchema08, commonSchema08}, {"0.7", worldSchema07, commonSchema07}, {"0.6", worldSchema06, commonSchema06},
                                      {"0.5", worldSchema05, commonSchema04}, {"0.4", worldSchema04, commonSchema04},
                                      {"0.3", worldSchema03, commonSchema03}, {"0.2", worldSchema02, commonSchema02}};
     static std::map<std::string, std::pair<Json, Json>> parsed;

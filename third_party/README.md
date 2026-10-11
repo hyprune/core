@@ -39,3 +39,7 @@ World format 0.7's schema is vendored from schema `6250450` under
 `hyprune-schema/v0.7` (`world.schema.json`, `common.schema.json`), byte-for-byte;
 `WORLD-SOURCE.json` records the commit and SHA-256s and CTest `schema-pin`
 verifies them and that `src/world/SchemaData.hpp` is regenerated.
+
+World format 0.8's schema (placed world objects) is vendored the same way under
+`hyprune-schema/v0.8` (`world.schema.json`, `common.schema.json`, beside the
+IPC 0.8 file) with its own `WORLD-SOURCE.json`.
