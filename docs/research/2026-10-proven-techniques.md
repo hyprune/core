@@ -1,14 +1,15 @@
-# Proven techniques we should adopt (2026-10)
+# Proven techniques to adopt (2026-10)
 
-Research note, 2026-10-09. Question from the owner: we went from about 20 to 60 FPS
-by optimising by hand, but every engine has already solved these problems, so why
-aren't we using the same tricks? And world plans made from fixed-angle stills looked
+Research note, 2026-10-09. The question: core went from about 20 to 60 FPS through
+hand optimisation, but every engine has already solved these problems, so why not
+use the same techniques? And world plans made from fixed-angle stills looked
 right but walked wrong. How do established pipelines prevent that?
 
 Scope: the core renderer (`core/src/render`, `core/src/world`, `core/src/offload`),
 world format 0.5/0.6, and the Lumen Reach build (`worlds/tools`, `worlds/lumen-reach`).
-The constraints are fixed. Core draws with GL inside Hyprland's render pass (AGENTS.md
-rule 2) on a laptop iGPU that is often on USB-C power. Bakes run only on the bake host.
+The constraints are fixed. Core draws with GL inside Hyprland's render pass (render-pass
+safety: deferred cursor and workspace changes, GL state restore) on a laptop iGPU that
+is often on USB-C power. Bakes run only on a dedicated bake host.
 The product goal is **playable**, not glossy. Checks must be **deterministic and cheap**,
 not LLM vision review of stills.
 
@@ -40,7 +41,7 @@ Top 5, ranked by playable impact against effort:
 | 5 | **Replace hand-made culling with standard, derived culling.** Per-batch AABB frustum culling (absent today) plus cell/portal visibility generated from the stage-1 plan (Teller & Séquin PVS, Luebke & Georges portals). Keep the current runtime format and generate it. | Medium today, because frames are fill-bound. It matters more as worlds grow and once batches are split per room or object. Mostly removes authoring work. | Low (frustum) to medium (portal generator). |
 
 **Not recommended now.** Embedding a third-party renderer in-process: they want
-their own context, thread and swapchain, which collides with rule 2. If we ever want
+their own context, thread and swapchain, which collides with render-pass safety. If we ever want
 an engine renderer, the place for it is behind the existing RFC-0009 process
 boundary (dmabuf hand-off), not inside Hyprland's pass (§A.4). GPU-driven,
 meshlet, Hi-Z and HLOD techniques are standard too, but they target scenes 100× our
@@ -101,7 +102,7 @@ the sense that it is in-house code, not that it is novel.
 | bgfx | BSD-2 | Can be driven single-threaded, but owns GL state. Inside Hyprland's pass we would still need GLState save/restore around a foreign renderer that we don't control. |
 | Godot as a library (libgodot) | MIT | Has everything (lightmaps, probes, occlusion, navmesh), but is a whole engine, input loop and scene system. Only viable behind the offload boundary, and doubles the stack. |
 
-**Conclusion.** In-process, no. Rule 2 (render-pass safety, deferred cursor and
+**Conclusion.** In-process, no. Render-pass safety (deferred cursor and
 workspace changes, GL state restore) and two past SIGSEGVs make a foreign GL renderer
 inside Hyprland's pass the riskiest change we could make. Out of process, an engine
 could live in the RFC-0009 `hyprune-renderer` slot, which already hands a dmabuf to
@@ -196,7 +197,7 @@ needed.
 - **Stage 1 (plan):** one Top-plane sketch per layer, named `walls`, `openings`,
   `stairs`, `screens`, `paths`, `vistas`, and so on, exported as DXF.
   Onshape variables and configurations hold the metrics (door width, eye height),
-  so the owner designs against the same numbers the checks use. A small importer
+  so the designer works against the same numbers the checks use. A small importer
   converts DXF to `plan.json` (closed polylines become rooms; lines on
   `openings` become portals).
 - **Stage 2 (massing):** a Part Studio of extruded massing, with floor slabs,
@@ -216,8 +217,8 @@ Principle: **every stage produces an artifact that core can load or a script can
 check in seconds, before the next, more expensive stage runs.** No stage needs a
 vision model. Humans walk the greybox; machines check numbers.
 
-Shared input: `worlds/metrics.json`. Proposed starting values, to tune with the
-owner by walking a stage-1 test plan:
+Shared input: `worlds/metrics.json`. Proposed starting values, to tune by
+walking a stage-1 test plan:
 
 | Metric | Proposed default | Already in code |
 |---|---|---|
@@ -271,7 +272,7 @@ owner by walking a stage-1 test plan:
   - placeholder screen quads
 
   The greybox is a valid world package (`lightmaps: []`). Core loads it in the
-  nested session at once, and the owner walks it in a live session. Most layout
+  nested session at once, and a designer walks it in a live session. Most layout
   rejections should happen here.
 - **2b, shell:** real architecture replaces the greybox: procedural Blender code
   as today, or Onshape massing GLB, or kit pieces. The plan stays the source of
@@ -305,7 +306,7 @@ owner by walking a stage-1 test plan:
     unoccluded from its approach
   - GPU pass times
 
-  The output is JSON thresholds plus one video for the gallery. People watch the
+  The output is JSON thresholds plus one review video. People watch the
   video; the gate is the JSON.
 
 ### Stage 3: objects (managed library, placed by reference)
@@ -328,8 +329,8 @@ owner by walking a stage-1 test plan:
   `{objectId, version, transform, variant, theme}`.
   - The bake host instantiates placements as linked collections. For baking it
     makes instances real, packs each instance's UV2 rectangle into the area atlas
-    (rectangle packing), bakes the shell and objects together in one Cycles pass
-    (the owner's "baked together"), then writes back a shared mesh plus a
+    (rectangle packing), bakes the shell and objects together in one Cycles pass,
+    then writes back a shared mesh plus a
     per-instance `lightmapScaleOffset`.
   - `probe` objects (small props) are excluded from the atlas. They receive an
     object-space AO bake once, in the library, and use a world SH probe grid
@@ -380,8 +381,8 @@ owner by walking a stage-1 test plan:
 ### What a cheap check looks like
 
 Every check follows the existing `check-*.py` pattern: numpy, `gltf_io.py`, a JSON
-report and a non-zero exit on failure. It runs in seconds on the laptop without
-Blender or a GPU, so it can run on every edit and every agent iteration. Only route
+report and a non-zero exit on failure. It runs in seconds on a laptop without
+Blender or a GPU, so it can run on every edit. Only route
 capture and the perf gate need the nested session, and they produce numbers, not
 pictures for a model to judge. The expensive human or LLM attention goes to the
 greybox walk (stage 2a) and the final art review, where only people can judge.
