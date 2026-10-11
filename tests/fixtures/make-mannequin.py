@@ -7,7 +7,7 @@ and an `accent` material, `root` bone at the feet, in-place clips idle/walk/run/
 turn_left/turn_right/look_around/wave/nod. Flags make spec violations for validator tests.
 
 usage: make-mannequin.py OUT.glb [--root-motion] [--centimetres] [--no-idle] [--extra-bones N]
-       [--three-materials] [--rotate-x] [--five-weights] [--accent RGB] [--mixamo] [--no-root]
+       [--three-materials] [--baked] [--rotate-x] [--five-weights] [--accent RGB] [--mixamo] [--no-root]
        [--fingers] [--one-node]
 """
 import argparse, json, math, struct
@@ -21,6 +21,7 @@ p.add_argument('--mixamo', action='store_true', help='Mixamo bone names (mixamor
 p.add_argument('--no-root', action='store_true', help='no root bone: the hips are the top (a raw Mixamo export)')
 p.add_argument('--fingers', action='store_true', help='add 3 bones per finger (30 more)')
 p.add_argument('--one-node', action='store_true', help='a single mesh node, not body/head/visor')
+p.add_argument('--baked', action='store_true', help='one baked material, no accent or visor (valid)')
 a = p.parse_args()
 
 # Joints: name, parent, local bind translation (metres). +X is the character's left.
@@ -127,6 +128,8 @@ accent = [float(x) for x in a.accent.split(',')]
 materials = [{'name': 'body', 'pbrMetallicRoughness': {'baseColorFactor': [.62, .66, .72, 1], 'metallicFactor': 0, 'roughnessFactor': .8}},
              {'name': 'accent', 'pbrMetallicRoughness': {'baseColorFactor': accent + [1], 'metallicFactor': 0, 'roughnessFactor': .7}},
              {'name': 'visor', 'emissiveFactor': [.3, .9, 1.0], 'pbrMetallicRoughness': {'baseColorFactor': [.05, .08, .1, 1], 'metallicFactor': 0, 'roughnessFactor': .3}}]
+if a.baked:
+    materials = materials[:1]
 if a.three_materials:
     materials.append({'name': 'extra', 'pbrMetallicRoughness': {'baseColorFactor': [.2, .2, .2, 1]}})
 meshes, mesh_index = [], {}
@@ -142,7 +145,8 @@ for (node, mat), (pos, nrm, jnt, idx) in sorted(prims.items()):
         attrs['WEIGHTS_1'] = add([0.0] * count * 4, 'f', count, 'VEC4', 5126, 34962)
     if node not in mesh_index:
         mesh_index[node] = len(meshes); meshes.append({'name': node, 'primitives': []})
-    meshes[mesh_index[node]]['primitives'].append({'attributes': attrs, 'indices': add(idx, 'H', len(idx), 'SCALAR', 5123, 34963), 'material': mat})
+    meshes[mesh_index[node]]['primitives'].append({'attributes': attrs, 'indices': add(idx, 'H', len(idx), 'SCALAR', 5123, 34963),
+                                                    'material': 0 if a.baked else mat})
 gltf['materials'] = materials
 gltf['meshes'] = meshes
 ibm = []

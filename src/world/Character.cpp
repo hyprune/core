@@ -469,19 +469,21 @@ std::vector<CharacterProblem> checkCharacter(const Character &c, const Character
         error(std::format("{} triangles: the budget is 4,000-8,000 (16,000 at most)", c.triangles));
     else if (c.triangles > 8000 || c.triangles < 4000)
         warn(std::format("{} triangles: aim for 4,000-8,000", c.triangles));
-    // Materials: the base, one `accent` (recoloured per area) and one emissive (visor/eyes).
+    // Materials: the base, optionally one `accent` (recoloured per area) and one emissive
+    // (visor/eyes). One baked material is valid: area variants are then separate characters.
     size_t emissive = std::count(c.emissive.begin(), c.emissive.end(), true);
     if (c.materials.size() > 3 || (c.materials.size() == 3 && emissive == 0))
-        error(std::format("{} materials ({} emissive): use the base, `accent` and one emissive visor/eyes material",
+        error(std::format("{} materials ({} emissive): use the base, an optional `accent` and one emissive visor/eyes material",
                           c.materials.size(), emissive));
     if (emissive > 1)
         warn(std::format("{} emissive materials: keep one (visor/eyes)", emissive));
-    if (c.materials.size() >= 2 && std::none_of(c.materialNames.begin(), c.materialNames.end(), [](auto &n) {
+    if (c.materials.size() - std::min(emissive, c.materials.size()) >= 2 &&
+        std::none_of(c.materialNames.begin(), c.materialNames.end(), [](auto &n) {
             std::string l = n;
             std::transform(l.begin(), l.end(), l.begin(), ::tolower);
             return l.find("accent") != std::string::npos;
         }))
-        warn("no material named `accent`: name the per-area recolourable one `accent`");
+        warn("two base materials and none named `accent`: name the per-area recolourable one `accent`");
     for (auto &n : c.meshNodes) {
         std::string l = n;
         std::transform(l.begin(), l.end(), l.begin(), ::tolower);
@@ -490,13 +492,13 @@ std::vector<CharacterProblem> checkCharacter(const Character &c, const Character
     }
     // Clips.
     static const std::set<std::string> loops{"idle", "walk", "run", "sit_idle"},
-        known{"idle", "walk", "run", "turn_left", "turn_right", "look_around", "wave", "nod", "sit", "sit_idle"};
+        known{"idle", "idle_fidget", "walk", "run", "turn_left", "turn_right", "look_around", "wave", "nod", "sit", "sit_idle"};
     for (auto name : {"idle", "walk"})
         if (!c.clip(name))
             error(std::format("no `{}` clip: idle and walk are required", name));
     for (auto &clip : c.clips) {
         if (!known.contains(clip.name))
-            warn(std::format("clip `{}` is not in the spec (idle, walk, run, turn_left, turn_right, look_around, wave, nod, sit, sit_idle): core ignores it",
+            warn(std::format("clip `{}` is not in the spec (idle, idle_fidget, walk, run, turn_left, turn_right, look_around, wave, nod, sit, sit_idle): core ignores it",
                              clip.name));
         if (clip.duration <= 0) {
             error(std::format("clip `{}` has no keyframes on the skeleton", clip.name));
@@ -540,8 +542,10 @@ std::vector<CharacterProblem> checkCharacter(const Character &c, const Character
         }
         if ((clip.name == "walk" || clip.name == "run") && clip.speed <= 0)
             info(std::format("clip `{}` has no extras.speed: core assumes {} m/s", clip.name, clip.name == "walk" ? "1.3" : "3.0"));
-        if (clip.name == "walk" && clip.speed > 0 && (clip.speed < 1.0f || clip.speed > 1.6f))
-            warn(std::format("walk speed {:.2f} m/s: the spec expects 1.2-1.4", clip.speed));
+        // Stylised characters walk slower than people; core always plays the clip at its
+        // measured (planted-foot) speed, so this only flags implausible measurements.
+        if (clip.name == "walk" && clip.speed > 0 && (clip.speed < .7f || clip.speed > 1.4f))
+            warn(std::format("walk speed {:.2f} m/s: the spec expects 0.7-1.4", clip.speed));
     }
     // Shared skeleton across variants.
     if (reference) {

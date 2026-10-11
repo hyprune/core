@@ -1694,6 +1694,8 @@ void Runtime::npcLoad() {
             agent.idleSeconds = a.value("idleSeconds", 3.f);
             if (auto walk = npcCharacter->clip("walk"); walk && walk->speed > 0)
                 agent.walkSpeed = walk->speed;
+            if (auto fidget = npcCharacter->clip("idle_fidget"))
+                agent.fidgetSeconds = fidget->duration;
             agent.start();
             npcAgents.push_back(agent);
             npcAccents.push_back(a.contains("accent") ? std::optional<Vec3>(Vec3{a["accent"][0], a["accent"][1], a["accent"][2]})

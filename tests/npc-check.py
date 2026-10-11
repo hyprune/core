@@ -5,7 +5,7 @@ check, make = sys.argv[1], pathlib.Path(__file__).resolve().parent / 'fixtures/m
 cases = {'': [], 'root-motion': ['animates `root`'], 'centimetres': ['centimetres'], 'no-idle': ['no `idle` clip'],
          'extra-bones 50': ['at most 64'], 'three-materials': ['4 materials'], 'rotate-x': ['stand along +Y'],
          'five-weights': ['more than 4 weights'], 'mixamo --no-root': ['run tools/npc-import']}
-warnings = {'mixamo --fingers': ['performance target'], 'extra-bones 25': ['performance target'], 'one-node': []}
+warnings = {'mixamo --fingers': ['performance target'], 'extra-bones 25': ['performance target'], 'one-node': [], 'baked': []}
 with tempfile.TemporaryDirectory() as tmp:
     base = pathlib.Path(tmp) / 'base.glb'
     subprocess.run([sys.executable, str(make), str(base)], check=True, stdout=subprocess.DEVNULL)
@@ -29,6 +29,8 @@ with tempfile.TemporaryDirectory() as tmp:
         r = subprocess.run([check, str(out), '--json'], capture_output=True, text=True); report = json.loads(r.stdout)
         found = [p['message'] for p in report['problems'] if p['level'] == 'warning']
         assert r.returncode == 0 and all(any(e in m for m in found) for e in expected), (flags, report)
+        if flags == 'baked':  # one baked material: the accent is optional
+            assert not any('accent' in m or 'material' in m for m in found), report
     bad = pathlib.Path(tmp) / 'not.glb'; bad.write_bytes(b'nope')
     assert subprocess.run([check, str(bad)], capture_output=True).returncode == 1
-print('PASS hyprune-npc-check: spec mannequin and Mixamo-named rigs pass; root motion, centimetres, missing idle, >65 bones, 4 materials, wrong axis, >4 weights, Mixamo without root fail; >40 bones warn')
+print('PASS hyprune-npc-check: spec mannequin and Mixamo-named rigs pass; root motion, centimetres, missing idle, >65 bones, 4 materials, wrong axis, >4 weights, Mixamo without root fail; >40 bones warn; one baked material passes')

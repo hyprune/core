@@ -1,6 +1,7 @@
 #pragma once
 // Ambient NPC agent (RFC-0010 prototype): follows a looping route of points at the walk
-// clip's speed, turns in place, idles at each point, yields to the player. Pure logic:
+// clip's speed, turns in place, idles at each point (now and then an `idle_fidget` when the
+// player is near), yields to the player. Pure logic:
 // no GL, no Hyprland; the runtime poses the character from `clip`/`clipTime`.
 #include "Math.hpp"
 #include <algorithm>
@@ -18,6 +19,9 @@ struct NpcAgent {
     std::string clip = "idle", previous;
     float clipTime = 0, previousTime = 0, fade = 1; // fade: 0 -> 1 over 0.25 s from previous to clip
     bool yielding = false;
+    // Occasional fidget while idling at a point with the player within fidgetRange: at most
+    // once per fidgetEvery seconds, played through once. fidgetSeconds = 0: the character has none.
+    float fidgetSeconds = 0, fidgetEvery = 45, fidgetRange = 4, sinceFidget = 0;
     Vec3 forward() const { return {std::sin(heading), 0, std::cos(heading)}; }
     void start() {
         if (route.empty())
@@ -39,6 +43,7 @@ struct NpcAgent {
     void update(float dt, Vec3 player, float clipSpeed) {
         fade = std::min(1.f, fade + dt / .25f);
         previousTime += dt;
+        sinceFidget += dt;
         auto advance = [&](float rate) { clipTime += dt * rate; };
         if (route.size() < 2) {
             play("idle"), advance(1);
@@ -46,7 +51,14 @@ struct NpcAgent {
         }
         if (wait > 0) {
             wait -= dt;
-            play("idle"), advance(1);
+            Vec3 near = player - position;
+            if (clip == "idle_fidget" && clipTime < fidgetSeconds - .25f) // finish it, then idle
+                advance(1);
+            else if (fidgetSeconds > 0 && sinceFidget >= fidgetEvery && std::hypot(near.x, near.z) < fidgetRange) {
+                play("idle_fidget"), advance(1);
+                sinceFidget = 0, wait = std::max(wait, fidgetSeconds);
+            } else
+                play("idle"), advance(1);
             return;
         }
         Vec3 goal = route[target], d = goal - position;
