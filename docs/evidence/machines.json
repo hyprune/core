@@ -1,0 +1,805 @@
+{
+  "nestedOnly": true,
+  "world": "org.hyprune.machines",
+  "stills": [
+    "machines-missing.png",
+    "machines-running.png",
+    "machines-items.png",
+    "machines-burst.png",
+    "machines-fail.png",
+    "machines-stale.png"
+  ],
+  "checks": [
+    {
+      "name": "the prototype binds two instances from the bindings file",
+      "evidence": [
+        "machine-a",
+        "machine-b"
+      ]
+    },
+    {
+      "name": "missing data: inputs at their defaults, labels show a dash",
+      "evidence": {
+        "animations": {
+          "lift": 0.0,
+          "spinner": 0.0
+        },
+        "asset": "mini-conveyor",
+        "id": "machine-a",
+        "inView": true,
+        "inputs": {
+          "name": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "lastJob",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": ""
+          },
+          "progress": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "progress",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": 0
+          },
+          "queued": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "depth",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": 0
+          },
+          "stage.1": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "stage.1",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": "idle"
+          },
+          "stage.2": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "stage.2",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": "idle"
+          },
+          "started": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "jobsStarted",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": null
+          },
+          "status": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "status",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": "idle"
+          }
+        },
+        "labels": {
+          "sign": "\u2014"
+        },
+        "look": 0.0,
+        "moving": false,
+        "revision": 1,
+        "stacks": {
+          "waiting": 0
+        },
+        "stale": false,
+        "states": {
+          "lamp_1": "idle",
+          "lamp_2": "idle"
+        },
+        "toggles": {
+          "alarm": false
+        },
+        "tracks": [
+          {
+            "backlog": 0,
+            "dropped": 0,
+            "live": 0,
+            "spawn": "in",
+            "spawned": 0,
+            "track": "belt"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an unfed machine forces no frames",
+      "evidence": {
+        "frames": {
+          "perSecond": 0.0,
+          "frames": 0,
+          "animationFrames": false
+        },
+        "instances": [
+          {
+            "id": "machine-a",
+            "moving": false,
+            "inView": true,
+            "animations": {
+              "lift": 0.0,
+              "spinner": 0.0
+            }
+          },
+          {
+            "id": "machine-b",
+            "moving": true,
+            "inView": false,
+            "animations": {
+              "lift": 0.0,
+              "spinner": 1.0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "published values reach the inputs through the binding maps",
+      "evidence": {
+        "name": {
+          "ageMs": 250,
+          "condition": "fresh",
+          "key": "lastJob",
+          "raw": "main #1432",
+          "source": "org.hyprune.nested.line",
+          "value": "main #1432"
+        },
+        "progress": {
+          "ageMs": 250,
+          "condition": "fresh",
+          "key": "progress",
+          "raw": 0.8,
+          "source": "org.hyprune.nested.line",
+          "value": 0.8
+        },
+        "queued": {
+          "ageMs": 250,
+          "condition": "fresh",
+          "key": "depth",
+          "raw": 70,
+          "source": "org.hyprune.nested.line",
+          "value": 4.0
+        },
+        "stage.1": {
+          "ageMs": 250,
+          "condition": "fresh",
+          "key": "stage.1",
+          "raw": "running",
+          "source": "org.hyprune.nested.line",
+          "value": "running"
+        },
+        "stage.2": {
+          "ageMs": 250,
+          "condition": "fresh",
+          "key": "stage.2",
+          "raw": "failed",
+          "source": "org.hyprune.nested.line",
+          "value": "fail"
+        },
+        "started": {
+          "ageMs": 250,
+          "condition": "fresh",
+          "key": "jobsStarted",
+          "raw": 500,
+          "source": "org.hyprune.nested.line",
+          "value": null
+        },
+        "status": {
+          "ageMs": 250,
+          "condition": "fresh",
+          "key": "status",
+          "raw": "running",
+          "source": "org.hyprune.nested.line",
+          "value": "running"
+        }
+      }
+    },
+    {
+      "name": "drives set palettes, labels, stack counts and toggles",
+      "evidence": {
+        "animations": {
+          "lift": 0.8,
+          "spinner": 1.0
+        },
+        "asset": "mini-conveyor",
+        "id": "machine-a",
+        "inView": true,
+        "inputs": {
+          "name": {
+            "ageMs": 250,
+            "condition": "fresh",
+            "key": "lastJob",
+            "raw": "main #1432",
+            "source": "org.hyprune.nested.line",
+            "value": "main #1432"
+          },
+          "progress": {
+            "ageMs": 250,
+            "condition": "fresh",
+            "key": "progress",
+            "raw": 0.8,
+            "source": "org.hyprune.nested.line",
+            "value": 0.8
+          },
+          "queued": {
+            "ageMs": 250,
+            "condition": "fresh",
+            "key": "depth",
+            "raw": 70,
+            "source": "org.hyprune.nested.line",
+            "value": 4.0
+          },
+          "stage.1": {
+            "ageMs": 250,
+            "condition": "fresh",
+            "key": "stage.1",
+            "raw": "running",
+            "source": "org.hyprune.nested.line",
+            "value": "running"
+          },
+          "stage.2": {
+            "ageMs": 250,
+            "condition": "fresh",
+            "key": "stage.2",
+            "raw": "failed",
+            "source": "org.hyprune.nested.line",
+            "value": "fail"
+          },
+          "started": {
+            "ageMs": 250,
+            "condition": "fresh",
+            "key": "jobsStarted",
+            "raw": 500,
+            "source": "org.hyprune.nested.line",
+            "value": null
+          },
+          "status": {
+            "ageMs": 250,
+            "condition": "fresh",
+            "key": "status",
+            "raw": "running",
+            "source": "org.hyprune.nested.line",
+            "value": "running"
+          }
+        },
+        "labels": {
+          "sign": "main #1432"
+        },
+        "look": 0.0,
+        "moving": true,
+        "revision": 20,
+        "stacks": {
+          "waiting": 4
+        },
+        "stale": false,
+        "states": {
+          "lamp_1": "running",
+          "lamp_2": "fail"
+        },
+        "toggles": {
+          "alarm": false
+        },
+        "tracks": [
+          {
+            "backlog": 0,
+            "dropped": 0,
+            "live": 0,
+            "spawn": "in",
+            "spawned": 0,
+            "track": "belt"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a spinning machine in view keeps frames coming",
+      "evidence": {
+        "perSecond": 59.7,
+        "frames": 122,
+        "animationFrames": true
+      }
+    },
+    {
+      "name": "the change is drawn (lamps, crates, label, lift)",
+      "evidence": {
+        "changedFraction": 0.01404
+      }
+    },
+    {
+      "name": "out of view a spinning machine forces no frames",
+      "evidence": {
+        "perSecond": 0.0,
+        "frames": 0,
+        "animationFrames": false
+      }
+    },
+    {
+      "name": "a bound change out of view updates state without frames",
+      "evidence": {
+        "frames": {
+          "perSecond": 0.0,
+          "frames": 0,
+          "animationFrames": false
+        },
+        "revision": [
+          20,
+          21
+        ]
+      }
+    },
+    {
+      "name": "a counter increase spawns items onto the track",
+      "evidence": [
+        {
+          "backlog": 0,
+          "dropped": 0,
+          "live": 3,
+          "spawn": "in",
+          "spawned": 3,
+          "track": "belt"
+        }
+      ]
+    },
+    {
+      "name": "items are drawn as instances",
+      "evidence": {
+        "animating": true,
+        "drawCalls": 9,
+        "instances": 3,
+        "instancesDrawn": 21,
+        "visible": 2
+      }
+    },
+    {
+      "name": "running -> success fires the burst",
+      "evidence": 48
+    },
+    {
+      "name": "items leave at the sink; the spinner winds down",
+      "evidence": {
+        "animations": {
+          "lift": 0.8,
+          "spinner": 0.0
+        },
+        "asset": "mini-conveyor",
+        "id": "machine-a",
+        "inView": true,
+        "inputs": {
+          "name": {
+            "ageMs": 353,
+            "condition": "fresh",
+            "key": "lastJob",
+            "raw": "main #1432",
+            "source": "org.hyprune.nested.line",
+            "value": "main #1432"
+          },
+          "progress": {
+            "ageMs": 353,
+            "condition": "fresh",
+            "key": "progress",
+            "raw": 0.8,
+            "source": "org.hyprune.nested.line",
+            "value": 0.8
+          },
+          "queued": {
+            "ageMs": 353,
+            "condition": "fresh",
+            "key": "depth",
+            "raw": 70,
+            "source": "org.hyprune.nested.line",
+            "value": 4.0
+          },
+          "stage.1": {
+            "ageMs": 353,
+            "condition": "fresh",
+            "key": "stage.1",
+            "raw": "success",
+            "source": "org.hyprune.nested.line",
+            "value": "ok"
+          },
+          "stage.2": {
+            "ageMs": 353,
+            "condition": "fresh",
+            "key": "stage.2",
+            "raw": "failed",
+            "source": "org.hyprune.nested.line",
+            "value": "fail"
+          },
+          "started": {
+            "ageMs": 353,
+            "condition": "fresh",
+            "key": "jobsStarted",
+            "raw": 503,
+            "source": "org.hyprune.nested.line",
+            "value": null
+          },
+          "status": {
+            "ageMs": 353,
+            "condition": "fresh",
+            "key": "status",
+            "raw": "success",
+            "source": "org.hyprune.nested.line",
+            "value": "ok"
+          }
+        },
+        "labels": {
+          "sign": "main #1432"
+        },
+        "look": 0.0,
+        "moving": false,
+        "revision": 21,
+        "stacks": {
+          "waiting": 4
+        },
+        "stale": false,
+        "states": {
+          "lamp_1": "ok",
+          "lamp_2": "fail"
+        },
+        "toggles": {
+          "alarm": false
+        },
+        "tracks": [
+          {
+            "backlog": 0,
+            "dropped": 0,
+            "live": 0,
+            "spawn": "in",
+            "spawned": 3,
+            "track": "belt"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an idle machine in view costs no frames",
+      "evidence": {
+        "perSecond": 0.0,
+        "frames": 0,
+        "animationFrames": false
+      }
+    },
+    {
+      "name": "fail shows the alarm toggle and doubles lamp emission",
+      "evidence": {
+        "alarm": true
+      }
+    },
+    {
+      "name": "past staleMs the machine is stale and greys",
+      "evidence": {
+        "animations": {
+          "lift": 0.8,
+          "spinner": 0.0
+        },
+        "asset": "mini-conveyor",
+        "id": "machine-a",
+        "inView": true,
+        "inputs": {
+          "name": {
+            "ageMs": 4330,
+            "condition": "stale",
+            "key": "lastJob",
+            "raw": "main #1432",
+            "source": "org.hyprune.nested.line",
+            "value": "main #1432"
+          },
+          "progress": {
+            "ageMs": 4330,
+            "condition": "stale",
+            "key": "progress",
+            "raw": 0.8,
+            "source": "org.hyprune.nested.line",
+            "value": 0.8
+          },
+          "queued": {
+            "ageMs": 4330,
+            "condition": "stale",
+            "key": "depth",
+            "raw": 70,
+            "source": "org.hyprune.nested.line",
+            "value": 4.0
+          },
+          "stage.1": {
+            "ageMs": 4330,
+            "condition": "stale",
+            "key": "stage.1",
+            "raw": "success",
+            "source": "org.hyprune.nested.line",
+            "value": "ok"
+          },
+          "stage.2": {
+            "ageMs": 4330,
+            "condition": "stale",
+            "key": "stage.2",
+            "raw": "failed",
+            "source": "org.hyprune.nested.line",
+            "value": "fail"
+          },
+          "started": {
+            "ageMs": 4330,
+            "condition": "stale",
+            "key": "jobsStarted",
+            "raw": 503,
+            "source": "org.hyprune.nested.line",
+            "value": null
+          },
+          "status": {
+            "ageMs": 4330,
+            "condition": "stale",
+            "key": "status",
+            "raw": "failed",
+            "source": "org.hyprune.nested.line",
+            "value": "fail"
+          }
+        },
+        "labels": {
+          "sign": "main #1432"
+        },
+        "look": 1.0,
+        "moving": false,
+        "revision": 53,
+        "stacks": {
+          "waiting": 4
+        },
+        "stale": true,
+        "states": {
+          "lamp_1": "ok (stale)",
+          "lamp_2": "fail (stale)"
+        },
+        "toggles": {
+          "alarm": true
+        },
+        "tracks": [
+          {
+            "backlog": 0,
+            "dropped": 0,
+            "live": 0,
+            "spawn": "in",
+            "spawned": 3,
+            "track": "belt"
+          }
+        ]
+      }
+    },
+    {
+      "name": "the stale look is drawn",
+      "evidence": {
+        "changedFraction": 0.00305
+      }
+    },
+    {
+      "name": "removed data: defaults again, labels show a dash",
+      "evidence": {
+        "animations": {
+          "lift": 0.0,
+          "spinner": 0.0
+        },
+        "asset": "mini-conveyor",
+        "id": "machine-a",
+        "inView": true,
+        "inputs": {
+          "name": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "lastJob",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": ""
+          },
+          "progress": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "progress",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": 0
+          },
+          "queued": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "depth",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": 0
+          },
+          "stage.1": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "stage.1",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": "idle"
+          },
+          "stage.2": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "stage.2",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": "idle"
+          },
+          "started": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "jobsStarted",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": null
+          },
+          "status": {
+            "ageMs": -1,
+            "condition": "missing",
+            "key": "status",
+            "raw": null,
+            "source": "org.hyprune.nested.line",
+            "value": "idle"
+          }
+        },
+        "labels": {
+          "sign": "\u2014"
+        },
+        "look": 0.0,
+        "moving": false,
+        "revision": 84,
+        "stacks": {
+          "waiting": 0
+        },
+        "stale": false,
+        "states": {
+          "lamp_1": "idle",
+          "lamp_2": "idle"
+        },
+        "toggles": {
+          "alarm": false
+        },
+        "tracks": [
+          {
+            "backlog": 0,
+            "dropped": 0,
+            "live": 0,
+            "spawn": "in",
+            "spawned": 3,
+            "track": "belt"
+          }
+        ]
+      }
+    },
+    {
+      "name": "reduced motion: states change, nothing spins or travels, no frames",
+      "evidence": {
+        "instance": {
+          "animations": {
+            "lift": 0.8,
+            "spinner": 0.0
+          },
+          "asset": "mini-conveyor",
+          "id": "machine-a",
+          "inView": true,
+          "inputs": {
+            "name": {
+              "ageMs": 996,
+              "condition": "fresh",
+              "key": "lastJob",
+              "raw": "main #1432",
+              "source": "org.hyprune.nested.line",
+              "value": "main #1432"
+            },
+            "progress": {
+              "ageMs": 996,
+              "condition": "fresh",
+              "key": "progress",
+              "raw": 0.8,
+              "source": "org.hyprune.nested.line",
+              "value": 0.8
+            },
+            "queued": {
+              "ageMs": 996,
+              "condition": "fresh",
+              "key": "depth",
+              "raw": 70,
+              "source": "org.hyprune.nested.line",
+              "value": 4.0
+            },
+            "stage.1": {
+              "ageMs": 996,
+              "condition": "fresh",
+              "key": "stage.1",
+              "raw": "success",
+              "source": "org.hyprune.nested.line",
+              "value": "ok"
+            },
+            "stage.2": {
+              "ageMs": 996,
+              "condition": "fresh",
+              "key": "stage.2",
+              "raw": "success",
+              "source": "org.hyprune.nested.line",
+              "value": "ok"
+            },
+            "started": {
+              "ageMs": 996,
+              "condition": "fresh",
+              "key": "jobsStarted",
+              "raw": 604,
+              "source": "org.hyprune.nested.line",
+              "value": null
+            },
+            "status": {
+              "ageMs": 996,
+              "condition": "fresh",
+              "key": "status",
+              "raw": "running",
+              "source": "org.hyprune.nested.line",
+              "value": "running"
+            }
+          },
+          "labels": {
+            "sign": "main #1432"
+          },
+          "look": 0.0,
+          "moving": false,
+          "revision": 104,
+          "stacks": {
+            "waiting": 4
+          },
+          "stale": false,
+          "states": {
+            "lamp_1": "ok",
+            "lamp_2": "ok"
+          },
+          "toggles": {
+            "alarm": false
+          },
+          "tracks": [
+            {
+              "backlog": 0,
+              "dropped": 4,
+              "live": 0,
+              "spawn": "in",
+              "spawned": 3,
+              "track": "belt"
+            }
+          ]
+        },
+        "frames": {
+          "perSecond": 0.0,
+          "frames": 0,
+          "animationFrames": false
+        }
+      }
+    },
+    {
+      "name": "the source helper publishes with its own grant and machine-b follows build-sim",
+      "evidence": {
+        "ageMs": 1433,
+        "condition": "fresh",
+        "key": "status",
+        "raw": "idle",
+        "source": "com.hyprune.sources.build",
+        "value": "idle"
+      }
+    },
+    {
+      "name": "on SIGTERM the helper removes its sources",
+      "evidence": {
+        "exit": 0
+      }
+    },
+    {
+      "name": "no render pass leaked",
+      "evidence": 0
+    }
+  ]
+}

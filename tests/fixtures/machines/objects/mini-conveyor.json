@@ -222,7 +222,7 @@
        0.6,
        0.2
       ],
-      "emission": 3
+      "emission": 1.5
      },
      {
       "id": "ok",
@@ -231,7 +231,7 @@
        1,
        0.6
       ],
-      "emission": 3
+      "emission": 1.5
      },
      {
       "id": "fail",
@@ -240,7 +240,7 @@
        0.2,
        0.1
       ],
-      "emission": 4
+      "emission": 2
      },
      {
       "id": "stale",
@@ -275,7 +275,7 @@
        0.6,
        0.2
       ],
-      "emission": 3
+      "emission": 1.5
      },
      {
       "id": "ok",
@@ -284,7 +284,7 @@
        1,
        0.6
       ],
-      "emission": 3
+      "emission": 1.5
      },
      {
       "id": "fail",
@@ -293,7 +293,7 @@
        0.2,
        0.1
       ],
-      "emission": 4
+      "emission": 2
      },
      {
       "id": "stale",

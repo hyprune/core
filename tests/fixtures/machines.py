@@ -56,8 +56,8 @@ w=Gltf()
 floor=w.node(name='floor',mesh=w.box((30,.4,30),0,(0,-.2,0)))
 w.write(root/'scene.gltf',[floor],[pbr('floor',(.6,.6,.6))],'Hyprune original CC0 machines fixture')
 
-lamp_palette=[{'id':'idle','colour':[.3,.3,.32],'emission':.2},{'id':'running','colour':[1,.6,.2],'emission':3},
-              {'id':'ok','colour':[.3,1,.6],'emission':3},{'id':'fail','colour':[1,.2,.1],'emission':4},
+lamp_palette=[{'id':'idle','colour':[.3,.3,.32],'emission':.2},{'id':'running','colour':[1,.6,.2],'emission':1.5},
+              {'id':'ok','colour':[.3,1,.6],'emission':1.5},{'id':'fail','colour':[1,.2,.1],'emission':2},
               {'id':'stale','colour':[.25,.25,.25],'emission':.1}]
 attribution=[{'path':'.','author':'Hyprune contributors','license':'CC0-1.0'}]
 machine={'formatVersion':'0.10','id':'mini-conveyor','version':'1.0.0','name':'Mini conveyor','category':'machines',
@@ -102,8 +102,8 @@ world={'formatVersion':'0.8','id':'org.hyprune.machines','version':'1.0.0','name
                    {'id':'token','scene':'objects/token.gltf'},
                    {'id':'spark','scene':'objects/spark.gltf','lighting':{'mode':'unlit'}}],
    'objects':[{'id':'machine-a','asset':'mini-conveyor','pose':{'position':[-3,0,0],'rotation':[0,0,0,1]}},
-              {'id':'machine-b','asset':'mini-conveyor','pose':{'position':[3,0,0],'rotation':[0,.7071068,0,.7071068]}},
-              {'id':'plain','asset':'mini-conveyor','pose':{'position':[0,0,-5],'rotation':[0,0,0,1]}}],
+              {'id':'machine-b','asset':'mini-conveyor','pose':{'position':[9,0,0],'rotation':[0,.7071068,0,.7071068]}},
+              {'id':'plain','asset':'mini-conveyor','pose':{'position':[0,0,-5],'rotation':[0,0,0,1]},'speed':0}],
    'attribution':attribution}
 (root/'world.json').write_text(json.dumps(world,indent=2)+'\n')
 src='org.hyprune.test.line'

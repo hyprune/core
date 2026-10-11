@@ -99,7 +99,7 @@
       "asset": "mini-conveyor",
       "pose": {
         "position": [
-          3,
+          9,
           0,
           0
         ],
@@ -126,7 +126,8 @@
           0,
           1
         ]
-      }
+      },
+      "speed": 0
     }
   ],
   "attribution": [

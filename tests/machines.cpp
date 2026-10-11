@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
               d["inputs"]["status"]["condition"] == "fresh", "binding maps raw to the input");
     check(d["states"]["lamp_1"] == "running" && d["states"]["lamp_2"] == "fail", "repeated input drives each lamp ({n})");
     auto &s = m.states[a];
-    check(s.meshes[lamp1].painted && near(s.meshes[lamp1].colour.x, 1) && near(s.meshes[lamp1].emission, 3), "palette colour and emission (materials)");
+    check(s.meshes[lamp1].painted && near(s.meshes[lamp1].colour.x, 1) && near(s.meshes[lamp1].emission, 1.5f), "palette colour and emission (materials)");
     check(s.meshes[lamp2].painted && near(s.meshes[lamp2].colour.y, .2f), "palette by nodes");
     check(!s.meshes[0].painted, "unslotted meshes keep their material");
     check(d["labels"]["sign"] == "main #1432 b", "labels cut to maxChars");

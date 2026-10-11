@@ -831,7 +831,7 @@ void Machines::fire(Instance &in, const EffectSlot &e, bool still) {
     if (playing.size() >= size_t(maxEffects)) // skipped, never queued (RFC-0013 caps)
         return;
     MeshPaint paint;
-    paint.painted = true, paint.colour = e.colour, paint.emission = 4;
+    paint.painted = true, paint.colour = e.colour, paint.emission = 1.2f;
     const auto &o = world_->objectInstances[in.object];
     auto kind = still && e.kind != EffectSlot::Flash ? EffectSlot::Flash : e.kind; // still: effects become flashes
     int count = kind == EffectSlot::Burst ? 24 : kind == EffectSlot::Ring ? 16 : 1;
