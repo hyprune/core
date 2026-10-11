@@ -65,7 +65,9 @@ std::optional<Vec3> areaHome(const world::World &w, const std::string &areaId) {
                 return s.position + Vec3{0, 2.2f, 0};
     return std::nullopt;
 }
-std::string ascii(const std::string &s) {
+std::string ascii(std::string s) {
+    for (size_t at; (at = s.find("\xc2\xb7")) != std::string::npos;)
+        s.replace(at, 2, "-"); // the overlay font is ASCII: a middle dot draws as a dash
     std::string out;
     for (unsigned char c : s)
         if (c >= 32 && c < 127)
@@ -220,7 +222,7 @@ std::vector<Marker> buildMarkers(const world::World *w, const Json &waypoint, co
                 m.kind = m.icon = home ? "home" : "workspace";
                 m.id = home ? "home:" + areaId : "workspace:" + std::to_string(workspace);
                 m.tier = 3;
-                m.label = areaName(*w, areaId) + " - " + std::to_string(workspace);
+                m.label = areaName(*w, areaId) + " \u00b7 " + std::to_string(workspace);
                 m.target = home ? Json{{"areaId", areaId}} : Json{{"workspaceId", workspace}};
                 m.source = {{"areaId", areaId}, {"workspaceId", workspace}};
                 m.position = areaHome(*w, areaId);
@@ -531,7 +533,7 @@ MarkerLayout MarkerRuntime::layout(const MarkerView &v) const {
                 continue; // the waypoint keeps its own world-locked marker (RFC-0005)
             if (int(inView.size()) < settings.maxRevealed && !aimedAt(c.x, c.y))
                 inView.push_back(c);
-        } else if (c.m->tier <= 2 && c.m->occlusion != "visible" && arrows.size() < 6)
+        } else if (c.m->tier <= 2 && c.m->occlusion != "visible")
             arrows.push_back(c);
     }
     out.inView = int(inView.size());
@@ -569,8 +571,7 @@ MarkerLayout MarkerRuntime::layout(const MarkerView &v) const {
         heads.push_back(i);
         headSource.push_back(&c);
     }
-    for (auto &h : heads)
-        out.stacks += h.stack > 1;
+
     // Edge arrows: 48 logical px inside an ellipse fitted to the output.
     const float inset = 48 * s, rx = std::max(8.f, W / 2 - inset), ry = std::max(8.f, H / 2 - inset);
     std::vector<DrawItem> arrowItems;
@@ -605,10 +606,23 @@ MarkerLayout MarkerRuntime::layout(const MarkerView &v) const {
         i.distance = distanceText(c.d);
         if (aimedAt(i.x, i.y))
             continue;
+        // Arrows for targets in one direction stack like icons (a tier-1 arrow keeps its own).
+        auto same = std::find_if(arrowItems.begin(), arrowItems.end(), [&](const DrawItem &o) {
+            return i.tier != 1 && std::hypot(o.x - i.x, o.y - i.y) < 28 * s;
+        });
+        if (same != arrowItems.end()) {
+            ++same->stack;
+            continue;
+        }
+        if (arrowItems.size() >= 6)
+            continue;
         arrowItems.push_back(i);
         arrowSource.push_back(&c);
     }
     out.arrows = int(arrowItems.size());
+    for (auto *list : {&heads, &arrowItems})
+        for (auto &h : *list)
+            out.stacks += h.stack > 1;
     // Labels: at most `labels`, tier 1 first, then nearest the screen centre. Near the
     // reticle labels collapse to icons; arrival, label range and tier rules drop others.
     struct LabelCandidate {

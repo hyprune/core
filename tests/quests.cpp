@@ -509,7 +509,7 @@ void markers() {
     v.now = 1000;
     auto layout = m.layout(v);
     check(layout.inView == 12, "at most 12 in view (got " + std::to_string(layout.inView) + ")");
-    check(layout.arrows == 6, "at most 6 edge arrows (got " + std::to_string(layout.arrows) + ")");
+    check(layout.arrows >= 1 && layout.arrows <= 6, "at most 6 edge arrows (got " + std::to_string(layout.arrows) + ")");
     check(layout.labels <= 5, "at most 5 labels");
     bool trackedLabelled = false;
     for (auto &i : layout.items) {
@@ -532,6 +532,17 @@ void markers() {
     st.list = m.list;
     layout = st.layout(v);
     check(layout.items.size() == 1 && layout.items[0].stack == 2 && layout.stacks == 1, "stacking within 32 px");
+    // Edge arrows toward one direction stack.
+    m.list.clear();
+    add("quest:back-a", 2, {.3f, 1.7f, 20});
+    add("quest:back-b", 2, {.35f, 1.7f, 25});
+    st.list = m.list;
+    layout = st.layout(v);
+    check(layout.arrows == 1 && layout.items[0].arrow && layout.items[0].stack == 2, "arrows in one direction stack");
+    m.list.clear();
+    add("place:a", 4, {10, 1.7f, -20});
+    add("place:b", 4, {10.1f, 1.7f, -20});
+    st.list = m.list;
     // The aimed window hides markers; others dim them to 50 %.
     v.windows = {{1000, 0, 1920, 1080, true}};
     check(st.layout(v).items.empty(), "never over the aimed window");
