@@ -51,6 +51,8 @@ struct Character {
     int joint(std::string_view name) const;
     // Skinning matrices (joint world x inverse bind) for a clip at time t (wrapped for loops).
     void pose(const Clip *clip, float t, bool loop, std::vector<Mat4> &out) const;
+    // Crossfade: clip a at ta blended towards clip b at tb by weight wb (0..1), both looping.
+    void blend(const Clip *a, float ta, const Clip *b, float tb, float wb, std::vector<Mat4> &out) const;
 };
 struct CharacterProblem {
     enum Level { Error, Warning, Info } level;

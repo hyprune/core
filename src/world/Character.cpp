@@ -74,31 +74,53 @@ int Character::joint(std::string_view name) const {
             return int(i);
     return -1;
 }
-void Character::pose(const Clip *c, float t, bool loop, std::vector<Mat4> &out) const {
-    std::vector<Vec3> T(joints.size()), S(joints.size());
-    std::vector<std::array<float, 4>> R(joints.size());
-    for (size_t i = 0; i < joints.size(); ++i)
-        T[i] = joints[i].translation, R[i] = joints[i].rotation, S[i] = joints[i].scale;
+namespace {
+struct Locals {
+    std::vector<Vec3> T, S;
+    std::vector<std::array<float, 4>> R;
+};
+Locals locals(const Character &ch, const Character::Clip *c, float t, bool loop) {
+    Locals l;
+    for (auto &j : ch.joints)
+        l.T.push_back(j.translation), l.R.push_back(j.rotation), l.S.push_back(j.scale);
     if (c && c->duration > 0) {
         t = loop ? std::fmod(std::fmod(t, c->duration) + c->duration, c->duration) : std::clamp(t, 0.f, c->duration);
-        for (auto &ch : c->channels) {
+        for (auto &k : c->channels) {
             float v[4];
-            sample(ch, t, v);
-            if (ch.path == 0)
-                T[ch.joint] = {v[0], v[1], v[2]};
-            else if (ch.path == 1)
-                R[ch.joint] = {v[0], v[1], v[2], v[3]};
+            sample(k, t, v);
+            if (k.path == 0)
+                l.T[k.joint] = {v[0], v[1], v[2]};
+            else if (k.path == 1)
+                l.R[k.joint] = {v[0], v[1], v[2], v[3]};
             else
-                S[ch.joint] = {v[0], v[1], v[2]};
+                l.S[k.joint] = {v[0], v[1], v[2]};
         }
     }
-    std::vector<Mat4> global(joints.size());
-    out.resize(joints.size());
-    for (size_t i = 0; i < joints.size(); ++i) { // parents precede children (sorted at load)
-        auto local = trs(T[i], R[i], S[i]);
-        global[i] = joints[i].parent < 0 ? armature * local : global[joints[i].parent] * local;
-        out[i] = global[i] * joints[i].inverseBind;
+    return l;
+}
+void skin(const Character &ch, const Locals &l, std::vector<Mat4> &out) {
+    std::vector<Mat4> global(ch.joints.size());
+    out.resize(ch.joints.size());
+    for (size_t i = 0; i < ch.joints.size(); ++i) { // parents precede children (sorted at load)
+        auto local = trs(l.T[i], l.R[i], l.S[i]);
+        global[i] = ch.joints[i].parent < 0 ? ch.armature * local : global[ch.joints[i].parent] * local;
+        out[i] = global[i] * ch.joints[i].inverseBind;
     }
+}
+} // namespace
+void Character::pose(const Clip *c, float t, bool loop, std::vector<Mat4> &out) const { skin(*this, locals(*this, c, t, loop), out); }
+void Character::blend(const Clip *a, float ta, const Clip *b, float tb, float wb, std::vector<Mat4> &out) const {
+    auto la = locals(*this, a, ta, true);
+    if (wb <= 0 || !b)
+        return skin(*this, la, out);
+    auto lb = locals(*this, b, tb, true);
+    wb = std::min(wb, 1.f);
+    for (size_t i = 0; i < joints.size(); ++i) {
+        la.T[i] = la.T[i] + (lb.T[i] - la.T[i]) * wb;
+        la.S[i] = la.S[i] + (lb.S[i] - la.S[i]) * wb;
+        la.R[i] = nlerp(la.R[i], lb.R[i], wb);
+    }
+    skin(*this, la, out);
 }
 Character loadCharacter(const std::filesystem::path &path) {
     cgltf_options opts{};

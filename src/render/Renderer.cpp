@@ -49,6 +49,22 @@ out vec3 n;out vec3 worldPosition;out vec2 uv;out vec2 lightUV;flat out vec4 pro
 void main(){mat4 m=instanced!=0?mat4(instance0,instance1,instance2,instance3):model;vec4 pos=m*vec4(position,1);gl_Position=vp*pos;
 n=instanced!=0?mat3(m)*normal:normalMatrix*normal;uv=uv0;lightUV=uv1;worldPosition=pos.xyz;probeUp=instanceUp;probeDown=instanceDown;}
 )";
+// NPC characters: linear blend skinning with up to 4 joints per vertex from a joint
+// UBO (<= 64 joints; the artist spec allows 40), same outputs as the world vertex shader.
+const char *skinnedVertex = R"(#version 300 es
+precision highp float;
+layout(location=0) in vec3 position;
+layout(location=1) in vec3 normal;
+layout(location=2) in vec2 uv0;
+layout(location=4) in vec4 joints;
+layout(location=5) in vec4 weights;
+uniform mat4 vp,model;uniform mat3 normalMatrix;
+layout(std140) uniform Joints{mat4 joint[64];};
+out vec3 n;out vec3 worldPosition;out vec2 uv;out vec2 lightUV;flat out vec4 probeUp;flat out vec4 probeDown;
+void main(){mat4 skin=weights.x*joint[int(joints.x)]+weights.y*joint[int(joints.y)]+weights.z*joint[int(joints.z)]+weights.w*joint[int(joints.w)];
+ vec4 pos=model*skin*vec4(position,1);gl_Position=vp*pos;n=normalMatrix*(mat3(skin)*normal);uv=uv0;lightUV=vec2(0);worldPosition=pos.xyz;probeUp=vec4(0);probeDown=vec4(0);}
+)";
+constexpr GLuint jointBinding = 1;
 // Per-material constants, one std140 range per material (MaterialStd140).
 #define MATERIAL_BLOCK "layout(std140) uniform Material{mat3 uvMatrix[5];int uvSet[5];int present[5];" \
     "vec3 color;float alpha;vec3 emission;float alphaCutoff;float intensity,metallic,roughness,normalScale," \
@@ -625,6 +641,11 @@ void Renderer::init() {
     if (!inkComposite_) inkComposite_ = program(screenVertex, inkCompositeFragment);
     if (!scene_)
         materialBlock(scene_ = program(vertex, fragment));
+    if (!skinned_) {
+        materialBlock(skinned_ = program(skinnedVertex, fragment));
+        if (auto index = glGetUniformBlockIndex(skinned_, "Joints"); index != GL_INVALID_INDEX)
+            glUniformBlockBinding(skinned_, index, jointBinding);
+    }
     if (!native_)
         native_ = program(vertex, nativeFragment);
     if (!tone_)
@@ -1540,38 +1561,42 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     gpu_[0].begin();
     glEnable(GL_DEPTH_TEST);
     const GLuint world = worldProgram(); // preset-specialised when compiled
-    glUseProgram(world);
     auto vp = camera.projection(float(w) / h) * camera.view();
-    glUniformMatrix4fv(location(world, "vp"), 1, GL_FALSE, vp.v.data());
-    uniform(world, "albedo", 0);
-    uniform(world, "lightmap", 1);
     auto ink = effectiveOutline(profile, graphics);
     bool drawInk = !externalWorldFbo && graphics["outline"].get<bool>() && ink.value("enabled", false);
-    uniform(world, "inkEnabled", drawInk);
-    uniform(world, "normalMap", 2);
-    uniform(world, "mrMap", 3);
-    uniform(world, "aoMap", 4);
-    uniform(world, "emissiveMap", 5);
-    uniform(world, "eye", camera.position);
-    uniform(world, "details", materialDetails);
-    uniform(world, "normalEnabled", graphics["normal_maps"].get<bool>());
-    uniform(world, "specularEnabled", graphics["specular"].get<bool>());
-    uniform(world, "aoEnabled", graphics["ambient_occlusion"].get<bool>());
-    uniform(world, "reflectionEnabled", graphics["reflections"].get<bool>());
-    uniform(world, "fogMode", graphics["fog"] == "off" ? 0 : graphics["fog"] == "linear" ? 1 : 2);
-    uniform(world, "effects", effects);
-    uniform(world, "environmentMap", 6);
-    uniform(world, "excludeUnlit", fog["excludeUnlit"].get<bool>());
-    uniform(world, "fogColor", vec(fog["color"]));
-    uniform(world, "sunDirection", vec(sun["direction"]));
-    uniform(world, "sunColor", vec(sun["color"]));
-    glUniform1f(location(world, "fogDensity"), fog["density"].get<float>());
-    glUniform1f(location(world, "heightFalloff"), fog["heightFalloff"].get<float>());
-    glUniform1f(location(world, "baseHeight"), fog["baseHeight"].get<float>());
-    glUniform1f(location(world, "sunIntensity"), sun["intensity"].get<float>());
-    glUniform1f(location(world, "cubeLevels"), cubeLevels_);
-    glUniform1f(location(world, "envRotation"), rotation);
-    glUniform1f(location(world, "envIntensity"), 1);
+    // Per-pass world shading constants; NPCs (skinned) share them.
+    auto passUniforms = [&](GLuint p) {
+        glUseProgram(p);
+        glUniformMatrix4fv(location(p, "vp"), 1, GL_FALSE, vp.v.data());
+        uniform(p, "albedo", 0);
+        uniform(p, "lightmap", 1);
+        uniform(p, "inkEnabled", drawInk);
+        uniform(p, "normalMap", 2);
+        uniform(p, "mrMap", 3);
+        uniform(p, "aoMap", 4);
+        uniform(p, "emissiveMap", 5);
+        uniform(p, "eye", camera.position);
+        uniform(p, "details", materialDetails);
+        uniform(p, "normalEnabled", graphics["normal_maps"].get<bool>());
+        uniform(p, "specularEnabled", graphics["specular"].get<bool>());
+        uniform(p, "aoEnabled", graphics["ambient_occlusion"].get<bool>());
+        uniform(p, "reflectionEnabled", graphics["reflections"].get<bool>());
+        uniform(p, "fogMode", graphics["fog"] == "off" ? 0 : graphics["fog"] == "linear" ? 1 : 2);
+        uniform(p, "effects", effects);
+        uniform(p, "environmentMap", 6);
+        uniform(p, "excludeUnlit", fog["excludeUnlit"].get<bool>());
+        uniform(p, "fogColor", vec(fog["color"]));
+        uniform(p, "sunDirection", vec(sun["direction"]));
+        uniform(p, "sunColor", vec(sun["color"]));
+        glUniform1f(location(p, "fogDensity"), fog["density"].get<float>());
+        glUniform1f(location(p, "heightFalloff"), fog["heightFalloff"].get<float>());
+        glUniform1f(location(p, "baseHeight"), fog["baseHeight"].get<float>());
+        glUniform1f(location(p, "sunIntensity"), sun["intensity"].get<float>());
+        glUniform1f(location(p, "cubeLevels"), cubeLevels_);
+        glUniform1f(location(p, "envRotation"), rotation);
+        glUniform1f(location(p, "envIntensity"), 1);
+    };
+    passUniforms(world);
     glBindSampler(0, repeat_);
     glBindSampler(1, clamp_);
     auto visible = world::visibleAreas(*world_, camera.position);
@@ -1775,6 +1800,11 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     if (!externalWorldFbo)
         for (const auto &d : objectDraws)
             drawBatch(d.batch, false, d.first, d.count);
+    npcsDrawn = 0;
+    if (!externalWorldFbo && !npcs.empty()) {
+        passUniforms(skinned_);
+        drawNpcs(planes, tone, exposure);
+    }
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
@@ -2739,7 +2769,137 @@ Renderer::Pixels Renderer::snapshot() {
     pixels.readbackMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
     return pixels;
 }
+Renderer::CharacterGPU &Renderer::characterGPU(const world::Character &c) {
+    auto [it, fresh] = characterGPU_.try_emplace(&c);
+    auto &gpu = it->second;
+    if (!fresh)
+        return gpu;
+    for (auto &image : c.images) {
+        GLuint t;
+        glGenTextures(1, &t);
+        glBindTexture(GL_TEXTURE_2D, t);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.rgba.data());
+        glGenerateMipmap(GL_TEXTURE_2D);
+        gpu.textures.push_back(t);
+    }
+    for (auto &prim : c.primitives) {
+        CharacterGPU::Primitive p;
+        glGenVertexArrays(1, &p.vao);
+        glGenBuffers(1, &p.vbo);
+        glGenBuffers(1, &p.ibo);
+        glBindVertexArray(p.vao);
+        glBindBuffer(GL_ARRAY_BUFFER, p.vbo);
+        glBufferData(GL_ARRAY_BUFFER, prim.vertices.size() * sizeof(world::Character::Vertex), prim.vertices.data(), GL_STATIC_DRAW);
+        using V = world::Character::Vertex;
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(V), (void *)offsetof(V, position));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(V), (void *)offsetof(V, normal));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(V), (void *)offsetof(V, uv));
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(V), (void *)offsetof(V, joints));
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(V), (void *)offsetof(V, weights));
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, p.ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, prim.indices.size() * 4, prim.indices.data(), GL_STATIC_DRAW);
+        glBindVertexArray(0);
+        p.count = GLsizei(prim.indices.size());
+        p.material = prim.material;
+        gpu.primitives.push_back(p);
+    }
+    glGenBuffers(1, &gpu.materials);
+    glBindBuffer(GL_UNIFORM_BUFFER, gpu.materials);
+    glBufferData(GL_UNIFORM_BUFFER, c.materials.size() * materialStride_, nullptr, GL_DYNAMIC_DRAW);
+    for (size_t i = 0; i < c.materials.size(); ++i) {
+        auto m = std140(c.materials[i]);
+        glBufferSubData(GL_UNIFORM_BUFFER, GLintptr(i * materialStride_), sizeof m, &m);
+    }
+    return gpu;
+}
+void Renderer::drawNpcs(const std::array<std::array<float, 4>, 6> &planes, int tone, float exposure) {
+    if (!skinned_)
+        return;
+    if (!jointUbo_) {
+        glGenBuffers(1, &jointUbo_);
+        glBindBuffer(GL_UNIFORM_BUFFER, jointUbo_);
+        glBufferData(GL_UNIFORM_BUFFER, 64 * sizeof(Mat4), nullptr, GL_DYNAMIC_DRAW);
+    }
+    glUseProgram(skinned_);
+    uniform(skinned_, "nativeOutput", 0);
+    uniform(skinned_, "nativeTone", tone);
+    glUniform1f(location(skinned_, "nativeExposure"), exposure);
+    glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_CULL_FACE);
+    glBindBufferBase(GL_UNIFORM_BUFFER, jointBinding, jointUbo_);
+    for (auto &npc : npcs) {
+        if (!npc.character || npc.skin.size() > 64)
+            continue;
+        auto &c = *npc.character;
+        // Conservative bounds: rest bounds grown by 0.6 m for limbs in motion, then the model.
+        Vec3 lo = c.lo - Vec3{.6f, .6f, .6f}, hi = c.hi + Vec3{.6f, .6f, .6f}, a = npc.model.point(lo), b = a;
+        for (int corner = 1; corner < 8; ++corner) {
+            auto q = npc.model.point({corner & 1 ? hi.x : lo.x, corner & 2 ? hi.y : lo.y, corner & 4 ? hi.z : lo.z});
+            a = {std::min(a.x, q.x), std::min(a.y, q.y), std::min(a.z, q.z)};
+            b = {std::max(b.x, q.x), std::max(b.y, q.y), std::max(b.z, q.z)};
+        }
+        bool inside = true;
+        for (auto &p : planes)
+            if (p[0] * (p[0] > 0 ? b.x : a.x) + p[1] * (p[1] > 0 ? b.y : a.y) + p[2] * (p[2] > 0 ? b.z : a.z) + p[3] < 0)
+                inside = false;
+        if (!inside)
+            continue;
+        auto &gpu = characterGPU(c);
+        glBindBuffer(GL_UNIFORM_BUFFER, jointUbo_);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, npc.skin.size() * sizeof(Mat4), npc.skin.data());
+        auto normals = normalMatrix(npc.model);
+        glUniformMatrix4fv(location(skinned_, "model"), 1, GL_FALSE, npc.model.v.data());
+        glUniformMatrix3fv(location(skinned_, "normalMatrix"), 1, GL_FALSE, normals.data());
+        for (auto &prim : gpu.primitives) {
+            const auto &m = c.materials[prim.material];
+            if (npc.accent && prim.material < c.materialNames.size() && c.materialNames[prim.material] == "accent") {
+                auto recoloured = m;
+                recoloured.color = *npc.accent;
+                auto block = std140(recoloured);
+                glBindBuffer(GL_UNIFORM_BUFFER, gpu.materials);
+                glBufferSubData(GL_UNIFORM_BUFFER, GLintptr(prim.material * materialStride_), sizeof block, &block);
+            }
+            glBindBufferRange(GL_UNIFORM_BUFFER, materialBinding, gpu.materials, GLintptr(prim.material) * materialStride_,
+                              sizeof(MaterialStd140));
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m.slots[0].texture >= 0 ? gpu.textures[m.slots[0].texture] : 0);
+            glBindSampler(0, repeat_);
+            for (int unit : {1, 2, 3, 4, 5}) {
+                glActiveTexture(GL_TEXTURE0 + unit);
+                glBindTexture(GL_TEXTURE_2D, 0);
+            }
+            glBindVertexArray(prim.vao);
+            glDrawElements(GL_TRIANGLES, prim.count, GL_UNSIGNED_INT, nullptr);
+        }
+        ++npcsDrawn;
+    }
+    glBindVertexArray(0);
+    glDisable(GL_CULL_FACE);
+}
+void Renderer::releaseCharacters() {
+    for (auto &[character, gpu] : characterGPU_) {
+        for (auto &p : gpu.primitives) {
+            glDeleteVertexArrays(1, &p.vao);
+            glDeleteBuffers(1, &p.vbo);
+            glDeleteBuffers(1, &p.ibo);
+        }
+        glDeleteTextures(GLsizei(gpu.textures.size()), gpu.textures.data());
+        glDeleteBuffers(1, &gpu.materials);
+    }
+    characterGPU_.clear();
+}
 void Renderer::destroy() {
+    releaseCharacters();
+    if (jointUbo_)
+        glDeleteBuffers(1, &jointUbo_);
+    jointUbo_ = 0;
+    deleteProgram(skinned_);
     if (warmFence_) glDeleteSync(warmFence_);
     warmFence_ = nullptr; warmStep_ = -1;
     glDeleteFramebuffers(1, &warmFbo_); glDeleteTextures(1, &warmTexture_); warmFbo_ = warmTexture_ = 0;

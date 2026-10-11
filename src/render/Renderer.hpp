@@ -5,10 +5,13 @@
 #include "Resolution.hpp"
 #include "interaction/Tools.hpp"
 #include "surfaces/Surface.hpp"
+#include "world/Character.hpp"
 #include "world/World.hpp"
 #include <GLES3/gl3.h>
 #include <chrono>
 #include <deque>
+#include <map>
+#include <optional>
 #include <functional>
 namespace hyprune::render {
 class Renderer {
@@ -90,6 +93,17 @@ class Renderer {
     bool scopeVignette = false;
     // The aiming reticle, drawn crisp at native output resolution in present(). Sizes in
     // logical px. State changes shape as well as colour (colour-blind safe).
+    // NPCs (RFC-0010 prototype): skinned characters, drawn after the opaque world with
+    // the world's shading. Set per tick by the runtime; skin = Character::pose() output.
+    struct Npc {
+        std::shared_ptr<const world::Character> character;
+        Mat4 model = Mat4::identity();
+        std::vector<Mat4> skin;
+        std::optional<Vec3> accent; // recolours the material named `accent`
+    };
+    std::vector<Npc> npcs;
+    int npcsDrawn = 0;
+    void releaseCharacters(); // GL context current
     struct Reticle {
         enum Style { CrossDot, TDot, CircleDot, Dot, Cross, Chevron };
         enum State { Neutral, Target, Valid, OutOfRange, Invalid, Holding, Typing };
@@ -161,6 +175,20 @@ class Renderer {
     size_t gpuBytes_ = 0;
     GLuint materialUbo_ = 0; // one std140 Material range per world material
     GLsizei materialStride_ = 0;
+    struct CharacterGPU {
+        struct Primitive {
+            GLuint vao = 0, vbo = 0, ibo = 0;
+            GLsizei count = 0;
+            unsigned material = 0;
+        };
+        std::vector<Primitive> primitives;
+        std::vector<GLuint> textures;
+        GLuint materials = 0; // MaterialStd140 ranges, one per material
+    };
+    std::map<const world::Character *, CharacterGPU> characterGPU_;
+    GLuint skinned_ = 0, jointUbo_ = 0;
+    CharacterGPU &characterGPU(const world::Character &);
+    void drawNpcs(const std::array<std::array<float, 4>, 6> &planes, int tone, float exposure);
     GLuint scene_ = 0, tone_ = 0, reticle_ = 0, quadVao_ = 0, quadVbo_ = 0, screenVao_ = 0, repeat_ = 0, clamp_ = 0, mipClamp_ = 0;
     GLuint environment_ = 0, bloom_ = 0, sky_ = 0, native_ = 0, depthProgram_ = 0;
     GLuint inkComposite_ = 0, inkNormals_ = 0, inkProgram_ = 0, inkFbo_ = 0, inkNormal_ = 0, inkDepth_ = 0;
