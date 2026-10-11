@@ -744,8 +744,11 @@ void Runtime::floatIntoWorld(PHLWINDOWREF window) {
         size = it->second;
         arrivalSizes.erase(it);
     }
-    // A tile of a large output would be a wall-sized quad: at most 60% of this output.
-    double fit = std::min({1., m->m_size.x * .6 / std::max(1., size.x), m->m_size.y * .6 / std::max(1., size.y)});
+    // A full-output tile would be a wall-sized quad: a window covering more than half of
+    // this output is scaled (same aspect) to 35% of its area; smaller windows keep their size.
+    double area = std::max(1., size.x * size.y), output = double(m->m_size.x) * m->m_size.y;
+    double fit = std::min({area > .5 * output ? std::sqrt(.35 * output / area) : 1., m->m_size.x / std::max(1., size.x),
+                           m->m_size.y / std::max(1., size.y)});
     size = {std::max(160., std::round(size.x * fit)), std::max(100., std::round(size.y * fit))};
     auto floated = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_ENABLE, w);
     if (!floated)
