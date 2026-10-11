@@ -158,7 +158,7 @@ void questBook() {
     // Persistence round trip.
     QuestBook c;
     c.restore(Json::parse(b.file().dump()));
-    check(c.file() == b.file(), "file round trip");
+    check(c.file() == b.file() && c.quests == b.quests, "file round trip");
     // Limit.
     QuestBook full;
     for (int i = 0; i < 64; ++i)

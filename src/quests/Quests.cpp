@@ -775,7 +775,18 @@ Json QuestBook::markers() const {
     return out;
 }
 Json QuestBook::file() const {
-    return {{"version", 1}, {"tracked", tracked}, {"quests", quests}};
+    // The stored shape (schema quests-personal): no nulls for absent dates and targets.
+    Json out = Json::array();
+    for (auto q : quests) {
+        q.erase("category");
+        if (q["expires"].is_null())
+            q.erase("expires");
+        for (auto &s : q["steps"])
+            if (s["target"].is_null())
+                s.erase("target");
+        out.push_back(q);
+    }
+    return {{"version", 1}, {"tracked", tracked}, {"quests", out}};
 }
 void QuestBook::restore(const Json &j) {
     if (!j.is_object() || j.value("version", 0) != 1 || !j.contains("quests") || !j["quests"].is_array())
