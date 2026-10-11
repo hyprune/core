@@ -46,6 +46,22 @@ inline Json withoutRecordingAction(Json j) {
     } else if (j.is_array()) for (auto &v : j) v = withoutRecordingAction(std::move(v));
     return j;
 }
+// IPC 0.21 added the world action markers.reveal (TAB tap): older peers never see it.
+inline Json withoutMarkersReveal(Json j) {
+    if (j.is_object()) {
+        j.erase("markers.reveal");
+        if (j.contains("conflicts") && j["conflicts"].is_array())
+            std::erase_if(j["conflicts"].get_ref<Json::array_t &>(), [](const Json &c) {
+                return c.is_object() && c.contains("actions") &&
+                       std::find(c["actions"].begin(), c["actions"].end(), "markers.reveal") != c["actions"].end();
+            });
+        for (auto &v : j)
+            v = withoutMarkersReveal(std::move(v));
+    } else if (j.is_array())
+        for (auto &v : j)
+            v = withoutMarkersReveal(std::move(v));
+    return j;
+}
 Json inputConflicts(const Json &);
 struct Action {
     std::string name;
@@ -63,7 +79,8 @@ class Input {
                               float value = 0, bool gestureMovement = false);
     bool gestureHeld() const;
     Json holds() const;
-    std::vector<Action> tick(uint64_t now);
+    // `mode`: the current input mode; a held tap/hold pair started in another mode fires nothing.
+    std::vector<Action> tick(uint64_t now, const std::string &mode = "");
     void apply(const Json &);
     void clear();
 
@@ -72,6 +89,8 @@ class Input {
         std::string action, binding;
         uint64_t started;
         bool hold, fired;
+        // Tap/hold pair (RFC-0012): `action` is the hold action, `tap` the plain one.
+        std::string tap = "", mode = "";
     };
     std::map<std::string, Press> held;
 };

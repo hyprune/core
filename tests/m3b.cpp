@@ -184,6 +184,14 @@ int main() {
                 Input input;
                 auto t = parseBinding(v);
                 auto events = input.event(mode, t.key, t.mods, true, 100);
+                if (action == "markers.reveal") {
+                    // The plain half of the TAB tap/hold pair (RFC-0012) fires on release.
+                    assert(events.size() == 1 && events[0].name == "menu" && !events[0].pressed);
+                    auto tap = input.event(mode, t.key, 0, false, 300);
+                    assert(tap.size() == 2 && tap[0].name == action && tap[0].pressed && !tap[1].pressed);
+                    checked++;
+                    continue;
+                }
                 assert(events.size() == 1 && events[0].name == action && events[0].pressed == !t.hold);
                 if (t.hold) {
                     assert(input.tick(1099).empty());

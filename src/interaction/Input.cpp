@@ -1,5 +1,6 @@
 #include "Input.hpp"
 #include "InputDefaults.hpp"
+#include <optional>
 #include <set>
 #include <xkbcommon/xkbcommon.h>
 namespace hyprune::interaction {
@@ -107,6 +108,15 @@ Json validateInput(const Json &raw) {
         for (auto key : {"hud.cycle", "content.scale", "window.reset", "carry.facing", "alternate", "cycle"})
             if (!w.contains(key))
                 w[key] = inputDefaults()["modes"]["world"][key];
+        // IPC 0.21: TAB tap reveals markers, unless plain Tab already does something here.
+        if (!w.contains("markers.reveal")) {
+            bool tabTaken = false;
+            for (auto &[action, bindings] : w.items())
+                if (bindings.is_array())
+                    for (auto &b : bindings)
+                        tabTaken |= b.is_string() && (b == "Tab" || b == "tab");
+            w["markers.reveal"] = tabTaken ? Json::array() : Json::array({"Tab"});
+        }
     }
     if (j.is_object() && !j.contains("show_area_markers"))
         j["show_area_markers"] = false;
@@ -190,13 +200,33 @@ Json inputConflicts(const Json &j) {
                 auto a = all[i].trigger, b = all[k].trigger;
                 bool overlap = a.key == b.key || (a.key == "Wheel" && b.key.starts_with("Wheel")) ||
                                (b.key == "Wheel" && a.key.starts_with("Wheel"));
-                if (a.mods == b.mods && overlap)
+                // A tap/hold pair (one plain, one [L], different actions) is not a conflict.
+                bool pair = a.hold != b.hold && all[i].action != all[k].action && a.key == b.key;
+                if (a.mods == b.mods && overlap && !pair)
                     result.push_back(
                         {{"mode", mode}, {"binding", all[k].name}, {"actions", {all[i].action, all[k].action}}});
             }
     }
     return result;
 }
+namespace {
+struct Pair {
+    std::string hold, tap, binding;
+};
+// One plain and one [L] binding of the same chord for different actions in one mode.
+std::optional<Pair> tapHold(const Json &table, const Trigger &t, const std::string &action) {
+    for (auto &[other, bindings] : table.items()) {
+        if (other == action)
+            continue;
+        for (auto &b : bindings) {
+            auto u = parseBinding(b);
+            if (u.key == t.key && u.mods == t.mods && u.hold != t.hold)
+                return t.hold ? Pair{action, other, bindingName(t)} : Pair{other, action, bindingName(u)};
+        }
+    }
+    return std::nullopt;
+}
+} // namespace
 std::vector<Action> Input::event(const std::string &mode, const std::string &key, unsigned mods, bool down,
                                  uint64_t now, float value, bool gestureMovement) {
     std::string identity = key;
@@ -210,6 +240,16 @@ std::vector<Action> Input::event(const std::string &mode, const std::string &key
             return {};
         auto p = it->second;
         held.erase(it);
+        if (!p.tap.empty()) {
+            // Tap/hold pair: the hold owns its release once fired; a release before
+            // longHoldMs is the tap; past it (before a tick saw it) it is the hold.
+            if (p.fired)
+                return {{p.action, false, value, false}};
+            if (!mode.empty() && mode != p.mode)
+                return {};
+            auto &action = now - p.started >= config["longHoldMs"].get<uint64_t>() ? p.action : p.tap;
+            return {{action, true, value}, {action, false, value, false}};
+        }
         bool still = false;
         for (auto &[k, h] : held)
             if (h.action == p.action)
@@ -252,14 +292,32 @@ std::vector<Action> Input::event(const std::string &mode, const std::string &key
             if ((t.key != key && !(t.key == "Wheel" && key.starts_with("Wheel"))) ||
                 ((matchMods & ~own) != t.mods && !(move && t.mods == 0 && (matchMods & ~(Shift | Ctrl)) == 0)))
                 continue;
-            if (!key.starts_with("Wheel") && key != "MouseMove")
+            if (!key.starts_with("Wheel") && key != "MouseMove") {
+                if (auto pair = tapHold(*table, t, action)) {
+                    held[identity] = {pair->hold, pair->binding, now, true, false, pair->tap, mode};
+                    return {{pair->hold, false, value}};
+                }
                 held[identity] = {action, bindingName(t), now, t.hold, false};
+            }
             // Wheel notches are impulses: a button-like slot still owes its
             // client/drag handler a release in this same deferred input batch.
             if (key.starts_with("Wheel") && (action == "primary" || action == "secondary" || action == "alternate"))
                 return {{action, true, value}, {action, false, value, false}};
             return {{action, t.hold ? false : true, value}};
         }
+    // A tap/hold pair on an unmodified chord also works with sprint (Shift) or crouch (Ctrl) held.
+    if (mode == "world" && (mods & (Shift | Ctrl)) && !(mods & ~(Shift | Ctrl)) && !key.starts_with("Wheel") &&
+        key != "MouseMove")
+        for (auto &[action, bindings] : config["modes"][mode].items())
+            for (auto &binding : bindings) {
+                auto t = parseBinding(binding);
+                if (t.key != key || t.mods)
+                    continue;
+                if (auto pair = tapHold(config["modes"][mode], t, action)) {
+                    held[identity] = {pair->hold, pair->binding, now, true, false, pair->tap, mode};
+                    return {{pair->hold, false, value}};
+                }
+            }
     return {};
 }
 Json Input::holds() const {
@@ -276,8 +334,13 @@ bool Input::gestureHeld() const {
             return true;
     return false;
 }
-std::vector<Action> Input::tick(uint64_t now) {
+std::vector<Action> Input::tick(uint64_t now, const std::string &mode) {
     std::vector<Action> out;
+    // A pair held across a mode change fires nothing, now or on release.
+    std::erase_if(held, [&](auto &entry) {
+        auto &p = entry.second;
+        return !p.tap.empty() && !p.fired && !mode.empty() && mode != p.mode;
+    });
     for (auto &[key, p] : held)
         if (p.hold && !p.fired && now - p.started >= config["longHoldMs"].get<uint64_t>()) {
             p.fired = true;

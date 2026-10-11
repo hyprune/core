@@ -34,6 +34,9 @@
       "menu": [
         "Tab[L]"
       ],
+      "markers.reveal": [
+        "Tab"
+      ],
       "sprint": [
         "Shift_L"
       ],
