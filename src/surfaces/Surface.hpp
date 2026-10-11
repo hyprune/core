@@ -22,6 +22,8 @@ struct Surface {
     }
     float opacity = 1; // placement previews only; never part of client buffer alpha
     unsigned texture = 0;
+    // Texture region shown (u0, v0, u1, v1): a wp_viewporter source crop, else the whole buffer.
+    std::array<float, 4> uvRect{0, 0, 1, 1};
     bool focused = false;
 };
 struct Hit {

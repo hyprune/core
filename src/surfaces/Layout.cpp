@@ -522,7 +522,8 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
     auto b = binding(i.workspaceId, w);
     if (!b && recalled.contains(i.id))
         b = binding(i.workspaceId, nullptr);
-    if (!b && !freePoses.contains(i.id) && !saved(i, w))
+    // Recalled room clients have no home binding: they come to the player like the rest.
+    if (!b && !freePoses.contains(i.id) && !saved(i, w) && !recalled.contains(i.id))
         return {};
     Surface s;
     s.id = i.id;
@@ -539,8 +540,39 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
             s.height = (*c)["worldSize"][1];
         } else
             s.logicalSize(pw, ph, windowScale);
-        if ((s.width != old.width || s.height != old.height) && !pushOut(s, w->collision))
-            return {}; // Never publish a newly resized quad through geometry.
+        if (auto f = fittedScale.find(i.id); f != fittedScale.end() && !contentFor(i, w) &&
+            std::get<0>(f->second) == pw && std::get<1>(f->second) == ph) {
+            s.width *= std::get<2>(f->second); // the fit found earlier for this client size
+            s.height *= std::get<2>(f->second);
+        } else if ((s.width != old.width || s.height != old.height) && !pushOut(s, w->collision)) {
+            // Never publish a resized quad through geometry, and never lose the window either:
+            // shrink it in place (same aspect, same content) until it fits, else bring it in
+            // front of the player. Hiding it made a resize look like the window vanished.
+            bool fitted = false;
+            for (int k = 1; k <= 12 && !fitted; ++k) {
+                auto smaller = s;
+                smaller.width = s.width * std::pow(.85f, float(k));
+                smaller.height = s.height * std::pow(.85f, float(k));
+                if ((fitted = pushOut(smaller, w->collision))) {
+                    s = smaller;
+                    fittedScale[i.id] = {pw, ph, std::pow(.85f, float(k))};
+                }
+            }
+            if (fitted)
+                if (auto c = contentFor(i, w)) { // keep the fitted size: no refit every frame
+                    auto sizing = *c;
+                    sizing["worldSize"] = {s.width, s.height};
+                    setContent(i, w, sizing);
+                }
+            if (!fitted) {
+                auto front = carryPlane(camera, s.width, s.height, w->collision);
+                front.id = s.id;
+                front.title = s.title;
+                front.pixelWidth = s.pixelWidth;
+                front.pixelHeight = s.pixelHeight;
+                s = front;
+            }
+        }
         freePoses[i.id] = s;
     } else if (carried == i.id || recalled.contains(i.id))
         s = carryPlane(camera, pw * windowScale, ph * windowScale, w->collision,

@@ -1858,8 +1858,8 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
                     world::Vertex v{};
                     v.position = center + right * ((xy.first - .5f) * width) + up * ((.5f - xy.second) * height);
                     v.normal = normal;
-                    v.uv[0] = xy.first;
-                    v.uv[1] = xy.second;
+                    v.uv[0] = s.uvRect[0] + xy.first * (s.uvRect[2] - s.uvRect[0]);
+                    v.uv[1] = s.uvRect[1] + xy.second * (s.uvRect[3] - s.uvRect[1]);
                     vertices.push_back(v);
                 }
             };

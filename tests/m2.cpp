@@ -44,6 +44,23 @@ int main(int argc, char **argv) {
                   adoptedPlane->center.z >= bounds["min"][2] && adoptedPlane->center.z <= bounds["max"][2],
               "spawn outside home free zone");
         check(adopted.bindings.empty() && adopted.placements.empty(), "spawn rewrote native workspace or saved homes");
+        {
+            // A client resize that no longer fits its spot (a 4K tile is a 7.7 m quad) shrinks
+            // in place, same aspect, instead of hiding the window; the fit is stable.
+            surfaces::Layout grown = adopted;
+            auto big = grown.locate(opened, w.get(), spawnCamera, 3840, 2160);
+            check(big && !surfaces::overlaps(*big, w->collision), "resized window vanished or collides");
+            check(big->width < 3840 * .002f && std::abs(big->width / big->height - 3840.f / 2160.f) < .01f,
+                  "resized window not shrunk in place with its aspect");
+            auto again = grown.locate(opened, w.get(), spawnCamera, 3840, 2160);
+            check(again && length(again->center - big->center) < 1e-4f && std::abs(again->width - big->width) < 1e-4f,
+                  "shrink-to-fit not stable across refreshes");
+            // Recall brings room clients (no home binding) to the player like the rest.
+            surfaces::Instance live[] = {opened};
+            grown.recall(live);
+            auto recalled = grown.locate(opened, w.get(), spawnCamera, 1600, 900);
+            check(recalled && length(recalled->center - spawnCamera.position) < 6, "recalled room client vanished");
+        }
         surfaces::Instance second = opened;
         second.id = "new-live-second";
         proposed.id = second.id;

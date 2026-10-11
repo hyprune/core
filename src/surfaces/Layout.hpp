@@ -23,6 +23,8 @@ class Layout {
     float windowScale = .002f;
     std::string carried;
     std::map<std::string, Surface> freePoses, occupiedPoses;
+    // Shrink factor a free window needed to fit after a client resize, per logical size.
+    std::map<std::string, std::tuple<int, int, float>> fittedScale;
     std::map<std::string, std::string> spawnAreas;
     std::set<std::string> unplaced;
     std::map<std::string, Json> content;

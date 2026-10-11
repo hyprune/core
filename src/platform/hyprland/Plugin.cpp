@@ -267,6 +267,8 @@ struct Runtime {
     void button(IPointer::SButtonEvent, bool super);
     void axis(IPointer::SAxisEvent);
     void handTick(float);
+    void floatIntoWorld(PHLWINDOWREF);
+    std::map<const void *, Vector2D> arrivalSizes; // size before a move into the room
     void motionTick(float);
     struct Handover {
         int phase = 0, workspace = 0;
@@ -684,6 +686,21 @@ void Runtime::refresh() {
         capture.refresh(monitor.lock(), world.get(), &layout, &camera);
         // Configure after the capture iteration completes: native layout changes
         // may reorder the compositor's window list or invoke other plugin hooks.
+        for (auto window : std::exchange(capture.floatRequests, {}))
+            deferInput([window] { runtime->floatIntoWorld(window); });
+        for (auto window : std::exchange(capture.tileRequests, {}))
+            deferInput([window] {
+                // Back on its home wall: restore the tiling it had before the world floated it.
+                if (!runtime->active || !window || !window->m_isMapped || !window->m_isFloating)
+                    return;
+                auto w = window.lock();
+                runtime->capture.worldFloated.erase(w.get());
+                if (w->m_workspace && w->m_workspace->m_id == runtime->worldWorkspace)
+                    return; // room windows stay floating
+                auto tiled = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_DISABLE, w);
+                if (!tiled)
+                    throw std::runtime_error("home re-tile rejected: " + tiled.error().message);
+            });
         for (auto [window, logical] : std::exchange(capture.configureRequests, {}))
             deferInput([window, logical] {
                 if (!runtime->active || !window || !window->m_isMapped || !window->m_target)
@@ -704,6 +721,41 @@ void Runtime::refresh() {
                 w->sendWindowSize(true);
             });
     }
+}
+void Runtime::floatIntoWorld(PHLWINDOWREF window) {
+    // Every way into the world (moved or dragged in from another output, Director pull or
+    // recall, carried off a home wall, placed or pocketed) leaves the client tiled where it
+    // was; only clients opened in the room float on open. Float it at the size it had
+    // before (capped to a sensible share of the output), on this output, before it is posed.
+    if (!active || !window || !window->m_isMapped || !window->m_target || !monitor)
+        return;
+    auto w = window.lock();
+    if (w->parent() || w->x11Parent() || w->m_isFloating || Fullscreen::controller()->isFullscreen(w) ||
+        (!(w->m_workspace && w->m_workspace->m_id == worldWorkspace && w->m_monitor == monitor) &&
+         std::none_of(capture.entries.begin(), capture.entries.end(), [&](auto &e) { return e.window == w; })))
+        return; // room arrivals on this output, or windows the world already shows
+    auto m = monitor.lock();
+    Vector2D size = w->m_target->position().size();
+    if (auto it = arrivalSizes.find(w.get()); it != arrivalSizes.end()) {
+        size = it->second;
+        arrivalSizes.erase(it);
+    }
+    // A tile of a large output would be a wall-sized quad: at most 60% of this output.
+    double fit = std::min({1., m->m_size.x * .6 / std::max(1., size.x), m->m_size.y * .6 / std::max(1., size.y)});
+    size = {std::max(160., std::round(size.x * fit)), std::max(100., std::round(size.y * fit))};
+    auto floated = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_ENABLE, w);
+    if (!floated)
+        throw std::runtime_error("world float rejected: " + floated.error().message);
+    auto resized = Config::Actions::resize(size, false, w);
+    if (!resized)
+        throw std::runtime_error("world float resize rejected: " + resized.error().message);
+    // A floating position remembered from another output would move it off this one.
+    auto moved = Config::Actions::move(m->m_position + (m->m_size - size) / 2, false, w);
+    if (!moved)
+        throw std::runtime_error("world float move rejected: " + moved.error().message);
+    w->m_target->rememberFloatingSize(size);
+    w->sendWindowSize(true);
+    capture.worldFloated.insert(w.get());
 }
 void Runtime::home(const Json &binding, bool travel) {
     if (!world || binding.at("worldId") != world->id)
@@ -4559,15 +4611,6 @@ int luaCamera(lua_State *state) {
           {"hint", runtime->renderer.reticle.hint}}},
         {"viewBob", {runtime->camera.viewBob.x, runtime->camera.viewBob.y, runtime->camera.viewBob.z}},
         {"motion", {{"speed", runtime->motionSpeed}, {"turn", runtime->motionTurn}}},
-        {"reticle",
-         {{"state", runtime->reticle.state},
-          {"action", runtime->reticle.action},
-          {"distance", runtime->reticle.distance},
-          {"reach", runtime->reticle.reach},
-          {"spread", runtime->renderer.reticle.spread},
-          {"hint", runtime->renderer.reticle.hint}}},
-        {"viewBob", {runtime->camera.viewBob.x, runtime->camera.viewBob.y, runtime->camera.viewBob.z}},
-        {"motion", {{"speed", runtime->motionSpeed}, {"turn", runtime->motionTurn}}},
         {"mountTarget", runtime->snapTarget},
         {"renderPasses", runtime->renderPass.passes()},
         {"renderPassesLeaked", runtime->renderPass.leaked()},
@@ -4610,6 +4653,9 @@ int luaCamera(lua_State *state) {
              {"position", {child.surface.center.x, child.surface.center.y, child.surface.center.z}},
              {"size", {child.surface.width, child.surface.height}},
              {"pixels", {child.surface.pixelWidth, child.surface.pixelHeight}}});
+    j["uncaptured"] = Json::array();
+    for (auto &[title, why] : runtime->capture.skipped)
+        j["uncaptured"].push_back({{"title", title}, {"reason", why}});
     j["captures"] = Json::array();
     for (auto &e : runtime->capture.entries)
         j["captures"].push_back(
@@ -4619,9 +4665,12 @@ int luaCamera(lua_State *state) {
              {"floating", e.window->m_isFloating},
              {"commits", *e.commits},
              {"visible", e.visible},
+             {"queued", e.queued},
+             {"placed", runtime->layout.freePoses.contains(e.surface.id)},
              {"size", {e.surface.width, e.surface.height}},
              {"collision", runtime->world && e.visible && surfaces::overlaps(e.surface, runtime->world->collision)},
              {"rotation", e.surface.rotation},
+             {"normal", {e.surface.normal().x, e.surface.normal().y, e.surface.normal().z}},
              {"workspaceId", e.instance.workspaceId},
              {"pixels", {e.surface.pixelWidth, e.surface.pixelHeight}},
              {"position", {e.surface.center.x, e.surface.center.y, e.surface.center.z}}});
@@ -4645,7 +4694,10 @@ int luaCamera(lua_State *state) {
                                         {"workspaceId", f.workspaceId},
                                         {"composed", f.composed},
                                         {"title", f.surface.title},
-                                        {"position", {f.surface.center.x, f.surface.center.y, f.surface.center.z}}});
+                                        {"position", {f.surface.center.x, f.surface.center.y, f.surface.center.z}},
+                                        {"size", {f.surface.width, f.surface.height}},
+                                        {"right", {f.surface.right().x, f.surface.right().y, f.surface.right().z}},
+                                        {"up", {f.surface.up().x, f.surface.up().y, f.surface.up().z}}});
     lua_pushstring(state, j.dump().c_str());
     return 1;
 }
@@ -4811,6 +4863,16 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         throw std::runtime_error("input source hooks unavailable");
     if (!originalKeyboardInput)
         throw std::runtime_error("Hyprune: event keyboard hook unavailable");
+    runtime->listeners.push_back(Event::bus()->m_events.window.moveToWorkspace.listen([](PHLWINDOW window, PHLWORKSPACE workspace) {
+        // Synchronous: only remember the size the client had before it reached the room;
+        // floatIntoWorld() floats it later, from the tick (never inside this hook).
+        if (runtime && runtime->active && workspace && workspace->m_id == runtime->worldWorkspace && window &&
+            !window->m_isFloating && window->m_target && window->m_workspace != workspace) {
+            if (runtime->arrivalSizes.size() > 64)
+                runtime->arrivalSizes.clear();
+            runtime->arrivalSizes[window.get()] = window->m_target->position().size();
+        }
+    }));
     runtime->listeners.push_back(Event::bus()->m_events.window.openEarly.listen([](PHLWINDOW window) {
         // This event follows static rules/launch-token workspace routing and
         // precedes newTarget(). Change only the initial layout flag: no render,

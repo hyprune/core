@@ -65,6 +65,8 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
     std::erase_if(adoptedWindows_, [](auto &w) { return !w.window || !w.window->m_isMapped; });
     std::set<std::string> refreshed;
     size_t leasedBytes = 0;
+    skipped.clear();
+    auto skip = [&](const PHLWINDOW &w, const char *why) { skipped.emplace_back(ipc::boundedText(w->m_title, ipc::TitleLimit), why); };
     for (auto &w : Desktop::windowState()->windows()) {
         if (!w->m_isMapped || w->isHidden() || w->m_monitor != monitor || !w->resource())
             continue;
@@ -86,20 +88,49 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             continue;
         auto surface = w->resource();
         auto texture = surface->m_current.texture;
-        if (!texture || !texture->m_texID || texture->m_type == Render::TEXTURE_EXTERNAL)
+        if (!texture || !texture->m_texID || texture->m_type == Render::TEXTURE_EXTERNAL) {
+            skip(w, !texture || !texture->m_texID ? "no texture" : "external texture");
             continue;
+        }
         // Unsupported source geometry is unavailable instead of silently
         // routing a click using mismatched texture coordinates.
-        if (surface->m_current.transform != WL_OUTPUT_TRANSFORM_NORMAL || surface->m_current.viewport.hasSource)
+        if (surface->m_current.transform != WL_OUTPUT_TRANSFORM_NORMAL) {
+            skip(w, "buffer transform");
             continue;
+        }
+        // A wp_viewporter source crop (Chromium uses one around resizes, on oversized
+        // buffers): show that region, as Hyprland does. Skipping such a client made it
+        // vanish from the world on resize and come back on a later commit.
+        std::array<float, 4> uvRect{0, 0, 1, 1};
+        if (surface->m_current.viewport.hasSource) {
+            auto buffer = surface->m_current.bufferSize;
+            auto source = surface->m_current.viewport.source;
+            if (buffer.x > 0 && buffer.y > 0 && source.w > 0 && source.h > 0)
+                uvRect = {float(std::clamp(source.x / buffer.x, 0., 1.)), float(std::clamp(source.y / buffer.y, 0., 1.)),
+                          float(std::clamp((source.x + source.w) / buffer.x, 0., 1.)),
+                          float(std::clamp((source.y + source.h) / buffer.y, 0., 1.))};
+            if (uvRect[2] - uvRect[0] < .01f || uvRect[3] - uvRect[1] < .01f)
+                uvRect = {0, 0, 1, 1};
+        }
         size_t bytes = size_t(texture->m_size.x) * size_t(texture->m_size.y) * 4;
-        if (bytes > 256 * 1024 * 1024 - leasedBytes)
+        if (bytes > 256 * 1024 * 1024 - leasedBytes) {
+            skip(w, "texture budget");
             continue;
+        }
         leasedBytes += bytes;
         auto it = std::find_if(entries.begin(), entries.end(), [&](auto &e) { return e.window == w; });
+        if (it == entries.end() && !attached && inRoom && !w->m_isFloating && !Fullscreen::controller()->isFullscreen(w)) {
+            // Arrived tiled (moved or dragged in): adopted once floating, at its own size,
+            // so the spawn search never sees a full-output tile.
+            floatRequests.push_back(w);
+            skip(w, "floating first");
+            continue;
+        }
         if (it == entries.end()) {
-            if (entries.size() >= 16)
+            if (entries.size() >= 16) {
+                skip(w, "capture limit");
                 continue;
+            }
             Entry e;
             e.window = w;
             e.surface.id =
@@ -185,6 +216,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 it->visible = true;
             }
         }
+        it->surface.uvRect = uvRect;
         it->queued = layout && layout->unplaced.contains(it->surface.id);
         if (it->queued)
             it->visible = false;
@@ -198,6 +230,15 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                      std::abs(w->m_target->position().h - logical.y) > 1))
                     configureRequests.push_back({w, logical});
             }
+        if (!attached && !Fullscreen::controller()->isFullscreen(w)) {
+            bool free = inRoom || (layout && layout->pulled(it->instance, world));
+            if (free && !w->m_isFloating) {
+                floatRequests.push_back(w);
+                if (!layout || layout->carried != it->surface.id)
+                    it->visible = false; // never posed at its tiled size: shown once floating
+            } else if (!free && w->m_isFloating && worldFloated.contains(w.get()))
+                tileRequests.push_back(w);
+        }
         if (attached && layout) {
             layout->freePoses.erase(it->surface.id);
             layout->spawnAreas.erase(it->surface.id);

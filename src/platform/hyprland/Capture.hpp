@@ -1,4 +1,5 @@
 #pragma once
+#include <set>
 #include "surfaces/Layout.hpp"
 #include "surfaces/Surface.hpp"
 #include "world/World.hpp"
@@ -24,6 +25,15 @@ class Capture {
     };
     std::vector<Entry> entries;
     std::vector<std::pair<PHLWINDOWREF, Vector2D>> configureRequests;
+    // Clients that live freely in the world (in the room, or pulled/recalled/placed/pocketed
+    // from a home) are floating windows: tiled, every native relayout resized them under
+    // their world pose. floatRequests are tiled ones to float (Runtime::floatIntoWorld);
+    // worldFloated are the ones floated that way; tileRequests are those back on their
+    // home wall, re-tiled there.
+    std::vector<PHLWINDOWREF> floatRequests, tileRequests;
+    std::set<const void *> worldFloated;
+    // Windows on this output that the last refresh could not capture, and why (diagnostics).
+    std::vector<std::pair<std::string, std::string>> skipped;
     struct Child {
         WP<CWLSurfaceResource> resource;
         SP<Render::ITexture> texture;
