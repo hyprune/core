@@ -1,4 +1,4 @@
-# Owner interaction follow-up — IPC 0.15
+# Tool slots, placement and mode exits — IPC 0.15
 
 The input pipeline resolves globally configured physical bindings to four tool
 slots, then resolves the selected tool's declaration to an action handler.
@@ -70,4 +70,4 @@ were executed. Main Release/development targets build. Validation:
   carry finish, E/F window/workspace exits and restored inactive Super+Tab.
 
 These are software-cursor nested tests; hardware cursor behavior still requires
-supervised validation. No gallery watcher was changed and no commits were pushed.
+supervised validation.

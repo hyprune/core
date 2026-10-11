@@ -59,11 +59,11 @@ dev/hyprune-dev record-input stop --socket "$HYPRUNE_SOCKET" --token-fd 3
 
 Each invocation needs its own fresh grant for client ID `org.hyprune.dev` (or
 `--client-id` matching the grant), with `input.control` and `state.read`.
-Observer connections are refused. No command discovers or mutates an owner
+Observer connections are refused. No command discovers or mutates a live
 session implicitly. Default nested replay packages include Lumen Reach,
 Switchyard and the test fixtures; install additional packages in the harness
 before replaying their recordings. Video capture is nested-only, encoded in
-`/tmp` before publication; the gallery watcher is never controlled.
+`/tmp` before publication.
 
 Example assertion file:
 

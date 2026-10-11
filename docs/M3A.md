@@ -1,7 +1,7 @@
 # Core M3A — hands-on desktop parity
 
-Implementation and acceptance on Hyprland 0.56.2. Changes stay local; no agent
-push and no owner-session compositor command. All nested lifetimes use
+Implementation and acceptance on Hyprland 0.56.2. No live-session compositor
+command is used. All nested lifetimes use
 `dev/nested/run.sh` → `flock /tmp/worldshell-nested.lock`.
 
 ## Controls and architecture
@@ -88,15 +88,6 @@ core-owned controls. Keys in `input.bindings` are XKB symbol names.
 | player.reach_grab | 15 | 1–100 m; Super+button window gestures |
 | player.reach_mount | 8 | 1–100 m; snapping into tool-mount frames |
 | player.reach_placement | 12 | 1–100 m; tool 5 surface placement and pocket, tool 2 wall mount, tool 3 path points |
-
-`input.roll_button` (Super+MMB roll) was removed: nothing could reach it, since MMB is the
-tools' Alternate. Rotation is Super+Ctrl+Wheel (`rotate` in the keymap). Configs that still set
-it keep loading; it has no effect.
-
-The player settings (walk/run speed, view bob, reticle, reach) are also on the wire
-from IPC 0.19 (`player.get` / `player.set`, Settings → Movement / Reticle in the shell)
-and persist in `~/.config/hyprune/player.json` (`$HYPRUNE_PLAYER_FILE`), overrides
-only; those overrides win over the Lua values.
 | windows.world_workspace | 20 | Integer 1–999999; dedicated native room, applies on next activation (was 8) |
 | windows.workspace_base | 20 | Integer 0–990000; area default home = base + workspaceSlot (0 disables), re-derived live |
 | windows.carry_face_player | true | Boolean; pickup faces the player, R toggles during a carry |
@@ -113,10 +104,19 @@ only; those overrides win over the Lua values.
 | graphics.bloom_strength | 0.15 | 0–4 world bloom override once explicitly set; otherwise authored atmosphere wins; app pixels bypass it |
 | graphics.reduced_motion | false | Boolean; instant fullscreen and focus handovers; no view bob or reticle spread |
 
+`input.roll_button` (Super+MMB roll) was removed: nothing could reach it, since MMB is the
+tools' Alternate. Rotation is Super+Ctrl+Wheel (`rotate` in the keymap). Configs that still set
+it keep loading; it has no effect.
+
+The player settings (walk/run speed, view bob, reticle, reach) are also on the wire
+from IPC 0.19 (`player.get` / `player.set`, Settings → Movement / Reticle in the shell)
+and persist in `~/.config/hyprune/player.json` (`$HYPRUNE_PLAYER_FILE`), overrides
+only; those overrides win over the Lua values.
+
 ## Supervised live test checklist
 
 Nested uses a software cursor and cannot test hardware-plane reentrancy. The
-owner must supervise the first dedicated live DRM run. Every plugin cursor
+first dedicated live DRM run must be supervised. Every plugin cursor
 transition below is queued after the frame, changes visibility only if needed,
 and never installs a new native cursor image. Native shape requests stay native. While world input owns the output, a visibility hook coalesces compositor hide/show requests through `doLater` and enforces the hidden reticle/virtual policy. It never calls native cursor rendering in the frame.
 Record cursor restoration and confirm no nested rendering / `CMonitor::useFP16`
@@ -143,14 +143,13 @@ crash for each transition:
 - Reload input/tools/graphics while carrying or typing: no duplicate cursor toggle,
   no lost release, no camera drift or frozen hardware cursor.
 
-No live DRM session is operated by automated acceptance. The gallery watcher is
-never paused, stopped, killed or signalled. Record to a temporary directory and
-move only completed MP4/JSON files into gallery/videos.
+No live DRM session is operated by automated acceptance. Recordings are made in a
+temporary directory; only completed MP4/JSON files are published.
 
 ## Verification and parity evidence
 
 Final locked run: **45 automated checks passed**; the 46th entry explicitly
-requires owner-supervised DRM hardware-cursor testing. The raw result is
+requires supervised DRM hardware-cursor testing. The raw result is
 [evidence/m3a-acceptance.json](evidence/m3a-acceptance.json). All 133 RPC responses
 and 805 notifications from this run validate against frozen IPC 0.5, including
 an actual authenticated Quickshell Director with five workspace apps. The
@@ -167,7 +166,7 @@ Workspaces screenshot was inspected for icons, titles and classes.
 | Discrete stairs, respawn, noclip and fly toggle | Done | stairs (eye height ~2.45 m after 0.25 m risers), respawn, noclip_on/off, noclip_through_wall (x > 7.5 m beyond the 7 m room boundary), fly_toggle |
 | Director Workspaces apps | Done | director_apps; actual rendered list of five clients inspected |
 | Validated Lua configuration and live diff reload | Done | config_reload/rejected, pure invalid/atomic config tests |
-| Hardware cursor on an owner DRM session | Pending supervised test | hardware_cursor_live is deliberately not marked passed |
+| Hardware cursor on a live DRM session | Pending supervised test | hardware_cursor_live is deliberately not marked passed |
 
 Validation: core CTest **6/6**, schema **78/78**, shell **39/39**, SDK **54/54**
 with core interoperability enabled and no skips; docs build and local link / five
@@ -180,9 +179,9 @@ The finished, visually inspected **57.9 s, 1920×1080, 30 fps H.264** recording 
 `$HYPRUNE_VIDEO_DIR/hyprune-core-m3a.mp4`, with
 `hyprune-core-m3a.json`. [Video metadata](evidence/m3a-video.json) records the
 SHA-256, timeline, reference-world attribution and tested implementation commit.
-It shows all requested interactions, then both unchanged author packages. Encoding
-and inspection happened under `/tmp`; only the finished pair was moved to the
-gallery. Its watcher was never signalled. No owner-session command was issued.
+It shows all listed interactions, then both unchanged author packages. Encoding
+and inspection happened under `/tmp`; only the finished pair was published. No
+live-session command was issued.
 
 Reproduce:
 
@@ -196,7 +195,7 @@ ctest --test-dir build --output-on-failure
 The GTK fixture uses a real xdg popup and client fullscreen request. The persistent
 nested virtual pointer preserves implicit/popup grabs across test commands.
 Lumen Reach and Switchyard are copied unchanged from `../worlds/dist` into the
-isolated session. Tests never select the owner's instance or Wayland socket.
+isolated session. Tests never select the outer session's instance or Wayland socket.
 
 ## Limits retained from M2
 
@@ -206,7 +205,7 @@ including hidden workspaces on that output. Unsupported external textures and
 cropped/transformed client buffers remain unavailable; HDR client color conversion
 is deferred. Path slots are deliberately stubs for M3B. Native cursor shape images
 remain compositor owned; the world pointer is a rendered reticle. Hardware cursor
-safety remains pending the supervised owner test, even after all nested checks pass.
+safety remains pending the supervised live test, even after all nested checks pass.
 
 ## Prototype lessons carried forward
 
@@ -267,4 +266,4 @@ Noclip stays unbounded and emits a warning when leaving the authored region.
 No cursor state transitions were added. Supervised check: fly toward a side and
 ceiling, confirm a soft stop; toggle noclip, cross the boundary, confirm one
 notice; return inside and cross again; disable noclip outside and verify a
-gradual return. Run only after the owner chooses to retry.
+gradual return. Run only in a supervised live session.

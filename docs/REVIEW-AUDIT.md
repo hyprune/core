@@ -1,8 +1,7 @@
 # Core rendering and interaction review audit
 
 All compositor tests use the verified nested instance under
-`flock /tmp/worldshell-nested.lock`. The real session and gallery watcher are
-untouched. Failures captured before fixes are in `evidence/review-audit/`.
+`flock /tmp/worldshell-nested.lock`; no live session is involved. Failures captured before fixes are in `evidence/review-audit/`.
 
 | Hazard | Confirmation and result |
 | --- | --- |
@@ -32,7 +31,7 @@ The legacy terminal smoke failure was stale fixture behavior: obsolete Lua camer
 setter, 500 ms TAB and click-to-type. Current IPC positioning, 1150 ms TAB and
 E/Super+Tab preserve the exact typing assertion and pass first-session acceptance.
 IPC 0.7 matches shell 36cb85f exactly. IPC 0.8 hold timing is core-ready; shell
-0.8 negotiation/bridge/ring wiring remains with the shell owner.
+0.8 negotiation/bridge/ring wiring is a shell-side follow-up.
 
 
 Final validation: nine core CTest suites; 156 nested M3B checks, 262 responses

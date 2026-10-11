@@ -1,9 +1,9 @@
 # Climbing acceptance
 
-Core `feature/climbing` adds climbable walking activities. World metadata is
+Core adds climbable walking activities. World metadata is
 format 0.4; shell movement activity and prompts require IPC 0.11. Existing
-walk/fly mode IDs and earlier IPC projections remain unchanged. IPC 0.11 inherits the renderer branch's shipped 0.10 contract and adds only
-movement activity fields.
+walk/fly mode IDs and earlier IPC projections remain unchanged. IPC 0.11 inherits
+the 0.10 contract and adds only movement activity fields.
 
 Switch the mechanic through the existing local Lua configuration entry point:
 
@@ -41,7 +41,7 @@ node tests/validate-climbing-wire.mjs ../schema
 ```
 
 Both nested commands hold `flock /tmp/worldshell-nested.lock` for the complete
-lifetime and use the existing identity-verifying controller. No owner-session
+lifetime and use the existing identity-verifying controller. No live-session
 commands are issued. The fixture is original procedural CC0: a hatch with a
 high drop-in spawn, 10 m rope ladder, 4 m wide chain-link wall and inclined vines.
 The immutable world format describes an oriented segment with width/depth,
@@ -60,15 +60,14 @@ Recording produces three labelled 36-second sections (about 109 seconds total)
 with real nested footage. Encoding and labelling happen in `/tmp`; finished MP4
 and string-only JSON sidecar move into
 `$HYPRUNE_VIDEO_DIR/hyprune-climbing.*`.
-The gallery autocommit process is never stopped or signalled.
 
 Results and the exact checks are saved under `tests/evidence/climbing/`.
 
-Verified after rebasing onto core `93fa9c0`: 11/11 core suites, 95/95 schema
+Verified on core `93fa9c0`: 11/11 core suites, 95/95 schema
 tests, 46/46 nested climbing checks, docs build/link checks, and full IPC 0.11
 response/notification validation. See the evidence logs for exact counts.
 
-Merged with shader warm-up and replay: 13/13 core suites, 46/46 climbing
+Combined with shader warm-up and replay: 13/13 core suites, 46/46 climbing
 checks; 260 IPC responses and 758 notifications validated against 0.11.
 The combined 0.12 scripted input replay passed twice with per-frame assertions,
 camera smoothing, and real-client app-key privacy checks.

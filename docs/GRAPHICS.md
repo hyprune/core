@@ -49,7 +49,7 @@ Upscaling below output size uses AMD FidelityFX FSR 1 (EASU + RCAS) by default;
 the `upscaler` graphics key (`"fsr1"`, `"bilinear"`, null = preset; every preset
 uses FSR 1), also settable in graphics.json and Lua; `HYPRUNE_UPSCALER` overrides
 it for diagnostics. Costs and stills: [PERF-2026-10.md](PERF-2026-10.md).
-`fov` is 30–110 degrees; `exposure` .01–16; `bloom_strength` 0–4;
+`fov` is 30–110 degrees (30–120, default 65, from IPC 0.19); `exposure` .01–16; `bloom_strength` 0–4;
 `reduced_motion` boolean. Absent exposure/bloom strength overrides preserve the
 world's authored atmosphere. SSR, runtime shadow maps and runtime contact
 shadows are not implemented. Baked lighting/shadows stay in world lightmaps.
@@ -82,7 +82,7 @@ Pointer and capsule broad phases now share a triangle BVH, built during CPU worl
 loading and rebuilt after object transforms. It preserves triangle order and
 re-queries after capsule correction. Lumen Reach's 3,994 collision triangles:
 ray 0.01361 → 0.000267 ms (51×), stationary walk step 0.2302 → 0.0900 ms (2.56×),
-in the same process on this machine. Dense 10,002-triangle fixture: 323× ray,
+in the same process on the test machine. Dense 10,002-triangle fixture: 323× ray,
 5.54× walk. These are query benchmarks, not whole-frame FPS claims. Randomized
 indexed/reference equivalence covers ray hits and capsule results; nine unit
 suites pass. Raw measurements are under `evidence/review-audit/`.
@@ -123,7 +123,7 @@ the opaque-world bloom extraction. Window buffers keep their original encoded
 colours and opacity; zero-alpha corners/shadows do not erase the background.
 The native intermediate is now entirely display-encoded (alpha reserved zero),
 so the offload spike should export HDR opaque colour + depth and reconstruct/
-tone-map before this native composition stage. Its branch was not edited.
+tone-map before this native composition stage.
 
 ## Runtime offload / Performance (IPC 0.10)
 

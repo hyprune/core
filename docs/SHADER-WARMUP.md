@@ -15,7 +15,7 @@ versions, build/compiler identity, renderer source hash and exact shader sources
 Writes are atomic, private files; bounded lengths and payload digests reject
 truncation/corruption. A driver rejecting a binary falls back to source. The
 sandboxed offload child receives access only to this cache subtree, not the rest
-of the owner's home. Cold driver specialization can still take a long loading
+of the user's home directory. Cold driver specialization can still take a long loading
 tick; it is deliberately kept behind loading rather than on first interaction.
 
 `graphics.get().timings.shaderCache` reports hits, misses, rejected binaries,
@@ -46,4 +46,4 @@ MESA_SHADER_CACHE_DISABLE=true flock /tmp/worldshell-nested.lock \
 ```
 
 The benchmark selects the Intel PCI vendor before creating its EGL context; it
-does not start the NVIDIA renderer. No owner-session command is involved.
+does not start the NVIDIA renderer. No live-session command is involved.

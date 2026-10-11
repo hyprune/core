@@ -2,8 +2,8 @@
 
 `dev/remote/run` runs core's automated checks on a headless work host and
 prints **one JSON summary on stdout** (progress on stderr). It is meant to be
-called over SSH from the lead's laptop, so the laptop can sleep while the host
-tests.
+called over SSH from a workstation or laptop, so that machine can sleep while
+the host tests.
 
 The host is yours to choose: set `HYPRUNE_BUILD_HOST` in the environment or in
 `~/.config/hyprune/dev.env` (see CONTRIBUTING.md), then:
@@ -52,7 +52,7 @@ summary.json           the JSON printed on stdout
 <suite>/log.txt        full suite output
 <suite>/state/         instance state: instance.json (GPU, load), parent.log,
                        hyprland-*.log, .*-state/ screenshots and transcripts
-<suite>/stills/        live-findings stills (never written into the gallery)
+<suite>/stills/        live-findings stills
 evidence/              docs/evidence/*.json the suites rewrote (restored in the tree)
 ```
 
@@ -87,7 +87,7 @@ Hyprland so HEADLESS-1 gets renderable buffers.
 `~/.local/share/hyprune-nightly/` and enables a systemd `--user` timer:
 `hyprune-nightly.timer`, daily at 02:00. It's `Persistent=true`, so a missed
 run starts after downtime. User lingering must be on (`loginctl enable-linger`)
-so the timer fires with nobody logged in, independent of any agent daemon.
+so the timer fires with nobody logged in.
 Re-run `install` after changes merge.
 
 Each run (`nightly run`, or `systemctl --user start hyprune-nightly`):
@@ -110,13 +110,13 @@ Each run (`nightly run`, or `systemctl --user start hyprune-nightly`):
      release.
 
    The make targets are expanded with `make -n`. Their ssh hop
-   (`tools/remote-*.sh`) becomes the same local Blender call, because this is
-   the bake host.
-5. Writes `pages/nightly/<date>.json`, `<date>.html` and `index.html` into the
-   gallery (`HYPRUNE_GALLERY_DIR` from the environment or the host's
+   (`tools/remote-*.sh`) becomes the same local Blender call, because the runner
+   host is expected to be the Blender host.
+5. Writes `pages/nightly/<date>.json`, `<date>.html` and `index.html` into a
+   static results site (`HYPRUNE_GALLERY_DIR` from the environment or the host's
    `~/.config/hyprune/dev.env`; `HYPRUNE_NIGHTLY_GALLERY` overrides it), plus
    a top-level `pages/nightly.html` link. Unset, it warns and writes under
-   `~/.local/state/hyprune/gallery`. It never commits or pushes. It keeps the
+   `~/.local/state/hyprune/gallery`. It never commits. It keeps the
    last 14 runs: pages, runner artifacts (`~/hyprune-remote-runs/nightly-*`)
    and logs (`~/hyprune-nightly/logs/`).
 

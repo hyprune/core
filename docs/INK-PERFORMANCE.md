@@ -32,7 +32,7 @@ historical build measured 6.75/6.69 ms versus about 1.10 ms in the new build.
 The normal encoding shares opaque shading, so the dedicated timer is not the
 whole incremental cost. Alternating outer GPU queries (100 measured pairs per
 tier, reversing order) measured Lumen added medians **1.18/1.17 ms** (Fast/Smooth).
-Switchyard initially measured **1.83/1.04 ms**; a repeat without our concurrent
+Switchyard initially measured **1.83/1.04 ms**; a repeat without concurrent
 build jobs measured **1.53/1.19 ms**. P95 pair deltas remained 2.2–5.0 ms amid host
 scheduling/clock variation. Thus a strict ≤1.5 ms *whole-frame* overhead is not
 claimed, nor is this a sustained whole-desktop 60 FPS guarantee. Full-resolution
@@ -78,4 +78,4 @@ at the newest common supported version (currently core 0.14 / shell 0.13).
 Validation: 13 core CTest groups; 103 schema tests; 59 SDK tests (2 optional daemon
 tests skipped); 11 pure live-tooling tests; locked nested ink/persistence/wire
 checks; all 51 live-tooling nested checks, including crash recovery and down twice.
-Docs build and links pass. Nothing was run against the owner's live session.
+Docs build and links pass. Nothing was run against a live session.

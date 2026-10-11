@@ -10,7 +10,7 @@ arrival, 12 s per phase, offload off → on → off.
 On any NVIDIA consumer (the compositor on an NVIDIA GPU), offload never activated:
 `glEGLImageTargetTexture2DOES(GL_TEXTURE_2D)` on the worker's LINEAR AB24 dmabuf
 returns GL_INVALID_OPERATION. `eglQueryDmaBufModifiersEXT` reports LINEAR
-AB24/AR24/XB24 `external_only` on both GPUs. Mesa (the laptop's Intel consumer)
+AB24/AR24/XB24 `external_only` on both GPUs. Mesa (an Intel iGPU consumer)
 imports LINEAR as a 2D texture, which hid this. The fix: when LINEAR is
 external-only, the client binds the slot as GL_TEXTURE_EXTERNAL_OES and copies
 it with a samplerExternalOES triangle instead of FBO + blit. The Mesa path is

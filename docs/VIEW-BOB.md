@@ -1,7 +1,7 @@
 # View bob: what others do, and Hyprune's default
 
-The owner found Hypr3D's walk bob fine when walking but silly when running, and didn't
-want a copy. This page is a short research pass (sources at the end) and the design that
+Hypr3D's walk bob is fine when walking but silly when running, so Hyprune does not copy
+it. This page is a short research pass (sources at the end) and the design that
 came out of it. Code: `src/sim/ViewBob.hpp`; setting `player.view_bob` (IPC 0.19).
 
 ## What games and engines do
@@ -37,7 +37,7 @@ came out of it. Code: `src/sim/ViewBob.hpp`; setting `player.view_bob` (IPC 0.19
 - WCAG 2.3.3 says motion triggered by interaction can be disabled; it cites vestibular
   disorders. Operating systems expose this as "reduce motion" [10][11].
 - Real gait: preferred walking cadence is about 2 steps/s, and the head's vertical motion
-  peaks at the step frequency [12]. I didn't find a measured head amplitude in cm; the
+  peaks at the step frequency [12]. A measured head amplitude in cm was not found; the
   body's centre of mass moves up to about 5 cm at 6 km/h [13].
 
 ## Hyprune's default
