@@ -38,7 +38,9 @@ def acceptance(client,children,args,shell_token,socketpath):
     capture_dir=s.STATE/'statehome/hyprune/captures';prior=set(capture_dir.glob('*.png'))
     keys('-k','u')
     wait(lambda:bool(set(capture_dir.glob('*.png'))-prior),timeout=20)
-    png=next(iter(set(capture_dir.glob('*.png'))-prior)); dump=json.loads(png.with_suffix('.json').read_text())
+    # Capture files are written asynchronously, PNG first: wait for the JSON too.
+    png=next(iter(set(capture_dir.glob('*.png'))-prior)); wait(lambda:png.with_suffix('.json').exists(),timeout=20)
+    dump=json.loads(png.with_suffix('.json').read_text())
     check('photo_capture_PNG',abs(dump['camera']['roll']-math.pi/2)<1e-5 and dump['camera']['fov']==15 and abs(dump['camera']['lensShift'][0]-.25)<1e-6)
     client.call('camera.release',{});restored=client.call('camera.get',{})
     check('release_restores_pose_and_lens',not restored['held'] and restored['orientation']==before['orientation'] and restored['fov']==before['fov'])

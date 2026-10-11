@@ -593,7 +593,10 @@ def m1(client):
     client.call('ui.open',{'leaseId':lease,'outputId':output,'panel':'overview'})
     assert state()['shell']['leases'][0]['overlays'][0]['visible']
     client.call('ui.close',{'leaseId':lease,'outputId':output})
-    subprocess.run([str(HERE/'ctl.py'),'env','wtype','-P','Tab','-s','450','-p','Tab'],check=True)
+    # A long hold opens the overview: longer than input longHoldMs (1000 ms by default since
+    # the keymap engine; this check was written for a shorter threshold).
+    hold=json.loads((ROOT/'config/input.default.json').read_text())['longHoldMs']+200
+    subprocess.run([str(HERE/'ctl.py'),'env','wtype','-P','Tab','-s',str(hold),'-p','Tab'],check=True)
     assert state()['shell']['leases'][0]['overlays'][0]['visible'],'core hold timing'
     client.call('ui.close',{'leaseId':lease,'outputId':output})
     client.call('data.publish',{'sourceId':'org.hyprune.nested.metrics','sequence':1,'values':{'cpuPercent':12,'status':'live'},'ttlMs':200})

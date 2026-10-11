@@ -52,6 +52,8 @@ def acceptance(client,children,args,shell_token,socketpath):
   nx=.5+x/(depth*tan*(1920/1080)*2);ny=.5-y/(depth*tan*2)
   pointer((nx-d['pointer'][0])*1920,(ny-d['pointer'][1])*1080);time.sleep(.2);pointer()
  def nav():keys('-k','Escape');time.sleep(.1)
+ # World clicks drive tools; Use (E) hands the aimed window real clicks (owner keymap).
+ def use():keys('-k','e');wait(lambda:diag()['mode']=='typing')
  def target(id,offset=(0,0)):
   v=captured(id);p=v['position'];pose(client,[p[0]+offset[0],p[1]+offset[1],p[2]+3]);time.sleep(.25)
  def stage(id):
@@ -67,11 +69,16 @@ def acceptance(client,children,args,shell_token,socketpath):
  def check(name,condition,extra=None):
   assert condition,(name,extra);results[name]={'passed':True,'evidence':extra};print('PASS M3A:',name,flush=True)
  stage(surface['id']);before=captured(surface['id']);gesture(272,110,-35,True);after=captured(surface['id']);check('carry_offset_distance',after['position']!=before['position'] and not after['collision'],after)
- target(surface['id'],(.25,0));before=captured(surface['id']);gesture(274,-30,-100);after=captured(surface['id']);check('roll',after['rotation']!=before['rotation'],after)
+ # Rotation is Super+Ctrl+Wheel since the IPC 0.15 owner corrections; MMB is the tools' Alternate.
+ target(surface['id'],(.25,0));before=captured(surface['id'])
+ mod=s.envrun('wtype','-P','Super_L','-P','Control_L','-s','1500','-p','Control_L','-p','Super_L');children.append(mod);time.sleep(.15)
+ for _ in range(3):pointer('scroll',-1);time.sleep(.15)
+ mod.wait(timeout=5);time.sleep(.2);after=captured(surface['id']);check('roll',after['rotation']!=before['rotation'],after)
  target(surface['id'],(.2,.2));before=captured(surface['id']);gesture(273,-75,55);after=captured(surface['id']);check('client_resize',after['pixels']!=before['pixels'],after)
  check('balanced_buttons',diag()['pressedButtons']==0 and diag()['gesture']==0)
- zoomkey=s.envrun('wtype','-P','c','-s','400','-p','c');children.append(zoomkey);time.sleep(.15);check('zoom',state()['presentation']['fov']<40);zoomkey.wait(timeout=5);time.sleep(.15)
- stage(popup['id']);pointer('button',273);wait(lambda:diag()['children']>0);check('xdg_popup_attached',diag()['children']>0);shot('popup-open.png')
+ # Zoom is the scope action on Q in the owner keymap.
+ zoomkey=s.envrun('wtype','-P','q','-s','400','-p','q');children.append(zoomkey);time.sleep(.15);check('zoom',state()['presentation']['fov']<40);zoomkey.wait(timeout=5);time.sleep(.15)
+ stage(popup['id']);use();pointer('button',273);wait(lambda:diag()['children']>0);check('xdg_popup_attached',diag()['children']>0);shot('popup-open.png')
  # The fixture menu opens at the clicked root centre, and its first row lies below/right.
  click_child(popup['id']);wait(lambda:marker.exists() and marker.read_text()=='popup click landed\n');check('popup_click',True)
  mode=diag();pointer((.5-mode['pointer'][0])*1920,(.5-mode['pointer'][1])*1080);time.sleep(.15);pointer('scroll',1);wait(lambda:scrollmarker.exists() and scrollmarker.read_text()=='scroll landed\n');check('virtual_cursor_scroll',True);pointer();wait(lambda:diag()['fullscreen']==2);check('fullscreen_in',state()['interaction']['mode']=='fullscreen');shot('fullscreen.png')
@@ -82,12 +89,12 @@ def acceptance(client,children,args,shell_token,socketpath):
  check('wayland_dialog_attached',dialog is not None,dialog);client.call('surface.focus',{'surfaceId':dialog['id'],'intent':'keyboard'});time.sleep(.3);keys('-k','Return');time.sleep(.5);check('dialog_keyboard_close',not any(x.get('parentId')==popup['id'] for x in diag()['captures']),diag())
  nav();submarker=s.STATE/'subsurface-selected.txt';submarker.unlink(missing_ok=True)
  subapp=s.envrun(str(ROOT/'build/nested-subsurface-client'),str(submarker),stdout=subprocess.DEVNULL,stderr=open(s.STATE/'subsurface.log','w'));children.append(subapp)
- subsurface=wait(lambda:next((x for x in state()['surfaces'] if x['title']=='M3A subsurface laboratory'),None));stage(subsurface['id']);pointer();click_child(subsurface['id']);wait(lambda:submarker.exists() and submarker.read_text()=='subsurface click landed\n');check('subsurface_click',True)
+ subsurface=wait(lambda:next((x for x in state()['surfaces'] if x['title']=='M3A subsurface laboratory'),None));stage(subsurface['id']);use();pointer();click_child(subsurface['id']);wait(lambda:submarker.exists() and submarker.read_text()=='subsurface click landed\n');check('subsurface_click',True)
  nav();xmarker=s.STATE/'x11-selected.txt';xmarker.unlink(missing_ok=True)
  # Dispatch from the verified nested compositor: Xwayland DISPLAY must come from it.
  command=f'env GDK_BACKEND=x11 {ROOT}/build/nested-parity-client {xmarker} "M3A X11 laboratory"'
  s.ctl('eval','hl.dispatch(hl.dsp.exec_cmd('+json.dumps(command)+'))')
- xapp=wait(lambda:next((x for x in state()['surfaces'] if x['title']=='M3A X11 laboratory'),None));stage(xapp['id']);pointer('button',273);time.sleep(.5)
+ xapp=wait(lambda:next((x for x in state()['surfaces'] if x['title']=='M3A X11 laboratory'),None));stage(xapp['id']);use();pointer('button',273);time.sleep(.5)
  menu=next((x for x in diag()['captures'] if x.get('parentId')==xapp['id']),None);check('x11_menu_attached',menu is not None,menu)
  if menu:
   d=diag();dx=menu['position'][0]-d['position'][0];dy=menu['position'][1]-d['position'][1];depth=d['position'][2]-menu['position'][2];tan=math.tan(state()['presentation']['fov']*math.pi/360)

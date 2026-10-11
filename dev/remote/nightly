@@ -209,6 +209,12 @@ def run():
         names = suites()
         result['suites'] = names
         env = {'HYPRUNE_REMOTE_CORE': str(WS / 'core'), 'HYPRUNE_PERF_WORLD': str(WS / 'worlds/dist/com.hyprune.lumen-reach')}
+        # capture-pose reproduces an owner capture; exercise it with the committed sample.
+        sample = WS / 'core/docs/evidence/live-round2/capture.json'
+        if sample.is_file():
+            env['HYPRUNE_CAPTURE_JSON'] = str(sample)
+        elif 'capture-pose' in names:
+            names.remove('capture-pose')
         # Harness scripts that predate per-instance state roots share dev/nested/.m3b-state:
         # run them one at a time after the parallel pass.
         # One nested instance per GPU: at four, Lumen Reach loads hit the harness's 5 s IPC timeouts.
