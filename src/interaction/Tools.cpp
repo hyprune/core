@@ -111,7 +111,7 @@ Json Tools::definitions() const {
          def(4, "Position", binding("gizmo.drag", "Select / drag"),
              binding("gizmo.space", localAxes ? "Use world axes" : "Use local axes"),
              binding("gizmo.snap", snap ? "Disable snapping" : "Enable snapping"),
-             binding("tool.cycle", "Move / rotate / scale")),
+             binding("tool.cycle", universal ? "Move / rotate / scale / all" : "Move / rotate / scale")),
          def(5, "Placement", binding("placement.ahead", "Place ahead"),
              binding("placement.surface", "Place on surface"), binding("placement.pocket", "Pocket window"),
              binding("placement.cycle", "Choose pocketed window"))});
@@ -151,7 +151,7 @@ std::string Tools::submode() const {
     if (slot == 3)
         return std::string(pathMode >= 3 ? "closed " : "open ") + std::array{"line", "curve", "arc"}[pathMode % 3];
     if (slot == 4)
-        return std::array{"move", "rotate", "scale"}[positionMode];
+        return std::array{"move", "rotate", "scale", "move"}[std::clamp(positionMode, 0, 3)];
     return slot == 1 ? "normal" : "placement";
 }
 void Tools::wheel(int steps) {
@@ -162,8 +162,33 @@ void Tools::wheel(int steps) {
         int closed = pathMode / 3;
         pathMode = (pathMode % 3 + steps % 3 + 3) % 3 + closed * 3;
     }
-    if (slot == 4)
-        cycle(positionMode, 3);
+    if (slot == 4) {
+        if (!universal && positionMode > 2)
+            positionMode = 0;
+        cycle(positionMode, universal ? 4 : 3);
+    }
+}
+std::string Tools::gizmoMode() const {
+    return std::array{"move", "rotate", "scale", "universal"}[std::clamp(positionMode, 0, universal ? 3 : 2)];
+}
+void Tools::recordEdit(const std::string &kind, const std::string &worldId, const std::string &id, Json before, Json after) {
+    if (before == after)
+        return;
+    history.resize(history.size() - undone);
+    undone = 0;
+    history.push_back({kind, worldId, id, std::move(before), std::move(after)});
+    if (history.size() > undoLimit)
+        history.erase(history.begin());
+}
+std::optional<Tools::Edit> Tools::undo() {
+    if (!canUndo())
+        return {};
+    return history[history.size() - ++undone];
+}
+std::optional<Tools::Edit> Tools::redo() {
+    if (!canRedo())
+        return {};
+    return history[history.size() - undone--];
 }
 void Tools::point(const std::string &world, const std::string &area, Vec3 p) {
     size_t total = 0;

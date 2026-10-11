@@ -1,0 +1,54 @@
+#pragma once
+// Placement rules for editor transforms (RFC-0011 "Placement rules", the subset that
+// applies to M3B transforms of scene nodes and world 0.8 objects). Pure geometry on
+// spans: core checks every gizmo preview and refuses to commit a failing pose.
+#include "../sim/TriangleIndex.hpp"
+#include "../world/Playable.hpp"
+#include <functional>
+#include <span>
+#include <string>
+#include <vector>
+namespace hyprune::interaction {
+// Oriented box: centre, orthonormal axes and half extents along them.
+struct Box {
+    Vec3 centre{};
+    std::array<Vec3, 3> axes{Vec3{1, 0, 0}, Vec3{0, 1, 0}, Vec3{0, 0, 1}};
+    Vec3 half{.5f, .5f, .5f};
+    float extent(Vec3 direction) const; // support half-width along a unit direction
+    Box grown(float by) const;          // negative shrinks (each half at least 5 mm)
+    Vec3 low() const;                   // world AABB
+    Vec3 high() const;
+};
+Box aabbBox(Vec3 low, Vec3 high);
+bool boxTriangle(const Box &, const Triangle &);
+bool boxBox(const Box &, const Box &);
+float boxDistance(const Box &, Vec3);
+bool boxSegment(const Box &, Vec3 a, Vec3 b, float radius); // capsule overlap
+bool triangleTriangle(const Triangle &, const Triangle &);
+
+struct PlacementScene {
+    std::span<const Triangle> collision;
+    const sim::TriangleIndex *index = nullptr; // over collision, optional
+    std::function<bool(unsigned)> ignore;      // the selection's own committed triangles
+    const world::PlayableBounds *playable = nullptr;
+    float respawnBelow = -1e9f;
+    std::vector<Box> windows;    // placed windows with their margin
+    std::vector<Box> approaches; // screen approach zones (anchors, tool mounts, workspace walls)
+    std::vector<Box> zones;      // placementZones: reserved for windows
+    std::vector<Box> keepClear;  // spawn capsules, climbables and keepClear volumes
+    bool player = false;
+    Vec3 playerLow{}, playerHigh{}; // capsule segment
+    float playerRadius = .3f;
+};
+struct PlacementVerdict {
+    bool ok = true;
+    std::string rule;    // "playable", "walls", "window", "approach", "zone", "keep-clear", "player"
+    std::string message; // short, for the readout and runtime.notice
+    bool supported = true; // advisory: rests on an upward surface (or floats)
+};
+// shape: the candidate bounds; own: the selection's collision triangles at the
+// candidate pose (empty when it has none: the shrunk bounds stand in).
+PlacementVerdict checkPlacement(const PlacementScene &, const Box &shape, std::span<const Triangle> own);
+// Highest upward surface (normal y >= 0.65) under a point within `down` metres, else none.
+std::optional<float> floorBelow(const PlacementScene &, Vec3 from, float down);
+} // namespace hyprune::interaction

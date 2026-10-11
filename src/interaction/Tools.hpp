@@ -28,6 +28,23 @@ class Tools {
     int activeHandle = -1;
     Json paths = Json::array(), objects = Json::array(), locks = Json::array();
     bool localAxes = false, snap = false;
+    // Gizmo 2.0: pivot at the base (bottom centre) instead of the centre; the
+    // universal mode joins the wheel cycle only when enabled (HYPRUNE_GIZMO_UNIVERSAL):
+    // IPC's editor submode has no "universal" value, so it reports "move".
+    bool pivotBase = false, universal = false;
+    std::string gizmoMode() const; // move, rotate, scale or universal
+    // Undo/redo of transforms (tool 4, Ctrl+Z / Ctrl+Shift+Z). before/after are the
+    // overlay records (objects) or window poses; null = no record.
+    struct Edit {
+        std::string kind, worldId, id;
+        Json before, after;
+    };
+    static constexpr size_t undoLimit = 64;
+    void recordEdit(const std::string &kind, const std::string &worldId, const std::string &id, Json before, Json after);
+    std::optional<Edit> undo();
+    std::optional<Edit> redo();
+    bool canUndo() const { return undone < history.size(); }
+    bool canRedo() const { return undone > 0; }
     // Declarative slot dispatch: adapters resolve actions, never physical buttons.
     // Future trusted extensions can register definitions and action handlers at
     // this boundary without introducing another mouse/key routing path.
@@ -48,5 +65,7 @@ class Tools {
 
   private:
     mutable std::map<std::string, Json> liveLocks;
+    std::vector<Edit> history; // oldest first
+    size_t undone = 0;         // edits at the end of history that are undone
 };
 } // namespace hyprune::interaction
