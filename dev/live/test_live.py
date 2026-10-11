@@ -4,6 +4,23 @@ from unittest.mock import patch
 spec=importlib.util.spec_from_file_location('live',pathlib.Path(__file__).with_name('live.py'));live=importlib.util.module_from_spec(spec);spec.loader.exec_module(live)
 
 class Tests(unittest.TestCase):
+    def test_replaces_nothing_unless_configured(self):
+        with tempfile.TemporaryDirectory() as d,patch.dict(live.os.environ,{'XDG_CONFIG_HOME':d},clear=False):
+            for key in ['HYPRUNE_LIVE_REPLACE_PLUGIN','HYPRUNE_LIVE_REPLACE_HUD']:live.os.environ.pop(key,None)
+            self.assertEqual(live.replaced(),('',''))
+            self.assertFalse(live.is_replaced_plugin('legacy3d'))
+            self.assertFalse(live.is_replaced_hud(['qs','-p',d+'/quickshell/legacy3d']))
+            self.assertEqual(live.plugin_paths({'runtime':d,'pid':live.os.getpid()}),[])
+            # dev.env configures the swap; the environment wins over it.
+            (pathlib.Path(d)/'hyprune').mkdir();(pathlib.Path(d)/'hyprune/dev.env').write_text('HYPRUNE_LIVE_REPLACE_PLUGIN=Legacy3D\nHYPRUNE_LIVE_REPLACE_HUD=quickshell/legacy3d/\n')
+            self.assertEqual(live.replaced(),('legacy3d','quickshell/legacy3d'))
+            self.assertTrue(live.is_replaced_plugin('legacy3d-renderer'))
+            self.assertFalse(live.is_replaced_plugin('hyprune-core'))
+            self.assertTrue(live.is_replaced_hud(['qs','-p',d+'/quickshell/legacy3d']))
+            self.assertFalse(live.is_replaced_hud(['qs','-c','main']))
+            self.assertFalse(live.is_replaced_hud(['qs','-p',d+'/quickshell/other']))
+            with patch.dict(live.os.environ,{'HYPRUNE_LIVE_REPLACE_PLUGIN':'other'}):self.assertEqual(live.replaced()[0],'other')
+
     def test_world_selection_is_generic_ordered_and_read_only(self):
         self.assertEqual(live.world().name,'com.hyprune.lumen-reach')
         with tempfile.TemporaryDirectory() as d,patch.object(live,'run',return_value='{}') as checker:

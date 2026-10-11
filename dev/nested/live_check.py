@@ -14,6 +14,8 @@ def acceptance(identity,children):
     def command(name,tty=False):
         environment=env.copy()
         environment['HYPRUNE_DEV_AUTOMATION']='1'
+        # The swap is configuration (dev.env keys); this fixture plugin and HUD stand in for a user's own.
+        environment.update(HYPRUNE_LIVE_REPLACE_PLUGIN='legacy3d',HYPRUNE_LIVE_REPLACE_HUD='quickshell/legacy3d')
         if os.environ.get('HYPRUNE_SHELL_DIR'): environment['HYPRUNE_SHELL_DIR']=os.environ['HYPRUNE_SHELL_DIR']
         # Verify stale inherited signature is ignored even with an explicit target.
         environment['HYPRLAND_INSTANCE_SIGNATURE']='deliberately-stale'
@@ -29,20 +31,20 @@ def acceptance(identity,children):
     def check(name,value):
         assert value,name;results.append(name);print('PASS live:',name,flush=True)
     # A harmless API-compatible fixture exercises exact old-path recovery.
-    fixture=s.STATE/'hypr3d-live-fixture.so';source=s.STATE/'old-plugin.cpp'
+    fixture=s.STATE/'legacy3d-live-fixture.so';source=s.STATE/'old-plugin.cpp'
     source.write_text('''#include <hyprland/src/plugins/PluginAPI.hpp>
 APICALL EXPORT std::string PLUGIN_API_VERSION(){return HYPRLAND_API_VERSION;}
-APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE){return {"hypr3d","Inert restoration fixture","Hyprune tests","test"};}
+APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE){return {"legacy3d","Inert restoration fixture","Hyprune tests","test"};}
 APICALL EXPORT void PLUGIN_EXIT(){}
 ''')
     flags=subprocess.check_output(['pkg-config','--cflags','hyprland'],text=True).split()
     subprocess.run(['c++','-std=c++23','-shared','-fPIC','-fno-gnu-unique',*flags,str(source),'-o',str(fixture)],check=True)
-    s.ctl('plugin','load',str(fixture));check('old_fixture_loaded',any(p['name']=='hypr3d' for p in json.loads(s.ctl('plugin','list','-j'))))
+    s.ctl('plugin','load',str(fixture));check('old_fixture_loaded',any(p['name']=='legacy3d' for p in json.loads(s.ctl('plugin','list','-j'))))
     config=s.STATE/'live-qs-config'
-    hud=config/'quickshell/hypr3d';keeper=config/'quickshell/rick'
+    hud=config/'quickshell/legacy3d';keeper=config/'quickshell/main'
     for path in [hud,keeper]:path.mkdir(parents=True,exist_ok=True);(path/'shell.qml').write_text('import Quickshell\nShellRoot {}\n')
     old=subprocess.Popen(['qs','-p',str(hud)],env={**env,'XDG_CONFIG_HOME':str(config)},stdout=open(state/'fixture-hud.log','w'),stderr=subprocess.STDOUT);children.append(old)
-    main=subprocess.Popen(['qs','-c','rick'],env={**env,'XDG_CONFIG_HOME':str(config)},stdout=open(state/'fixture-main.log','w'),stderr=subprocess.STDOUT);children.append(main)
+    main=subprocess.Popen(['qs','-c','main'],env={**env,'XDG_CONFIG_HOME':str(config)},stdout=open(state/'fixture-main.log','w'),stderr=subprocess.STDOUT);children.append(main)
     time.sleep(1);check('fixture_HUD_and_main_running',old.poll() is None and main.poll() is None)
     # Reserve the preferred chord so fallback is proved without rewriting it.
     s.ctl('eval','hl.bind("SUPER + SHIFT + H",hl.dsp.exec_cmd("true"),{description="Keep H binding"})')
@@ -61,7 +63,7 @@ APICALL EXPORT void PLUGIN_EXIT(){}
         check('exact_old_path_recorded',recorded['oldUnloaded']==[str(fixture)])
         check('old_HUD_stopped_main_preserved',old.poll() is not None and main.poll() is None)
         check('free_toggle_fallback',recorded['binds'][0]['chord']=='SUPER + SHIFT + F10')
-        current=json.loads(s.ctl('plugin','list','-j'));check('exclusive_core',any(p['name']=='hyprune-core' for p in current) and not any(p['name']=='hypr3d' for p in current))
+        current=json.loads(s.ctl('plugin','list','-j'));check('exclusive_core',any(p['name']=='hyprune-core' for p in current) and not any(p['name']=='legacy3d' for p in current))
         check('up_stays_on_desktop',not s.camera()['active'])
         check('ready_notice_has_actual_fallback_chord','Hyprune ready · press Super+Shift+F10 to enter' in output)
         s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")');time.sleep(.5)
@@ -90,7 +92,7 @@ APICALL EXPORT void PLUGIN_EXIT(){}
         helper=json.loads((state/'helper.json').read_text());os.kill(helper['pid'],signal.SIGKILL);time.sleep(.15)
         print(command('down',tty=True),flush=True)
         check('TTY_down_after_helper_crash',json.loads((state/'state.json').read_text())['phase']=='down')
-        restored=json.loads(s.ctl('plugin','list','-j'));check('old_plugin_restored',any(p['name']=='hypr3d' for p in restored) and not any('hyprune' in p['name'] for p in restored))
+        restored=json.loads(s.ctl('plugin','list','-j'));check('old_plugin_restored',any(p['name']=='legacy3d' for p in restored) and not any('hyprune' in p['name'] for p in restored))
         binds=json.loads(s.ctl('binds','-j'));check('runtime_bind_removed_original_kept',not any(b.get('description')=='Hyprune supervised live toggle' for b in binds) and any(b.get('description')=='Keep this binding' for b in binds))
         restored_pid=json.loads((state/'state.json').read_text())['restoredHUD'][str(old_record['pid'])]['pid']
         check('HUD_restarted_main_preserved',pathlib.Path(f'/proc/{restored_pid}').exists() and main.poll() is None)

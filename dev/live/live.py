@@ -7,6 +7,28 @@ BUILD = ROOT / 'build/live'
 SHELL = pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR', ROOT.parent / 'shell'))
 DEFAULT_WORLD_ID = 'com.hyprune.lumen-reach'
 GRANTS = ['state.read', 'world.control', 'surface.control', 'movement.control', 'shell.control', 'runtime.control', 'input.control']
+sys.path.insert(0, str(ROOT / 'dev'))
+import devenv
+
+
+def replaced():
+    """What up swaps out and down restores, from the environment or ~/.config/hyprune/dev.env:
+    HYPRUNE_LIVE_REPLACE_PLUGIN, a substring of the loaded plugin's name to unload, and
+    HYPRUNE_LIVE_REPLACE_HUD, the Quickshell config path suffix (`qs -p .../<suffix>`) of the HUD
+    to stop. Unset, nothing is replaced: core loads beside whatever is running."""
+    return (devenv.get('HYPRUNE_LIVE_REPLACE_PLUGIN', '').strip().lower(),
+            devenv.get('HYPRUNE_LIVE_REPLACE_HUD', '').strip().strip('/'))
+
+
+def is_replaced_plugin(name):
+    plugin = replaced()[0]
+    return bool(plugin) and plugin in name.lower()
+
+
+def is_replaced_hud(argv):
+    hud = replaced()[1]
+    return bool(hud) and any(argv[i] == '-p' and pathlib.Path(os.path.expanduser(argv[i+1])).resolve().as_posix().rstrip('/').endswith('/' + hud)
+                             for i in range(len(argv)-1))
 
 
 def core_protocols(header=None):
@@ -69,8 +91,7 @@ def qs_processes(session):
         if not rec or not rec['argv'] or pathlib.Path(rec['argv'][0]).name not in ('qs', 'quickshell'): continue
         # Only the chosen Wayland session, never another compositor's HUD.
         if rec['env'].get('WAYLAND_DISPLAY') != session['wayland']: continue
-        rec['oldHUD'] = any(rec['argv'][i] == '-p' and pathlib.Path(os.path.expanduser(rec['argv'][i+1])).resolve().as_posix().rstrip('/').endswith('/quickshell/hypr3d')
-                            for i in range(len(rec['argv'])-1))
+        rec['oldHUD'] = is_replaced_hud(rec['argv'])
         result.append(rec)
     return result
 
@@ -130,11 +151,13 @@ def plugin_paths(s):
     # Hyprland 0.56 plugin list omits paths; /proc maps and reload.sh's pointer
     # provide candidates. up confirms the exact loaded path via unload's result.
     paths = []
-    loaded = pathlib.Path(s['runtime']) / 'hypr3d/loaded'
+    plugin = replaced()[0]
+    if not plugin: return paths
+    loaded = pathlib.Path(s['runtime']) / plugin / 'loaded'
     preferred = loaded.read_text().strip() if loaded.is_file() else None
     for line in pathlib.Path(f"/proc/{s['pid']}/maps").read_text().splitlines():
         path = line.split(maxsplit=5)[-1]
-        if path.startswith('/') and 'hypr3d' in pathlib.Path(path).name.lower() and path.endswith('.so'): paths.append(path)
+        if path.startswith('/') and plugin in pathlib.Path(path).name.lower() and path.endswith('.so'): paths.append(path)
     paths = list(dict.fromkeys(p for p in paths if pathlib.Path(p).is_file()))
     return ([preferred] if preferred in paths else []) + [p for p in paths if p != preferred]
 
@@ -198,7 +221,7 @@ def verify(s, paths=None):
     packages = world_packages(paths); version = abi(s)
     plugins = query(s, 'plugin', 'list')
     if any('hyprune' in x['name'].lower() for x in plugins): raise RuntimeError('Hyprune already loaded; run down for this test or unload it explicitly first')
-    olds = [x for x in plugins if 'hypr3d' in x['name'].lower()]
+    olds = [x for x in plugins if is_replaced_plugin(x['name'])]
     candidates = plugin_paths(s) if olds else []
     if olds and not candidates: raise RuntimeError('Cannot recover the old plugin path; refusing the swap')
     return packages, version, plugins, candidates
@@ -221,7 +244,10 @@ def preflight(args):
     print('Old-plugin candidate paths:', candidates)
     print('Quickshell instances:', [(r['pid'], r['argv'], 'STOP old HUD' if r['oldHUD'] else 'KEEP') for r in qs_processes(s)])
     print('Toggle candidate:', choose_bind(query(s, 'binds')), '(rechecked after old-plugin unload)')
-    print('up will: record private recovery state; unload only hypr3d; stop only its -p .../quickshell/hypr3d HUD; copy/load core from a unique path;\n'
+    plugin, hud = replaced()
+    swap = (f'unload only plugins named *{plugin}*; ' if plugin else 'unload no plugin (HYPRUNE_LIVE_REPLACE_PLUGIN unset); ') + \
+           (f'stop only the qs -p .../{hud} HUD; ' if hud else 'stop no HUD (HYPRUNE_LIVE_REPLACE_HUD unset); ')
+    print('up will: record private recovery state; ' + swap + 'copy/load core from a unique path;\n'
           'start its private helper and detached logged shell with in-memory grants; install all selected worlds and load the first without activating it; add one free runtime toggle.\n'
           'Core switches the chosen output to its configured world workspace (default 20; area homes 21+), floating new room clients before layout; exit restores the prior workspace.\n'
           'Core materializes default input.json in a private runtime test directory. No installed config is edited.\n'
@@ -284,7 +310,7 @@ def up(args, path):
             elif out != 'plugin not loaded': raise RuntimeError(out)
             state.pop('pendingOld',None); atomic(path,state)
         time.sleep(.5) # Let Hyprland's implicit lifecycle config evaluation finish.
-        if any('hypr3d' in x['name'].lower() for x in query(s,'plugin','list')): raise RuntimeError('Old plugin still loaded; refusing coexistence')
+        if any(is_replaced_plugin(x['name']) for x in query(s,'plugin','list')): raise RuntimeError('Old plugin still loaded; refusing coexistence')
         for rec in state['qs']:
             if rec['oldHUD']:
                 rec['stopRequested']=True; atomic(path,state); stop(rec)
@@ -295,7 +321,7 @@ def up(args, path):
         mutate(s,'plugin','load',str(copy))
         wait(lambda:(runroot/'ready.json').exists(),40)
         ready=json.loads((runroot/'ready.json').read_text());state['processes']=ready['processes'];state['phase']='up';atomic(path,state)
-        if any('hypr3d' in p['name'].lower() for p in query(s,'plugin','list')):
+        if any(is_replaced_plugin(p['name']) for p in query(s,'plugin','list')):
             raise RuntimeError('Old plugin reappeared during load; refusing coexistence')
         state['binds']=[{'chord':choose_bind(query(s,'binds')), 'description':'Hyprune supervised live toggle'}];atomic(path,state)
         bind=state['binds'][0]
@@ -439,7 +465,7 @@ def down(args,path):
         if not any('hyprune' in p['name'].lower() for p in query(s,'plugin','list')):
             restore=list(state['oldUnloaded'])
             if state.get('pendingOld') and not restore:restore.append(state['pendingOld'])
-            if not any('hypr3d' in p['name'].lower() for p in query(s,'plugin','list')):
+            if not any(is_replaced_plugin(p['name']) for p in query(s,'plugin','list')):
                 for plugin in restore:
                     try:mutate(s,'plugin','load',plugin)
                     except Exception as e:errors.append(str(e))
