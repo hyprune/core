@@ -20,6 +20,8 @@ class Capture {
         bool visible = true, queued = false;
         std::string parentId;
         std::string wall; // the workspace wall composing this window, when not drawn on its own
+        // On a home workspace that lives on another output: shown on its wall only.
+        bool elsewhere = false;
         bool parentKeyboard = false;
         std::shared_ptr<uint64_t> commits = std::make_shared<uint64_t>(0);
         CHyprSignalListener commitListener;
@@ -75,6 +77,9 @@ class Capture {
 
   private:
     std::vector<PHLWINDOWREF> knownWindows_;
+    // Windows the world shows (room and home workspaces), kept presenting while their
+    // workspace is hidden; one that leaves the set gets the compositor's own state back.
+    std::vector<PHLWINDOWREF> presenting_;
     struct AdoptedWindow {
         PHLWINDOWREF window;
         std::string id, worldId;

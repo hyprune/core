@@ -36,7 +36,10 @@ PHLWINDOW attachmentParent(const PHLWINDOW &w) {
 void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::Layout *layout,
                       const sim::Camera *camera) {
     std::erase_if(entries, [&](Entry &e) {
-        bool remove = !e.window || !e.window->m_isMapped || e.window->m_monitor != monitor;
+        bool remove = !e.window || !e.window->m_isMapped ||
+                      (e.window->m_monitor != monitor &&
+                       !(layout && e.window->m_workspace && e.window->m_workspace->m_id != worldWorkspace &&
+                         layout->binding(e.window->m_workspace->m_id, world)));
         if (!remove && e.parentId.empty() && e.window->m_workspace && e.window->m_workspace->m_id != worldWorkspace &&
             layout) {
             auto identity = e.instance;
@@ -68,8 +71,24 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
     size_t leasedBytes = 0;
     skipped.clear();
     auto skip = [&](const PHLWINDOW &w, const char *why) { skipped.emplace_back(ipc::boundedText(w->m_title, ipc::TitleLimit), why); };
+    std::vector<PHLWINDOWREF> presenting;
+    // Shown in the world, so it must keep drawing although its workspace is on no output:
+    // clear the xdg "suspended" state the compositor gives hidden workspaces (browsers
+    // throttle or stop painting on it) and pace it with frame callbacks. This includes a
+    // window the capture skips below: one without a buffer yet never gets one otherwise.
+    auto present = [&](const PHLWINDOW &w) {
+        w->setSuspended(false);
+        w->resource()->frame(std::chrono::steady_clock::now());
+        presenting.push_back(w);
+    };
     for (auto &w : Desktop::windowState()->windows()) {
-        if (!w->m_isMapped || w->isHidden() || w->m_monitor != monitor || !w->resource())
+        if (!w->m_isMapped || w->isHidden() || !w->resource())
+            continue;
+        // A home workspace can live on another output (a window moved there from it); its
+        // windows still belong on this world's wall.
+        const bool elsewhere = w->m_monitor != monitor;
+        if (elsewhere && !(layout && world && w->m_workspace && w->m_workspace->m_id != worldWorkspace &&
+                           layout->binding(w->m_workspace->m_id, world)))
             continue;
         bool attached = bool(attachmentParent(w));
         bool newlyMapped = std::none_of(knownWindows_.begin(), knownWindows_.end(), [&](auto &v) { return v == w; });
@@ -87,6 +106,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         if (!attached && !inRoom &&
             (!layout || (!layout->binding(identity.workspaceId, world) && !layout->hasPlacement(identity, world))))
             continue;
+        present(w);
         auto surface = w->resource();
         auto texture = surface->m_current.texture;
         if (!texture || !texture->m_texID || texture->m_type == Render::TEXTURE_EXTERNAL) {
@@ -211,7 +231,8 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             if (!surfaces::pushOut(it->surface, world->collision))
                 it->visible = false;
         }
-        if (!attached && layout && camera && world && !world->areas.empty()) {
+        it->elsewhere = elsewhere;
+        if (!attached && layout && camera && world && !world->areas.empty() && !elsewhere) {
             it->visible = false;
             if (auto placed =
                     layout->locate(it->instance, world, *camera, it->surface.pixelWidth, it->surface.pixelHeight)) {
@@ -235,7 +256,9 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                      std::abs(w->m_target->position().h - logical.y) > 1))
                     configureRequests.push_back({w, logical});
             }
-        if (!attached && !Fullscreen::controller()->isFullscreen(w)) {
+        if (elsewhere)
+            it->visible = false;
+        if (!attached && !elsewhere && !Fullscreen::controller()->isFullscreen(w)) {
             bool free = inRoom || (layout && layout->pulled(it->instance, world));
             if (free && !w->m_isFloating) {
                 floatRequests.push_back(w);
@@ -248,9 +271,14 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             layout->freePoses.erase(it->surface.id);
             layout->spawnAreas.erase(it->surface.id);
         }
-        w->setSuspended(false);
-        surface->frame(std::chrono::steady_clock::now());
     }
+    for (auto &previous : presenting_)
+        if (auto w = previous.lock(); w && w->m_isMapped &&
+                                      std::find(presenting.begin(), presenting.end(), previous) == presenting.end()) {
+            auto ws = w->m_workspace;
+            w->setSuspended(ws && !ws->isVisible());
+        }
+    presenting_ = std::move(presenting);
     std::erase_if(entries, [&](Entry &e) {
         if (refreshed.contains(e.surface.id))
             return false;
@@ -271,6 +299,12 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
 }
 void Capture::release() {
     configureRequests.clear();
+    for (auto &previous : presenting_)
+        if (auto w = previous.lock(); w && w->m_isMapped) {
+            auto workspace = w->m_workspace;
+            w->setSuspended(workspace && !workspace->isVisible());
+        }
+    presenting_.clear();
     for (auto &e : entries)
         if (e.window && e.window->m_isMapped) {
             auto workspace = e.window->m_workspace;
@@ -579,6 +613,13 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
     }
     for (auto &e : entries)
         e.wall.clear();
+    // A window's rectangle is relative to the output its workspace is on.
+    auto output = [&](const PHLWINDOW &w) {
+        auto on = w ? w->m_monitor.lock() : nullptr;
+        if (!on || on->m_size.x <= 0 || on->m_size.y <= 0)
+            on = monitor;
+        return std::pair{on->m_position, on->m_size};
+    };
     std::set<int> live;
     for (const auto &b : layout.effectiveBindings()) {
         if (b.at("worldId") != world->id)
@@ -614,7 +655,7 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         };
         std::vector<std::pair<std::pair<int, size_t>, Entry *>> stack;
         for (auto &entry : entries) {
-            if (entry.instance.workspaceId != id || layout.pulled(entry.instance, world))
+            if (entry.instance.workspaceId != id || (!entry.elsewhere && layout.pulled(entry.instance, world)))
                 continue;
             auto window = entry.window.lock();
             if (!window || !window->logicalBox())
@@ -624,9 +665,9 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
             // Not drawn on its own: its pose is its rectangle on the wall, never a placeholder.
             auto box = *window->logicalBox();
             auto &wall = it->surface;
-            float u = float((box.x - monitor->m_position.x) / monitor->m_size.x),
-                  v = float((box.y - monitor->m_position.y) / monitor->m_size.y),
-                  du = float(box.w / monitor->m_size.x), dv = float(box.h / monitor->m_size.y);
+            auto [origin, extent] = output(window);
+            float u = float((box.x - origin.x) / extent.x), v = float((box.y - origin.y) / extent.y),
+                  du = float(box.w / extent.x), dv = float(box.h / extent.y);
             entry.wall = wall.id;
             entry.surface.rotation = wall.rotation;
             entry.surface.yaw = wall.yaw;
@@ -730,18 +771,16 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         for (auto &[rank, item] : stack) {
             auto &entry = *item;
             auto box = entry.window.lock()->logicalBox();
-            glUniform4f(glGetUniformLocation(program_, "rect"), (box->x - monitor->m_position.x) / monitor->m_size.x,
-                        (box->y - monitor->m_position.y) / monitor->m_size.y, box->w / monitor->m_size.x,
-                        box->h / monitor->m_size.y);
+            auto [origin, extent] = output(entry.window.lock());
+            glUniform4f(glGetUniformLocation(program_, "rect"), (box->x - origin.x) / extent.x,
+                        (box->y - origin.y) / extent.y, box->w / extent.x, box->h / extent.y);
             glBindTexture(GL_TEXTURE_2D, entry.surface.texture);
             glDrawArrays(GL_TRIANGLES, 0, 6);
             for (auto &child : children)
                 if (child.parentId == entry.surface.id && child.resource) {
-                    glUniform4f(glGetUniformLocation(program_, "rect"),
-                                (box->x - monitor->m_position.x + child.offset.x) / monitor->m_size.x,
-                                (box->y - monitor->m_position.y + child.offset.y) / monitor->m_size.y,
-                                child.surface.pixelWidth / monitor->m_size.x,
-                                child.surface.pixelHeight / monitor->m_size.y);
+                    glUniform4f(glGetUniformLocation(program_, "rect"), (box->x - origin.x + child.offset.x) / extent.x,
+                                (box->y - origin.y + child.offset.y) / extent.y, child.surface.pixelWidth / extent.x,
+                                child.surface.pixelHeight / extent.y);
                     glBindTexture(GL_TEXTURE_2D, child.surface.texture);
                     glDrawArrays(GL_TRIANGLES, 0, 6);
                 }
