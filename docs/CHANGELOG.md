@@ -107,6 +107,18 @@ These are wire-compatible behavior changes that integrators may notice:
 - Shell credential renewal for supervised launches uses `HYPRUNE_TOKEN_REFRESH=1`
   and a duplex `HYPRUNE_TOKEN_FD` (`renew\n` request, fresh one-use token reply).
   No public IPC method is involved.
+- Windows brought into the world (opened in the room, moved or dragged in from another
+  output, pulled, recalled, placed, pocketed, carried off a home wall) become floating
+  clients at their own size (over half the output: scaled to 35% of it), centred on
+  the world output; returned to a home wall they are tiled again. Clients with a
+  `wp_viewporter` source crop are captured. Recall brings room clients to the player.
+- The out-of-range reticle uses `overlayStyle.invalidColor` with a "Too far: N m"
+  label. A refused reach-limited action always sends a notice: `placement.out_of_range`
+  (place, pocket, mount, path) or `interaction.out_of_range` (Super grab beyond
+  `reach_grab`, use beyond `useDistance`; `interaction.reticle` shows `out_of_range`
+  with action `""` for a refused use). Use mode (E) accepts the Super window gestures;
+  Super+LMB on a window edge resizes. `interaction.mode` `workspace`, `fullscreen` and
+  `typing` hide the shell HUD.
 
 ## World format versions
 
