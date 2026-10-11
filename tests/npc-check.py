@@ -3,7 +3,7 @@
 import json, pathlib, subprocess, sys, tempfile
 check, make = sys.argv[1], pathlib.Path(__file__).resolve().parent / 'fixtures/make-mannequin.py'
 cases = {'': [], 'root-motion': ['animates `root`'], 'centimetres': ['centimetres'], 'no-idle': ['no `idle` clip'],
-         'extra-bones 50': ['the limit is 65'], 'three-materials': ['4 materials'], 'rotate-x': ['stand along +Y'],
+         'extra-bones 50': ['at most 64'], 'three-materials': ['4 materials'], 'rotate-x': ['stand along +Y'],
          'five-weights': ['more than 4 weights'], 'mixamo --no-root': ['run tools/npc-import']}
 warnings = {'mixamo --fingers': ['performance target'], 'extra-bones 25': ['performance target'], 'one-node': []}
 with tempfile.TemporaryDirectory() as tmp:

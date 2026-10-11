@@ -392,13 +392,13 @@ std::vector<CharacterProblem> checkCharacter(const Character &c, const Character
     if (c.skins != 1)
         warn(std::format("{} skins: one shared skeleton is expected; only the first is used", c.skins));
     // Skeleton: at most 40 bones, one root named `root` at the feet.
-    // Bones: 40 is the performance target; up to 65 (a Mixamo skeleton with fingers) is accepted.
+    // Bones: 40 is a performance target (a warning); the hard limit is the renderer's 64-joint
+    // skinning block. Finger and accessory bones are fine.
     size_t fingers = std::count_if(c.joints.begin(), c.joints.end(), [](auto &j) { return fingerBone(j.name); });
-    if (c.joints.size() > 65)
-        error(std::format("{} bones: the limit is 65 (40 without finger bones)", c.joints.size()));
+    if (c.joints.size() > 64)
+        error(std::format("{} bones: core skins at most 64 (tools/npc-import --strip-fingers removes finger bones)", c.joints.size()));
     else if (c.joints.size() > 40)
-        warn(std::format("{} bones ({} finger bones): over the 40-bone performance target; tools/npc-import --strip-fingers removes them",
-                         c.joints.size(), fingers));
+        warn(std::format("{} bones ({} finger bones): over the 40-bone performance target", c.joints.size(), fingers));
     int root = c.role("root");
     if (root < 0)
         error(c.role("hips") >= 0 ? "no `root` bone above the hips: run tools/npc-import, which adds one at the feet"
