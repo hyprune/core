@@ -35,3 +35,4 @@ tests/fixtures/m3b/
 /dev/nested/.handover-state/
 /dev/nested/.objects-state/
 /dev/nested/.npc-state/
+/dev/nested/.gizmo-state/
