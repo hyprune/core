@@ -31,8 +31,12 @@ shell's World Styles preference is enabled. `down` needs no world arguments.
 
 `up` records plugin paths and old HUD argv/environment/cwd/PID identities in
 `$XDG_STATE_HOME/hyprune/live/state.json` (default `~/.local/state/hyprune/live/state.json`).
-It unloads hypr3d, stops only `qs -p .../quickshell/hypr3d`, and preserves
-`qs -c rick`/other instances. Core loads from a unique copy, starts its helper
+It replaces only what you configure, from the environment or
+`~/.config/hyprune/dev.env`: `HYPRUNE_LIVE_REPLACE_PLUGIN` (a substring of a loaded
+plugin's name to unload) and `HYPRUNE_LIVE_REPLACE_HUD` (the Quickshell config path
+suffix of a HUD to stop, e.g. `quickshell/myhud` for `qs -p ~/.config/quickshell/myhud`).
+Unset, nothing is unloaded or stopped; other Quickshell instances always keep
+running. `down` restores exactly what `up` replaced. Core loads from a unique copy, starts its helper
 and detached shell at the newest common IPC version, then loads the first selected world (Lumen Reach by default)
 without activating it. A Hyprland notification names the actual toggle chord;
 press it to enter when ready.
@@ -44,7 +48,7 @@ Toggle: **Super+Shift+H**, otherwise N/F10/F11/F8 with those modifiers; up check
 binds after load and prints its choice. It conservatively reserves matching keys
 across modifiers because Hyprland's bind JSON omits ignore-mods flags.
 Hyprland itself **re-evaluates Lua on plugin load/unload**; scripts issue no reload
-command. If hypr3d reappears, up rolls back. Avoid manual reload during testing:
+command. If the replaced plugin reappears, up rolls back. Avoid manual reload during testing:
 it removes runtime binds.
 
 Walking checklist ([full M3B detail](../../docs/M3B.md#supervised-live-test-checklist)):

@@ -8,7 +8,7 @@ remove Wayland variables and recover the recorded nested socket. No real-session
 command was issued.
 
 The old plugin is an inert API-compatible fixture, not the owner's prototype.
-Old HUD and `qs -c rick` are isolated minimal QML fixtures. Lumen Reach, core,
+The replaced HUD and a kept `qs -c` instance are isolated minimal QML fixtures (recorded before the replaced plugin/HUD became configuration; the fixture names were redacted). Lumen Reach, core,
 hypruned and the Hyprune shell are real. Proof includes healthy down, distinct
 load paths across two ups, helper SIGKILL, restored HUD/plugin, preserved main
 shell/native bind, and repeated down. The reserved N key causes selection of

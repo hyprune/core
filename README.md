@@ -256,8 +256,9 @@ for the demo. Both use the lifetime flock. See [M3B.md](docs/M3B.md), including 
 complete supervised live cursor checklist, input options, contracts and evidence.
 
 For the supervised real-session check, see [dev/live/LIVE-TEST.md](dev/live/LIVE-TEST.md).
-`dev/live/preflight`, `up`, `status`, and idempotent `down` swap only the old
-hypr3d plugin/HUD and record recovery state. Automated tests must use explicit nested
+`dev/live/preflight`, `up`, `status`, and idempotent `down` load core into a real
+session, optionally replacing a plugin/HUD you configure (`HYPRUNE_LIVE_REPLACE_PLUGIN`,
+`HYPRUNE_LIVE_REPLACE_HUD`; default: replace nothing), and record recovery state. Automated tests must use explicit nested
 instances; `./dev/nested/run.sh --live` provides the locked dry-run.
 
 Graphics presets and individual effects use an independent, watched

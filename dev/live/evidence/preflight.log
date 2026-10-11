@@ -128,7 +128,7 @@ Loaded plugins: [
   }
 ]
 Old-plugin candidate paths: ['$WORKSPACE/core/dev/nested/.state/hypr3d-live-fixture.so']
-Quickshell instances: [(1490217, ['qs', '-p', '$WORKSPACE/core/dev/nested/.state/live-qs-config/quickshell/hypr3d'], 'STOP old HUD'), (1490218, ['qs', '-c', 'rick'], 'KEEP')]
+Quickshell instances: [(1490217, ['qs', '-p', '$WORKSPACE/core/dev/nested/.state/live-qs-config/quickshell/hypr3d'], 'STOP old HUD'), (1490218, ['qs', '-c', 'main'], 'KEEP')]
 Toggle candidate: SUPER + SHIFT + F10 (rechecked after old-plugin unload)
 up will: record private recovery state; unload only hypr3d; stop only its -p .../quickshell/hypr3d HUD; copy/load core from a unique path;
 start its private helper and detached logged shell with in-memory grants; load/activate Lumen Reach; add one free runtime toggle.
