@@ -5,6 +5,92 @@
 #include <cassert>
 #include <iostream>
 using namespace hyprune;
+namespace {
+// Two floor triangles spanning [x0,x1] x [z0,z1] at height y, facing up.
+void floorQuad(world::World &w, float x0, float x1, float z0, float z1, float y) {
+    w.collision.push_back({{x0, y, z0}, {x0, y, z1}, {x1, y, z1}});
+    w.collision.push_back({{x0, y, z0}, {x1, y, z1}, {x1, y, z0}});
+}
+// The pose the capture adapter hands to spawn: the configured distance along the view.
+surfaces::Surface ahead(const sim::Camera &camera, int pw, int ph, float distance = 5) {
+    surfaces::Surface s;
+    s.id = "spawned";
+    s.logicalSize(pw, ph, .002f);
+    s.yaw = -camera.yaw;
+    s.center = camera.position + camera.forward() * distance;
+    return s;
+}
+float floorGap(const surfaces::Surface &s, float floor) {
+    return s.center.y - (std::abs(s.up().y) * s.height + std::abs(s.right().y) * s.width) * .5f - floor;
+}
+// A new room window lands in front of the player on floor it can be used from, never in
+// mid-air in a far corner of the area's free zone (live take: a kitty opened from the
+// Sun Court plaza appeared 13 m away, its lower edge 3.2 m above the terrace).
+void spawnReachability() {
+    world::World court;
+    court.id = "org.hyprune.test.court";
+    floorQuad(court, -24, 26, -27, 16, 0);
+    court.spawns = {{"court", {0, 0, 10}, 0, 0}};
+    court.areas = world::Json::array({{{"id", "court"}, {"workspaceSlot", "01"}, {"spawnId", "court"},
+                                       {"freePlacementZones", {"court-open-work"}}}});
+    court.placementZones = world::Json::array({{{"id", "court-open-work"},
+                                                {"bounds", {{"min", {-2, .15, 0}}, {"max", {7, 4.8, 8}}}},
+                                                {"clearance", .15},
+                                                {"windowSizes", {{1.6, .9}, {3.2, 1.8}}}}});
+    sim::Camera camera;
+    camera.position = {-13.23f, 1.7f, 11.65f}; // the capture's pose
+    camera.yaw = .927f;
+    camera.pitch = .0407f;
+    surfaces::Instance kitty{"kitty", "kitty", "~", 20};
+    surfaces::Layout layout;
+    assert(layout.spawn(kitty, &court, camera, ahead(camera, 1200, 675), 16.f / 9));
+    auto placed = layout.freePoses.at(kitty.id);
+    assert(length(placed.center - camera.position) < 5.5f); // in front of the player, not the zone
+    assert(dot(placed.center - camera.position, camera.forward()) > 1);
+    assert(floorGap(placed, 0) >= 0 && floorGap(placed, 0) <= surfaces::MaxSpawnLift);
+    assert(surfaces::reachable(placed, court) && layout.spawnAreas.at(kitty.id) == "court");
+
+    // At a terrace edge with only a drop ahead and no free zone: queue, never float.
+    world::World ledge;
+    ledge.id = "org.hyprune.test.ledge";
+    floorQuad(ledge, -24, 26, 0, 16, 0);
+    floorQuad(ledge, -60, 60, -80, 0, -9); // the valley far below
+    camera = {};
+    camera.position = {0, 1.7f, .6f};
+    surfaces::Layout edge;
+    assert(!edge.spawn(kitty, &ledge, camera, ahead(camera, 1200, 675), 16.f / 9));
+    assert(edge.unplaced.contains(kitty.id) && !edge.freePoses.contains(kitty.id));
+
+    // A playable volume bounds the floor too: a ledge outside it is no place to stand.
+    world::World fenced = court;
+    fenced.playable = world::loadPlayable({{"playable", {{"volumes", {{{"type", "box"}, {"min", {-24, -20, -27}},
+                                                                       {"max", {-14, 60, 16}}}}}}}});
+    camera.position = {-15, 1.7f, 10};
+    camera.yaw = 1.5708f; // facing +X, out of the volume
+    surfaces::Layout outside;
+    outside.spawn(kitty, &fenced, camera, ahead(camera, 1200, 675), 16.f / 9);
+    assert(!outside.freePoses.contains(kitty.id) || fenced.playable.contains(outside.freePoses.at(kitty.id).center));
+
+    // The zone is the fallback when the view ahead is blocked; its window rests at the
+    // player's viewing height above the zone floor, not stacked up its full height.
+    world::World blocked = court;
+    blocked.collision.push_back({{-50, 0, -5.2f}, {50, 0, -5.2f}, {50, 10, -5.2f}});
+    blocked.collision.push_back({{-50, 0, -5.2f}, {50, 10, -5.2f}, {-50, 10, -5.2f}});
+    blocked.placementZones[0]["bounds"] = {{"min", {-3, .15, -4.6}}, {"max", {3, 4.8, -1}}};
+    camera = {};
+    camera.position = {0, 1.7f, 4};
+    auto against = ahead(camera, 1200, 675, 9.2f); // in the wall: every column ahead overlaps it
+    surfaces::Layout zoned;
+    assert(zoned.spawn(kitty, &blocked, camera, against, 16.f / 9));
+    placed = zoned.freePoses.at(kitty.id);
+    assert(placed.center.z > -4.6f && placed.center.z < -1 && std::abs(placed.center.y - 1.7f) < .3f);
+    assert(surfaces::reachable(placed, blocked) && !surfaces::overlaps(placed, blocked.collision));
+    // A second arrival takes the next free column, never a row stacked above the first.
+    surfaces::Instance second{"second", "kitty", "~", 20};
+    if (zoned.spawn(second, &blocked, camera, against, 16.f / 9))
+        assert(std::abs(zoned.freePoses.at(second.id).center.y - placed.center.y) < .3f);
+}
+} // namespace
 int main() {
     world::World world;
     world.id = "org.hyprune.test";
@@ -151,5 +237,7 @@ int main() {
         world::World bare;
         assert(!surfaces::roomAnchor(bare, 0) && surfaces::adoptRoomClient(bare, 0, true, false) == A::Pocket);
     }
+    spawnReachability();
+    std::cout << "PASS spawn in front of the player on reachable floor, zone fallback at viewing height\n";
     std::cout << "PASS placement queue, pocket ordering, durable client size, workspace scope and facing toggle\n";
 }

@@ -1,5 +1,6 @@
 #include "Layout.hpp"
 #include "ipc/Server.hpp"
+#include "interaction/Hands.hpp"
 #include "ipc/Text.hpp"
 #include "world/Mounts.hpp"
 #include <set>
@@ -49,6 +50,16 @@ float ray(Vec3 o, Vec3 d, const Triangle &t) {
         return INFINITY;
     float distance = dot(f, r) / det;
     return distance > 0 ? distance : INFINITY;
+}
+// A zone's resting spot for a window: its horizontal centre, at standing eye height
+// above the zone's floor, within its bounds. Never the middle of a tall zone's air.
+Vec3 zoneRest(const world::World &w, Vec3 lo, Vec3 hi, float margin, float height) {
+    Vec3 c = (lo + hi) * .5f;
+    auto floor = interaction::raycast({c.x, hi.y, c.z}, {0, -1, 0}, w.collision, &w.collisionIndex);
+    float base = floor && floor->point.y >= lo.y - 1 ? floor->point.y : lo.y;
+    float low = lo.y + margin + height * .5f, high = std::max(low, hi.y - margin - height * .5f);
+    c.y = std::clamp(base + 1.7f, low, high);
+    return c;
 }
 } // namespace
 bool overlaps(const Surface &s, std::span<const Triangle> triangles, float margin) {
@@ -415,6 +426,16 @@ void Layout::setContent(const Instance &i, const world::World *w, const Json &va
         if (&p == saved(i, w))
             p["content"] = value;
 }
+bool reachable(const Surface &s, const world::World &w) {
+    if (w.collision.empty())
+        return true; // a world without collision has no floor to stand on: fly worlds
+    // Floor straight below, close enough under the plane's lower edge to stand and use it.
+    auto hit = interaction::raycast(s.center, {0, -1, 0}, w.collision, &w.collisionIndex);
+    if (!hit || hit->normal.y < .5f)
+        return false;
+    float lowest = s.center.y - (std::abs(s.up().y) * s.height + std::abs(s.right().y) * s.width) * .5f;
+    return lowest - hit->point.y <= MaxSpawnLift && w.playable.contains(hit->point + Vec3{0, 1.7f, 0});
+}
 bool Layout::spawn(const Instance &i, const world::World *w, const sim::Camera &camera, Surface s, float aspect) {
     auto desired = s;
     if (!w || hasPlacement(i, w))
@@ -434,83 +455,73 @@ bool Layout::spawn(const Instance &i, const world::World *w, const sim::Camera &
             }
         }
     }
-    if (home) {
-        // Fit the full oriented rectangle, including clearance, into this home's
-        // free zone. Never accept OBB recovery that moves it outside the zone.
+    if (home)
+        spawnAreas[i.id] = home->at("id");
+    auto forward = camera.forward();
+    auto right = normalized(cross(forward, {0, 1, 0}));
+    auto up = normalized(cross(right, forward));
+    float tangent = std::tan(camera.fov * float(M_PI) / 360.f);
+    auto inView = [&](const Surface &c) {
+        auto delta = c.center - camera.position;
+        float depth = dot(delta, forward);
+        return depth > .05f && std::abs(dot(delta, right)) <= depth * tangent * aspect &&
+               std::abs(dot(delta, up)) <= depth * tangent;
+    };
+    auto accept = [&](const Surface &c) {
+        freePoses[i.id] = c;
+        unplaced.erase(i.id);
+        return true;
+    };
+    // In front of the player first: a bounded fan in the camera plane. Never shrink a
+    // client into a postage stamp, stack it over another window or leave it over a drop.
+    for (int fan = 0; fan < 9; ++fan) {
+        s = desired;
+        int column = fan == 0 ? 0 : ((fan + 1) / 2) * (fan % 2 ? 1 : -1);
+        s.center += s.right() * (column * (s.width + .15f));
+        if (inView(s) && !overlaps(s, w->collision) && vacant(s, i.id) && reachable(s, *w))
+            return accept(s);
+    }
+    // Then the home's reserved free zone: the part nearest the player, at the player's
+    // viewing height above the zone's floor. Fit the full oriented rectangle, including
+    // clearance; never accept OBB recovery that moves it outside the zone.
+    if (home)
         for (auto &id : home->value("freePlacementZones", Json::array()))
             for (auto &zone : w->placementZones) {
                 if (zone.at("id") != id)
                     continue;
                 auto lo = vec(zone.at("bounds").at("min")), hi = vec(zone.at("bounds").at("max"));
                 float margin = zone.at("clearance");
-                s = desired;
-                for (int attempt = 0; attempt < 1; ++attempt) {
-                    for (int fan = 0; fan < 49; ++fan) {
-                        auto candidate = s;
-                        // Small screen-plane offsets fan arrivals without changing the
-                        // collision-safe depth chosen by the spawn recovery.
-                        int column = fan == 0 ? 0 : ((fan + 1) / 2) * (fan % 2 ? 1 : -1);
-                        candidate.center += candidate.right() * (column * (s.width + .15f)) +
-                                            candidate.up() * ((fan / 7) * (s.height + .15f));
-                        auto r = candidate.right(), u = candidate.up(), n = candidate.normal();
-                        Vec3 half;
-                        half.x = std::abs(r.x) * candidate.width * .5f + std::abs(u.x) * candidate.height * .5f +
-                                 std::abs(n.x) * .04f + margin;
-                        half.y = std::abs(r.y) * candidate.width * .5f + std::abs(u.y) * candidate.height * .5f +
-                                 std::abs(n.y) * .04f + margin;
-                        half.z = std::abs(r.z) * candidate.width * .5f + std::abs(u.z) * candidate.height * .5f +
-                                 std::abs(n.z) * .04f + margin;
-                        if (hi.x - lo.x >= 2 * half.x && hi.y - lo.y >= 2 * half.y && hi.z - lo.z >= 2 * half.z) {
-                            candidate.center = {std::clamp(candidate.center.x, lo.x + half.x, hi.x - half.x),
-                                                std::clamp(candidate.center.y, lo.y + half.y, hi.y - half.y),
-                                                std::clamp(candidate.center.z, lo.z + half.z, hi.z - half.z)};
-                            if (!vacant(candidate, i.id))
-                                continue;
-                            if (pushOut(candidate, w->collision) && candidate.center.x >= lo.x + half.x &&
-                                candidate.center.x <= hi.x - half.x && candidate.center.y >= lo.y + half.y &&
-                                candidate.center.y <= hi.y - half.y && candidate.center.z >= lo.z + half.z &&
-                                candidate.center.z <= hi.z - half.z) {
-                                auto forward = camera.forward();
-                                auto right = normalized(cross(forward, {0, 1, 0}));
-                                auto up = normalized(cross(right, forward));
-                                auto delta = candidate.center - camera.position;
-                                float depth = dot(delta, forward);
-                                float tangent = std::tan(camera.fov * float(M_PI) / 360.f);
-                                if (depth <= .05f ||
-                                    std::abs(dot(delta, right)) > depth * tangent * aspect ||
-                                    std::abs(dot(delta, up)) > depth * tangent) {
-                                    continue;
-                                }
-                                if (!vacant(candidate, i.id))
-                                    continue;
-                                freePoses[i.id] = candidate;
-                                spawnAreas[i.id] = home->at("id");
-                                unplaced.erase(i.id);
-                                return true;
-                            }
-                        }
-                    }
+                for (int fan = 0; fan < 7; ++fan) {
+                    auto candidate = desired;
+                    int column = fan == 0 ? 0 : ((fan + 1) / 2) * (fan % 2 ? 1 : -1);
+                    candidate.center += candidate.right() * (column * (desired.width + .15f));
+                    auto r = candidate.right(), u = candidate.up(), n = candidate.normal();
+                    Vec3 half;
+                    half.x = std::abs(r.x) * candidate.width * .5f + std::abs(u.x) * candidate.height * .5f +
+                             std::abs(n.x) * .04f + margin;
+                    half.y = std::abs(r.y) * candidate.width * .5f + std::abs(u.y) * candidate.height * .5f +
+                             std::abs(n.y) * .04f + margin;
+                    half.z = std::abs(r.z) * candidate.width * .5f + std::abs(u.z) * candidate.height * .5f +
+                             std::abs(n.z) * .04f + margin;
+                    if (hi.x - lo.x < 2 * half.x || hi.y - lo.y < 2 * half.y || hi.z - lo.z < 2 * half.z)
+                        continue;
+                    candidate.center.x = std::clamp(candidate.center.x, lo.x + half.x, hi.x - half.x);
+                    candidate.center.z = std::clamp(candidate.center.z, lo.z + half.z, hi.z - half.z);
+                    auto floor = interaction::raycast({candidate.center.x, hi.y, candidate.center.z}, {0, -1, 0},
+                                                      w->collision, &w->collisionIndex);
+                    float base = floor ? floor->point.y : lo.y;
+                    float lift = desired.center.y - (camera.position.y - camera.eyeHeight);
+                    candidate.center.y = std::clamp(base + lift, lo.y + half.y, hi.y - half.y);
+                    if (!vacant(candidate, i.id) || !pushOut(candidate, w->collision))
+                        continue;
+                    if (candidate.center.x < lo.x + half.x || candidate.center.x > hi.x - half.x ||
+                        candidate.center.y < lo.y + half.y || candidate.center.y > hi.y - half.y ||
+                        candidate.center.z < lo.z + half.z || candidate.center.z > hi.z - half.z)
+                        continue;
+                    if (inView(candidate) && vacant(candidate, i.id) && reachable(candidate, *w))
+                        return accept(candidate);
                 }
             }
-        spawnAreas[i.id] = home->at("id");
-    }
-    // Bounded fan in the camera plane. Never shrink a client into a postage stamp
-    // or stack a fallback over another window when the home is full.
-    for (int fan = 0; fan < 9; ++fan) {
-        s = desired;
-        int column = fan == 0 ? 0 : ((fan + 1) / 2) * (fan % 2 ? 1 : -1);
-        s.center += s.right() * (column * (s.width + .15f));
-        auto delta = s.center - camera.position;
-        float depth = dot(delta, camera.forward());
-        if (depth <= .05f ||
-            std::abs(dot(delta, s.right())) > depth * std::tan(camera.fov * float(M_PI) / 360.f) * aspect)
-            continue;
-        if (!overlaps(s, w->collision) && vacant(s, i.id)) {
-            freePoses[i.id] = s;
-            unplaced.erase(i.id);
-            return true;
-        }
-    }
     freePoses.erase(i.id);
     unplaced.insert(i.id);
     return false;
@@ -618,9 +629,9 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                     if (id == anchorId && zone.at("id") == id) {
                         auto lo = vec(zone["bounds"]["min"]), hi = vec(zone["bounds"]["max"]);
                         float margin = zone.at("clearance");
-                        s.center = (lo + hi) * .5f;
                         s.width = std::min(1.6f, hi.x - lo.x - 2 * margin);
                         s.height = s.width * ph / pw;
+                        s.center = zoneRest(*w, lo, hi, margin, s.height);
                         valid =
                             s.width > 0 && s.height < hi.y - lo.y - 2 * margin && !overlaps(s, w->collision, margin);
                     }
@@ -672,11 +683,11 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                                 })) {
                                 auto lo = vec(zone["bounds"]["min"]), hi = vec(zone["bounds"]["max"]);
                                 float margin = zone.at("clearance");
-                                s.center = (lo + hi) * .5f;
                                 s.rotation = {0, 0, 0, 1};
                                 s.yaw = 0;
                                 s.width = std::min(1.6f, hi.x - lo.x - 2 * margin);
                                 s.height = s.width * ph / pw;
+                                s.center = zoneRest(*w, lo, hi, margin, s.height);
                                 if (s.width > 0 && s.height < hi.y - lo.y - 2 * margin &&
                                     !overlaps(s, w->collision, margin)) {
                                     zoned = true;

@@ -68,6 +68,11 @@ class Layout {
     const Json *saved(const Instance &, const world::World *) const;
 };
 bool overlaps(const Surface &, std::span<const Triangle>, float margin = .04f);
+// A spawned plane's lower edge may sit at most this far above the floor below it.
+inline constexpr float MaxSpawnLift = 2.f;
+// Floor (an upward-facing surface) under the plane within MaxSpawnLift of its lower
+// edge, inside the world's playable volume. Worlds without collision always pass.
+bool reachable(const Surface &, const world::World &);
 bool pushOut(Surface &, std::span<const Triangle>);
 Surface carryPlane(const sim::Camera &, float width, float height, std::span<const Triangle>, int index = 0);
 void anchorPlane(Surface &, const Json &, int width, int height);

@@ -38,11 +38,11 @@ int main(int argc, char **argv) {
         check(adoptedPlane && !surfaces::overlaps(*adoptedPlane, w->collision),
               "unbound new window missing or colliding");
         check(adopted.spawnAreas.at(opened.id) == "sun-court", "new window chose wrong home");
-        auto bounds = w->placementZones[0].at("bounds");
-        check(adoptedPlane->center.x >= bounds["min"][0] && adoptedPlane->center.x <= bounds["max"][0] &&
-                  adoptedPlane->center.y >= bounds["min"][1] && adoptedPlane->center.y <= bounds["max"][1] &&
-                  adoptedPlane->center.z >= bounds["min"][2] && adoptedPlane->center.z <= bounds["max"][2],
-              "spawn outside home free zone");
+        // In front of the player on floor it can use; the home's free zone is only the fallback.
+        check(length(adoptedPlane->center - spawnCamera.position) < 5.5f &&
+                  dot(adoptedPlane->center - spawnCamera.position, spawnCamera.forward()) > 1 &&
+                  surfaces::reachable(*adoptedPlane, *w),
+              "spawn not ahead of the player on reachable floor");
         check(adopted.bindings.empty() && adopted.placements.empty(), "spawn rewrote native workspace or saved homes");
         {
             // A client resize that no longer fits its spot (a 4K tile is a 7.7 m quad) shrinks
