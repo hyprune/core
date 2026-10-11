@@ -44,13 +44,16 @@ def acceptance(client,children,args,shell_token,socketpath):
  popup=wait(lambda:next((v for v in state()['surfaces'] if v['title']=='M3A popup laboratory'),None))
  def diag():return s.camera()
  def captured(id):return next(v for v in diag()['captures'] if v['id']==id)
+ # Use mode drives a window-local virtual cursor: relative motion moves it across the root
+ # client's pixels (localCursor u, v), wherever the plane sits. Aim there, then click.
+ def local_move(parent,u,v):
+  root=captured(parent);lc=wait(lambda:(lambda c:c if c['surfaceId']==parent else None)(diag()['localCursor']))
+  pointer((u-lc['u'])*root['pixels'][0],(v-lc['v'])*root['pixels'][1]);time.sleep(.2)
+ def local_click(parent,u,v):local_move(parent,u,v);pointer()
  def click_child(parent):
-  child=wait(lambda:next((x for x in diag()['childSurfaces'] if x['parentId']==parent),None))
-  d=diag();x,y,z=[child['position'][i]-d['position'][i] for i in range(3)]
-  # These fixtures face a level camera. Project their actual compositor-constrained offset.
-  depth=-z;tan=math.tan(state()['presentation']['fov']*math.pi/360)
-  nx=.5+x/(depth*tan*(1920/1080)*2);ny=.5-y/(depth*tan*2)
-  pointer((nx-d['pointer'][0])*1920,(ny-d['pointer'][1])*1080);time.sleep(.2);pointer()
+  # A subsurface/popup offset is in its root client's pixels: aim at its centre.
+  child=wait(lambda:next((x for x in diag()['childSurfaces'] if x['parentId']==parent),None));root=captured(parent)
+  local_click(parent,(child['offset'][0]+child['pixels'][0]*.5)/root['pixels'][0],(child['offset'][1]+child['pixels'][1]*.5)/root['pixels'][1])
  def nav():keys('-k','Escape');time.sleep(.1)
  # World clicks drive tools; Use (E) hands the aimed window real clicks (owner keymap).
  def use():keys('-k','e');wait(lambda:diag()['mode']=='typing')
@@ -81,8 +84,8 @@ def acceptance(client,children,args,shell_token,socketpath):
  stage(popup['id']);use();pointer('button',273);wait(lambda:diag()['children']>0);check('xdg_popup_attached',diag()['children']>0);shot('popup-open.png')
  # The fixture menu opens at the clicked root centre, and its first row lies below/right.
  click_child(popup['id']);wait(lambda:marker.exists() and marker.read_text()=='popup click landed\n');check('popup_click',True)
- mode=diag();pointer((.5-mode['pointer'][0])*1920,(.5-mode['pointer'][1])*1080);time.sleep(.15);pointer('scroll',1);wait(lambda:scrollmarker.exists() and scrollmarker.read_text()=='scroll landed\n');check('virtual_cursor_scroll',True);pointer();wait(lambda:diag()['fullscreen']==2);check('fullscreen_in',state()['interaction']['mode']=='fullscreen');shot('fullscreen.png')
- pointer();wait(lambda:diag()['fullscreen']==0);check('fullscreen_out',state()['interaction']['mode']!='fullscreen')
+ local_move(popup['id'],.5,.5);pointer('scroll',1);wait(lambda:scrollmarker.exists() and scrollmarker.read_text()=='scroll landed\n');check('virtual_cursor_scroll',True);pointer();wait(lambda:diag()['fullscreen']==2 and state()['interaction']['mode']=='fullscreen');check('fullscreen_in',True);shot('fullscreen.png')
+ pointer();wait(lambda:diag()['fullscreen']==0 and state()['interaction']['mode']!='fullscreen');check('fullscreen_out',True)
  # A transient dialog keeps the root pose while receiving its own keyboard.
  client.call('surface.focus',{'surfaceId':popup['id'],'intent':'keyboard'});keys('-k','F10')
  time.sleep(.4);dialog=next((x for x in diag()['captures'] if x.get('parentId')==popup['id']),None)
@@ -97,20 +100,29 @@ def acceptance(client,children,args,shell_token,socketpath):
  xapp=wait(lambda:next((x for x in state()['surfaces'] if x['title']=='M3A X11 laboratory'),None));stage(xapp['id']);use();pointer('button',273);time.sleep(.5)
  menu=next((x for x in diag()['captures'] if x.get('parentId')==xapp['id']),None);check('x11_menu_attached',menu is not None,menu)
  if menu:
-  d=diag();dx=menu['position'][0]-d['position'][0];dy=menu['position'][1]-d['position'][1];depth=d['position'][2]-menu['position'][2];tan=math.tan(state()['presentation']['fov']*math.pi/360)
-  pointer((.5+dx/(depth*tan*(1920/1080)*2)-d['pointer'][0])*1920,(.5-dy/(depth*tan*2)-d['pointer'][1])*1080);time.sleep(.2);pointer()
+  # The override-redirect menu is its own plane beside the staged (level, camera-facing) root:
+  # its centre in the root's u, v, which the virtual cursor may leave to reach it.
+  root=captured(xapp['id']);u=.5+(menu['position'][0]-root['position'][0])/root['size'][0];v=.5-(menu['position'][1]-root['position'][1])/root['size'][1]
+  local_click(xapp['id'],u,v)
  wait(lambda:xmarker.exists() and xmarker.read_text()=='popup click landed\n');check('x11_menu_click',True)
  # Unbound keys and pointer events aimed away from world planes must not hit the hidden GTK app.
  client.call('surface.focus',{'surfaceId':popup['id'],'intent':'keyboard'});nav();[client.call('surface.return',{'surfaceId':v['id']}) for v in state()['surfaces'] if v['kind']=='window'];pose(client,[0,2.3,4],0,1.2)
  before=(s.STATE/'popup.log').read_text();keys('-k','z');keys('-P','Super_L','-k','z','-p','Super_L');pointer();pointer('scroll',1);time.sleep(.3)
  check('input_swallowed',(s.STATE/'popup.log').read_text()==before and diag()['fullscreen']==0,diag())
  pose(client,[0,2.3,4])
- nav();keys('-P','Super_L','-k','Alt_L','-p','Super_L');wait(lambda:state()['interaction']['mode']=='typing');check('typing_toggle',diag()['cursor']=='virtual')
- pointer(-1500,0);wait(lambda:diag()['cursor']=='desktop');check('typing_neighbour_cursor',diag()['nativeCursorVisible']);pointer(1500,0);wait(lambda:diag()['cursor']=='virtual' and diag()['ownsInput']);check('typing_cursor_return',not diag()['nativeCursorVisible'])
- keys('-P','Super_L','-k','Alt_L','-p','Super_L');wait(lambda:state()['interaction']['mode']=='movement')
- stage(surface['id']);pointer();marker2=s.STATE/'typed.txt';marker2.unlink(missing_ok=True);keys(f"printf 'virtual cursor input\\n' > {marker2}");keys('-k','Return');wait(lambda:marker2.exists() and marker2.read_text()=='virtual cursor input\n');check('virtual_cursor_typing',marker2.read_text()=='virtual cursor input\n')
+ # Use (E) on a window enters typing with the virtual cursor; Super+Tab exits to world.
+ def exit_use():keys('-P','Super_L','-k','Tab','-p','Super_L')
+ stage(surface['id']);use();check('typing_toggle',diag()['cursor']=='virtual')
+ # The cursor moves in the window's pixels: push it past the output's left edge onto the
+ # neighbour in mouse-sized steps (one huge jump can project behind the camera).
+ for _ in range(12):
+  if diag()['cursor']=='desktop':break
+  pointer(-400,0);time.sleep(.15)
+ wait(lambda:diag()['cursor']=='desktop');check('typing_neighbour_cursor',diag()['nativeCursorVisible']);pointer(1500,0);wait(lambda:diag()['cursor']=='virtual' and diag()['ownsInput']);check('typing_cursor_return',not diag()['nativeCursorVisible'])
+ exit_use();wait(lambda:state()['interaction']['mode']=='movement')
+ stage(surface['id']);use();marker2=s.STATE/'typed.txt';marker2.unlink(missing_ok=True);keys(f"printf 'virtual cursor input\\n' > {marker2}");keys('-k','Return');wait(lambda:marker2.exists() and marker2.read_text()=='virtual cursor input\n');check('virtual_cursor_typing',marker2.read_text()=='virtual cursor input\n')
  nav();[client.call('surface.return',{'surfaceId':v['id']}) for v in state()['surfaces'] if v['kind']=='window'];pose(client,[0,3,-7]);keys('-k','f');wait(lambda:state()['mounts']['desktopWorkspaceId']==10);check('focus_wall',state()['interaction']['mode']=='workspace')
- keys('-P','Super_L','-k','Alt_L','-p','Super_L');wait(lambda:state()['mounts']['desktopWorkspaceId'] is None and diag()['handover']==0);check('focus_back',state()['interaction']['mode']=='movement')
+ exit_use();wait(lambda:state()['mounts']['desktopWorkspaceId'] is None and diag()['handover']==0);check('focus_back',state()['interaction']['mode']=='movement')
  # Native wall extraction uses the real compositor rectangle at the ray hit.
  client.call('surface.return',{'surfaceId':surface['id']});client.call('surface.return',{'surfaceId':popup['id']});pose(client,[0,3,-7]);time.sleep(.3)
  mod=s.envrun('wtype','-P','Super_L','-s','800','-p','Super_L');children.append(mod);time.sleep(.1);pointer('button',272,1);time.sleep(.25);check('drag_off_wall',diag()['gesture']==1,diag());pulled_title=captured(diag()['gestureId'])['title'];pointer('button',272,0);mod.wait(timeout=5);time.sleep(.25)
@@ -136,7 +148,12 @@ def acceptance(client,children,args,shell_token,socketpath):
    client.call('workspace.bind',{'id':10,'worldId':worldid,'areaId':state()['mounts']['areas'][0]['id']});time.sleep(.5)
    client.call('surface.pull',{'surfaceId':wait(lambda:next((v for v in state()['surfaces'] if v['title']=='M3A terminal'),None))['id']});time.sleep(.3);gesture(272,45,-10,True);check('hands_'+worldid,not any(v['collision'] for v in diag()['captures'] if v['visible']))
   else:
-   client.call('movement.set',{'modeId':'com.hyprune.fly'});t=wait(lambda:next((v for v in state()['surfaces'] if v['title']=='M3A terminal'),None));target(t['id']);before=captured(t['id']);gesture(272,35,-10,True);after=captured(t['id']);check('hands_'+worldid,after['position']!=before['position'] and not after['collision'],after)
+   # An area-less world binds no workspaces and adopts only room clients: bring the
+   # terminal into the room (windows.world_workspace) for the carry, then take it back.
+   term_window=lambda:next(w for w in json.loads(s.ctl('clients','-j')) if w['title']=='M3A terminal')
+   s.ctl('eval',f'hl.dispatch(hl.dsp.window.move({{workspace="20",follow=false,window="address:{term_window()["address"]}"}}))')
+   client.call('movement.set',{'modeId':'com.hyprune.fly'});t=wait(lambda:next((v for v in diag()['captures'] if v['title']=='M3A terminal' and v['visible']),None));target(t['id']);before=captured(t['id']);gesture(272,35,-10,True);after=captured(t['id']);check('hands_'+worldid,after['position']!=before['position'] and not after['collision'],after)
+   s.ctl('eval',f'hl.dispatch(hl.dsp.window.move({{workspace="10",follow=false,window="address:{term_window()["address"]}"}}))')
   shot(worldid+'.png')
  # Spawn, typing-button, live pose persistence and actual shell presentation.
  nav();client.call('world.load',{'worldId':'org.hyprune.m3a'});client.call('workspace.bind',{'id':10,'worldId':'org.hyprune.m3a','areaId':'sun-court'});pose(client,[0,2.3,4]);client.call('movement.set',{'modeId':'com.hyprune.fly'})
@@ -144,7 +161,8 @@ def acceptance(client,children,args,shell_token,socketpath):
  spawned=wait(lambda:next((v for v in state()['surfaces'] if v['title']=='M3A spawn'),None));time.sleep(.3);v=captured(spawned['id']);check('spawn_in_front',v['visible'] and not v['collision'] and v['position'][2]<4,v)
  pointer('button',275);wait(lambda:state()['interaction']['mode']=='typing');pointer('button',275);wait(lambda:state()['interaction']['mode']=='movement');check('typing_button',state()['interaction']['mode']=='movement')
  check('shell_mode_tools',status().get('mode')=='movement' and status().get('tool')==1,status())
- keys('-P','Tab','-s','450','-p','Tab');wait(lambda:status().get('director'));ui('tab',3);time.sleep(.5);shot('director-workspace-apps.png');check('director_apps',status().get('apps',0)>=2,status());ui('close');wait(lambda:not status().get('director'))
+ hold=json.loads((ROOT/'config/input.default.json').read_text())['longHoldMs']+200  # a long Tab hold opens the Director
+ keys('-P','Tab','-s',str(hold),'-p','Tab');wait(lambda:status().get('director'));ui('tab',3);time.sleep(.5);shot('director-workspace-apps.png');check('director_apps',status().get('apps',0)>=2,status());ui('close');wait(lambda:not status().get('director'))
  client.call('runtime.exit',{});time.sleep(.25);d=diag();check('cursor_exit_restore',not d['active'] and d['cursor']=='desktop' and d['nativeCursorVisible']==(not d['savedCursorHidden']),d['cursor'])
  if args.record:
   s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")');wait(lambda:state()['runtime']['active']);time.sleep(.3)
@@ -204,7 +222,7 @@ def demo(client,children,args,state,pointer):
   stage(app);mark('Real xdg right-click menu');pointer('button',273);pause(3);click_child(app);pause(.5)
   centre();mark('Client fullscreen to native 2D');pointer();pause(3);mark('Fullscreen back to 3D');pointer();pause(2)
   stage(term);mark('Typing and virtual cursor');pointer();keys("printf 'Typing through the virtual cursor\\n'");keys('-k','Return');pointer(80,10);pause(2);nav()
-  client.call('surface.return',{'surfaceId':term});pose(client,[0,3,-7]);mark('F workspace fly-in');keys('-k','f');pause(2);mark('Super+Alt fly-out');keys('-P','Super_L','-k','Alt_L','-p','Super_L');pause(2)
+  client.call('surface.return',{'surfaceId':term});pose(client,[0,3,-7]);mark('F workspace fly-in');keys('-k','f');pause(2);mark('Super+Tab fly-out');keys('-P','Super_L','-k','Tab','-p','Super_L');pause(2)
   stage(term);mark('Carry and drop into workspace tiling');mod=s.envrun('wtype','-P','Super_L','-s','1200','-p','Super_L');children.append(mod);pause(.1);pointer('button',272,1);pose(client,[0,3,-7]);pause(.5);pointer('button',272,0);mod.wait(timeout=5);pause(2)
   stage(term);keys('-k','2');mark('Mount tool: tag window');pointer();pause(1);pose(client,[4,2,1],math.pi/2);mark('Mount arbitrary wall');pointer();pause(2);keys('-k','1')
   nav();client.call('movement.set',{'modeId':'com.hyprune.walk'});pose(client,[-4,1.7,2]);mark('Discrete stairs');keys('-P','w','-s','800','-p','w');pause(2)

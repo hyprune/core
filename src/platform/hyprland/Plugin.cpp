@@ -4587,6 +4587,8 @@ int luaCamera(lua_State *state) {
         {"nativePointerFocused", bool(g_pSeatManager->m_state.pointerFocus)},
         {"savedCursorHidden", runtime->savedCursorHidden},
         {"pointer", {runtime->pointerX, runtime->pointerY}},
+        // Use mode's window-local virtual cursor (u, v on the root plane; motion is in its pixels).
+        {"localCursor", {{"surfaceId", runtime->relativeSurface}, {"u", runtime->localX}, {"v", runtime->localY}}},
         {"config", runtime->config},
         {"children", runtime->capture.children.size()},
         {"seatGrab", bool(g_pSeatManager->m_seatGrab)},
