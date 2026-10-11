@@ -59,6 +59,7 @@ extern "C" {
 #include "offload/Client.hpp"
 #include "offload/Supervisor.hpp"
 #include "sim/Npc.hpp"
+#include "world/Machines.hpp"
 #include "world/Character.hpp"
 #include "offload/Pci.hpp"
 #include "render/PNG.hpp"
@@ -379,6 +380,11 @@ struct Runtime {
     std::vector<std::vector<Mat4>> npcSkins;
     void npcLoad();
     void npcTick(float dt);
+    // Machines (RFC-0013 draft prototype): data-channel values drive placed objects
+    // through HYPRUNE_MACHINES_PROTOTYPE's bindings. Applied in the tick only.
+    world::Machines machines;
+    void machinesLoad();
+    void machinesTick(float dt);
     // What the reticle tells the player (IPC 0.19 interaction.reticle); distance/reach in m, -1 = none.
     struct ReticleView {
         std::string state = "hidden", action;
@@ -1378,6 +1384,7 @@ void Runtime::finishLoad() {
         applyGraphics(graphicsFile.current);
         world = std::move(candidate);
         npcLoad();
+        machinesLoad();
         outsidePlayable = false;
         capture.release();
         layout.invalidateCollision();
@@ -1812,6 +1819,39 @@ void Runtime::npcLoad() {
         npcAgents.clear();
         npcCharacter.reset();
     }
+}
+void Runtime::machinesLoad() {
+    // Prototype only: the world format has no machines yet. The bindings file names the
+    // world, the assets' object.json manifests (slots, machine trait) and per-instance
+    // input bindings: {"worldId", "manifests", "instances", "staleMs", "effectAsset"}.
+    machines = {};
+    renderer.objectStates.clear();
+    renderer.objectExtras.clear();
+    renderer.worldLabels.clear();
+    auto file = getenv("HYPRUNE_MACHINES_PROTOTYPE");
+    if (!file || !world)
+        return;
+    try {
+        auto spec = interaction::readJSON(file, 1 << 20);
+        if (spec.value("worldId", "") != world->id)
+            return;
+        machines.load(spec, *world, installed / world->id);
+    } catch (const std::exception &e) {
+        lastError = std::string("machines prototype: ") + e.what();
+        machines = {};
+    }
+}
+void Runtime::machinesTick(float dt) {
+    if (!machines.active() || !world)
+        return;
+    // Same clock as Control's publication monotonicMs. Still: reduced motion (states,
+    // labels, counts and flashes change; nothing spins or travels).
+    auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    bool still = config["graphics"]["reduced_motion"] == true;
+    machines.tick(dt, control.sources, now, still);
+    renderer.objectStates = machines.states;
+    renderer.objectExtras = machines.extras;
+    renderer.worldLabels = machines.labels;
 }
 void Runtime::npcTick(float dt) {
     if (!npcCharacter || npcAgents.empty()) {
@@ -4494,6 +4534,7 @@ void Runtime::tick() {
         }
         motionTick(dt);
         npcTick(dt);
+        machinesTick(dt);
         handTick(dt);
         toolsTick();
         reticleTick();
@@ -4696,8 +4737,15 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
             if (!npc.skin.empty())
                 h.bytes(npc.skin.data(), npc.skin.size() * sizeof(Mat4));
         }
-    if (auto m = monitor.lock())
+    if (auto m = monitor.lock()) {
         h(m->m_pixelSize.x)(m->m_pixelSize.y)(m->m_scale);
+        // Machines: a bound change renders a frame only while its instance is in view;
+        // out of view it updates state and forces nothing (seen on the next view change).
+        float aspect = float(m->m_pixelSize.x) / std::max(1.f, float(m->m_pixelSize.y));
+        for (auto k : machines.instances())
+            if (renderer.objectInView(k, camera, aspect))
+                h(k)(machines.states[k].revision);
+    }
     for (auto &s : surfaces) {
         h(s.id)(s.center)(s.width)(s.height)(s.yaw)(s.opacity)(s.texture)(s.focused)(s.pixelWidth)(s.pixelHeight);
         for (auto q : s.rotation)
@@ -4954,6 +5002,22 @@ int luaCamera(lua_State *state) {
                                               runtime->renderer.npcAnimationVisible(runtime->camera, aspect)},
                          {"drawn", runtime->renderer.npcsDrawn},
                          {"agents", agents}};
+         }()},
+        {"machines",
+         [] {
+             auto m = runtime->monitor.lock();
+             float aspect = m ? float(m->m_pixelSize.x) / std::max(1.f, float(m->m_pixelSize.y)) : 16 / 9.f;
+             auto d = runtime->machines.diagnostics();
+             for (auto &in : d["instances"]) {
+                 size_t k = 0;
+                 for (; k < runtime->world->objectInstances.size(); ++k)
+                     if (runtime->world->objectInstances[k].id == in["id"].get<std::string>())
+                         break;
+                 in["inView"] = runtime->renderer.objectInView(k, runtime->camera, aspect);
+             }
+             d["active"] = runtime->machines.active();
+             d["labelsDrawn"] = runtime->renderer.worldLabelsDrawn;
+             return d;
          }()},
         {"motion", {{"speed", runtime->motionSpeed}, {"turn", runtime->motionTurn}}},
         {"mountTarget", runtime->snapTarget},

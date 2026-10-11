@@ -7,6 +7,7 @@
 #include "interaction/Tools.hpp"
 #include "surfaces/Surface.hpp"
 #include "world/Character.hpp"
+#include "world/ObjectState.hpp"
 #include "world/World.hpp"
 #include "quests/Markers.hpp"
 #include <GLES3/gl3.h>
@@ -137,6 +138,14 @@ class Renderer {
     // owner keeps frames coming. The NPC half alone feeds diagnostics.
     bool animationVisible(const sim::Camera &, float aspect) const;
     bool npcAnimationVisible(const sim::Camera &, float aspect) const;
+    // Machines prototype (HYPRUNE_MACHINES_PROTOTYPE): per-instance draw state set in the
+    // tick (parallel to World::objectInstances; empty: authored), extra draws and labels.
+    std::vector<world::ObjectDrawState> objectStates;
+    std::vector<world::ObjectExtra> objectExtras;
+    std::vector<world::WorldLabel> worldLabels;
+    // An instance's swept bounds in the frustum and not region-culled (frame scheduling).
+    bool objectInView(size_t instance, const sim::Camera &, float aspect) const;
+    size_t worldLabelsDrawn = 0;
     bool materialDetails = true; // Also permits like-for-like benchmark comparisons.
     static constexpr int lightmapMipLevels = 2; // Deepest lightmap mip sampled (4 px bake gutters).
     uint64_t frames = 0;
@@ -148,6 +157,7 @@ class Renderer {
         bool indexed = false;
         unsigned material = 0, node = 0;
         int asset = -1;      // world object asset (node is then the asset's node), else a scene batch
+        int mesh = -1;       // the asset's mesh index (object batches)
         Vec3 center, lo, hi; // bounds of the pre-transformed vertices (asset space for objects)
     };
     struct PendingUpload {
@@ -178,7 +188,8 @@ class Renderer {
     std::shared_ptr<const world::World> world_;
     std::vector<Batch> batches_;
     std::chrono::steady_clock::time_point animationEpoch_{};
-    GLuint instanceVbo_ = 0; // per-frame instance records (model, probe lighting)
+    GLuint instanceVbo_ = 0; // per-frame instance records (model, probe lighting, paint, tint)
+    static constexpr GLuint recordFloats = 32;
     size_t objectInstancesVisible_ = 0, objectDrawCalls_ = 0, objectInstancesDrawn_ = 0;
     bool npcVisible(const Npc &, const std::array<std::array<float, 4>, 6> &planes) const;
     bool instanceVisible(const world::ObjectInstance &, const std::array<std::array<float, 4>, 6> &planes,
@@ -253,6 +264,16 @@ class Renderer {
     void markerShape(float x, float y, int shape, float radius, Vec3 color, float alpha, int ring, bool dashed,
                      float angle, int w, int h, float extentX = 0, float extentY = 0);
     GLuint textProgram_ = 0, textTexture_ = 0, textVao_ = 0, textBuffer_ = 0;
+    // World labels (machines prototype): a 64 px glyph atlas built with the world's
+    // font setup (an upload job, never in the frame) and quads drawn in the world pass.
+    struct LabelGlyph {
+        float u0, v0, u1, v1, width, height, left, top, advance;
+    };
+    std::map<uint32_t, LabelGlyph> labelGlyphs_;
+    float labelAscent_ = 48, labelLine_ = 64;
+    GLuint labelProgram_ = 0, labelTexture_ = 0, labelVao_ = 0, labelVbo_ = 0;
+    void labelAtlas();
+    void drawWorldLabels(const Mat4 &vp);
     std::string loadedFont_;
     struct Glyph {
         float width = 0, height = 0, left = 0, top = 0, advance = 0, u = 0, v = 0;

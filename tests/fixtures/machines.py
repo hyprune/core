@@ -60,7 +60,7 @@ lamp_palette=[{'id':'idle','colour':[.3,.3,.32],'emission':.2},{'id':'running','
               {'id':'ok','colour':[.3,1,.6],'emission':3},{'id':'fail','colour':[1,.2,.1],'emission':4},
               {'id':'stale','colour':[.25,.25,.25],'emission':.1}]
 attribution=[{'path':'.','author':'Hyprune contributors','license':'CC0-1.0'}]
-machine={'formatVersion':'0.11','id':'mini-conveyor','version':'1.0.0','name':'Mini conveyor','category':'machines',
+machine={'formatVersion':'0.10','id':'mini-conveyor','version':'1.0.0','name':'Mini conveyor','category':'machines',
   'scene':'mini-conveyor.gltf','license':'CC0-1.0','attribution':attribution,'bounds':{'min':[-2,0,-.5],'max':[2,2.05,.5]},
   'traits':{'decorative':{'animations':[{'node':'spinner','type':'spin','axis':[0,1,0],'pivot':[0,1.5,0],'period':2},
                                         {'node':'lift','type':'bob','axis':[0,1,0],'amplitude':.4,'period':4}]},
@@ -89,7 +89,7 @@ machine={'formatVersion':'0.11','id':'mini-conveyor','version':'1.0.0','name':'M
            'toggles':[{'id':'alarm','nodes':['alarm']}],
            'effects':[{'id':'cheer','pose':{'position':[0,2.2,0],'rotation':[0,0,0,1]},'kind':'burst','colour':[.3,1,.6],'durationMs':1000}]}}
 (root/'objects/mini-conveyor.json').write_text(json.dumps(machine,indent=1)+'\n')
-token_manifest={'formatVersion':'0.11','id':'token','version':'1.0.0','name':'Token','category':'machines','scene':'token.gltf','license':'CC0-1.0',
+token_manifest={'formatVersion':'0.10','id':'token','version':'1.0.0','name':'Token','category':'machines','scene':'token.gltf','license':'CC0-1.0',
   'attribution':attribution,'bounds':{'min':[-.1,0,-.1],'max':[.1,.12,.1]},'traits':{},
   'slots':{'states':[{'id':'token','materials':['token'],'palette':[{'id':'idle','colour':[.5,.5,.5],'emission':0},{'id':'running','colour':[1,.6,.2],'emission':1}]}]}}
 (root/'objects/token.json').write_text(json.dumps(token_manifest,indent=1)+'\n')

@@ -44,10 +44,14 @@ layout(location=3) in vec2 uv1;
 // scale, so mat3(m) transforms normals) and probe lighting records.
 layout(location=4) in vec4 instance0;layout(location=5) in vec4 instance1;layout(location=6) in vec4 instance2;
 layout(location=7) in vec4 instance3;layout(location=8) in vec4 instanceUp;layout(location=9) in vec4 instanceDown;
+// Per-instance paint (machines prototype): palette colour (rgb, a > .5 when painted) and
+// tint (painted emission, emissive scale, saturation, brightness).
+layout(location=10) in vec4 instancePaint;layout(location=11) in vec4 instanceTint;
 uniform mat4 vp,model;uniform mat3 normalMatrix;uniform int instanced;
-out vec3 n;out vec3 worldPosition;out vec2 uv;out vec2 lightUV;flat out vec4 probeUp;flat out vec4 probeDown;
+out vec3 n;out vec3 worldPosition;out vec2 uv;out vec2 lightUV;flat out vec4 probeUp;flat out vec4 probeDown;flat out vec4 paint;flat out vec4 tint;
 void main(){mat4 m=instanced!=0?mat4(instance0,instance1,instance2,instance3):model;vec4 pos=m*vec4(position,1);gl_Position=vp*pos;
-n=instanced!=0?mat3(m)*normal:normalMatrix*normal;uv=uv0;lightUV=uv1;worldPosition=pos.xyz;probeUp=instanceUp;probeDown=instanceDown;}
+n=instanced!=0?mat3(m)*normal:normalMatrix*normal;uv=uv0;lightUV=uv1;worldPosition=pos.xyz;probeUp=instanceUp;probeDown=instanceDown;
+paint=instanced!=0?instancePaint:vec4(0);tint=instanced!=0?instanceTint:vec4(0,1,1,1);}
 )";
 // NPC characters: linear blend skinning with up to 4 joints per vertex from a joint
 // UBO (<= 64 joints; the artist spec allows 40), same outputs as the world vertex shader.
@@ -60,8 +64,8 @@ layout(location=4) in vec4 joints;
 layout(location=5) in vec4 weights;
 uniform mat4 vp,model;uniform mat3 normalMatrix;
 layout(std140) uniform Joints{mat4 joint[64];};
-out vec3 n;out vec3 worldPosition;out vec2 uv;out vec2 lightUV;flat out vec4 probeUp;flat out vec4 probeDown;
-void main(){mat4 skin=weights.x*joint[int(joints.x)]+weights.y*joint[int(joints.y)]+weights.z*joint[int(joints.z)]+weights.w*joint[int(joints.w)];
+out vec3 n;out vec3 worldPosition;out vec2 uv;out vec2 lightUV;flat out vec4 probeUp;flat out vec4 probeDown;flat out vec4 paint;flat out vec4 tint;
+void main(){paint=vec4(0);tint=vec4(0,1,1,1);mat4 skin=weights.x*joint[int(joints.x)]+weights.y*joint[int(joints.y)]+weights.z*joint[int(joints.z)]+weights.w*joint[int(joints.w)];
  vec4 pos=model*skin*vec4(position,1);gl_Position=vp*pos;n=normalMatrix*(mat3(skin)*normal);uv=uv0;lightUV=vec2(0);worldPosition=pos.xyz;probeUp=vec4(0);probeDown=vec4(0);}
 )";
 constexpr GLuint jointBinding = 1;
@@ -79,6 +83,7 @@ in vec3 n;in vec3 worldPosition;in vec2 uv;in vec2 lightUV;
 // World objects (probe lighting): ambient for up/down normals (rgb), direct sun
 // strength (probeUp.w) and sun visibility (probeDown.w); objectLit selects it.
 flat in vec4 probeUp;flat in vec4 probeDown;uniform int objectLit;
+flat in vec4 paint;flat in vec4 tint; // per-instance palette paint and tint (world objects only)
 uniform sampler2D albedo,lightmap,normalMap,mrMap,aoMap,emissiveMap;
 uniform vec3 eye;
 uniform int details,nativeOutput,nativeTone;
@@ -125,8 +130,9 @@ void main(){
  vec3 face=safeNormalize(cross(dFdx(worldPosition),dFdy(worldPosition)),vec3(0,1,0));
  vec4 baseSample=present[0]!=0?texture(albedo,coords(0)):vec4(1);
  float coverage=alpha*baseSample.a;if(alphaMode==1&&coverage<alphaCutoff)discard;
- vec3 base=color*baseSample.rgb;
- vec3 emissive=emission*(present[4]!=0?texture(emissiveMap,coords(4)).rgb:vec3(1));
+ bool painted=paint.a>.5;
+ vec3 base=(painted?paint.rgb:color)*baseSample.rgb;
+ vec3 emissive=(painted?paint.rgb*tint.x:emission)*tint.y*(present[4]!=0?texture(emissiveMap,coords(4)).rgb:vec3(1));
  // A degenerate (zero) interpolated normal falls back to the face normal, facing the eye.
  if(dot(face,eye-worldPosition)<0.)face=-face;
  vec3 N=safeNormalize(gl_FrontFacing?n:-n,face),L=safeNormalize(sunDirection,vec3(0,1,0));vec3 geometric=N;
@@ -158,6 +164,7 @@ void main(){
  }
  if(unlit!=0)lit=base;
  lit+=emissive;
+ if(tint.z!=1.||tint.w!=1.)lit=mix(vec3(dot(lit,vec3(.2126,.7152,.0722))),lit,tint.z)*tint.w; // greyed, dimmed (stale data)
  lit=min(lit,vec3(6e4)); // stays finite in FP16 targets (max 65504): no Inf into bloom/tone
  // Camera-relative integrated height density along the view segment.
  float fog=0.;
@@ -670,15 +677,34 @@ bool Renderer::npcAnimationVisible(const sim::Camera &camera, float aspect) cons
 bool Renderer::animationVisible(const sim::Camera &camera, float aspect) const {
     if (npcAnimationVisible(camera, aspect))
         return true;
-    if (!animating() || pending_)
+    if (!world_ || pending_)
+        return false;
+    bool clock = animating(), bound = false;
+    for (const auto &s : objectStates)
+        bound |= s.bound && s.moving;
+    if (!clock && !bound)
         return false;
     auto planes = frustumPlanes(camera.projection(aspect) * camera.view());
     auto areas = world::visibleAreas(*world_, camera.position);
     bool regions = graphics.value("visibility_culling", true);
-    for (const auto &o : world_->objectInstances)
-        if (o.speed > 0 && world_->objectAssets[o.asset].animated() && instanceVisible(o, planes, areas, regions))
+    for (size_t k = 0; k < world_->objectInstances.size(); ++k) {
+        const auto &o = world_->objectInstances[k];
+        // A bound machine moves when its runtime says so (spins, eases, items, effects);
+        // reduced motion is the runtime's still mode there.
+        bool moving = k < objectStates.size() && objectStates[k].bound
+                          ? objectStates[k].moving
+                          : clock && o.speed > 0 && world_->objectAssets[o.asset].animated();
+        if (moving && instanceVisible(o, planes, areas, regions))
             return true;
+    }
     return false;
+}
+bool Renderer::objectInView(size_t instance, const sim::Camera &camera, float aspect) const {
+    if (!world_ || pending_ || instance >= world_->objectInstances.size())
+        return false;
+    auto planes = frustumPlanes(camera.projection(aspect) * camera.view());
+    auto areas = world::visibleAreas(*world_, camera.position);
+    return instanceVisible(world_->objectInstances[instance], planes, areas, graphics.value("visibility_culling", true));
 }
 void Renderer::init() {
     if (quadVao_)
@@ -987,12 +1013,12 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
                              GL_FLOAT, l.faces[face].data());
             });
     // Scene meshes, then each object asset's meshes once (drawn per instance).
-    std::vector<int> meshAsset;
+    std::vector<int> meshAsset, meshIndex;
     for (const auto &mesh : p->world->meshes)
-        p->meshes.push_back(&mesh), meshAsset.push_back(-1);
+        p->meshes.push_back(&mesh), meshAsset.push_back(-1), meshIndex.push_back(-1);
     for (size_t a = 0; a < p->world->objectAssets.size(); ++a)
-        for (const auto &mesh : p->world->objectAssets[a].meshes)
-            p->meshes.push_back(&mesh), meshAsset.push_back(int(a));
+        for (size_t m = 0; m < p->world->objectAssets[a].meshes.size(); ++m)
+            p->meshes.push_back(&p->world->objectAssets[a].meshes[m]), meshAsset.push_back(int(a)), meshIndex.push_back(int(m));
     p->batches.resize(p->meshes.size());
     for (size_t i = 0; i < p->batches.size(); ++i) {
         auto &mesh = *p->meshes[i];
@@ -1001,6 +1027,7 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
         b.material = mesh.material;
         b.node = mesh.node;
         b.asset = meshAsset[i];
+        b.mesh = meshIndex[i];
         b.lo = b.hi = mesh.vertices.empty() ? Vec3{} : mesh.vertices[0].position;
         for (auto &v : mesh.vertices) {
             b.center += v.position;
@@ -1052,6 +1079,7 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
         [this] {
             init();
             textAtlas();
+            labelAtlas();
         },
         "font/setup");
     uploadMs_ = uploadMaxMs_ = uploadMaxJobMs_ = 0;
@@ -1713,11 +1741,39 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     if (!world_->objectInstances.empty()) {
         const double t = animationSeconds();
         std::vector<size_t> shown;
+        std::vector<bool> instanceShown(world_->objectInstances.size(), false);
         for (size_t k = 0; k < world_->objectInstances.size(); ++k)
             if (instanceVisible(world_->objectInstances[k], planes, visible, regions))
-                shown.push_back(k);
+                shown.push_back(k), instanceShown[k] = true;
         objectInstancesVisible_ = shown.size();
+        // Extras (machines prototype: stack copies, items, effect pieces) draw with their
+        // owner's region visibility and their own bounds in the frustum.
+        std::vector<size_t> extras;
+        for (size_t e = 0; e < objectExtras.size(); ++e) {
+            const auto &x = objectExtras[e];
+            if (x.owner >= instanceShown.size() || !instanceShown[x.owner] || x.asset >= world_->objectAssets.size())
+                continue;
+            const auto &asset = world_->objectAssets[x.asset];
+            Vec3 c = x.model.point(asset.center);
+            float r = asset.radius * x.scale;
+            bool inside = true;
+            for (auto &p : planes)
+                if (p[0] * c.x + p[1] * c.y + p[2] * c.z + p[3] < -r * std::sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]))
+                    inside = false;
+            if (inside)
+                extras.push_back(e);
+        }
         std::vector<float> records;
+        auto record = [&](const Mat4 &model, const world::ObjectInstance &o, const world::MeshPaint *paint, float saturation,
+                          float brightness) {
+            records.insert(records.end(), model.v.begin(), model.v.end());
+            records.insert(records.end(), {o.ambientUp.x, o.ambientUp.y, o.ambientUp.z, o.sun, o.ambientDown.x,
+                                           o.ambientDown.y, o.ambientDown.z, o.sunVisibility});
+            bool painted = paint && paint->painted;
+            records.insert(records.end(), {painted ? paint->colour.x : 0.f, painted ? paint->colour.y : 0.f,
+                                           painted ? paint->colour.z : 0.f, painted ? 1.f : 0.f, painted ? paint->emission : 0.f,
+                                           paint ? paint->emissiveScale : 1.f, saturation, brightness});
+        };
         for (size_t i = 0; i < batches_.size(); ++i) {
             const auto &b = batches_[i];
             if (b.asset < 0)
@@ -1725,21 +1781,53 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             const auto &asset = world_->objectAssets[b.asset];
             const int animation = asset.animationOf(b.node);
             const bool blended = world_->materials[b.material].alphaMode == 2;
-            GLint first = GLint(records.size() / 24);
+            GLint first = GLint(records.size() / recordFloats);
             GLsizei count = 0;
-            for (auto k : shown) {
-                const auto &o = world_->objectInstances[k];
-                if (o.asset != unsigned(b.asset))
-                    continue;
-                auto model = animation >= 0 ? o.model * world::animation::matrix(asset.animations[animation], t, o.speed, o.phase)
-                                            : o.model;
-                records.insert(records.end(), model.v.begin(), model.v.end());
-                records.insert(records.end(), {o.ambientUp.x, o.ambientUp.y, o.ambientUp.z, o.sun, o.ambientDown.x,
-                                               o.ambientDown.y, o.ambientDown.z, o.sunVisibility});
+            auto add = [&](const Mat4 &model) {
                 recordCenters.push_back(model.point(b.center));
                 if (blended)
                     objectBlended.push_back({i, first + count});
                 ++count;
+            };
+            for (auto k : shown) {
+                const auto &o = world_->objectInstances[k];
+                if (o.asset != unsigned(b.asset))
+                    continue;
+                const world::ObjectDrawState *state =
+                    k < objectStates.size() && objectStates[k].bound ? &objectStates[k] : nullptr;
+                const world::MeshPaint *paint =
+                    state && size_t(b.mesh) < state->meshes.size() ? &state->meshes[b.mesh] : nullptr;
+                if (paint && paint->hidden)
+                    continue;
+                Mat4 model = o.model;
+                if (paint && (paint->offset.x != 0 || paint->offset.y != 0 || paint->offset.z != 0)) {
+                    auto offset = Mat4::identity();
+                    offset.v[12] = paint->offset.x, offset.v[13] = paint->offset.y, offset.v[14] = paint->offset.z;
+                    model = model * offset;
+                }
+                if (animation >= 0)
+                    model = model * (state && size_t(animation) < state->turns.size()
+                                         ? world::animation::matrixAt(asset.animations[animation], state->turns[animation])
+                                         : world::animation::matrix(asset.animations[animation], t, o.speed, o.phase));
+                record(model, o, paint, state ? state->saturation : 1.f, state ? state->brightness : 1.f);
+                add(model);
+            }
+            for (auto e : extras) {
+                const auto &x = objectExtras[e];
+                if (x.asset != unsigned(b.asset))
+                    continue;
+                if (x.node >= 0) { // only the node's subtree
+                    bool inside = false;
+                    for (int n = int(b.node); n >= 0 && !inside; n = asset.nodeParents[n])
+                        inside = n == x.node;
+                    if (!inside)
+                        continue;
+                }
+                bool painted = !x.paintMeshes ||
+                               std::find(x.paintMeshes->begin(), x.paintMeshes->end(), unsigned(b.mesh)) != x.paintMeshes->end();
+                Mat4 model = animation >= 0 ? x.model * world::animation::matrix(asset.animations[animation], t) : x.model;
+                record(model, world_->objectInstances[x.owner], painted ? &x.paint : nullptr, x.saturation, x.brightness);
+                add(model);
             }
             if (count && !blended)
                 objectDraws.push_back({i, first, count});
@@ -1827,12 +1915,13 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         }
         glBindVertexArray(b.vao);
         if (instances > 0) {
-            // Records: mat4 model, vec4 ambient up + sun, vec4 ambient down + sun visibility.
+            // Records: mat4 model, vec4 ambient up + sun, vec4 ambient down + sun visibility,
+            // vec4 paint, vec4 tint (machines prototype; neutral for plain objects).
             glBindBuffer(GL_ARRAY_BUFFER, instanceVbo_);
-            for (GLuint c = 0; c < 6; ++c) {
+            for (GLuint c = 0; c < recordFloats / 4; ++c) {
                 glEnableVertexAttribArray(4 + c);
-                glVertexAttribPointer(4 + c, 4, GL_FLOAT, GL_FALSE, 24 * sizeof(float),
-                                      reinterpret_cast<const void *>((size_t(first) * 24 + c * 4) * sizeof(float)));
+                glVertexAttribPointer(4 + c, 4, GL_FLOAT, GL_FALSE, recordFloats * sizeof(float),
+                                      reinterpret_cast<const void *>((size_t(first) * recordFloats + c * 4) * sizeof(float)));
                 glVertexAttribDivisor(4 + c, 1);
             }
             if (b.indexed)
@@ -1857,6 +1946,9 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         passUniforms(skinned_);
         drawNpcs(planes, tone, exposure);
     }
+    worldLabelsDrawn = 0;
+    if (!externalWorldFbo && !worldLabels.empty())
+        drawWorldLabels(vp);
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
@@ -2462,6 +2554,159 @@ void Renderer::drawHUD(GLuint target, int w, int h) {
     debugHUD(w, h);
 }
 
+void Renderer::labelAtlas() {
+    if (labelTexture_)
+        return;
+    auto pattern = FcPatternCreate();
+    FcPatternAddString(pattern, FC_FAMILY, reinterpret_cast<const FcChar8 *>("monospace"));
+    FcPatternAddInteger(pattern, FC_WEIGHT, FC_WEIGHT_BOLD);
+    FcConfigSubstitute(nullptr, pattern, FcMatchPattern);
+    FcDefaultSubstitute(pattern);
+    FcResult result;
+    auto match = FcFontMatch(nullptr, pattern, &result);
+    FcPatternDestroy(pattern);
+    FcChar8 *path = nullptr;
+    FT_Library library;
+    FT_Face face;
+    if (!match || FcPatternGetString(match, FC_FILE, 0, &path) != FcResultMatch || FT_Init_FreeType(&library)) {
+        if (match)
+            FcPatternDestroy(match);
+        return; // labels stay undrawn; nothing else depends on them
+    }
+    if (FT_New_Face(library, reinterpret_cast<const char *>(path), 0, &face)) {
+        FcPatternDestroy(match);
+        FT_Done_FreeType(library);
+        return;
+    }
+    FcPatternDestroy(match);
+    FT_Set_Pixel_Sizes(face, 0, 64);
+    std::vector<uint32_t> codes;
+    for (uint32_t c = 32; c < 127; ++c)
+        codes.push_back(c);
+    for (uint32_t c : {0x2014u, 0x25f7u, 0xd7u, 0xb7u, 0x2026u}) // em dash, clock mark, times, middle dot, ellipsis
+        codes.push_back(c);
+    constexpr int cellW = 72, cellH = 80, columns = 16, width = cellW * columns;
+    const int height = cellH * int((codes.size() + columns - 1) / columns);
+    std::vector<uint8_t> atlas(size_t(width) * height);
+    labelAscent_ = float(face->size->metrics.ascender) / 64, labelLine_ = float(face->size->metrics.height) / 64;
+    for (size_t i = 0; i < codes.size(); ++i) {
+        if (codes[i] > 127 && !FT_Get_Char_Index(face, codes[i]))
+            continue; // missing glyph: the layout substitutes
+        if (FT_Load_Char(face, codes[i], FT_LOAD_RENDER))
+            continue;
+        auto &g = face->glyph;
+        int x = int(i % columns) * cellW, y = int(i / columns) * cellH;
+        int gw = std::min<int>(cellW - 2, g->bitmap.width), gh = std::min<int>(cellH - 2, g->bitmap.rows);
+        for (int row = 0; row < gh; ++row)
+            for (int column = 0; column < gw; ++column)
+                atlas[size_t(y + 1 + row) * width + x + 1 + column] = g->bitmap.buffer[row * g->bitmap.pitch + column];
+        labelGlyphs_[codes[i]] = {float(x + 1) / width, float(y + 1) / height, float(x + 1 + gw) / width, float(y + 1 + gh) / height,
+                                  float(gw), float(gh), float(g->bitmap_left), float(g->bitmap_top), float(g->advance.x) / 64};
+    }
+    FT_Done_Face(face);
+    FT_Done_FreeType(library);
+    glGenTextures(1, &labelTexture_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, labelTexture_);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    labelProgram_ = program(R"(#version 300 es
+layout(location=0) in vec3 position;layout(location=1) in vec2 texcoord;uniform mat4 vp;out vec2 uv;
+void main(){gl_Position=vp*vec4(position,1);uv=texcoord;})",
+                            R"(#version 300 es
+precision highp float;in vec2 uv;uniform sampler2D atlas;uniform vec3 color;out vec4 result;
+void main(){float a=texture(atlas,uv).r;if(a<.02)discard;result=vec4(color*a,a);})");
+    glGenVertexArrays(1, &labelVao_);
+    glGenBuffers(1, &labelVbo_);
+    glBindVertexArray(labelVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, labelVbo_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void *>(3 * sizeof(float)));
+}
+// Labels on machine label slots: centred lines of glyph quads in the slot's
+// rectangle, emissive, depth-tested without depth writes; blended colour keeps the
+// world target's alpha (ink normals). Text and colours were prepared in the tick.
+void Renderer::drawWorldLabels(const Mat4 &vp) {
+    if (!labelProgram_ || labelGlyphs_.empty())
+        return;
+    std::vector<float> vertices;
+    std::vector<std::pair<size_t, Vec3>> runs; // vertex count, colour per label
+    for (const auto &label : worldLabels) {
+        std::vector<uint32_t> codes;
+        for (size_t i = 0; i < label.text.size();) {
+            unsigned char c = label.text[i];
+            int extra = c < 0x80 ? 0 : (c & 0xe0) == 0xc0 ? 1 : (c & 0xf0) == 0xe0 ? 2 : 3;
+            uint32_t code = extra == 0 ? c : extra == 1 ? c & 0x1f : extra == 2 ? c & 0x0f : c & 0x07;
+            for (int k = 1; k <= extra && i + k < label.text.size(); ++k)
+                code = code << 6 | (label.text[i + k] & 0x3f);
+            i += 1 + extra;
+            codes.push_back(labelGlyphs_.contains(code) ? code : code == 0x25f7 ? '~' : '?');
+        }
+        float advance = 0;
+        for (auto c : codes)
+            advance += labelGlyphs_.contains(c) ? labelGlyphs_[c].advance : 0;
+        float w = 2 * length(label.right), h = 2 * length(label.up);
+        if (advance <= 0 || w <= 0 || h <= 0)
+            continue;
+        // Metres per atlas pixel: the line fills 70% of the height unless the width runs out.
+        float scale = std::min(.7f * h / labelLine_, .92f * w / advance);
+        Vec3 right = label.right / (w / 2), up = label.up / (h / 2);
+        Vec3 origin = label.centre - right * (advance * scale / 2) - up * ((labelAscent_ - labelLine_ / 2) * scale) +
+                      up * (labelLine_ * scale * .12f);
+        float x = 0;
+        size_t before = vertices.size();
+        for (auto c : codes) {
+            const auto &g = labelGlyphs_[c];
+            if (g.width > 0) {
+                Vec3 p0 = origin + right * ((x + g.left) * scale) + up * ((g.top - g.height) * scale);
+                Vec3 px = right * (g.width * scale), py = up * (g.height * scale);
+                Vec3 q[4]{p0, p0 + px, p0 + px + py, p0 + py};
+                float uv[4][2]{{g.u0, g.v1}, {g.u1, g.v1}, {g.u1, g.v0}, {g.u0, g.v0}};
+                for (int k : {0, 1, 2, 0, 2, 3})
+                    vertices.insert(vertices.end(), {q[k].x, q[k].y, q[k].z, uv[k][0], uv[k][1]});
+            }
+            x += g.advance;
+        }
+        float luminance = .2126f * label.colour.x + .7152f * label.colour.y + .0722f * label.colour.z;
+        Vec3 colour = (Vec3{luminance, luminance, luminance} + (label.colour - Vec3{luminance, luminance, luminance}) * label.saturation) *
+                      (label.intensity * label.brightness);
+        runs.push_back({(vertices.size() - before) / 5, colour});
+    }
+    if (vertices.empty())
+        return;
+    glUseProgram(labelProgram_);
+    glUniformMatrix4fv(location(labelProgram_, "vp"), 1, GL_FALSE, vp.v.data());
+    uniform(labelProgram_, "atlas", 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, labelTexture_);
+    glBindSampler(0, 0);
+    glBindVertexArray(labelVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, labelVbo_);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STREAM_DRAW);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+    glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+    GLint first = 0;
+    for (auto &[count, colour] : runs) {
+        uniform(labelProgram_, "color", colour);
+        glDrawArrays(GL_TRIANGLES, first, GLsizei(count));
+        first += GLint(count);
+        ++worldLabelsDrawn;
+    }
+    glDepthMask(GL_TRUE);
+}
 void Renderer::textAtlas() {
     if (loadedFont_ == font && textTexture_)
         return;
@@ -3055,6 +3300,12 @@ void Renderer::destroy() {
     glDeleteBuffers(1, &textBuffer_);
     textProgram_ = textTexture_ = textVao_ = textBuffer_ = 0;
     loadedFont_.clear();
+    deleteProgram(labelProgram_);
+    glDeleteTextures(1, &labelTexture_);
+    glDeleteVertexArrays(1, &labelVao_);
+    glDeleteBuffers(1, &labelVbo_);
+    labelProgram_ = labelTexture_ = labelVao_ = labelVbo_ = 0;
+    labelGlyphs_.clear();
     glDeleteVertexArrays(1, &collisionVao_);
     glDeleteBuffers(1, &collisionVbo_);
     collisionVao_ = collisionVbo_ = 0;
