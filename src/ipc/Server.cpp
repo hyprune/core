@@ -119,6 +119,17 @@ Json Server::snapshot() const {
 }
 Json Server::visibleState(const Peer &p) const {
     Json state = state_;
+    if (!protocol::atLeast(p.protocol, "0.21") && state.is_object()) {
+        for (auto key : {"markers", "quests", "focus"})
+            state.erase(key);
+        if (state.contains("keymap"))
+            state["keymap"] = interaction::withoutMarkersReveal(std::move(state["keymap"]));
+        if (state.contains("spatial") && state["spatial"].contains("projection") &&
+            state["spatial"]["projection"].is_object()) {
+            auto &markers = state["spatial"]["projection"]["markers"];
+            std::erase_if(markers.get_ref<Json::array_t &>(), [](const Json &m) { return m.contains("markerId"); });
+        }
+    }
     if (!protocol::atLeast(p.protocol, "0.20") && state.contains("spatial") && state["spatial"].contains("map") &&
         state["spatial"]["map"].is_object())
         state["spatial"]["map"].erase("levels");
@@ -211,6 +222,14 @@ void Server::notify(const std::string &event, Json params, const std::string &ac
         for (auto &p : peers_)
             if (p.hello && !p.closing && protocol::atLeast(p.protocol, "0.17") && p.grants.contains("shell.control") &&
                 p.grants.contains("state.read") && !p.subscription.empty())
+                queue(p, {{"jsonrpc", "2.0"}, {"method", event}, {"params", params}});
+        return;
+    }
+    if (event == "quest.progress" || event == "focus.phase") {
+        // RFC-0012 presentation hints: IPC 0.21 state readers with a state subscription.
+        for (auto &p : peers_)
+            if (p.hello && !p.closing && protocol::atLeast(p.protocol, "0.21") && p.grants.contains("state.read") &&
+                !p.subscription.empty())
                 queue(p, {{"jsonrpc", "2.0"}, {"method", event}, {"params", params}});
         return;
     }
@@ -353,12 +372,14 @@ void Server::frame(Peer &p, const std::string &bytes) {
                   -32602, "invalid client identity");
             check(params["capabilities"].is_array(), -32602, "invalid capabilities");
             const std::set<std::string> known{"state.read",    "world.control",   "surface.control", "movement.control",
-                                              "shell.control", "runtime.control", "data.publish",    "input.control", "camera.author"};
+                                              "shell.control", "runtime.control", "data.publish",    "input.control", "camera.author",
+                                              "quest.control"};
             std::set<std::string> requested;
             for (auto &cap : params["capabilities"]) {
                 check(cap.is_string(), -32602, "invalid capability");
                 auto name = cap.get<std::string>();
-                check(known.contains(name) && (name != "camera.author" || protocol::atLeast(p.protocol,"0.13")) && (name != "input.control" || protocol::atLeast(p.protocol, "0.6")) &&
+                check(known.contains(name) && (name != "quest.control" || protocol::atLeast(p.protocol, "0.21")) &&
+                          (name != "camera.author" || protocol::atLeast(p.protocol,"0.13")) && (name != "input.control" || protocol::atLeast(p.protocol, "0.6")) &&
                           (protocol::atLeast(p.protocol, "0.2") || name != "data.publish") &&
                           requested.insert(name).second,
                       -32602, "invalid capability list");
@@ -409,6 +430,9 @@ void Server::frame(Peer &p, const std::string &bytes) {
                     events.push_back("runtime.notice");
                 if (protocol::atLeast(p.protocol, "0.17") && p.grants.contains("shell.control"))
                     events.push_back("capture.taken");
+                if (protocol::atLeast(p.protocol, "0.21"))
+                    for (auto e : {"quest.progress", "focus.phase"})
+                        events.push_back(e);
             }
             result = {{"protocol", p.protocol},
                       {"sessionId", session_},
@@ -503,6 +527,8 @@ void Server::frame(Peer &p, const std::string &bytes) {
             result = handler_(method, command);
             if (method.starts_with("input.") && !protocol::atLeast(p.protocol, "0.12"))
                 result = interaction::withoutRecordingAction(std::move(result));
+            if (method.starts_with("input.") && !protocol::atLeast(p.protocol, "0.21"))
+                result = interaction::withoutMarkersReveal(std::move(result));
         }
         queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"result", result}}, method);
     } catch (const Error &e) {

@@ -2,6 +2,7 @@
 #include "ipc/Protocol.hpp"
 #include "ipc/Server.hpp"
 #include "ipc/GrantIssuer.hpp"
+#include "quests/Engine.hpp"
 #include <arpa/inet.h>
 #include <atomic>
 #include <filesystem>
@@ -152,8 +153,12 @@ void inheritance(const std::string &runtime) {
           "input.capture",   "input.capture.cancel", "player.get",       "player.set",
           "surface.pocket",  "surface.unpocket"})
         methods[m] = "state.read"; // Version eligibility is independent of grants.
+    for (auto &[m, grant] : hyprune::quests::Engine::methods())
+        methods[m] = "state.read";
+    methods["markers.reveal"] = "state.read";
     const std::set<std::string> allGrants{"state.read",      "world.control", "surface.control", "movement.control",
-                                          "runtime.control", "shell.control", "data.publish",    "input.control", "camera.author"};
+                                          "runtime.control", "shell.control", "data.publish",    "input.control", "camera.author",
+                                          "quest.control"};
     std::vector<LaunchGrant> grants;
     for (size_t i = 0; i < Supported.size(); ++i)
         grants.push_back({randomId(), "org.hyprune.test", allGrants});
@@ -175,7 +180,11 @@ void inheritance(const std::string &runtime) {
                     {"interaction", {{"mode", "cursor"}, {"reticle", {{"state", "valid"}, {"action", "place"}}}}},
                     {"apps", Json::array_t(17, Json::object())},
                     {"editor", {{"mode", "cursor"}}},
-                    {"keymap", {{"holds", Json::array({Json{{"action", "menu.open"}}})}}}});
+                    {"keymap", {{"holds", Json::array({Json{{"action", "menu.open"}}})},
+                                {"config", {{"modes", {{"world", {{"menu", {"Tab[L]"}}, {"markers.reveal", {"Tab"}}}}}}}}}},
+                    {"markers", {{"reveal", nullptr}, {"list", Json::array()}}},
+                    {"quests", {{"enabled", true}}},
+                    {"focus", {{"state", "idle"}}}});
     std::atomic<bool> sendMounts = false;
     std::jthread polling([&](std::stop_token stop) {
         while (!stop.stop_requested()) {
@@ -197,6 +206,16 @@ void inheritance(const std::string &runtime) {
         if (!atLeast(version, "0.6"))
             requested.erase("input.control");
         if (!atLeast(version,"0.13")) requested.erase("camera.author");
+        if (!atLeast(version, "0.21")) {
+            // quest.control is unknown before 0.21: requesting it fails the hello.
+            Client early(server.path());
+            auto refused = hello(); // no token: the capability check comes first
+            refused["params"]["protocols"] = {version};
+            refused["params"]["capabilities"] = {"state.read", "quest.control"};
+            early.sendJson(refused);
+            check(early.receive().contains("error"), "quest.control accepted before 0.21");
+            requested.erase("quest.control");
+        }
         h["params"]["capabilities"] = requested;
         c.sendJson(h);
         auto response = c.receive().at("result");
@@ -249,6 +268,16 @@ void inheritance(const std::string &runtime) {
         if (atLeast(version, "0.3")) // spatial (with the map) exists from 0.3
             check(state.at("spatial").at("map").contains("levels") == atLeast(version, "0.20"),
                   "blueprint levels version projection");
+        for (auto key : {"markers", "quests", "focus"})
+            check(state.contains(key) == atLeast(version, "0.21"), "quest state version projection");
+        if (atLeast(version, "0.6"))
+            check(state["keymap"]["config"]["modes"]["world"].contains("markers.reveal") == atLeast(version, "0.21"),
+                  "markers.reveal keymap projection");
+        check((std::find(events.begin(), events.end(), "quest.progress") != events.end()) == atLeast(version, "0.21") &&
+                  (std::find(events.begin(), events.end(), "focus.phase") != events.end()) == atLeast(version, "0.21"),
+              "quest events floor");
+        for (auto m : {"markers.reveal", "quests.create", "focus.start", "guidance.get"})
+            check(methodAvailable(version, m) == atLeast(version, "0.21"), "quest methods floor");
         previousMethods = advertised;
         previousEvents = events;
         if (atLeast(version,"0.4")) check(state["presentation"]["profile"].contains("outline")==atLeast(version,"0.13"),"ink compatibility projection");
