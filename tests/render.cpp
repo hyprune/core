@@ -1,4 +1,5 @@
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include "render/GLState.hpp"
 #include "render/PNG.hpp"
@@ -94,10 +95,36 @@ precision highp float;uniform sampler2D image;out vec4 color;void main(){color=t
     glDeleteShader(vertex);
     glDeleteShader(fragment);
 }
+// Mesa's surfaceless platform opens the first DRM render node; when an NVIDIA dGPU is awake
+// that is the NVIDIA node, Mesa can't drive it and falls back to software rendering. Pick
+// the device explicitly: HYPRUNE_TEST_RENDER_NODE if set, else the first non-NVIDIA render
+// node, else surfaceless as before (no GPU: software).
+EGLDisplay testDisplay() {
+    auto platform = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
+    auto query = reinterpret_cast<PFNEGLQUERYDEVICESEXTPROC>(eglGetProcAddress("eglQueryDevicesEXT"));
+    auto info = reinterpret_cast<PFNEGLQUERYDEVICESTRINGEXTPROC>(eglGetProcAddress("eglQueryDeviceStringEXT"));
+    EGLDeviceEXT devices[16];
+    EGLint count = 0;
+    const char *wanted = getenv("HYPRUNE_TEST_RENDER_NODE");
+    if (platform && query && info && query(16, devices, &count))
+        for (EGLint i = 0; i < count; ++i) {
+            const char *node = info(devices[i], EGL_DRM_RENDER_NODE_FILE_EXT);
+            if (!node)
+                continue;
+            std::string vendor;
+            std::ifstream(std::filesystem::path("/sys/class/drm") / std::filesystem::path(node).filename() /
+                          "device/vendor") >> vendor;
+            if (wanted ? std::strcmp(node, wanted) == 0 : vendor != "0x10de") {
+                std::cerr << "render tests on " << node << " (vendor " << vendor << ")\n";
+                return platform(EGL_PLATFORM_DEVICE_EXT, devices[i], nullptr);
+            }
+        }
+    return eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
+}
 int main(int argc, char **argv) {
     if (argc < 2 || argc > 3)
         return 1;
-    EGLDisplay display = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
+    EGLDisplay display = testDisplay();
     try {
         check(eglInitialize(display, nullptr, nullptr), "EGL init");
         eglBindAPI(EGL_OPENGL_ES_API);
@@ -112,9 +139,20 @@ int main(int argc, char **argv) {
                           EGL_BLUE_SIZE,
                           8,
                           EGL_NONE};
-        EGLConfig config;
-        EGLint count;
-        check(eglChooseConfig(display, attrs, &config, 1, &count) && count, "EGL config");
+        // Exactly 8 bits per channel: the device platform lists 10-bit configs first, and
+        // the pixel comparisons below assume 8-bit readback.
+        EGLConfig configs[64], config = nullptr;
+        EGLint count = 0;
+        check(eglChooseConfig(display, attrs, configs, 64, &count) && count, "EGL config");
+        for (EGLint i = 0; i < count && !config; ++i) {
+            EGLint r = 0, g = 0, b = 0;
+            eglGetConfigAttrib(display, configs[i], EGL_RED_SIZE, &r);
+            eglGetConfigAttrib(display, configs[i], EGL_GREEN_SIZE, &g);
+            eglGetConfigAttrib(display, configs[i], EGL_BLUE_SIZE, &b);
+            if (r == 8 && g == 8 && b == 8)
+                config = configs[i];
+        }
+        check(config, "EGL 8-bit config");
         EGLint ctx[] = {EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE};
         auto context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctx);
         EGLint size[] = {EGL_WIDTH, 320, EGL_HEIGHT, 180, EGL_NONE};
