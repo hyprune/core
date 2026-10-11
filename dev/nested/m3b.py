@@ -204,8 +204,9 @@ def acceptance(client,children,args,shell_token,socketpath):
  pose(client,[2,1.8,3]);time.sleep(.2);gaim('move-x');pointer('button',272,1);snap=s.envrun('wtype','-P','Shift_L','-s','650','-p','Shift_L');children.append(snap);time.sleep(.1);pointer(-100,0);time.sleep(.2);pointer('button',272,0);snap.wait(timeout=5);obj=state()['editor']['objects'][-1];check('gizmo_object_move_snap',obj['position'][0]!=2 and abs((obj['position'][0]-2)*10-round((obj['position'][0]-2)*10))<.001,obj)
  pointer('scroll',-1);p=obj['position'];pose(client,[p[0],p[1]+.5,p[2]+3]);time.sleep(.2);gaim('rotate-y');pointer('button',272,1);pointer(100,0);time.sleep(.2);pointer('button',272,0);obj=state()['editor']['objects'][-1];check('gizmo_object_rotate',obj['rotation']!=[0,0,0,1],obj)
  pointer('scroll',-1);p=obj['position'];pose(client,[p[0],p[1],p[2]+3]);time.sleep(.2);gaim('scale-uniform');pointer('button',272,1);pointer(80,0);time.sleep(.2);pointer('button',272,0);obj=state()['editor']['objects'][-1];check('gizmo_object_scale',obj['scale']!=[1,1,1],obj);check('objects_persist',obj in json.loads((s.STATE/'editor.json').read_text())['objects'])
- # Placement rules: a collision-owning node may not be committed into the player.
- e=diag()['position'];probe=s.STATE/'probe.json';s.ctl('eval',f'local f = assert(io.open({json.dumps(str(probe))}, "w")); f:write(hl.plugin.hyprune.gizmo_probe({e[0]},{e[1]-.8},{e[2]})); f:close()');verdict=json.loads(probe.read_text());check('gizmo_object_refuses_player',verdict['rule']=='player',verdict)
+ # Placement rules: a collision-owning node may not be committed into the player
+ # (probed clear of the fixture's window zone and spawn capsules).
+ pose(client,[4.5,1.8,4]);time.sleep(.3);e=diag()['position'];probe=s.STATE/'probe.json';s.ctl('eval',f'local f = assert(io.open({json.dumps(str(probe))}, "w")); f:write(hl.plugin.hyprune.gizmo_probe({e[0]},{e[1]-.8},{e[2]})); f:close()');verdict=json.loads(probe.read_text());check('gizmo_object_refuses_player',verdict['rule']=='player',verdict)
  keys('-k','3');pose(client,[1,2.5,4],pitch=-.6);time.sleep(.2)
  modes=[]
  for _ in range(6):

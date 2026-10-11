@@ -152,7 +152,18 @@ std::optional<float> floorBelow(const PlacementScene &s, Vec3 from, float down) 
         return {};
     return from.y - hit->first;
 }
-PlacementVerdict checkPlacement(const PlacementScene &s, const Box &shape, std::span<const Triangle> own) {
+std::set<std::string> brokenSoftRules(const PlacementScene &s, const Box &shape, std::span<const Triangle> own) {
+    std::set<std::string> waived;
+    for (int i = 0; i < 4; ++i) {
+        auto v = checkPlacement(s, shape, own, waived);
+        if (v.ok || v.rule == "walls" || v.rule == "playable" || v.rule == "player")
+            break;
+        waived.insert(v.rule);
+    }
+    return waived;
+}
+PlacementVerdict checkPlacement(const PlacementScene &s, const Box &shape, std::span<const Triangle> own,
+                                const std::set<std::string> &waived) {
     auto fail = [](const char *rule, const char *message) { return PlacementVerdict{false, rule, message, true}; };
     float below = shape.extent({0, 1, 0});
     Vec3 base = shape.centre - Vec3{0, below, 0};
@@ -209,18 +220,18 @@ PlacementVerdict checkPlacement(const PlacementScene &s, const Box &shape, std::
         return fail("walls", "Inside solid geometry");
     // 4. Windows stay visible.
     for (auto &w : s.windows)
-        if (boxBox(inner, w))
+        if (!waived.contains("window") && boxBox(inner, w))
             return fail("window", "Covers a window");
     // 5. Screen approaches and window zones stay free.
     for (auto &a : s.approaches)
-        if (boxBox(inner, a))
+        if (!waived.contains("approach") && boxBox(inner, a))
             return fail("approach", "Blocks a screen approach");
     for (auto &z : s.zones)
-        if (boxBox(inner, z))
+        if (!waived.contains("zone") && boxBox(inner, z))
             return fail("zone", "Inside a window zone");
     // 6. Ways stay open (collidable or taller than 0.3 m).
     bool tall = shape.extent({0, 1, 0}) * 2 > .3f;
-    if (!own.empty() || tall)
+    if ((!own.empty() || tall) && !waived.contains("keep-clear"))
         for (auto &k : s.keepClear)
             if (boxBox(inner, k))
                 return fail("keep-clear", "Blocks a way");

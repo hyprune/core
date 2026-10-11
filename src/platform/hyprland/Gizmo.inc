@@ -204,9 +204,13 @@ interaction::PlacementScene Runtime::placementScene() {
     s.playerHigh = camera.position + Vec3{0, .1f - .3f, 0};
     return s;
 }
-interaction::PlacementVerdict Runtime::placementCheck(const interaction::Transform &t) {
+interaction::PlacementVerdict Runtime::placementCheck(const interaction::Transform &t, const std::set<std::string> &waived) {
     auto scene = placementScene();
-    return interaction::checkPlacement(scene, selectionBox(t), selectionTriangles(t));
+    return interaction::checkPlacement(scene, selectionBox(t), selectionTriangles(t), waived);
+}
+std::set<std::string> Runtime::waivedRules(const interaction::Transform &t) {
+    auto scene = placementScene();
+    return interaction::brokenSoftRules(scene, selectionBox(t), selectionTriangles(t));
 }
 Json Runtime::objectRecord(const interaction::Transform &t) {
     auto b = layout.binding(monitor && monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
@@ -240,7 +244,7 @@ void Runtime::writeObjectRecord(const std::string &worldId, const std::string &i
 }
 // Commits an object pose (outside a drag): refused when it breaks a placement rule.
 bool Runtime::commitObject(const interaction::Transform &t, const std::string &what) {
-    auto verdict = placementCheck(t);
+    auto verdict = placementCheck(t, waivedRules(objectTransform(editor, *world, editor.selected)));
     if (!verdict.ok) {
         ipc->notify("runtime.notice", {{"level", "info"}, {"code", "placement.blocked"}, {"message", what + " refused: " + verdict.message}});
         return false;
@@ -408,7 +412,7 @@ std::map<size_t, Mat4> Runtime::applyInstanceModels() {
 }
 void Runtime::previewObject(const interaction::Transform &candidate, bool carry) {
     preview.candidate = candidate;
-    preview.verdict = placementCheck(candidate);
+    preview.verdict = placementCheck(candidate, preview.waived);
     preview.valid = preview.verdict.ok;
     if (preview.valid)
         preview.pose = candidate;
@@ -476,6 +480,7 @@ bool Runtime::gizmoBegin() {
         preview.active = true;
         preview.pose = dragStart;
         preview.startSupported = placementCheck(dragStart).supported;
+        preview.waived = waivedRules(dragStart);
     } else if (auto e = capture.find(editor.selected)) {
         editBefore = windowPose(*e);
         dragPixelWidth = e->surface.pixelWidth;

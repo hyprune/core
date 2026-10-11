@@ -260,3 +260,34 @@ session:
 - [ ] Warp between areas, Super+1..9 between homes, focus into a wall and back, enter and
   leave the world: no slide or fade, and no cursor flicker or crash. A normal 1 -> 2 switch
   on your desktop still animates with your own settings.
+
+## Position tool: Gizmo 2.0 (tool 4)
+
+Handles, hover highlight, ghost and readouts are core overlays drawn inside the world
+frame; drags move a virtual pointer, never the native one, and every key effect (typed
+values, undo, drop, pivot) runs deferred from input, not in the render pass. No step
+should change cursor visibility or shape. Nested runs use a software cursor, so check on
+the real session (`HYPRUNE_GIZMO_OBJECTS=1 HYPRUNE_GIZMO_UNIVERSAL=1` in the compositor
+environment enables world objects and the universal mode):
+
+- [ ] Tool 4, aim at a window and click: handles appear at a constant size; turn and walk
+  around it. Hovering a handle brightens it and the reticle tightens; the native cursor
+  stays hidden and does not flicker.
+- [ ] Press on an arrow and drag: the reticle follows the virtual pointer off-centre, the
+  guide line and readout appear; release: the reticle snaps back to the centre with no
+  native cursor flash. Repeat with a ring, a plane square, the centre disc and the outer
+  view ring, with Shift held (ticks) and without.
+- [ ] Drag until the pointer reaches each screen edge and release there: no cursor appears
+  on the other monitor, no warp, no focus change.
+- [ ] Start a drag, type `1.5`, release the button, press Enter: exact value applied. Start
+  another, press Escape: cancelled. Neither moves the native cursor or changes focus.
+- [ ] Scale a window from its X box: the client resizes during the drag without flicker;
+  Ctrl+Z restores its size, Ctrl+Shift+Z re-applies it.
+- [ ] Wheel through move / rotate / scale (/ all), toggle local axes (RMB) and the pivot
+  (period): overlays only.
+- [ ] With world objects enabled, select the Sun Court armillary; drag it down into the
+  pedestal: it stays put, a red ghost and BLOCKED readout show, release refuses with a
+  notice. End drops it, Shift+End aligns it to the aimed surface.
+- [ ] Super+LMB carry the armillary into a wall and release: it stays at its last valid
+  place. During every drag above, open the Director (TAB hold): the drag is cancelled
+  cleanly and the cursor policy is the Director's.

@@ -45,7 +45,7 @@ void layoutAndPicking() {
     auto &l = g.geometry();
     // Constant screen size: the axis is options.pixels long on screen.
     auto tip = at(v, l.centre + l.axes[0] * l.size * l.sign[0]);
-    assert(near(std::abs(tip.x - l.centrePx.x), 110, 1));
+    assert(near(std::abs(tip.x - l.centrePx.x), 160, 1));
     // Twice as far: twice the world size, same pixels.
     Gizmo far;
     far.layout(view({0, 1.7f, 8}, 0), {0, 1.7f, 0}, {0, 0, 0, 1});
@@ -64,7 +64,7 @@ void layoutAndPicking() {
     Gizmo h;
     h.layout(hi, {0, 1.7f, 0}, {0, 0, 0, 1});
     auto hiTip = at(hi, h.geometry().centre + h.geometry().axes[0] * h.geometry().size * h.geometry().sign[0]);
-    assert(near(std::abs(hiTip.x - h.geometry().centrePx.x), 220, 1));
+    assert(near(std::abs(hiTip.x - h.geometry().centrePx.x), 320, 1));
     // Behind the camera: nothing drawn or picked.
     Gizmo behind;
     behind.layout(v, {0, 1.7f, 6}, {0, 0, 0, 1});
@@ -104,6 +104,8 @@ void edgeOnRings() {
     // A point on the edge-on line, away from the X ring (a face-on circle here) and the Z line.
     auto onLine = GizmoPoint{l.centrePx.x + rPx * .6f, l.centrePx.y + 2, 0};
     assert(g.pick(onLine.x, onLine.y) == Part::RotateY);
+    // Near the centre the edge-on lines don't pick: the trackball does.
+    assert(g.pick(l.centrePx.x + rPx * .2f, l.centrePx.y + 1) == Part::RotateFree);
     // The face-on X ring is picked on its circle; inside it the trackball.
     assert(g.pick(l.centrePx.x + rPx * .7071f, l.centrePx.y - rPx * .7071f) == Part::RotateX);
     assert(g.pick(l.centrePx.x + rPx * .3f, l.centrePx.y - rPx * .5f) == Part::RotateFree);
@@ -203,7 +205,7 @@ void moveAndScale() {
     sc.end();
     assert(sc.pick(sl.centrePx.x, sl.centrePx.y) == Part::ScaleUniform);
     assert(sc.begin(Part::ScaleUniform, sl.centrePx.x, sl.centrePx.y, start, v));
-    auto u = sc.drag(sl.centrePx.x + 110, sl.centrePx.y, false, v);
+    auto u = sc.drag(sl.centrePx.x + 160, sl.centrePx.y, false, v);
     assert(near(u.factor.x, 1.5f) && u.factor.x == u.factor.y && u.factor.y == u.factor.z);
     sc.end();
     // Objects scale uniformly only; windows have no depth axis.
@@ -214,6 +216,14 @@ void moveAndScale() {
     for (auto p : {Part::ScaleX, Part::ScaleY, Part::ScaleZ, Part::ScalePlaneX, Part::ScalePlaneY, Part::ScalePlaneZ})
         assert(!obj.enabled(p));
     assert(obj.enabled(Part::ScaleUniform));
+    // Uniform-only selections scale from a ring too: twice the distance, twice the size.
+    auto &ol = obj.geometry();
+    float ringPx = ol.size * .62f * ol.unitPx;
+    assert(obj.pick(ol.centrePx.x + ringPx, ol.centrePx.y) == Part::ScaleUniform);
+    assert(obj.begin(Part::ScaleUniform, ol.centrePx.x + ringPx, ol.centrePx.y, start, view({3, 3, 3}, -pi / 4, -.4f)));
+    auto ratio = obj.drag(ol.centrePx.x + ringPx * 2, ol.centrePx.y, false, view({3, 3, 3}, -pi / 4, -.4f));
+    assert(near(ratio.factor.x, 2, 1e-3f));
+    obj.end();
     Gizmo win;
     win.options.mode = GizmoMode::Scale;
     win.options.scaleAxes = {true, true, false};
@@ -338,6 +348,14 @@ void placement() {
     crate.half.y = .04f; // a part under 0.1 m above the floor may lie in an approach
     crate.centre.y = .04f;
     assert(checkPlacement(s, crate, {}).ok);
+    // Already in an approach (authored there): edits may stay, walls still refuse.
+    crate.half.y = .25f, crate.centre.y = .25f;
+    auto waived = brokenSoftRules(s, crate, {});
+    assert(waived == std::set<std::string>{"approach"});
+    crate.centre.x += .2f;
+    assert(checkPlacement(s, crate, {}, waived).ok);
+    crate.centre.x = 1.9f;
+    assert(checkPlacement(s, crate, {}, waived).rule == "walls");
     s.approaches.clear();
     crate = aabbBox({-.25f, 0, -.25f}, {.25f, .5f, .25f});
     s.zones.push_back(aabbBox({-.3f, 0, -.3f}, {.3f, 2, .3f}));

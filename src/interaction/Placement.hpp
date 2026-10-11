@@ -5,6 +5,7 @@
 #include "../sim/TriangleIndex.hpp"
 #include "../world/Playable.hpp"
 #include <functional>
+#include <set>
 #include <span>
 #include <string>
 #include <vector>
@@ -48,7 +49,12 @@ struct PlacementVerdict {
 };
 // shape: the candidate bounds; own: the selection's collision triangles at the
 // candidate pose (empty when it has none: the shrunk bounds stand in).
-PlacementVerdict checkPlacement(const PlacementScene &, const Box &shape, std::span<const Triangle> own);
+// waived: soft rules (window, approach, zone, keep-clear) not enforced, for selections
+// whose start pose already breaks them; walls, playable and player always apply.
+PlacementVerdict checkPlacement(const PlacementScene &, const Box &shape, std::span<const Triangle> own,
+                                const std::set<std::string> &waived = {});
+// The soft rules a pose already breaks (what an edit of it may keep breaking).
+std::set<std::string> brokenSoftRules(const PlacementScene &, const Box &shape, std::span<const Triangle> own);
 // Highest upward surface (normal y >= 0.65) under a point within `down` metres, else none.
 std::optional<float> floorBelow(const PlacementScene &, Vec3 from, float down);
 } // namespace hyprune::interaction

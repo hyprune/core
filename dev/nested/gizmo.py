@@ -128,6 +128,29 @@ def acceptance(client, children, args, shell_token, socketpath):
             pointer('scroll', -1); time.sleep(.15)
         assert gizmo()['mode'] == name, gizmo()['mode']
 
+    def sheet(window):
+        """Before/after stills: the placed window in each mode from three angles. Works with
+        the M3B plugin too (HYPRUNE_NESTED_PLUGIN): no gizmo diagnostics are needed."""
+        build = os.environ.get('GIZMO_SHEET_LABEL', 'new')
+        w = window['position']
+        look([w[0], w[1] + .3, w[2] + 3.2], w); time.sleep(.3)
+        pointer('button', 272); time.sleep(.2); pointer('button', 272, 0)
+        wait(lambda: editor()['selectedKind'] == 'window', 5)
+        angles = {'front': [w[0], w[1] + 1.0, w[2] + 3.0], 'three-quarter': [w[0] + 2.4, w[1] + 1.4, w[2] + 2.2],
+                  'edge-on': [w[0], w[1], w[2] + 3.2]}
+        modes = ['move', 'rotate', 'scale'] + (['universal'] if 'gizmo' in diag() else [])
+        for m in modes:
+            for _ in range(5):
+                current = diag()['gizmo']['mode'] if 'gizmo' in diag() else editor()['submode']
+                if current == m:
+                    break
+                pointer('scroll', -1); time.sleep(.2)
+            for name, at in angles.items():
+                # The reticle rests below-left of the handles: no hover in the comparison.
+                look(at, [w[0] - .95, w[1] - .7, w[2]]); time.sleep(.4)
+                shot(f'sheet-{build}-window-{m}-{name}.png')
+        print('PASS gizmo: sheet stills', build, flush=True)
+
     # World, a placed window and tool 4.
     client.call('world.load', {'worldId': WORLD})
     s.ctl('eval', 'hl.dispatch(hl.dsp.focus({monitor="HEADLESS-1"}))')
@@ -153,6 +176,10 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('window placed in the world', window['visible'], {'position': window['position']})
 
     keys('-k', '4'); time.sleep(.3)
+    if os.environ.get('GIZMO_STAGE') == 'sheet':
+        sheet(window)
+        client.call('runtime.exit', {})
+        return
     check('tool 4 selected', editor()['tool'] == 4 and gizmo()['objectsEnabled'])
     # Select the armillary (a world 0.8 placed object).
     eye = [-7.0, 4.6, -6.2]

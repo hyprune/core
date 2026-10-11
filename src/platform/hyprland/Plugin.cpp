@@ -150,6 +150,7 @@ struct Runtime {
     interaction::Part gizmoHover = interaction::Part::None;
     struct ObjectPreview {
         bool active = false, valid = true, startSupported = true;
+        std::set<std::string> waived; // soft rules the start pose already broke
         interaction::Transform pose, candidate;
         interaction::PlacementVerdict verdict;
     } preview;
@@ -169,7 +170,8 @@ struct Runtime {
     Vec3 selectionPivot(const interaction::Transform &);
     std::vector<Triangle> selectionTriangles(const interaction::Transform &);
     interaction::PlacementScene placementScene();
-    interaction::PlacementVerdict placementCheck(const interaction::Transform &);
+    interaction::PlacementVerdict placementCheck(const interaction::Transform &, const std::set<std::string> &waived = {});
+    std::set<std::string> waivedRules(const interaction::Transform &);
     Json objectRecord(const interaction::Transform &);
     Json currentRecord(const std::string &worldId, const std::string &id);
     void writeObjectRecord(const std::string &worldId, const std::string &id, const Json &record);
@@ -2792,6 +2794,7 @@ void Runtime::action(interaction::Action a) {
                 preview = {};
                 preview.active = true;
                 preview.pose = dragStart;
+                preview.waived = waivedRules(dragStart);
                 return;
             }
         if (objectCarry && !a.pressed) {
