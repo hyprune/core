@@ -252,6 +252,7 @@ def run(args):
     if args.m3b:
         for grant in grants:grant['capabilities'].append('input.control')
     if getattr(args,'quests',False):grants[0]['capabilities']+=['shell.control','data.publish','input.control','camera.author','quest.control']
+    if getattr(args,'quests',False):grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','input.control','quest.control']})
     if getattr(args,'long_titles',False):
         from long_titles import grants as extra
         args.extra_grants=extra();grants+=args.extra_grants

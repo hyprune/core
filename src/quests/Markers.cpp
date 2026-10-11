@@ -581,13 +581,12 @@ MarkerLayout MarkerRuntime::layout(const MarkerView &v) const {
         if (-c.local.z > .01f) {
             dx = c.x - W / 2;
             dy = c.y - H / 2;
+        } else if (std::abs(c.local.x) < .2f * std::abs(c.local.z)) {
+            dx = 0;
+            dy = 1; // about straight behind (within ~11 degrees): bottom centre, "turn around"
         } else {
-            dx = c.local.x;
-            dy = -c.local.y;
-            if (std::hypot(dx, dy) < 1e-4f) {
-                dx = 0;
-                dy = 1; // straight behind: point down
-            }
+            dx = c.local.x; // behind and to one side: that side's edge, height kept small
+            dy = -c.local.y * .25f;
         }
         float t = 1 / std::sqrt((dx / rx) * (dx / rx) + (dy / ry) * (dy / ry));
         DrawItem i;

@@ -532,6 +532,15 @@ void markers() {
     st.list = m.list;
     layout = st.layout(v);
     check(layout.items.size() == 1 && layout.items[0].stack == 2 && layout.stacks == 1, "stacking within 32 px");
+    // Straight behind: bottom centre; behind and right: the right edge.
+    m.list.clear();
+    add("quest:behind", 2, {0, 2.5f, 30});
+    add("quest:behind-right", 2, {25, 1.7f, 20});
+    st.list = m.list;
+    layout = st.layout(v);
+    check(layout.arrows == 2 && std::abs(layout.items[0].x - 960) < 1 && layout.items[0].y > 900 &&
+              layout.items[1].x > 1800,
+          "behind arrows: bottom centre and the near side");
     // Edge arrows toward one direction stack.
     m.list.clear();
     add("quest:back-a", 2, {.3f, 1.7f, 20});
