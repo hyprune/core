@@ -1,0 +1,431 @@
+{
+  "nestedOnly": true,
+  "world": "com.hyprune.lumen-reach",
+  "protocol": "0.21",
+  "focusTimeScale": 20,
+  "stills": [
+    "quests-tap-reveal.png",
+    "quests-clutter-caps.png",
+    "quests-tracked-arrow.png"
+  ],
+  "checks": [
+    {
+      "name": "IPC 0.21 with quest.control and the new methods and events",
+      "evidence": {
+        "protocol": "0.21"
+      }
+    },
+    {
+      "name": "state carries markers, quests and focus; area homes are markers",
+      "evidence": {
+        "homes": [
+          "home:array-hall",
+          "home:rime-vault",
+          "home:signal-rise",
+          "home:sun-court"
+        ],
+        "list": 18
+      }
+    },
+    {
+      "name": "a home marker sits on its primary wall top + 0.3 m",
+      "evidence": {
+        "areaId": "sun-court",
+        "icon": "home",
+        "id": "home:sun-court",
+        "kind": "home",
+        "label": "Sun Court \u00b7 21",
+        "labelRange": 150.0,
+        "occlusion": "through",
+        "position": [
+          8.0,
+          14.90000057220459,
+          -23.114999771118164
+        ],
+        "range": [
+          3.0,
+          1000.0
+        ],
+        "source": {
+          "areaId": "sun-court",
+          "workspaceId": 21
+        },
+        "target": {
+          "areaId": "sun-court"
+        },
+        "tier": 3,
+        "tracked": false
+      }
+    },
+    {
+      "name": "a TAB tap reveals markers and does not open the Director",
+      "evidence": {
+        "reveal": {
+          "fadeMs": 600,
+          "holdMs": 4000,
+          "reason": "tap",
+          "startedAtMs": 109894637
+        },
+        "layout": 5
+      }
+    },
+    {
+      "name": "reveal holds, fades over 600 ms with frames forced, then ends",
+      "evidence": {
+        "hold": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "fading": [
+          0.44,
+          0.44,
+          0.44,
+          0.44
+        ],
+        "framesDuringFade": 12
+      }
+    },
+    {
+      "name": "a TAB hold opens the Director and reveals nothing",
+      "evidence": {
+        "opened": {
+          "leaseId": "lease-2902bba37a42866c",
+          "outputId": "output-1",
+          "panel": "map",
+          "revision": 78,
+          "sessionId": "130ad4ecf4b705c7de89c2e5c63474c1b84dea9917413a9621019ba2ca538ccd"
+        }
+      }
+    },
+    {
+      "name": "a tap with Shift (sprint) held still reveals",
+      "evidence": null
+    },
+    {
+      "name": "markers.reveal method restarts the reveal",
+      "evidence": {
+        "fadeMs": 600,
+        "holdMs": 1500,
+        "reason": "request",
+        "startedAtMs": 109901857
+      }
+    },
+    {
+      "name": "reduced motion: no fade (all at full alpha, gone right after the hold)",
+      "evidence": {
+        "alphas": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "quests.create returns a personal questRef and tracks it",
+      "evidence": {
+        "id": "release-notes",
+        "source": "personal"
+      }
+    },
+    {
+      "name": "quests.list shows it",
+      "evidence": [
+        {
+          "category": "personal",
+          "offWorld": false,
+          "progress": [
+            0,
+            2
+          ],
+          "questRef": {
+            "id": "release-notes",
+            "source": "personal"
+          },
+          "state": "active",
+          "step": {
+            "id": "step-1",
+            "progress": [
+              0,
+              1
+            ],
+            "title": "Draft"
+          },
+          "title": "Release notes",
+          "tracked": true,
+          "updatedAt": "2026-10-12T01:14:10"
+        }
+      ]
+    },
+    {
+      "name": "quests.update edits title and steps",
+      "evidence": [
+        {
+          "any": false,
+          "id": "step-1",
+          "objectives": [
+            {
+              "count": 1,
+              "done": 0,
+              "id": "done",
+              "label": "Done",
+              "type": "manual"
+            }
+          ],
+          "optional": false,
+          "state": "current",
+          "target": null,
+          "title": "Draft"
+        },
+        {
+          "any": false,
+          "id": "step-2",
+          "objectives": [
+            {
+              "count": 1,
+              "done": 0,
+              "id": "done",
+              "label": "Done",
+              "type": "manual"
+            }
+          ],
+          "optional": false,
+          "state": "pending",
+          "target": null,
+          "title": "Review"
+        },
+        {
+          "any": false,
+          "id": "step-3",
+          "objectives": [
+            {
+              "count": 1,
+              "done": 0,
+              "id": "done",
+              "label": "Done",
+              "type": "manual"
+            }
+          ],
+          "optional": false,
+          "state": "pending",
+          "target": null,
+          "title": "Publish"
+        }
+      ]
+    },
+    {
+      "name": "marking a step sends quest.progress (step, next step)",
+      "evidence": {
+        "kind": "step",
+        "nextStepTitle": "Review",
+        "questRef": {
+          "id": "release-notes",
+          "source": "personal"
+        },
+        "revision": 153,
+        "sessionId": "130ad4ecf4b705c7de89c2e5c63474c1b84dea9917413a9621019ba2ca538ccd",
+        "stepId": "step-1",
+        "stepTitle": "Draft",
+        "title": "Release notes 0.21"
+      }
+    },
+    {
+      "name": "a later step of a sequential quest is not open (-32004)",
+      "evidence": null
+    },
+    {
+      "name": "untrack",
+      "evidence": null
+    },
+    {
+      "name": "abandon and resume keep progress and re-track",
+      "evidence": null
+    },
+    {
+      "name": "the last step completes the quest; it is untracked",
+      "evidence": null
+    },
+    {
+      "name": "a reach objective completes on entering its area",
+      "evidence": null
+    },
+    {
+      "name": "quests.delete removes it",
+      "evidence": null
+    },
+    {
+      "name": "personal quests persist privately (0600, debounced)",
+      "evidence": "0o600"
+    },
+    {
+      "name": "clutter caps: <= 12 in view, <= 6 edge arrows, <= 5 labels",
+      "evidence": {
+        "inView": 12,
+        "arrows": 4,
+        "labels": 5,
+        "stacks": 2,
+        "kinds": {
+          "quest": 16
+        },
+        "listed": 48
+      }
+    },
+    {
+      "name": "the tracked step is a labelled tier-1 edge arrow",
+      "evidence": [
+        "quest:personal/errand-4/step-1",
+        "quest:personal/errand-7/step-1",
+        "quest:personal/errand-9/step-1",
+        "quest:personal/errand-12/step-1",
+        "quest:personal/tracked-errand/step-1"
+      ]
+    },
+    {
+      "name": "off-screen tracked step keeps an edge arrow (no reveal)",
+      "evidence": [
+        {
+          "alpha": 1.0,
+          "angle": -0.07485983520746231,
+          "arrow": true,
+          "chevron": 0,
+          "dimmed": false,
+          "distance": "30 m",
+          "id": "quest:personal/tracked-errand/step-1",
+          "kind": "quest",
+          "label": "",
+          "occluded": true,
+          "small": true,
+          "stack": 1,
+          "tier": 1,
+          "tracked": true,
+          "x": 1863.312255859375,
+          "y": 472.2515869140625
+        }
+      ]
+    },
+    {
+      "name": "in view beyond 25 m it is a small unlabelled diamond",
+      "evidence": [
+        {
+          "alpha": 1.0,
+          "angle": 0.0,
+          "arrow": false,
+          "chevron": 0,
+          "dimmed": false,
+          "distance": "30 m",
+          "id": "quest:personal/tracked-errand/step-1",
+          "kind": "quest",
+          "label": "",
+          "occluded": true,
+          "small": true,
+          "stack": 1,
+          "tier": 1,
+          "tracked": true,
+          "x": 846.9825439453125,
+          "y": 531.523681640625
+        }
+      ]
+    },
+    {
+      "name": "markers.persistent off hides it",
+      "evidence": null
+    },
+    {
+      "name": "focus.start: a work interval with the HUD timer fields",
+      "evidence": {
+        "breakKind": null,
+        "calm": true,
+        "countMode": "focus",
+        "creditedMs": 0,
+        "crediting": false,
+        "cycle": 1,
+        "cycles": 1,
+        "pausedState": null,
+        "phaseEndsAtMs": 109940415,
+        "phaseMs": 15000,
+        "phaseStartedAtMs": 109925415,
+        "remainingMs": 15000,
+        "sessionId": "focus-ea49e3efdc385caf",
+        "state": "work",
+        "target": {
+          "kind": "workspace",
+          "label": "Workspace 2",
+          "questRef": {
+            "id": "deep-work",
+            "source": "personal"
+          },
+          "workspaceId": 2
+        }
+      }
+    },
+    {
+      "name": "credit accrues with keyboard focus on the target and recent input",
+      "evidence": 2500
+    },
+    {
+      "name": "leaving the target credits only the 30 s grace (1.5 s scaled)",
+      "evidence": 1858
+    },
+    {
+      "name": "idle beyond focus.idle_s (3 s scaled) stops credit",
+      "evidence": 1990
+    },
+    {
+      "name": "input resumes credit",
+      "evidence": null
+    },
+    {
+      "name": "the last interval ends the session (completed)",
+      "evidence": {
+        "counted": false,
+        "creditedMs": 9632,
+        "cycle": 1,
+        "cycles": 1,
+        "focusSessionId": "focus-ea49e3efdc385caf",
+        "outcome": "completed",
+        "phase": "ended",
+        "revision": 386,
+        "sessionId": "130ad4ecf4b705c7de89c2e5c63474c1b84dea9917413a9621019ba2ca538ccd"
+      }
+    },
+    {
+      "name": "the linked focus objective counts the completed interval",
+      "evidence": {
+        "count": 1,
+        "creditedMinutes": 3.2,
+        "done": 1,
+        "focusTarget": "quest",
+        "id": "work",
+        "label": "1 focus session",
+        "minutes": 1,
+        "sessions": 1,
+        "type": "focus"
+      }
+    },
+    {
+      "name": "history: one work line, workspace and quest IDs, no titles",
+      "evidence": {
+        "creditedMin": 3.2,
+        "end": "2026-10-12T01:14:41",
+        "outcome": "completed",
+        "phase": "work",
+        "plannedMin": 5.0,
+        "questId": "personal/deep-work",
+        "start": "2026-10-12T01:14:26",
+        "targetKind": "workspace",
+        "workspaceId": 2
+      }
+    },
+    {
+      "name": "pause, resume, skip and stop",
+      "evidence": [
+        "paused",
+        "work",
+        "break",
+        "ended"
+      ]
+    }
+  ]
+}
