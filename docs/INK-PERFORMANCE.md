@@ -69,9 +69,9 @@ overrides, preventing warm-up from accidentally baking them into reset defaults.
 A world must still author enabled ink; width/colour settings do not invent it.
 
 `graphics.get` provides requested/effective values and shared ink cost for the
-Performance page. `atmosphere.set` remains a transient authoring preview. Shell
-0ec998b must switch its width/colour writes to the graphics keys and add the tier
-selector using the [handoff](CHANGES-FOR-SDK-AND-SHELL.md). Shell files were not edited.
+Performance page. `atmosphere.set` remains a transient authoring preview; shells
+write width and colour through the graphics keys and offer the tier selector (see
+the [changelog](CHANGELOG.md)).
 The live launcher offers the C++ protocol helper's versions, and starts the shell
 at the newest common supported version (currently core 0.14 / shell 0.13).
 

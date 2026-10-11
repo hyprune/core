@@ -292,8 +292,7 @@ owner by walking a stage-1 test plan:
      cast hemisphere rays. If more than X% hit back faces, or the nearest surface
      is closer than the near plane plus a margin, the point is inside or clipping
      geometry. This is the deterministic version of the any-angle review, and
-     catches problems like `rise-exterior` sitting inside the shell
-     (`lumen-reach/HANDOFF.md:109-115`).
+     catches problems like a camera place sitting inside a building shell.
   5. **Window-in-wall.** For every anchor and placement zone, check the SAT sweep
      already in `check-placement`, run at plan time.
 - **Route capture** (nested, deterministic, no LLM): generate a pose list from
@@ -341,9 +340,9 @@ owner by walking a stage-1 test plan:
     `EXT_mesh_gpu_instancing` attribute `_LIGHTMAP_ST`
   - an optional probe-grid texture
 
-  Core draws one `glDrawElementsInstanced` per object mesh and material. As
-  AGENTS.md rule 6 requires, this goes through an RFC-0004 amendment, a schema
-  bump, SDK types and `CHANGES-FOR-SDK-AND-SHELL.md`.
+  Core draws one `glDrawElementsInstanced` per object mesh and material. Like any
+  contract change, this goes through an RFC-0004 amendment, a schema bump, SDK
+  types and a [changelog](../CHANGELOG.md) entry.
 - **Automated gates:**
   - **Per object, in library CI** (seconds):
     - glTF validator (`validate-gltf.mjs`)
@@ -432,4 +431,4 @@ greybox walk (stage 2a) and the final art review, where only people can judge.
 Internal evidence cited: `core/docs/{GRAPHICS,M3B,AUTHORING,INK-PERFORMANCE,SHADER-WARMUP}.md`,
 `core/src/render/Renderer.cpp`, `core/src/world/World.cpp`,
 `core/src/platform/hyprland/Plugin.cpp`, RFC-0004, RFC-0009,
-`worlds/tools/bake_pipeline.py`, `worlds/lumen-reach/{build.py,VISIBILITY.md,HANDOFF.md,RENDER-REVIEW.md}`.
+`worlds/tools/bake_pipeline.py`, `worlds/lumen-reach/{build.py,VISIBILITY.md,RENDER-REVIEW.md}`.

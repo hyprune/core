@@ -5,8 +5,8 @@ Graphics settings live in `~/.config/hyprune/graphics.json` (or
 from Hyprland configuration. Core watches atomic saves and applies valid changes
 without a Hyprland reload. Invalid edits retain the last valid settings. Shell
 Settings uses IPC 0.7 `graphics.get` / `graphics.set`; it never writes this file.
-The API, ranges, permissions and schema handoff are documented in
-[CHANGES-FOR-SDK-AND-SHELL.md](CHANGES-FOR-SDK-AND-SHELL.md#graphics-settings-integration-core-only-handoff-2026-10-08).
+The API, ranges and permissions are summarised below and in the
+[changelog](CHANGELOG.md); the canonical schema is the contract.
 
 ```json
 {"quality":"auto","render_scale":"auto","dynamic_resolution":true,"target_fps":60}

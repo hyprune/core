@@ -30,7 +30,7 @@ snapshot call or focus/cursor/workspace mutation occurs inside `Pass::draw`.
 IPC 0.5 adds `interaction`, `apps` and user pose placements. Frozen 0.1–0.4
 projections stay isolated. User mounts are saved by `hypruned` with atomic
 replacement; world packages remain immutable. See the RFC-0002/0003/0005/0006/0008
-amendments and [SDK/shell handoff](CHANGES-FOR-SDK-AND-SHELL.md).
+amendments and the [changelog](CHANGELOG.md).
 
 ## Configuration
 

@@ -24,10 +24,10 @@ command without this path; the regression now verifies the complete command in
 free-cursor mode too.
 
 IPC 0.12 publishes `interaction.mode` and `editor.mode` as `cursor`. Older
-protocols receive their frozen `typing` / `interactive` equivalents. The shell
-handoff requests **CURSOR · Back/Super+Tab to return**; shell implementation is
-owned by the separate shell agent. See `CHANGES-FOR-SDK-AND-SHELL.md`. Canonical
-schema, generated SDK and generated keymap have been updated.
+protocols receive their frozen `typing` / `interactive` equivalents. Shells should
+show a chip such as **CURSOR · Back/Super+Tab to return** while this mode is set.
+See the [changelog](CHANGELOG.md). Canonical schema, generated SDK and generated
+keymap include the mode.
 
 ## Verification
 

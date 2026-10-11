@@ -65,7 +65,7 @@ input.preview, input.set, input.capture, input.capture.cancel. Reads/preview use
 state.read; edits/capture use input.control. Capture requires the active verified
 Director lease. Schemas include the live follow-up amendment from schema commit 2d41df5; older exact
 versions omit new fields/methods and retain prior projection bounds.
-RFC 0003, 0006 and 0008 amendments and CHANGES-FOR-SDK-AND-SHELL.md describe this.
+RFC 0003, 0006 and 0008 amendments and the [changelog](CHANGELOG.md) describe this.
 
 ## Verification
 
@@ -318,8 +318,9 @@ can opt in. Shell IPC 0.6 HUD removes its projected marker repeater while keepin
 Director/notices/compass/minimap. Projection data remains available at up to 10 Hz.
 Periodic state publication is capped at 30 Hz; explicit mutations and UI events
 publish immediately. This removes repeated per-frame marker raycasts and JSON
-publication from the 3D feedback loop. See the RFC-0005/0008 amendments and
-CHANGES-FOR-SDK-AND-SHELL.md for the lease-owned colour/font/icon-atlas style hook.
+publication from the 3D feedback loop. See the RFC-0005/0008 amendments and the
+[changelog](CHANGELOG.md) for the lease-owned colour/font/icon-atlas style hook
+(`overlay.style`).
 
 Diagnostic timings distinguish CPU frame submission from asynchronous GPU elapsed
 time. CPU update includes movement and native texture refresh; capture refresh is
@@ -487,8 +488,8 @@ including scale diff reload, new-window spawn, captures and recovery. CTests: 8/
 
 ### Graphics presets and diagnostics follow-up
 
-See [GRAPHICS.md](GRAPHICS.md) and the IPC 0.7 graphics handoff in
-[CHANGES-FOR-SDK-AND-SHELL.md](CHANGES-FOR-SDK-AND-SHELL.md).
+See [GRAPHICS.md](GRAPHICS.md) and the IPC 0.7 entry in the
+[changelog](CHANGELOG.md).
 The core-only work adds no cursor state transitions. Graphics file/IPC changes
 run outside the render pass and do not switch focus, workspaces or input mode.
 

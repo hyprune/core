@@ -186,8 +186,8 @@ injects grants through an inherited pipe; a production supervisor/policy manager
 renewal protocol and extension sandbox remain future work.
 
 See [docs/M1.md](docs/M1.md) for measurements, validation and limitations, and
-[docs/CHANGES-FOR-SDK-AND-SHELL.md](docs/CHANGES-FOR-SDK-AND-SHELL.md) for the exact
-migration contract. [docs/M0.md](docs/M0.md) preserves the earlier acceptance report.
+[docs/CHANGELOG.md](docs/CHANGELOG.md) for the per-version IPC and world format
+changes. [docs/M0.md](docs/M0.md) preserves the earlier acceptance report.
 `hl.plugin.hyprune.camera(x,y,z,yaw,pitch)` remains a local diagnostic helper.
 
 Window capture currently leases the committed root surface's normal 2D texture;
@@ -213,7 +213,7 @@ and [Code of Conduct](https://github.com/hyprune/.github/blob/main/CODE_OF_CONDU
 
 Core M2 adds workspace homes, pulled tools, collision recovery, persistent layouts,
 IPC 0.4 and world format 0.3. See [docs/M2.md](docs/M2.md) and
-[SDK/shell changes](docs/CHANGES-FOR-SDK-AND-SHELL.md). Run `dev/hyprune-dev m2-smoke`
+the [changelog](docs/CHANGELOG.md). Run `dev/hyprune-dev m2-smoke`
 for locked acceptance or `dev/hyprune-dev m2-record` for the gallery demo. Set
 `HYPRUNE_M2_PACKAGE` to a built Lumen Reach directory to load it unchanged after
 acceptance; `dev/hyprune-dev m2` keeps the isolated session available for captures.
