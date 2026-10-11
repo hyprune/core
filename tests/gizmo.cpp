@@ -248,6 +248,14 @@ void modes() {
     lo.options.local = true;
     lo.layout(v, {0, 1, 0}, axisAngle({0, 1, 0}, pi / 2));
     assert(near(lo.geometry().axes[0].z, -1, 1e-4f));
+    // Anchors pick their own handle (the nested tests aim with them).
+    for (int k = 0; k < int(Part::Count); ++k)
+        if (u.enabled(Part(k))) {
+            auto a = u.anchor(Part(k));
+            assert(a);
+            auto s = at(v, *a);
+            assert(u.pick(s.x, s.y) == Part(k));
+        }
     // Drawing: depth slack and primitives; hover thickens; active dims the others.
     auto frame = u.draw(Part::None, false, v);
     assert(!frame.empty() && frame.occlusionSlack > 0);

@@ -218,6 +218,29 @@ void main(){vec2 st=vec2(uv.x,1.-uv.y);vec4 sampleColor=texture(frame,st);vec3 c
  if(scope!=0){vec2 q=(gl_FragCoord.xy/resolution-.5)*vec2(resolution.x/resolution.y,1.);c*=1.-.86*smoothstep(.24,.48,length(q));float ring=abs(length(q)-.28);if(ring<.001)c=mix(c,vec3(.5,.8,.65),.4);}
  result=vec4(c,1);}
 )";
+// Gizmo primitives in output pixels (y down, like text: the output framebuffer is
+// flipped relative to the world's): strokes carry their signed distance
+// across the line, half width, dash phase and flags (1 occlude, 2 dashed) and are
+// antialiased over one pixel. World depth (resolved, nearest) dims and dashes the
+// parts behind geometry, beyond the selection's own slack.
+const char *gizmoVertex = R"(#version 300 es
+precision highp float;
+layout(location=0) in vec3 point;layout(location=1) in vec4 colour;layout(location=2) in vec4 stroke;
+uniform vec2 resolution;out float depth;out vec4 tint;out vec4 line;
+void main(){depth=point.z;tint=colour;line=stroke;gl_Position=vec4(point.xy/resolution*2.-1.,0,1);}
+)";
+const char *gizmoFragment = R"(#version 300 es
+precision highp float;
+in float depth;in vec4 tint;in vec4 line;uniform highp sampler2D sceneDepth;uniform int useDepth;
+uniform vec2 resolution,projection;uniform float slack,px;out vec4 result;
+void main(){float a=tint.a;if(line.y>0.)a*=clamp(line.y+.5-abs(line.x),0.,1.);
+ int flags=int(line.w+.5);bool hidden=false;
+ if(useDepth!=0&&(flags&1)!=0){float d=texture(sceneDepth,vec2(gl_FragCoord.x/resolution.x,1.-gl_FragCoord.y/resolution.y)).r;
+  if(d<1.){float scene=projection.y/(d*2.-1.+projection.x);hidden=scene<depth-slack;}}
+ if(hidden)a*=.4;
+ if(line.z>=0.&&((flags&2)!=0||hidden)&&mod(line.z,9.*px)>5.*px)a*=.12;
+ if(a<=.002)discard;result=vec4(tint.rgb*a,a);}
+)";
 // The reticle as a signed distance field in output pixels (y down, origin at the aim
 // point), antialiased over one pixel, with an optional dark outline for contrast.
 const char *reticleFragment = R"(#version 300 es
@@ -679,6 +702,8 @@ void Renderer::init() {
         tone_ = program(screenVertex, toneFragment);
     if (!reticle_)
         reticle_ = program(screenVertex, reticleFragment);
+    if (!gizmoProgram_)
+        gizmoProgram_ = program(gizmoVertex, gizmoFragment);
     if (!upscale_)
         upscale_ = program(screenVertex, upscaleFragment);
     if (!bloom_)
@@ -2195,7 +2220,16 @@ void Renderer::present(GLuint target, int w, int h, bool typing) {
     glBindSampler(0, clamp_);
     glBindVertexArray(screenVao_);
     glDrawArrays(GL_TRIANGLES, 0, 3);
-    for (auto &label : labels) {
+    drawGizmo(w, h);
+    drawLabels(labels, w, h);
+    drawLabels(readouts, w, h);
+    for (auto &sprite : icons_)
+        icon(sprite, w, h);
+    drawReticle(w, h, typing);
+    debugHUD(w, h);
+}
+void Renderer::drawLabels(const std::vector<Label> &list, int w, int h) {
+    for (auto &label : list) {
         float scale = std::clamp(w / 1920.f, 1.f, 2.f);
         auto caption = label.text;
         float limit = std::min(440.f * scale, w - 32.f);
@@ -2217,10 +2251,89 @@ void Renderer::present(GLuint target, int w, int h, bool typing) {
         panel(x - 6 * scale, y - 3 * scale, width + 12 * scale, 24 * scale);
         text(x, y, caption, label.color, w, h, scale);
     }
-    for (auto &sprite : icons_)
-        icon(sprite, w, h);
-    drawReticle(w, h, typing);
-    debugHUD(w, h);
+}
+void Renderer::drawGizmo(int w, int h) {
+    if (!gizmoProgram_ || gizmo.empty())
+        return;
+    // One interleaved buffer in painter's order: x y depth, rgba, across halfWidth along flags.
+    std::vector<float> data;
+    auto vertex = [&](float x, float y, float depth, const interaction::Rgba &c, float across, float half, float along, float flags) {
+        data.insert(data.end(), {x, y, depth, c.r, c.g, c.b, c.a, across, half, along, flags});
+    };
+    auto strokeAt = [&](const interaction::GizmoStroke &s) {
+        float dx = s.b.x - s.a.x, dy = s.b.y - s.a.y, length = std::hypot(dx, dy);
+        if (length < .01f)
+            return;
+        dx /= length, dy /= length;
+        auto color = s.color;
+        float half = s.width * .5f;
+        if (s.width < 1) {
+            color.a *= s.width;
+            half = .5f;
+        }
+        float edge = half + 1, cap = std::min(half, 1.f), nx = -dy * edge, ny = dx * edge;
+        float flags = (s.occlude ? 1 : 0) + (s.dashed ? 2 : 0);
+        float ax = s.a.x - dx * cap, ay = s.a.y - dy * cap, bx = s.b.x + dx * cap, by = s.b.y + dy * cap;
+        float a0 = s.along - cap, a1 = s.along + length + cap;
+        vertex(ax + nx, ay + ny, s.a.depth, color, edge, half, a0, flags);
+        vertex(bx + nx, by + ny, s.b.depth, color, edge, half, a1, flags);
+        vertex(bx - nx, by - ny, s.b.depth, color, -edge, half, a1, flags);
+        vertex(ax + nx, ay + ny, s.a.depth, color, edge, half, a0, flags);
+        vertex(bx - nx, by - ny, s.b.depth, color, -edge, half, a1, flags);
+        vertex(ax - nx, ay - ny, s.a.depth, color, -edge, half, a0, flags);
+    };
+    auto fillAt = [&](const interaction::GizmoFill &f) {
+        float flags = f.occlude ? 1 : 0;
+        for (size_t i = 1; i + 1 < f.points.size(); ++i)
+            for (auto &p : {f.points[0], f.points[i], f.points[i + 1]})
+                vertex(p.x, p.y, p.depth, f.color, 0, 0, -1, flags);
+    };
+    size_t si = 0, fi = 0;
+    auto strokes = gizmo.strokes;
+    auto fills = gizmo.fills;
+    std::stable_sort(strokes.begin(), strokes.end(), [](auto &a, auto &b) { return a.sequence < b.sequence; });
+    std::stable_sort(fills.begin(), fills.end(), [](auto &a, auto &b) { return a.sequence < b.sequence; });
+    while (si < strokes.size() || fi < fills.size())
+        if (fi >= fills.size() || (si < strokes.size() && strokes[si].sequence < fills[fi].sequence))
+            strokeAt(strokes[si++]);
+        else
+            fillAt(fills[fi++]);
+    if (data.empty())
+        return;
+    if (!gizmoVao_) {
+        glGenVertexArrays(1, &gizmoVao_);
+        glGenBuffers(1, &gizmoVbo_);
+        glBindVertexArray(gizmoVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, gizmoVbo_);
+        for (GLuint a = 0; a < 3; ++a)
+            glEnableVertexAttribArray(a);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), nullptr);
+        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 11 * sizeof(float), reinterpret_cast<void *>(3 * sizeof(float)));
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 11 * sizeof(float), reinterpret_cast<void *>(7 * sizeof(float)));
+    }
+    glBindVertexArray(gizmoVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, gizmoVbo_);
+    glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), data.data(), GL_STREAM_DRAW);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+    glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(gizmoProgram_);
+    glUniform2f(location(gizmoProgram_, "resolution"), w, h);
+    auto projection = perspective(1.f);
+    glUniform2f(location(gizmoProgram_, "projection"), projection.v[10], projection.v[14]);
+    glUniform1f(location(gizmoProgram_, "slack"), gizmo.occlusionSlack);
+    glUniform1f(location(gizmoProgram_, "px"), std::max(1.f, logicalScale));
+    // The resolved world depth exists only for in-process frames.
+    bool depth = !externalWorldFbo && resolvedDepth_;
+    uniform(gizmoProgram_, "useDepth", depth ? 1 : 0);
+    uniform(gizmoProgram_, "sceneDepth", 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, depth ? resolvedDepth_ : 0);
+    glBindSampler(0, 0);
+    glDrawArrays(GL_TRIANGLES, 0, GLsizei(data.size() / 11));
+    glDisable(GL_BLEND);
 }
 void Renderer::drawReticle(int w, int h, bool typing) {
     if (!reticle_ || !reticle.visible || pointerX < 0 || pointerY < 0)
@@ -2966,6 +3079,10 @@ void Renderer::destroy() {
     glDeleteSamplers(1, &mipClamp_);
     glDeleteSamplers(1, &clamp_);
     deleteProgram(reticle_);
+    deleteProgram(gizmoProgram_);
+    glDeleteVertexArrays(1, &gizmoVao_);
+    glDeleteBuffers(1, &gizmoVbo_);
+    gizmoProgram_ = gizmoVao_ = gizmoVbo_ = 0;
     native_ = scene_ = tone_ = bloom_ = sky_ = quadVbo_ = quadVao_ = screenVao_ = repeat_ = clamp_ = mipClamp_ = 0;
 }
 } // namespace hyprune::render

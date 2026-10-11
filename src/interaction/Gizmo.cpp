@@ -90,6 +90,26 @@ std::pair<Vec3, Vec3> basis(Vec3 n) {
 }
 } // namespace
 
+unsigned GizmoFrame::next() const {
+    unsigned n = 0;
+    for (auto &s : strokes)
+        n = std::max(n, s.sequence + 1);
+    for (auto &f : fills)
+        n = std::max(n, f.sequence + 1);
+    return n;
+}
+void GizmoFrame::append(const GizmoFrame &other) {
+    unsigned base = next();
+    for (auto s : other.strokes) {
+        s.sequence += base;
+        strokes.push_back(s);
+    }
+    for (auto f : other.fills) {
+        f.sequence += base;
+        fills.push_back(std::move(f));
+    }
+    occlusionSlack = std::max(occlusionSlack, other.occlusionSlack);
+}
 Rgba palette::axis(int i) { return i == 0 ? coral : i == 1 ? mint : i == 2 ? sky : neutral; }
 float snapValue(float value, float step) { return std::round(value / step) * step; }
 std::array<float, 4> axisAngle(Vec3 axis, float radians) {
@@ -329,6 +349,51 @@ Part Gizmo::pick(float x, float y) const {
     return best;
 }
 
+std::optional<Vec3> Gizmo::anchor(Part part) const {
+    if (!enabled(part))
+        return {};
+    auto &l = layout_;
+    auto c = l.centre;
+    int i = partAxis(part);
+    bool universal = options.mode == GizmoMode::Universal;
+    std::vector<Vec3> candidates;
+    if (part == Part::MoveView || part == Part::ScaleUniform)
+        candidates.push_back(c);
+    else if (isAxis(part)) {
+        auto dir = l.axes[i] * l.sign[i];
+        float end = isScale(part) ? (universal ? universalCube : scaleCube) : .9f;
+        for (float t : {end, end - .06f, .6f, .45f})
+            candidates.push_back(c + dir * (l.size * t));
+    } else if (isPlane(part)) {
+        auto u = l.axes[(i + 1) % 3] * l.sign[(i + 1) % 3], w = l.axes[(i + 2) % 3] * l.sign[(i + 2) % 3];
+        candidates.push_back(c + (u + w) * (l.size * (planeInner + planeOuter) * .5f));
+    } else if (part == Part::RotateFree) {
+        auto [u, w] = basis(l.toCamera);
+        for (float k : {.35f, .5f, .2f})
+            candidates.push_back(c + (u + w) * (ringRadius() * k));
+    } else {
+        Vec3 u, w;
+        float r = ringRadius();
+        if (part == Part::RotateView)
+            u = view_.camera.right(), w = view_.camera.up(), r = l.size * viewRing * (universal ? universalRing / rotateRing : 1);
+        else
+            u = l.axes[(i + 1) % 3], w = l.axes[(i + 2) % 3];
+        // Most camera-facing points first.
+        std::vector<std::pair<float, Vec3>> ring;
+        for (int n = 0; n < 48; ++n) {
+            float t = (n + .5f) * 2 * pi / 48;
+            auto d = u * std::cos(t) + w * std::sin(t);
+            ring.push_back({-dot(d, l.toCamera) + (part == Part::RotateView ? std::abs(std::cos(2 * t)) : 0), c + d * r});
+        }
+        std::stable_sort(ring.begin(), ring.end(), [](auto &a, auto &b) { return a.first < b.first; });
+        for (auto &[k, p] : ring)
+            candidates.push_back(p);
+    }
+    for (auto &p : candidates)
+        if (auto s = view_.project(p); s && pick(s->x, s->y) == part)
+            return p;
+    return {};
+}
 bool Gizmo::begin(Part part, float x, float y, const GizmoPose &start, const GizmoView &view) {
     if (!enabled(part))
         return false;
@@ -596,6 +661,11 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
     bool universal = options.mode == GizmoMode::Universal;
     auto active = drag_.part;
     f.occlusionSlack = l.size * 1.2f;
+    unsigned sequence = 0;
+    auto pushStroke = [&](GizmoStroke s) {
+        s.sequence = sequence++;
+        f.strokes.push_back(s);
+    };
     // Light from the upper left of the camera: faces read as solids.
     auto light = normalized(view.camera.up() * .55f - view.camera.right() * .35f + l.toCamera * .75f);
     auto clipSegment = [&](Vec3 a, Vec3 b) -> std::optional<std::pair<GizmoPoint, GizmoPoint>> {
@@ -618,7 +688,7 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
         if (auto s = clipSegment(a, b)) {
             float depth = (s->first.depth + s->second.depth) * .5f;
             float cue = std::clamp(depthC / std::max(depth, .01f), .8f, 1.25f);
-            f.strokes.push_back({s->first, s->second, color, width * dpi * cue, dashed, occlude});
+            pushStroke({s->first, s->second, color, width * dpi * cue, dashed, occlude});
         }
     };
     auto fill = [&](const std::vector<Vec3> &points, Rgba color, bool occlude = true) {
@@ -631,12 +701,13 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
                 return;
             out.points.push_back(*s);
         }
+        out.sequence = sequence++;
         f.fills.push_back(std::move(out));
     };
     auto outline = [&](std::vector<GizmoPoint> pts, Rgba color, float width) {
         auto h = hull(std::move(pts));
         for (size_t n = 0; n < h.size(); ++n)
-            f.strokes.push_back({h[n], h[(n + 1) % h.size()], color, width * dpi, false, true});
+            pushStroke({h[n], h[(n + 1) % h.size()], color, width * dpi, false, true});
     };
     // Colour and alpha for a part in the current hover/drag state.
     auto look = [&](Part p, Rgba base) {
@@ -700,15 +771,21 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
         constexpr int n = 40;
         GizmoFill disc{{}, fillColor, true};
         for (int k = 0; k < n; ++k) {
-            float t0 = k * 2 * pi / n, t1 = (k + 1) * 2 * pi / n;
-            GizmoPoint a{centre.x + std::cos(t0) * radius, centre.y + std::sin(t0) * radius, centre.depth};
-            GizmoPoint b{centre.x + std::cos(t1) * radius, centre.y + std::sin(t1) * radius, centre.depth};
-            if (width > 0 && color.a > .01f)
-                f.strokes.push_back({a, b, color, width * dpi, false, true});
-            disc.points.push_back(a);
+            float t = k * 2 * pi / n;
+            disc.points.push_back({centre.x + std::cos(t) * radius, centre.y + std::sin(t) * radius, centre.depth});
         }
-        if (filled && fillColor.a > .01f)
+        float along = 0;
+        for (int k = 0; k < n && width > 0 && color.a > .01f; ++k) {
+            auto &a = disc.points[k], &b = disc.points[(k + 1) % n];
+            GizmoStroke s{a, b, color, width * dpi, false, true};
+            s.along = along;
+            along += std::hypot(b.x - a.x, b.y - a.y);
+            pushStroke(s);
+        }
+        if (filled && fillColor.a > .01f) {
+            disc.sequence = sequence++;
             f.fills.push_back(std::move(disc));
+        }
     };
     // Guides for the active handle: infinite axis lines and snap ticks.
     auto guide = [&](int axis, Rgba color) {
@@ -746,11 +823,18 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
         float r = ringRadius();
         bool faceOn = std::abs(dot(l.axes[i], l.toCamera)) > .97f;
         constexpr int count = 72;
+        float along = 0;
         for (int n = 0; n < count; ++n) {
             float t0 = n * 2 * pi / count, t1 = (n + 1) * 2 * pi / count;
             auto d0 = u * std::cos(t0) + w * std::sin(t0), d1 = u * std::cos(t1) + w * std::sin(t1);
             bool front = faceOn || dot(d0 + d1, l.toCamera) >= -.04f || part == active;
+            size_t before = f.strokes.size();
             stroke(c + d0 * r, c + d1 * r, front ? color : withAlpha(color, .3f), front ? widthOf(part, 2.6f) : 1.3f, !front);
+            if (f.strokes.size() > before) {
+                auto &s = f.strokes.back();
+                s.along = along;
+                along += std::hypot(s.b.x - s.a.x, s.b.y - s.a.y);
+            }
         }
     }
     if (alpha(Part::RotateView) > 0) {
@@ -820,9 +904,11 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
         if (alpha(scale) > 0) {
             auto color = look(scale, palette::axis(i));
             float end = universal ? universalCube : scaleCube, half = (universal ? universalHalf : scaleHalf) * l.size;
-            if (!universal)
-                stroke(c + dir * (l.size * shaftStart), c + dir * (l.size * end - half), color, widthOf(scale, 3.f));
-            box(c + dir * (l.size * end), half * (scale == hover ? 1.15f : 1), color);
+            // While scaling, the box rides on the cursor's distance along the axis.
+            float reach = scale == active ? std::max(half * 2, std::abs(drag_.t0) * component(last_.factor, i)) : l.size * end;
+            if (!universal || scale == active)
+                stroke(c + dir * (l.size * shaftStart), c + dir * (reach - half), color, widthOf(scale, 3.f));
+            box(c + dir * reach, half * (scale == hover ? 1.15f : 1), color);
         }
     }
     // Centre: screen-plane disc (move) or uniform cube (scale).

@@ -21,11 +21,14 @@ struct GizmoStroke {
     float width = 2;     // output pixels
     bool dashed = false; // always dashed (back halves); occluded parts dash anyway
     bool occlude = true; // dim and dash where world geometry is in front
+    float along = 0;     // dash phase at a, pixels (continuous along rings)
+    unsigned sequence = 0; // painter's order across strokes and fills
 };
 struct GizmoFill {
     std::vector<GizmoPoint> points; // convex polygon, either winding
     Rgba color;
     bool occlude = true;
+    unsigned sequence = 0;
 };
 struct GizmoFrame {
     std::vector<GizmoFill> fills;
@@ -34,6 +37,8 @@ struct GizmoFrame {
     // extent, so the object being edited never hides its own handles.
     float occlusionSlack = 0;
     bool empty() const { return fills.empty() && strokes.empty(); }
+    unsigned next() const; // the sequence after every primitive
+    void append(const GizmoFrame &); // drawn after this frame's primitives
 };
 // HUD palette (output sRGB, drawn after tone mapping).
 namespace palette {
@@ -99,6 +104,8 @@ class Gizmo {
     // Nearest enabled handle within the pick tolerance of output pixel (x, y).
     Part pick(float x, float y) const;
     float alpha(Part) const;   // 0 = disabled (degenerate or not offered)
+    // A world point on the handle that picks it from the current view (tests, demos).
+    std::optional<Vec3> anchor(Part) const;
     bool enabled(Part p) const { return alpha(p) > 0; }
 
     struct Result {

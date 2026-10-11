@@ -3,6 +3,7 @@
 #include "Graphics.hpp"
 #include "OverlayStyle.hpp"
 #include "Resolution.hpp"
+#include "interaction/Gizmo.hpp"
 #include "interaction/Tools.hpp"
 #include "surfaces/Surface.hpp"
 #include "world/Character.hpp"
@@ -115,6 +116,11 @@ class Renderer {
         std::string hint; // e.g. "18 m" when out of range
     } reticle;
     std::vector<interaction::Line> lines;
+    // Position tool gizmo and placement ghost: anti-aliased screen-space primitives
+    // drawn at native output resolution over the tone-mapped world, dimmed and dashed
+    // where world geometry is in front. Readouts sit beside the pointer (normalized).
+    interaction::GizmoFrame gizmo;
+    std::vector<Label> readouts;
     std::map<unsigned, Mat4> transforms;
     // World 0.8 placed objects (RFC-0004): the animation clock starts when a world
     // becomes current and follows the steady clock; graphics.reduced_motion pins
@@ -242,6 +248,9 @@ class Renderer {
     void debugHUD(int, int);
     void text(float x, float y, const std::string &, Vec3 color, int w, int h, float scale = 1);
     void drawReticle(int w, int h, bool typing);
+    void drawGizmo(int w, int h);
+    void drawLabels(const std::vector<Label> &, int w, int h);
+    GLuint gizmoProgram_ = 0, gizmoVao_ = 0, gizmoVbo_ = 0;
     void panel(float x, float y, float width, float height);
     void present(GLuint, int, int, bool);
     void debugGeometry(const sim::Camera &, std::span<const surfaces::Surface>);
