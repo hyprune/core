@@ -1,0 +1,1615 @@
+{
+  "nestedOnly": true,
+  "world": "com.hyprune.lumen-reach",
+  "checks": [
+    {
+      "name": "clients start tiled",
+      "evidence": {
+        "Drag-Chromium": {
+          "native": {
+            "monitor": 0,
+            "workspace": 1,
+            "floating": false,
+            "size": [
+              781,
+              876
+            ]
+          },
+          "capture": null
+        },
+        "Move-Kitty": {
+          "native": {
+            "monitor": 0,
+            "workspace": 1,
+            "floating": false,
+            "size": [
+              781,
+              876
+            ]
+          },
+          "capture": null
+        },
+        "Home-Chromium": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": false,
+            "size": [
+              941,
+              1056
+            ]
+          },
+          "capture": null
+        },
+        "Home-Kitty-A": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": false,
+            "size": [
+              941,
+              521
+            ]
+          },
+          "capture": null
+        },
+        "Home-Kitty-B": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": false,
+            "size": [
+              941,
+              521
+            ]
+          },
+          "capture": null
+        }
+      }
+    },
+    {
+      "name": "windows on their home wall stay tiled there",
+      "evidence": {
+        "Home-Chromium": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": false,
+            "size": [
+              941,
+              1056
+            ]
+          },
+          "capture": {
+            "id": "surface-1",
+            "visible": false,
+            "queued": false,
+            "placed": false,
+            "position": [
+              0.0,
+              2.0,
+              -2.0
+            ],
+            "size": [
+              1.8820000886917114,
+              2.111999988555908
+            ],
+            "pixels": [
+              941,
+              1056
+            ]
+          }
+        },
+        "Home-Kitty-A": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": false,
+            "size": [
+              941,
+              521
+            ]
+          },
+          "capture": {
+            "id": "surface-2",
+            "visible": false,
+            "queued": false,
+            "placed": false,
+            "position": [
+              -3.799999952316284,
+              2.0,
+              -2.0
+            ],
+            "size": [
+              1.8820000886917114,
+              1.0420000553131104
+            ],
+            "pixels": [
+              941,
+              521
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "opened in the room: floating world window",
+      "evidence": {
+        "Room-Kitty": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1920,
+              1080
+            ]
+          },
+          "capture": {
+            "id": "surface-4",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -8.0,
+              1.7000000476837158,
+              7.0
+            ],
+            "size": [
+              3.8400001525878906,
+              2.1600000858306885
+            ],
+            "pixels": [
+              1920,
+              1080
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "moved in from the other output: Move-Kitty",
+      "evidence": {
+        "Move-Kitty": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1152,
+              643
+            ]
+          },
+          "capture": {
+            "id": "surface-5",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -4.057999610900879,
+              1.7000000476837158,
+              7.0
+            ],
+            "size": [
+              2.30400013923645,
+              1.2860000133514404
+            ],
+            "pixels": [
+              1152,
+              643
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "moved in from the other output: Move-GTK",
+      "evidence": {
+        "Move-GTK": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              300,
+              226
+            ]
+          },
+          "capture": {
+            "id": "surface-6",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -11.0,
+              1.7000000476837158,
+              7.0
+            ],
+            "size": [
+              0.6000000238418579,
+              0.4520000219345093
+            ],
+            "pixels": [
+              300,
+              226
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "dragged across the outputs: Chromium (viewport crop) floating and visible",
+      "evidence": {
+        "Drag-Chromium": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1152,
+              643
+            ]
+          },
+          "capture": {
+            "id": "surface-7",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -8.0,
+              1.7000000476837158,
+              15.850000381469727
+            ],
+            "size": [
+              2.30400013923645,
+              1.2860000133514404
+            ],
+            "pixels": [
+              1152,
+              643
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Room-Kitty: corner resize keeps it visible and floating",
+      "evidence": {
+        "Room-Kitty": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1920,
+              952
+            ]
+          },
+          "capture": {
+            "id": "surface-4",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -7.778989791870117,
+              1.572636604309082,
+              7.0
+            ],
+            "size": [
+              3.8400001525878906,
+              1.9040000438690186
+            ],
+            "pixels": [
+              1920,
+              952
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Room-Kitty: the resize changed its native size",
+      "evidence": {
+        "before": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1920,
+              1080
+            ]
+          },
+          "capture": {
+            "id": "surface-4",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -8.0,
+              1.7000000476837158,
+              7.0
+            ],
+            "size": [
+              3.8400001525878906,
+              2.1600000858306885
+            ],
+            "pixels": [
+              1920,
+              1080
+            ]
+          }
+        },
+        "after": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1920,
+              952
+            ]
+          },
+          "capture": {
+            "id": "surface-4",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -7.778989791870117,
+              1.572636604309082,
+              7.0
+            ],
+            "size": [
+              3.8400001525878906,
+              1.9040000438690186
+            ],
+            "pixels": [
+              1920,
+              952
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Room-Kitty: content scale keeps it visible",
+      "evidence": {
+        "Room-Kitty": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1531,
+              759
+            ]
+          },
+          "capture": {
+            "id": "surface-4",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -7.778989791870117,
+              1.572636604309082,
+              7.0
+            ],
+            "size": [
+              3.8400001525878906,
+              1.9040000438690186
+            ],
+            "pixels": [
+              1531,
+              759
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Room-Kitty: carried and released, still visible and floating",
+      "evidence": {
+        "Room-Kitty": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1531,
+              759
+            ]
+          },
+          "capture": {
+            "id": "surface-4",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -7.040189266204834,
+              1.572636604309082,
+              7.111659526824951
+            ],
+            "size": [
+              3.8400001525878906,
+              1.9040000438690186
+            ],
+            "pixels": [
+              1531,
+              759
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Room-Kitty: the carry moved it",
+      "evidence": {
+        "grabbed": "surface-4",
+        "from": [
+          -7.778989791870117,
+          1.572636604309082,
+          7.0
+        ],
+        "to": [
+          -7.040189266204834,
+          1.572636604309082,
+          7.111659526824951
+        ]
+      }
+    },
+    {
+      "name": "Move-Kitty: corner resize keeps it visible and floating",
+      "evidence": {
+        "Move-Kitty": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1374,
+              515
+            ]
+          },
+          "capture": {
+            "id": "surface-5",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -3.836989164352417,
+              1.572636604309082,
+              7.0
+            ],
+            "size": [
+              2.748000144958496,
+              1.03000009059906
+            ],
+            "pixels": [
+              1374,
+              515
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Move-Kitty: the resize changed its native size",
+      "evidence": {
+        "before": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1152,
+              643
+            ]
+          },
+          "capture": {
+            "id": "surface-5",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -4.057999610900879,
+              1.7000000476837158,
+              7.0
+            ],
+            "size": [
+              2.30400013923645,
+              1.2860000133514404
+            ],
+            "pixels": [
+              1152,
+              643
+            ]
+          }
+        },
+        "after": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1374,
+              515
+            ]
+          },
+          "capture": {
+            "id": "surface-5",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -3.836989164352417,
+              1.572636604309082,
+              7.0
+            ],
+            "size": [
+              2.748000144958496,
+              1.03000009059906
+            ],
+            "pixels": [
+              1374,
+              515
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Move-Kitty: content scale keeps it visible",
+      "evidence": {
+        "Move-Kitty": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1095,
+              411
+            ]
+          },
+          "capture": {
+            "id": "surface-5",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -3.836989164352417,
+              1.572636604309082,
+              7.0
+            ],
+            "size": [
+              2.748000144958496,
+              1.03000009059906
+            ],
+            "pixels": [
+              1095,
+              411
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Move-Kitty: carried and released, still visible and floating",
+      "evidence": {
+        "Move-Kitty": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1095,
+              411
+            ]
+          },
+          "capture": {
+            "id": "surface-5",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -3.098188877105713,
+              1.572636604309082,
+              7.111659526824951
+            ],
+            "size": [
+              2.748000144958496,
+              1.03000009059906
+            ],
+            "pixels": [
+              1095,
+              411
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Move-Kitty: the carry moved it",
+      "evidence": {
+        "grabbed": "surface-5",
+        "from": [
+          -3.836989164352417,
+          1.572636604309082,
+          7.0
+        ],
+        "to": [
+          -3.098188877105713,
+          1.572636604309082,
+          7.111659526824951
+        ]
+      }
+    },
+    {
+      "name": "Drag-Chromium: corner resize keeps it visible and floating",
+      "evidence": {
+        "Drag-Chromium": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1462,
+              465
+            ]
+          },
+          "capture": {
+            "id": "surface-7",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -8.309415817260742,
+              1.521691083908081,
+              15.850000381469727
+            ],
+            "size": [
+              2.9240000247955322,
+              0.9300000667572021
+            ],
+            "pixels": [
+              1462,
+              465
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Drag-Chromium: the resize changed its native size",
+      "evidence": {
+        "before": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1152,
+              643
+            ]
+          },
+          "capture": {
+            "id": "surface-7",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -8.0,
+              1.7000000476837158,
+              15.850000381469727
+            ],
+            "size": [
+              2.30400013923645,
+              1.2860000133514404
+            ],
+            "pixels": [
+              1152,
+              643
+            ]
+          }
+        },
+        "after": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1462,
+              465
+            ]
+          },
+          "capture": {
+            "id": "surface-7",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -8.309415817260742,
+              1.521691083908081,
+              15.850000381469727
+            ],
+            "size": [
+              2.9240000247955322,
+              0.9300000667572021
+            ],
+            "pixels": [
+              1462,
+              465
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Drag-Chromium: content scale keeps it visible",
+      "evidence": {
+        "Drag-Chromium": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1165,
+              371
+            ]
+          },
+          "capture": {
+            "id": "surface-7",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -8.309415817260742,
+              1.521691083908081,
+              15.850000381469727
+            ],
+            "size": [
+              2.9240000247955322,
+              0.9300000667572021
+            ],
+            "pixels": [
+              1165,
+              371
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Drag-Chromium: carried and released, still visible and floating",
+      "evidence": {
+        "Drag-Chromium": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1165,
+              371
+            ]
+          },
+          "capture": {
+            "id": "surface-7",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -8.309415817260742,
+              2.044724225997925,
+              15.810699462890625
+            ],
+            "size": [
+              2.9240000247955322,
+              0.9300000667572021
+            ],
+            "pixels": [
+              1165,
+              371
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Drag-Chromium: the carry moved it",
+      "evidence": {
+        "grabbed": "surface-7",
+        "from": [
+          -8.309415817260742,
+          1.521691083908081,
+          15.850000381469727
+        ],
+        "to": [
+          -8.309415817260742,
+          2.044724225997925,
+          15.810699462890625
+        ]
+      }
+    },
+    {
+      "name": "Director pull: Chromium from its home wall",
+      "evidence": {
+        "Home-Chromium": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              581,
+              648
+            ]
+          },
+          "capture": {
+            "id": "surface-1",
+            "visible": true,
+            "queued": false,
+            "placed": false,
+            "position": [
+              -8.309415817260742,
+              2.0586514472961426,
+              14.723052024841309
+            ],
+            "size": [
+              1.162000060081482,
+              1.2960000038146973
+            ],
+            "pixels": [
+              581,
+              648
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "tool 5 pocket: floating while pocketed",
+      "evidence": {
+        "native": {
+          "monitor": 1,
+          "workspace": 21,
+          "floating": true,
+          "size": [
+            581,
+            648
+          ]
+        },
+        "capture": {
+          "id": "surface-1",
+          "visible": false,
+          "queued": true,
+          "placed": false,
+          "position": [
+            -8.309415817260742,
+            2.0586514472961426,
+            14.723052024841309
+          ],
+          "size": [
+            1.162000060081482,
+            1.2960000038146973
+          ],
+          "pixels": [
+            581,
+            648
+          ]
+        }
+      }
+    },
+    {
+      "name": "tool 5 place: floating and visible",
+      "evidence": {
+        "Home-Chromium": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              581,
+              648
+            ]
+          },
+          "capture": {
+            "id": "surface-1",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -3.309415817260742,
+              1.7000000476837158,
+              12.350001335144043
+            ],
+            "size": [
+              1.162000060081482,
+              1.2960000038146973
+            ],
+            "pixels": [
+              581,
+              648
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Home-Chromium: corner resize keeps it visible and floating",
+      "evidence": {
+        "Home-Chromium": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              891,
+              470
+            ]
+          },
+          "capture": {
+            "id": "surface-1",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -3.309415817260742,
+              1.5216912031173706,
+              12.659416198730469
+            ],
+            "size": [
+              1.7820000648498535,
+              0.940000057220459
+            ],
+            "pixels": [
+              891,
+              470
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Home-Chromium: the resize changed its native size",
+      "evidence": {
+        "before": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              581,
+              648
+            ]
+          },
+          "capture": {
+            "id": "surface-1",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -3.309415817260742,
+              1.7000000476837158,
+              12.350001335144043
+            ],
+            "size": [
+              1.162000060081482,
+              1.2960000038146973
+            ],
+            "pixels": [
+              581,
+              648
+            ]
+          }
+        },
+        "after": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              891,
+              470
+            ]
+          },
+          "capture": {
+            "id": "surface-1",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -3.309415817260742,
+              1.5216912031173706,
+              12.659416198730469
+            ],
+            "size": [
+              1.7820000648498535,
+              0.940000057220459
+            ],
+            "pixels": [
+              891,
+              470
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Home-Chromium: content scale keeps it visible",
+      "evidence": {
+        "Home-Chromium": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              710,
+              375
+            ]
+          },
+          "capture": {
+            "id": "surface-1",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -3.309415817260742,
+              1.5216912031173706,
+              12.659416198730469
+            ],
+            "size": [
+              1.7820000648498535,
+              0.940000057220459
+            ],
+            "pixels": [
+              710,
+              375
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Home-Chromium: carried and released, still visible and floating",
+      "evidence": {
+        "Home-Chromium": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              710,
+              375
+            ]
+          },
+          "capture": {
+            "id": "surface-1",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -3.465737819671631,
+              1.5216912031173706,
+              13.69373607635498
+            ],
+            "size": [
+              1.7820000648498535,
+              0.940000057220459
+            ],
+            "pixels": [
+              710,
+              375
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Home-Chromium: the carry moved it",
+      "evidence": {
+        "grabbed": "surface-1",
+        "from": [
+          -3.309415817260742,
+          1.5216912031173706,
+          12.659416198730469
+        ],
+        "to": [
+          -3.465737819671631,
+          1.5216912031173706,
+          13.69373607635498
+        ]
+      }
+    },
+    {
+      "name": "Super+LMB on the wall picks up the native client there",
+      "evidence": {
+        "gestureId": "surface-3",
+        "kitty": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              581,
+              648
+            ]
+          },
+          "capture": {
+            "id": "surface-3",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              11.979166984558105,
+              10.100000381469727,
+              -23.05500030517578
+            ],
+            "size": [
+              1.162000060081482,
+              1.2960000038146973
+            ],
+            "pixels": [
+              581,
+              648
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "carried off the home wall: floating and visible",
+      "evidence": {
+        "Home-Kitty-B": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              581,
+              648
+            ]
+          },
+          "capture": {
+            "id": "surface-3",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -1.0250749588012695,
+              10.100000381469727,
+              -17.804914474487305
+            ],
+            "size": [
+              1.162000060081482,
+              1.2960000038146973
+            ],
+            "pixels": [
+              581,
+              648
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Home-Kitty-B: corner resize keeps it visible and floating",
+      "evidence": {
+        "Home-Kitty-B": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              803,
+              520
+            ]
+          },
+          "capture": {
+            "id": "surface-3",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -0.8040645122528076,
+              9.972637176513672,
+              -17.804914474487305
+            ],
+            "size": [
+              1.6060000658035278,
+              1.040000081062317
+            ],
+            "pixels": [
+              803,
+              520
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Home-Kitty-B: the resize changed its native size",
+      "evidence": {
+        "before": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              581,
+              648
+            ]
+          },
+          "capture": {
+            "id": "surface-3",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -1.0250749588012695,
+              10.100000381469727,
+              -17.804914474487305
+            ],
+            "size": [
+              1.162000060081482,
+              1.2960000038146973
+            ],
+            "pixels": [
+              581,
+              648
+            ]
+          }
+        },
+        "after": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              803,
+              520
+            ]
+          },
+          "capture": {
+            "id": "surface-3",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -0.8040645122528076,
+              9.972637176513672,
+              -17.804914474487305
+            ],
+            "size": [
+              1.6060000658035278,
+              1.040000081062317
+            ],
+            "pixels": [
+              803,
+              520
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Home-Kitty-B: content scale keeps it visible",
+      "evidence": {
+        "Home-Kitty-B": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              640,
+              415
+            ]
+          },
+          "capture": {
+            "id": "surface-3",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -0.8040645122528076,
+              9.972637176513672,
+              -17.804914474487305
+            ],
+            "size": [
+              1.6060000658035278,
+              1.040000081062317
+            ],
+            "pixels": [
+              640,
+              415
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Home-Kitty-B: carried and released, still visible and floating",
+      "evidence": {
+        "Home-Kitty-B": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              640,
+              415
+            ]
+          },
+          "capture": {
+            "id": "surface-3",
+            "visible": true,
+            "queued": false,
+            "placed": true,
+            "position": [
+              -0.06526404619216919,
+              9.972637176513672,
+              -17.693256378173828
+            ],
+            "size": [
+              1.6060000658035278,
+              1.040000081062317
+            ],
+            "pixels": [
+              640,
+              415
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Home-Kitty-B: the carry moved it",
+      "evidence": {
+        "grabbed": "surface-3",
+        "from": [
+          -0.8040645122528076,
+          9.972637176513672,
+          -17.804914474487305
+        ],
+        "to": [
+          -0.06526404619216919,
+          9.972637176513672,
+          -17.693256378173828
+        ]
+      }
+    },
+    {
+      "name": "Director pull: kitty from its home wall",
+      "evidence": {
+        "Home-Kitty-A": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              1152,
+              643
+            ]
+          },
+          "capture": {
+            "id": "surface-2",
+            "visible": true,
+            "queued": false,
+            "placed": false,
+            "position": [
+              -0.09481602907180786,
+              9.972637176513672,
+              -17.59772300720215
+            ],
+            "size": [
+              2.30400013923645,
+              1.2860000133514404
+            ],
+            "pixels": [
+              1152,
+              643
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Director recall: Home-Kitty-A comes to the player, floating and visible",
+      "evidence": {
+        "Home-Kitty-A": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              1152,
+              643
+            ]
+          },
+          "capture": {
+            "id": "surface-2",
+            "visible": true,
+            "queued": false,
+            "placed": false,
+            "position": [
+              2.216334104537964,
+              9.972637176513672,
+              -16.882801055908203
+            ],
+            "size": [
+              2.30400013923645,
+              1.2860000133514404
+            ],
+            "pixels": [
+              1152,
+              643
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Director recall: Home-Chromium comes to the player, floating and visible",
+      "evidence": {
+        "Home-Chromium": {
+          "native": {
+            "monitor": 1,
+            "workspace": 21,
+            "floating": true,
+            "size": [
+              710,
+              375
+            ]
+          },
+          "capture": {
+            "id": "surface-1",
+            "visible": true,
+            "queued": false,
+            "placed": false,
+            "position": [
+              -0.09481602907180786,
+              9.972637176513672,
+              -17.59772300720215
+            ],
+            "size": [
+              1.4200000762939453,
+              0.7500000596046448
+            ],
+            "pixels": [
+              710,
+              375
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Director recall: Room-Kitty comes to the player, floating and visible",
+      "evidence": {
+        "Room-Kitty": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1531,
+              759
+            ]
+          },
+          "capture": {
+            "id": "surface-4",
+            "visible": true,
+            "queued": false,
+            "placed": false,
+            "position": [
+              -0.09481602907180786,
+              11.566536903381348,
+              -17.59772300720215
+            ],
+            "size": [
+              3.062000036239624,
+              1.5180001258850098
+            ],
+            "pixels": [
+              1531,
+              759
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "Director recall: Drag-Chromium comes to the player, floating and visible",
+      "evidence": {
+        "Drag-Chromium": {
+          "native": {
+            "monitor": 1,
+            "workspace": 20,
+            "floating": true,
+            "size": [
+              1165,
+              371
+            ]
+          },
+          "capture": {
+            "id": "surface-7",
+            "visible": true,
+            "queued": false,
+            "placed": false,
+            "position": [
+              -0.09481602907180786,
+              11.530837059020996,
+              -17.59772300720215
+            ],
+            "size": [
+              2.330000162124634,
+              0.7420000433921814
+            ],
+            "pixels": [
+              1165,
+              371
+            ]
+          }
+        },
+        "uncaptured": []
+      }
+    },
+    {
+      "name": "returned to its home wall: tiled again",
+      "evidence": {
+        "native": {
+          "monitor": 1,
+          "workspace": 21,
+          "floating": false,
+          "size": [
+            1896,
+            1056
+          ]
+        },
+        "capture": {
+          "id": "surface-3",
+          "visible": false,
+          "queued": false,
+          "placed": false,
+          "position": [
+            -1.3787882328033447,
+            9.972637176513672,
+            -17.994901657104492
+          ],
+          "size": [
+            1.28000009059906,
+            0.7129114270210266
+          ],
+          "pixels": [
+            1896,
+            1056
+          ]
+        }
+      }
+    }
+  ]
+}
