@@ -115,6 +115,9 @@ Json Server::snapshot() const {
 }
 Json Server::visibleState(const Peer &p) const {
     Json state = state_;
+    if (!protocol::atLeast(p.protocol, "0.20") && state.contains("spatial") && state["spatial"].contains("map") &&
+        state["spatial"]["map"].is_object())
+        state["spatial"]["map"].erase("levels");
     if (!protocol::atLeast(p.protocol, "0.19") && state.contains("interaction"))
         state["interaction"].erase("reticle");
     if (!protocol::atLeast(p.protocol, "0.15")) {

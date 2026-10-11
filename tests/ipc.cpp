@@ -149,7 +149,8 @@ void inheritance(const std::string &runtime) {
           "surfaces.recall", "placements.list",     "placements.remove", "data.object.bind",   "camera.fov",
           "atmosphere.get",  "atmosphere.set",      "shell.bind",        "workspace.activate", "overlay.style",
           "graphics.get",    "graphics.set",        "input.get",         "input.preview",      "input.set",
-          "input.capture",   "input.capture.cancel", "player.get",       "player.set"})
+          "input.capture",   "input.capture.cancel", "player.get",       "player.set",
+          "surface.pocket",  "surface.unpocket"})
         methods[m] = "state.read"; // Version eligibility is independent of grants.
     const std::set<std::string> allGrants{"state.read",      "world.control", "surface.control", "movement.control",
                                           "runtime.control", "shell.control", "data.publish",    "input.control", "camera.author"};
@@ -164,7 +165,10 @@ void inheritance(const std::string &runtime) {
                     {"runtime", Json::object()},
                     {"location", Json::object()},
                     {"integrations", {{"sources",Json::array({{{"values",{{"outline",true}}}}})}}},
-                    {"spatial", Json::object()},
+                    {"spatial", Json{{"map", {{"svg", "<svg/>"}, {"sha256", std::string(64, 'a')}, {"bounds", {0, 0, 1, 1}},
+                                             {"worldToMap", {1, 0, 0, 1, 0, 0}},
+                                             {"levels", Json::array({Json{{"id", "ground"}, {"name", "Ground"}, {"minY", -2}, {"maxY", 4},
+                                                                          {"svg", "<svg/>"}, {"sha256", std::string(64, 'b')}}})}}}}},
                     {"workspaces", Json::object()},
                     {"mounts", mounts},
                     {"presentation", {{"fov", 10},{"profile",{{"outline",{{"enabled",true}}}}}}},
@@ -215,7 +219,7 @@ void inheritance(const std::string &runtime) {
         c.sendJson(req("sub", "state.subscribe", {{"topics", {"state"}}}));
         auto state = c.receive().at("result").at("snapshot").at("state");
         for (auto it = previousState.begin(); it != previousState.end(); ++it)
-            check(state.contains(it.key()), "inherited state section disappeared");
+            check(state.contains(it.key()), ("inherited state section disappeared: " + it.key() + " at " + version).c_str());
         if (atLeast(version, "0.4")) {
             check(state["mounts"]["instances"].size() == (atLeast(version,"0.15") ? 2 : 1), "unzoned instance legacy projection");
             check(state["mounts"]["placements"].size() == (atLeast(version, "0.5") ? 2 : 1),
@@ -239,6 +243,12 @@ void inheritance(const std::string &runtime) {
             check(state["interaction"].contains("reticle") == atLeast(version, "0.19"), "reticle state version projection");
         }
         check(methodAvailable(version, "player.set") == atLeast(version, "0.19"), "player settings floor");
+        check(methodAvailable(version, "surface.pocket") == atLeast(version, "0.20") &&
+                  methodAvailable(version, "surface.unpocket") == atLeast(version, "0.20"),
+              "pocket floor");
+        if (atLeast(version, "0.3")) // spatial (with the map) exists from 0.3
+            check(state.at("spatial").at("map").contains("levels") == atLeast(version, "0.20"),
+                  "blueprint levels version projection");
         previousMethods = advertised;
         previousEvents = events;
         if (atLeast(version,"0.4")) check(state["presentation"]["profile"].contains("outline")==atLeast(version,"0.13"),"ink compatibility projection");

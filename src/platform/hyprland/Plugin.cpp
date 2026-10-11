@@ -3822,6 +3822,69 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         publish();
         return Json{{"revision", ipc->revision()}};
     }
+    if (method == "surface.pocket" || method == "surface.unpocket") {
+        if (!active || !world || !layout.desktop.is_null())
+            throw ipc::Error(-32005, "exploration inactive");
+        if (params.size() != 1 || !params.contains("surfaceId") || !params.at("surfaceId").is_string())
+            throw ipc::Error(-32602, "invalid pocket request");
+        auto e = capture.find(params.at("surfaceId"));
+        if (!e)
+            throw ipc::Error(-32003, "unknown window");
+        if (!e->parentId.empty())
+            throw ipc::Error(-32005, "child surfaces have no pocket");
+        const auto id = e->surface.id;
+        bool placed = false;
+        if (method == "surface.pocket") {
+            if (editor.locked(world->id, e->instance))
+                throw ipc::Error(-32005, "window is locked");
+            if (!layout.unplaced.contains(id)) { // idempotent: a pocketed window stays where it is in the queue
+                cancelGrab();
+                layout.stash(e->instance, e->surface);
+                ipc->notify("runtime.notice", {{"level", "info"},
+                                               {"code", "placement.pocketed"},
+                                               {"message", "Pocketed " + e->instance.title}});
+            }
+            unplacedSelected = id;
+        } else {
+            if (!layout.unplaced.contains(id))
+                throw ipc::Error(-32004, "window is not in the pocket");
+            cancelGrab();
+            if (layout.hasPlacement(e->instance, world.get())) {
+                layout.unplaced.erase(id); // back to its durable placement
+                placed = true;
+            } else {
+                // The pose a newly opened room window gets: in front of the player, short of walls.
+                auto s = e->surface;
+                s.yaw = -camera.yaw;
+                s.rotation = {0, 0, 0, 1};
+                float distance = config["windows"]["spawn_distance"].get<float>();
+                if (auto wall = interaction::raycast(camera.position, camera.forward(), world->collision,
+                                                     &world->collisionIndex))
+                    distance = interaction::limitSpawnDistance(distance, wall->distance);
+                s.center = camera.position + camera.forward() * distance;
+                surfaces::pushOut(s, world->collision);
+                float aspect = monitor ? float(monitor->m_size.x / monitor->m_size.y) : 16.f / 9.f;
+                placed = layout.spawn(e->instance, world.get(), camera, s, aspect);
+            }
+            if (placed)
+                std::erase(layout.pocketOrder, id);
+            else {
+                // No free full-size spot: keep it pocketed, selected for the Placement tool.
+                unplacedSelected = id;
+                editor.slot = tool = 5;
+                ipc->notify("runtime.notice", {{"level", "info"},
+                                               {"code", "placement.blocked"},
+                                               {"message", "No free spot here. Aim and click to place " +
+                                                               e->instance.title + "."}});
+            }
+        }
+        refresh();
+        publish();
+        ipc->notify("mounts.changed", {{"mounts", layout.state(world.get())}});
+        if (method == "surface.pocket")
+            return Json{{"revision", ipc->revision()}};
+        return Json{{"revision", ipc->revision()}, {"placed", placed}};
+    }
     if (method == "surface.pull" || method == "surface.place" || method == "surface.return") {
         if (!active || !world || !layout.desktop.is_null())
             throw ipc::Error(-32005, "exploration inactive");
@@ -4802,6 +4865,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     {"surface.pull", "surface.control"},
                     {"surface.place", "surface.control"},
                     {"surface.return", "surface.control"},
+                    {"surface.pocket", "surface.control"},
+                    {"surface.unpocket", "surface.control"},
                     {"surfaces.recall", "surface.control"},
                     {"placements.list", "state.read"},
                     {"placements.remove", "surface.control"},
