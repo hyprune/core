@@ -8,8 +8,8 @@ the second world is the original CC0 atrium fixture named Quiet observatory.
 ## Reproduce
 
 Build core using the README, install shell's Python requirements, and build
-Switchyard according to `../worlds/README.md`. This machine consumed the existing
-remote-Blender-built `../worlds/dist/com.hyprune.switchyard` package. Require
+Switchyard according to `../worlds/README.md`. The session consumes a prebuilt
+`../worlds/dist/com.hyprune.switchyard` package. Require
 Quickshell, kitty, btop, wtype and grim; Chromium is optional. For recording,
 install wf-recorder and FFmpeg.
 
@@ -24,7 +24,7 @@ node tests/validate-session.mjs
 The entire nested lifetime holds `flock /tmp/worldshell-nested.lock`. All
 compositor/Quickshell/Wayland operations pass through a controller that verifies
 the nested PID, start time, exact config, compositor lock, instance signature
-and display. It rejects the owner's session. IPC grants enter through inherited
+and display. It rejects the outer (live) session. IPC grants enter through inherited
 FDs; tokens never enter recordings, logs or files. `up` uses the visible nested
 Wayland output; smoke/record default to 1080p HEADLESS-1. Artifacts stay in ignored
 `dev/nested/.integration-state/`, separate from the older fixture harness. Set `HYPRUNE_NESTED_STATE_DIR="$PWD/dev/nested/.integration-state"`
@@ -97,4 +97,4 @@ Tab hold, package Map waypoint/travel, workspace warp out and back. Camera
 glides use authenticated core camera commands to frame the real rendered world;
 the walking, hold, Map click and application typing use nested seat input.
 
-Worlds content was not edited. All integration commits remain local for review.
+Worlds content was not modified.

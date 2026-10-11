@@ -70,8 +70,8 @@ dev/nested/ctl.py shot /tmp/hyprune-nested.png
 The controller checks the saved PID, process start time, exact config path,
 instance signature, Wayland socket and compositor lock file on **every call**. It
 rejects instance overrides, missing/stale state and the outer signature/display.
-Never run bare `hyprctl`, load into the owner's desktop, or manipulate that
-session to make a test pass. The controller supports `env` only after verifying
+Never run bare `hyprctl`, load into the outer desktop session, or manipulate
+that session to make a test pass. The controller supports `env` only after verifying
 the nested display; it never falls back to the caller's display.
 
 The Lua entry point is `hl.plugin.hyprune.toggle([monitorName])`; the registered
@@ -84,7 +84,7 @@ when the nested Lua config is reloaded after plugin load.
 
 M3A defers and coalesces native cursor visibility changes after the frame; a
 rendered reticle or virtual pointer marks the world picking ray. Native cursor
-images stay with Hyprland. Hardware cursor behavior still requires the owner
+images stay with Hyprland. Hardware cursor behavior still requires the
 supervised checklist in [docs/M3A.md](docs/M3A.md).
 
 
@@ -103,7 +103,7 @@ quiet-observatory fixture as workspace 11; workspace 10 is Switchyard. It starts
 Quickshell over authenticated IPC 0.3, two live terminals (including btop) and a
 private-profile Chromium page. All nested session lifetimes hold
 `flock /tmp/worldshell-nested.lock`; the verified controller is the only compositor
-control entry point. No owner-session command is used. `up` runs smoke acceptance
+control entry point. No live-session command is used. `up` runs smoke acceptance
 and remains interactive on the visible nested Wayland output; Ctrl+C stops it.
 `smoke --visible` verifies that same output; recording uses 1920×1080 HEADLESS-1. See
 [contracts and verification](docs/FIRST-SESSION.md).
@@ -214,7 +214,7 @@ and [Code of Conduct](https://github.com/hyprune/.github/blob/main/CODE_OF_CONDU
 Core M2 adds workspace homes, pulled tools, collision recovery, persistent layouts,
 IPC 0.4 and world format 0.3. See [docs/M2.md](docs/M2.md) and
 the [changelog](docs/CHANGELOG.md). Run `dev/hyprune-dev m2-smoke`
-for locked acceptance or `dev/hyprune-dev m2-record` for the gallery demo. Set
+for locked acceptance or `dev/hyprune-dev m2-record` for the demo recording. Set
 `HYPRUNE_M2_PACKAGE` to a built Lumen Reach directory to load it unchanged after
 acceptance; `dev/hyprune-dev m2` keeps the isolated session available for captures.
 `build/hyprune-world-check <package-directory>` validates packages without a compositor.
@@ -255,9 +255,9 @@ Run `dev/nested/run.sh --m3b` for isolated real seat acceptance, or add `--recor
 for the demo. Both use the lifetime flock. See [M3B.md](docs/M3B.md), including the
 complete supervised live cursor checklist, input options, contracts and evidence.
 
-For the owner-supervised real-session check, see [dev/live/LIVE-TEST.md](dev/live/LIVE-TEST.md).
+For the supervised real-session check, see [dev/live/LIVE-TEST.md](dev/live/LIVE-TEST.md).
 `dev/live/preflight`, `up`, `status`, and idempotent `down` swap only the old
-hypr3d plugin/HUD and record recovery state. Agents must use explicit nested
+hypr3d plugin/HUD and record recovery state. Automated tests must use explicit nested
 instances; `./dev/nested/run.sh --live` provides the locked dry-run.
 
 Graphics presets and individual effects use an independent, watched
