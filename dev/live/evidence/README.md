@@ -7,12 +7,12 @@ All preflight/up/status calls use explicit nested `--instance`; TTY down tests
 remove Wayland variables and recover the recorded nested socket. No real-session
 command was issued.
 
-The old plugin is an inert API-compatible fixture, not the owner's prototype.
+The replaced plugin is an inert API-compatible fixture, not a real desktop plugin.
 The replaced HUD and a kept `qs -c` instance are isolated minimal QML fixtures (recorded before the replaced plugin/HUD became configuration; the fixture names were redacted). Lumen Reach, core,
 hypruned and the Hyprune shell are real. Proof includes healthy down, distinct
 load paths across two ups, helper SIGKILL, restored HUD/plugin, preserved main
 shell/native bind, and repeated down. The reserved N key causes selection of
 **Super+Shift+F10**; live up chooses and reports its own free chord.
 
-The supervised live cursor/real old-prototype behavior remains for the owner.
+Hardware cursors and a real replaced plugin still need the supervised live checklist.
 Logs contain no launch tokens or saved process environments.
