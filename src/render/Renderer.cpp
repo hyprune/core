@@ -607,11 +607,13 @@ bool Renderer::animating() const {
             return true;
     return false;
 }
-// Instance culling: its visibility region (by position) and its swept sphere,
-// which holds the object at every animation pose.
+// Instance culling: the visibility of the static geometry around it (any owning
+// area visible; none: frustum only) and its swept sphere, which holds the object
+// at every animation pose.
 bool Renderer::instanceVisible(const world::ObjectInstance &o, const std::array<std::array<float, 4>, 6> &planes,
                                const std::vector<bool> &areas, bool regions) const {
-    if (regions && o.region >= 0 && size_t(o.region) < areas.size() && !areas[o.region])
+    if (regions && !o.regions.empty() &&
+        std::none_of(o.regions.begin(), o.regions.end(), [&](int r) { return size_t(r) < areas.size() && areas[r]; }))
         return false;
     for (auto &p : planes)
         if (p[0] * o.center.x + p[1] * o.center.y + p[2] * o.center.z + p[3] <

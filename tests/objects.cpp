@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
         check(o.ambientDown.x > 2 * o.ambientDown.z && o.ambientDown.x > .3f, o.id + ": warm bounce from the baked floor");
         check(o.ambientUp.z > o.ambientUp.x, o.id + ": sky-blue ambient from above");
         check(o.sunVisibility == 1 && o.sun > .2f && o.sun < 4, o.id + ": open sun, calibrated strength");
-        check(o.region == -1, o.id + ": no visibility regions");
+        check(o.regions.empty(), o.id + ": no visibility regions");
     }
 
     // Variants: copies of the fixture with one change to world.json and/or the asset glTF.
@@ -204,11 +204,19 @@ int main(int argc, char **argv) {
         for (auto &m : unlit->meshes)
             check(!unlit->materials[m.material].unlit, "scene materials keep their lighting");
     }
-    if (auto region = accepts("visibility region by position", [](auto &j) {
-            j["visibility"] = {{"areas", {{{"id", "west"}, {"bounds", {{"min", {-5, -1, -8}}, {"max", {-1, 4, -4}}}},
-                                           {"nodes", world::Json::array()}, {"visibleFrom", world::Json::array()}}}}};
+    // Derived regions: camera cells (no nodes, visible from nowhere) plus owner areas.
+    // An object takes the owners of the static geometry it overlaps, never a cell.
+    auto cell = world::Json{{"id", "cell-west"}, {"bounds", {{"min", {-5, -1, -8}}, {"max", {-1, 4, -4}}}},
+                            {"nodes", world::Json::array()}, {"visibleFrom", world::Json::array()}};
+    if (auto owned = accepts("visibility of the geometry around an object", [&](auto &j) {
+            j["visibility"] = {{"areas", {cell, {{"id", "owner-floor"}, {"bounds", {{"min", {50, 50, 50}}, {"max", {51, 51, 51}}}},
+                                                 {"nodes", {0}}, {"visibleFrom", {"cell-west"}}}}}};
         }))
-        check(region->objectInstances[0].region == 0 && region->objectInstances[1].region == -1, "instance region by position");
+        for (auto &o : owned->objectInstances)
+            check(o.regions == std::vector<int>{1}, o.id + ": takes the floor's owner area, not the camera cell");
+    if (auto cells = accepts("camera cells alone", [&](auto &j) { j["visibility"] = {{"areas", {cell}}}; }))
+        for (auto &o : cells->objectInstances)
+            check(o.regions.empty(), o.id + ": a cell owning nothing leaves the object to the frustum");
     // A roof over the east instance shades it from the sun (static geometry only).
     if (auto shaded = accepts("a roof over one instance", none, {}, [](auto &g) {
             g["nodes"].push_back({{"mesh", 0}, {"translation", {3, 4, -6}}, {"scale", {.15, 1, .15}}});

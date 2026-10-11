@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
                                                                      {"sweptRadius", a.radius}, {"unlit", a.unlit}});
                                                }
                                                for (auto &o : w->objectInstances)
-                                                   list.push_back({{"id", o.id}, {"asset", w->objectAssets[o.asset].id}, {"region", o.region},
+                                                   list.push_back({{"id", o.id}, {"asset", w->objectAssets[o.asset].id}, {"regions", o.regions},
                                                                    {"ambientUp", {o.ambientUp.x, o.ambientUp.y, o.ambientUp.z}},
                                                                    {"ambientDown", {o.ambientDown.x, o.ambientDown.y, o.ambientDown.z}},
                                                                    {"sun", o.sun}});

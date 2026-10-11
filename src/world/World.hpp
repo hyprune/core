@@ -95,7 +95,9 @@ struct ObjectInstance {
     bool authoredAmbient = false;
     Vec3 center{}; // world-space swept sphere
     float radius = 0;
-    int region = -1; // visibility area holding `center`, else -1 (always region-visible)
+    // Visibility areas owning static scene geometry that the swept sphere overlaps:
+    // the object is region-visible when any of them is. Empty: frustum only.
+    std::vector<int> regions;
 };
 struct World {
     PlayableBounds playable;

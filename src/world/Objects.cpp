@@ -198,16 +198,31 @@ Vec3 decodeSrgb(Vec3 c) {
 void lightObjects(World &w) {
     if (w.objectInstances.empty())
         return;
-    for (auto &o : w.objectInstances) {
-        o.region = -1;
-        for (size_t i = 0; i < w.visibility.size(); ++i) {
-            const auto &a = w.visibility[i];
-            if (o.center.x >= a.min.x && o.center.x <= a.max.x && o.center.y >= a.min.y && o.center.y <= a.max.y &&
-                o.center.z >= a.min.z && o.center.z <= a.max.z) {
-                o.region = int(i);
-                break;
-            }
+    // An object shares the visibility of the static geometry around it: the areas
+    // owning scene meshes its swept sphere overlaps. Bounds alone say nothing:
+    // derived regions are camera cells that own no nodes and are visible from
+    // nowhere, so an object placed by position in one was never drawn.
+    std::vector<std::pair<Vec3, Vec3>> bounds(w.meshes.size(), {Vec3{1e30f, 1e30f, 1e30f}, Vec3{-1e30f, -1e30f, -1e30f}});
+    for (size_t m = 0; m < w.meshes.size(); ++m)
+        for (const auto &v : w.meshes[m].vertices) {
+            auto &[lo, hi] = bounds[m];
+            lo = {std::min(lo.x, v.position.x), std::min(lo.y, v.position.y), std::min(lo.z, v.position.z)};
+            hi = {std::max(hi.x, v.position.x), std::max(hi.y, v.position.y), std::max(hi.z, v.position.z)};
         }
+    for (auto &o : w.objectInstances) {
+        std::set<int> owners;
+        for (size_t m = 0; m < w.meshes.size(); ++m) {
+            unsigned node = w.meshes[m].node;
+            int owner = node < w.nodeVisibility.size() ? w.nodeVisibility[node] : -1;
+            if (owner < 0 || owners.contains(owner))
+                continue;
+            auto &[lo, hi] = bounds[m];
+            float dx = std::max({lo.x - o.center.x, 0.f, o.center.x - hi.x}), dy = std::max({lo.y - o.center.y, 0.f, o.center.y - hi.y}),
+                  dz = std::max({lo.z - o.center.z, 0.f, o.center.z - hi.z});
+            if (dx * dx + dy * dy + dz * dz <= o.radius * o.radius)
+                owners.insert(owner);
+        }
+        o.regions.assign(owners.begin(), owners.end());
     }
     // Static triangle -> (mesh, first vertex) as visualTriangles was built.
     std::vector<std::pair<unsigned, unsigned>> source;

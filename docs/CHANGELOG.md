@@ -154,6 +154,10 @@ These are wire-compatible behavior changes that integrators may notice:
   while an animated object is visible in the active world view, and holds the t = 0
   pose under `graphics.reduced_motion`. Worlds with objects use the in-process
   renderer (offload reports "world objects use local renderer"). No IPC change.
+  Correction (2026-10-11): an object shares the visibility of the static geometry
+  around it (the areas owning scene meshes its swept sphere overlaps; none: frustum
+  only), not the first area containing its centre, which in derived regions is a
+  camera cell visible from nowhere. `hyprune-world-check` reports `regions`.
 
 Older packages remain accepted by core at every format version above.
 
