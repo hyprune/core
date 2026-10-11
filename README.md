@@ -286,6 +286,18 @@ Walking keeps its collision behavior; noclip ignores bounds and respawn, with a
 in its JSON `warnings` array without rejecting intentional clamping. See the
 [RFC-0004 amendment](https://hyprune.com/rfcs/0004-world-format/).
 
+### Placed world objects
+
+World format 0.8 optionally declares `objectAssets` (package glTFs with
+`spin`/`orbit`/`bob` node animation, a static collision proxy and probe or unlit
+lighting) and `objects` placing them. Objects are render-only apart from their
+proxies. Core draws repeated objects instanced, culls them by swept bounds, lights
+them with the sun plus an ambient probe sampled from the baked world at load, and
+keeps frames coming only while an animated object is in view;
+`graphics.reduced_motion` holds the t = 0 pose. `hyprune-world-check` lists assets
+and each object's probe. Fixture: `tests/fixtures/objects.py`; nested check:
+`dev/nested/run.sh --objects`.
+
 Regression commands: `ctest --test-dir build --output-on-failure` and
 `dev/nested/run.sh --playable` (the runner acquires the nested lifetime flock).
 

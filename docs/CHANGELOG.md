@@ -142,6 +142,18 @@ These are wire-compatible behavior changes that integrators may notice:
   `runtime.notice` `world.bounds.left`.
 - **0.7** Packages may require `KHR_texture_basisu` (KTX2), `EXT_meshopt_compression`
   and `KHR_mesh_quantization`. Lightmaps stay PNG.
+- **0.8** Placed world objects: `objectAssets` (≤ 32 package glTFs, the format's
+  extension rules, never lightmapped) with optional node animation (≤ 16; `spin`,
+  `orbit`, `bob`; nodes by unique name), a static collision proxy and `probe`/`unlit`
+  lighting; `objects` (≤ 256 instances: pose, uniform scale, speed, phase, optional
+  ambient). `library` references are reserved and rejected. Objects are render-only
+  (never picked, walked on or moved by gestures; proxies collide statically and count
+  toward the collision budget). Core uploads each asset once, draws instances
+  instanced, culls by swept bounds, lights `probe` assets with the runtime sun plus a
+  per-instance ambient probe from the world's baked light, renders on demand only
+  while an animated object is visible in the active world view, and holds the t = 0
+  pose under `graphics.reduced_motion`. Worlds with objects use the in-process
+  renderer (offload reports "world objects use local renderer"). No IPC change.
 
 Older packages remain accepted by core at every format version above.
 
