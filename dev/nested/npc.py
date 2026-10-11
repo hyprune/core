@@ -1,7 +1,8 @@
 """NPC prototype (RFC-0010 draft): dev/nested/run.sh --npc.
 
-Nested only (run.sh holds /tmp/worldshell-nested.lock). Switchyard with the generated
-placeholder mannequin (tests/fixtures/make-mannequin.py) walking a route through the
+Nested only (run.sh holds /tmp/worldshell-nested.lock). Switchyard with a published
+resident from ../worlds/characters (HYPRUNE_NPC_CHARACTER: another file; without either,
+the generated mannequin, tests/fixtures/make-mannequin.py) walking a route through the
 hall (HYPRUNE_NPC_PROTOTYPE). Checks: skinned character drawn, walks the route at the
 walk clip's speed, turns and idles at points, yields to the player, pauses (and stops
 costing frames) when typing / in focus / idle / free cursor / reduced motion / on battery
@@ -14,14 +15,23 @@ from m2 import wait, keys, pose
 
 SWITCHYARD = 'com.hyprune.switchyard'
 ROUTE = [[-6.5, 0, 7], [-6.5, 0, -3], [5, 0, -3], [5, 0, 7]]  # clear of the ring platform and furniture
+RESIDENT = 'resident-crimson.glb'  # worlds/characters (CC-BY-4.0, Hyprune contributors)
+CHARACTER = 'make-mannequin.py placeholder'
 
 
 def prepare(installed):
     shutil.copytree(s.ROOT.parent / 'worlds/dist' / SWITCHYARD, installed / SWITCHYARD, dirs_exist_ok=True)
-    glb = s.STATE / 'mannequin.glb'
-    subprocess.run([sys.executable, str(s.ROOT / 'tests/fixtures/make-mannequin.py'), str(glb)], check=True, stdout=subprocess.DEVNULL)
-    if os.environ.get('HYPRUNE_NPC_CHARACTER'):  # e.g. a tools/npc-import output instead of the mannequin
+    global CHARACTER
+    glb, resident = s.STATE / 'mannequin.glb', s.ROOT.parent / 'worlds/characters' / RESIDENT
+    if os.environ.get('HYPRUNE_NPC_CHARACTER'):  # e.g. a tools/npc-import output
         glb = pathlib.Path(os.environ['HYPRUNE_NPC_CHARACTER'])
+    elif resident.exists():
+        glb = resident
+    else:
+        subprocess.run([sys.executable, str(s.ROOT / 'tests/fixtures/make-mannequin.py'), str(glb)], check=True, stdout=subprocess.DEVNULL)
+    if glb.name != 'mannequin.glb':
+        CHARACTER = glb.stem
+    print('npc character:', CHARACTER, flush=True)
     spec = {'worldId': SWITCHYARD, 'character': str(glb), 'agents': [{'route': ROUTE, 'idleSeconds': 2.5, 'accent': [.95, .55, .15]}]}
     (s.STATE / 'npc-prototype.json').write_text(json.dumps(spec))
     os.environ['HYPRUNE_NPC_PROTOTYPE'] = str(s.STATE / 'npc-prototype.json')
@@ -119,7 +129,7 @@ def acceptance(client, children, args, token, socket):
     lua('{npc={motion="off"}}'); time.sleep(.3); look_at_npc(); time.sleep(.5)
     check('off: hidden', npc()['state'] == 'off' and npc()['drawn'] == 0, npc())
     lua('{npc={motion="auto"}}')
-    (s.ROOT / 'docs/evidence/npc.json').write_text(json.dumps({'nestedOnly': True, 'world': SWITCHYARD, 'character': 'make-mannequin.py placeholder',
+    (s.ROOT / 'docs/evidence/npc.json').write_text(json.dumps({'nestedOnly': True, 'world': SWITCHYARD, 'character': CHARACTER,
                                                                'checks': checks}, indent=2) + '\n')
     print('PASS npc prototype:', len(checks), 'checks', flush=True)
 

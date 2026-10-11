@@ -1,7 +1,7 @@
 {
   "nestedOnly": true,
   "world": "com.hyprune.switchyard",
-  "character": "make-mannequin.py placeholder",
+  "character": "resident-crimson",
   "checks": [
     {
       "name": "the prototype character is loaded",
@@ -16,7 +16,7 @@
               0.0,
               7.0
             ],
-            "walkSpeed": 1.2999999523162842,
+            "walkSpeed": 1.0119999647140503,
             "yielding": false
           }
         ],
@@ -31,14 +31,14 @@
         "agents": [
           {
             "clip": "walk",
-            "clipTime": 1.5045015811920166,
+            "clipTime": 1.4531192779541016,
             "heading": 3.1415927410125732,
             "position": [
               -6.5,
               0.0,
-              5.044148921966553
+              5.529443264007568
             ],
-            "walkSpeed": 1.2999999523162842,
+            "walkSpeed": 1.0119999647140503,
             "yielding": false
           }
         ],
@@ -52,37 +52,37 @@
       "evidence": {
         "from": {
           "clip": "walk",
-          "clipTime": 1.5378562211990356,
+          "clipTime": 1.4697265625,
           "heading": 3.1415927410125732,
           "position": [
             -6.5,
             0.0,
-            5.000787734985352
+            5.512636661529541
           ],
-          "walkSpeed": 1.2999999523162842,
+          "walkSpeed": 1.0119999647140503,
           "yielding": false
         },
         "to": {
           "clip": "walk",
-          "clipTime": 3.5712997913360596,
+          "clipTime": 3.503039598464966,
           "heading": 3.1415927410125732,
           "position": [
             -6.5,
             0.0,
-            2.357313632965088
+            3.454923152923584
           ],
-          "walkSpeed": 1.2999999523162842,
+          "walkSpeed": 1.0119999647140503,
           "yielding": false
         },
-        "metres": 2.6434741020202637,
-        "expected": 2.5999999046325684
+        "metres": 2.057713508605957,
+        "expected": 2.0239999294281006
       }
     },
     {
       "name": "idles at a route point, then turns in place and walks on",
       "evidence": {
         "before": 3.1415927410125732,
-        "after": 1.5632257461547852
+        "after": 1.564706802368164
       }
     },
     {
@@ -90,14 +90,14 @@
       "evidence": {
         "agent": {
           "clip": "idle",
-          "clipTime": 1.7012237310409546,
-          "heading": 1.5553666353225708,
+          "clipTime": 1.7174450159072876,
+          "heading": 1.5588878393173218,
           "position": [
-            -5.093024253845215,
+            -5.354175567626953,
             0.0,
-            -3.155806064605713
+            -3.123354434967041
           ],
-          "walkSpeed": 1.2999999523162842,
+          "walkSpeed": 1.0119999647140503,
           "yielding": true
         },
         "moved": 0.0
@@ -107,14 +107,14 @@
       "name": "walks on once the way is clear",
       "evidence": {
         "clip": "walk",
-        "clipTime": 0.5505148768424988,
-        "heading": 1.5553611516952515,
+        "clipTime": 0.5683732032775879,
+        "heading": 1.5588842630386353,
         "position": [
-          -4.377440929412842,
+          -4.77902364730835,
           0.0,
-          -3.144761323928833
+          -3.116502285003662
         ],
-        "walkSpeed": 1.2999999523162842,
+        "walkSpeed": 1.0119999647140503,
         "yielding": false
       }
     },
@@ -168,15 +168,15 @@
       "evidence": {
         "agents": [
           {
-            "clip": "idle",
-            "clipTime": 0.8830781579017639,
-            "heading": 1.5553559064865112,
+            "clip": "walk",
+            "clipTime": 8.654491424560547,
+            "heading": 1.558882713317871,
             "position": [
-              5.0,
+              3.403550386428833,
               0.0,
-              -3.0
+              -3.01902174949646
             ],
-            "walkSpeed": 1.2999999523162842,
+            "walkSpeed": 1.0119999647140503,
             "yielding": false
           }
         ],
@@ -190,15 +190,15 @@
       "evidence": {
         "agents": [
           {
-            "clip": "idle",
-            "clipTime": 0.8830781579017639,
-            "heading": 1.5553559064865112,
+            "clip": "walk",
+            "clipTime": 8.654491424560547,
+            "heading": 1.558882713317871,
             "position": [
-              5.0,
+              3.403550386428833,
               0.0,
-              -3.0
+              -3.01902174949646
             ],
-            "walkSpeed": 1.2999999523162842,
+            "walkSpeed": 1.0119999647140503,
             "yielding": false
           }
         ],
