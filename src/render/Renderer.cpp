@@ -40,9 +40,14 @@ layout(location=0) in vec3 position;
 layout(location=1) in vec3 normal;
 layout(location=2) in vec2 uv0;
 layout(location=3) in vec2 uv1;
-uniform mat4 vp,model;uniform mat3 normalMatrix;
-out vec3 n;out vec3 worldPosition;out vec2 uv;out vec2 lightUV;
-void main(){vec4 pos=model*vec4(position,1);gl_Position=vp*pos;n=normalMatrix*normal;uv=uv0;lightUV=uv1;worldPosition=pos.xyz;}
+// World objects (world 0.8) draw instanced: per-instance model (rigid x uniform
+// scale, so mat3(m) transforms normals) and probe lighting records.
+layout(location=4) in vec4 instance0;layout(location=5) in vec4 instance1;layout(location=6) in vec4 instance2;
+layout(location=7) in vec4 instance3;layout(location=8) in vec4 instanceUp;layout(location=9) in vec4 instanceDown;
+uniform mat4 vp,model;uniform mat3 normalMatrix;uniform int instanced;
+out vec3 n;out vec3 worldPosition;out vec2 uv;out vec2 lightUV;flat out vec4 probeUp;flat out vec4 probeDown;
+void main(){mat4 m=instanced!=0?mat4(instance0,instance1,instance2,instance3):model;vec4 pos=m*vec4(position,1);gl_Position=vp*pos;
+n=instanced!=0?mat3(m)*normal:normalMatrix*normal;uv=uv0;lightUV=uv1;worldPosition=pos.xyz;probeUp=instanceUp;probeDown=instanceDown;}
 )";
 // Per-material constants, one std140 range per material (MaterialStd140).
 #define MATERIAL_BLOCK "layout(std140) uniform Material{mat3 uvMatrix[5];int uvSet[5];int present[5];" \
@@ -55,6 +60,9 @@ float a=alpha*(present[0]!=0?texture(albedo,st).a:1.);if(a<alphaCutoff)discard;}
 )";
 const char *fragment = "#version 300 es\nprecision highp float;precision highp int;\n" MATERIAL_BLOCK R"(
 in vec3 n;in vec3 worldPosition;in vec2 uv;in vec2 lightUV;
+// World objects (probe lighting): ambient for up/down normals (rgb), direct sun
+// strength (probeUp.w) and sun visibility (probeDown.w); objectLit selects it.
+flat in vec4 probeUp;flat in vec4 probeDown;uniform int objectLit;
 uniform sampler2D albedo,lightmap,normalMap,mrMap,aoMap,emissiveMap;
 uniform vec3 eye;
 uniform int details,nativeOutput,nativeTone;
@@ -109,6 +117,8 @@ void main(){
  if(details!=0&&normalEnabled!=0&&present[1]!=0)N=mappedNormal(N,coords(1));
  vec3 irradiance=vec3(.24+.76*max(dot(N,L),0.));
  if(baked!=0){irradiance=texture(lightmap,lightUV).rgb;if(lightSrgb!=0)irradiance=decode(irradiance);irradiance*=intensity;}
+ else if(objectLit!=0)irradiance=mix(probeDown.rgb,probeUp.rgb,N.y*.5+.5)
+  +sunColor/max(dot(sunColor,vec3(.2126,.7152,.0722)),1e-3)*probeUp.w*max(dot(N,L),0.);
  float ao=aoEnabled!=0&&present[3]!=0?mix(1.,texture(aoMap,coords(3)).r,occlusionStrength):1.;
  vec3 lit=base*irradiance*ao;
  if(details!=0&&specularEnabled!=0&&unlit==0){
@@ -126,7 +136,7 @@ void main(){
   if(effects!=0)key*=sunColor*sunIntensity;
   if(reflectionEnabled==0)sky=vec3(0);
   vec3 skyF=F0+(max(vec3(1.-rough),F0)-F0)*pow(1.-nv,5.); // nv is clamped to 0..1
-  float visibility=baked!=0?clamp(dot(irradiance,vec3(.2126,.7152,.0722)),0.,1.):1.;
+  float visibility=baked!=0?clamp(dot(irradiance,vec3(.2126,.7152,.0722)),0.,1.):objectLit!=0?clamp(probeDown.w,0.,1.):1.;
   float detail=baked!=0?clamp(1.+.3*(dot(N,L)-dot(geometric,L)),.7,1.3):1.;
   lit=lit*(1.-metal)*detail+(key+sky*skyF)*visibility*ao;
  }
@@ -560,6 +570,50 @@ std::array<float, 9> normalMatrix(const Mat4 &m) {
     return {x.x, x.y, x.z, y.x, y.y, y.z, z.x, z.y, z.z};
 }
 } // namespace
+// Frustum planes of vp (Gribb/Hartmann), unnormalised: inside when p·x + d >= 0.
+static std::array<std::array<float, 4>, 6> frustumPlanes(const Mat4 &vp) {
+    std::array<std::array<float, 4>, 6> planes;
+    for (int i = 0; i < 6; ++i)
+        for (int c = 0; c < 4; ++c)
+            planes[i][c] = vp.v[c * 4 + 3] + (i % 2 ? -1.f : 1.f) * vp.v[c * 4 + i / 2];
+    return planes;
+}
+double Renderer::animationSeconds() const {
+    if (!animating())
+        return 0;
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - animationEpoch_).count();
+}
+bool Renderer::animating() const {
+    if (!world_ || graphics.value("reduced_motion", false) == true)
+        return false;
+    for (const auto &o : world_->objectInstances)
+        if (o.speed > 0 && world_->objectAssets[o.asset].animated())
+            return true;
+    return false;
+}
+// Instance culling: its visibility region (by position) and its swept sphere,
+// which holds the object at every animation pose.
+bool Renderer::instanceVisible(const world::ObjectInstance &o, const std::array<std::array<float, 4>, 6> &planes,
+                               const std::vector<bool> &areas, bool regions) const {
+    if (regions && o.region >= 0 && size_t(o.region) < areas.size() && !areas[o.region])
+        return false;
+    for (auto &p : planes)
+        if (p[0] * o.center.x + p[1] * o.center.y + p[2] * o.center.z + p[3] <
+            -o.radius * std::sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]))
+            return false;
+    return true;
+}
+bool Renderer::animationVisible(const sim::Camera &camera, float aspect) const {
+    if (!animating() || pending_)
+        return false;
+    auto planes = frustumPlanes(camera.projection(aspect) * camera.view());
+    auto areas = world::visibleAreas(*world_, camera.position);
+    bool regions = graphics.value("visibility_culling", true);
+    for (const auto &o : world_->objectInstances)
+        if (o.speed > 0 && world_->objectAssets[o.asset].animated() && instanceVisible(o, planes, areas, regions))
+            return true;
+    return false;
+}
 void Renderer::init() {
     if (quadVao_)
         return;
@@ -859,13 +913,21 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
                 glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, mip, GL_RGBA16F, l.size, l.size, 0, GL_RGBA,
                              GL_FLOAT, l.faces[face].data());
             });
-    p->batches.resize(p->world->meshes.size());
+    // Scene meshes, then each object asset's meshes once (drawn per instance).
+    std::vector<int> meshAsset;
+    for (const auto &mesh : p->world->meshes)
+        p->meshes.push_back(&mesh), meshAsset.push_back(-1);
+    for (size_t a = 0; a < p->world->objectAssets.size(); ++a)
+        for (const auto &mesh : p->world->objectAssets[a].meshes)
+            p->meshes.push_back(&mesh), meshAsset.push_back(int(a));
+    p->batches.resize(p->meshes.size());
     for (size_t i = 0; i < p->batches.size(); ++i) {
-        auto &mesh = p->world->meshes[i];
+        auto &mesh = *p->meshes[i];
         auto &b = p->batches[i];
         b.count = mesh.vertices.size();
         b.material = mesh.material;
         b.node = mesh.node;
+        b.asset = meshAsset[i];
         b.lo = b.hi = mesh.vertices.empty() ? Vec3{} : mesh.vertices[0].position;
         for (auto &v : mesh.vertices) {
             b.center += v.position;
@@ -906,7 +968,7 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
                 glBindVertexArray(p->batches[i].vao);
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, p->batches[i].ibo);
                 glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, offset, count,
-                                reinterpret_cast<const char *>(p->world->meshes[i].indices.data()) + offset);
+                                reinterpret_cast<const char *>(p->meshes[i]->indices.data()) + offset);
             });
         }
     }
@@ -995,6 +1057,7 @@ bool Renderer::continuePrepare(double milliseconds, size_t byteBudget) {
             return false;
         freeWorld();
         world_ = p->world;
+        animationEpoch_ = std::chrono::steady_clock::now(); // the world-animation clock starts at load
         batches_ = std::move(p->batches);
         textures_ = std::move(p->textures);
         colorTextures_ = std::move(p->colors);
@@ -1515,10 +1578,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     bool regions = graphics["visibility_culling"].get<bool>();
     // Standard per-batch frustum test: world AABB (transformed for edited
     // objects) against the six clip planes of vp (Gribb/Hartmann).
-    std::array<std::array<float, 4>, 6> planes;
-    for (int i = 0; i < 6; ++i)
-        for (int c = 0; c < 4; ++c)
-            planes[i][c] = vp.v[c * 4 + 3] + (i % 2 ? -1.f : 1.f) * vp.v[c * 4 + i / 2];
+    auto planes = frustumPlanes(vp);
     auto inFrustum = [&](size_t i) {
         auto lo = batches_[i].lo, hi = batches_[i].hi;
         if (auto edited = transforms.find(batches_[i].node); edited != transforms.end()) {
@@ -1539,11 +1599,14 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     auto regionVisible = [&](size_t i) {
         return !regions || transforms.contains(batches_[i].node) || world::nodeVisible(*world_, batches_[i].node, visible);
     };
-    auto keep = [&](size_t i) { return regionVisible(i) && inFrustum(i); };
+    // Scene batches only; world objects are culled per instance below.
+    auto keep = [&](size_t i) { return batches_[i].asset < 0 && regionVisible(i) && inFrustum(i); };
     std::vector<size_t> order;
     culledBatches_ = frustumCulled_ = 0;
     for (size_t i = 0; i < batches_.size(); ++i)
-        if (!regionVisible(i))
+        if (batches_[i].asset >= 0)
+            continue;
+        else if (!regionVisible(i))
             ++culledBatches_;
         else if (!inFrustum(i))
             ++frustumCulled_;
@@ -1557,18 +1620,73 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             return !ta;
         return ta && length(batches_[a].center - camera.position) > length(batches_[b].center - camera.position);
     });
+    // World objects (world 0.8): each visible instance (region by position, swept
+    // sphere in the frustum) adds one record per asset batch: its model (instance
+    // pose x animation) and probe lighting. Opaque batches draw all their
+    // instances in one instanced call; blended ones draw per instance, depth-sorted.
+    struct ObjectDraw {
+        size_t batch;
+        GLint first;
+        GLsizei count;
+    };
+    std::vector<ObjectDraw> objectDraws;
+    std::vector<std::pair<size_t, GLint>> objectBlended; // batch, record
+    std::vector<Vec3> recordCenters;
+    objectInstancesVisible_ = objectDrawCalls_ = objectInstancesDrawn_ = 0;
+    if (!world_->objectInstances.empty()) {
+        const double t = animationSeconds();
+        std::vector<size_t> shown;
+        for (size_t k = 0; k < world_->objectInstances.size(); ++k)
+            if (instanceVisible(world_->objectInstances[k], planes, visible, regions))
+                shown.push_back(k);
+        objectInstancesVisible_ = shown.size();
+        std::vector<float> records;
+        for (size_t i = 0; i < batches_.size(); ++i) {
+            const auto &b = batches_[i];
+            if (b.asset < 0)
+                continue;
+            const auto &asset = world_->objectAssets[b.asset];
+            const int animation = asset.animationOf(b.node);
+            const bool blended = world_->materials[b.material].alphaMode == 2;
+            GLint first = GLint(records.size() / 24);
+            GLsizei count = 0;
+            for (auto k : shown) {
+                const auto &o = world_->objectInstances[k];
+                if (o.asset != unsigned(b.asset))
+                    continue;
+                auto model = animation >= 0 ? o.model * world::animation::matrix(asset.animations[animation], t, o.speed, o.phase)
+                                            : o.model;
+                records.insert(records.end(), model.v.begin(), model.v.end());
+                records.insert(records.end(), {o.ambientUp.x, o.ambientUp.y, o.ambientUp.z, o.sun, o.ambientDown.x,
+                                               o.ambientDown.y, o.ambientDown.z, o.sunVisibility});
+                recordCenters.push_back(model.point(b.center));
+                if (blended)
+                    objectBlended.push_back({i, first + count});
+                ++count;
+            }
+            if (count && !blended)
+                objectDraws.push_back({i, first, count});
+        }
+        if (!records.empty()) {
+            if (!instanceVbo_)
+                glGenBuffers(1, &instanceVbo_);
+            glBindBuffer(GL_ARRAY_BUFFER, instanceVbo_);
+            glBufferData(GL_ARRAY_BUFFER, records.size() * sizeof(float), records.data(), GL_STREAM_DRAW);
+        }
+    }
     bool depthOnly = false;
     // Per-pass constants are set once per program; per batch only the material
     // range, its textures and (for edited objects) the model/normal matrices.
     struct ProgramState {
         int native = -1;
         bool identity = false;
+        int instanced = -1;
     };
     std::array<std::pair<GLuint, ProgramState>, 2> programState{{{world, {}}, {depthProgram_, {}}}};
     int tone = profile["toneMapping"] == "aces" ? 0 : profile["toneMapping"] == "reinhard" ? 1 : 2;
     float exposure = profile["exposure"].get<float>();
     bool haze = graphics["alpha_haze"].get<bool>();
-    auto drawBatch = [&](size_t index, bool nativeOutput) {
+    auto drawBatch = [&](size_t index, bool nativeOutput, GLint first = -1, GLsizei instances = 0) {
         const auto &b = batches_[index];
         const auto &m = world_->materials[b.material];
         if (m.alphaMode == 2 && !haze)
@@ -1615,9 +1733,15 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             glBindTexture(GL_TEXTURE_2D, m.lightmap >= 0 ? textures_[m.lightmap] : 0);
             glBindSampler(1, m.lightmap >= 0 ? dataSamplers_[m.lightmap] : clamp_);
         }
+        if (state.instanced != int(instances > 0)) {
+            uniform(shader, "instanced", int(instances > 0));
+            uniform(shader, "objectLit", int(instances > 0));
+            state.instanced = instances > 0;
+        }
         // World vertices are pre-transformed; only edited objects carry a model.
+        // World objects take theirs from the instance records.
         auto edited = transforms.find(b.node);
-        if (edited != transforms.end() || !state.identity) {
+        if (instances == 0 && (edited != transforms.end() || !state.identity)) {
             auto model = edited != transforms.end() ? edited->second : Mat4::identity();
             auto normals = normalMatrix(model);
             glUniformMatrix4fv(location(shader, "model"), 1, GL_FALSE, model.v.data());
@@ -1625,7 +1749,22 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             state.identity = edited == transforms.end();
         }
         glBindVertexArray(b.vao);
-        if (b.indexed)
+        if (instances > 0) {
+            // Records: mat4 model, vec4 ambient up + sun, vec4 ambient down + sun visibility.
+            glBindBuffer(GL_ARRAY_BUFFER, instanceVbo_);
+            for (GLuint c = 0; c < 6; ++c) {
+                glEnableVertexAttribArray(4 + c);
+                glVertexAttribPointer(4 + c, 4, GL_FLOAT, GL_FALSE, 24 * sizeof(float),
+                                      reinterpret_cast<const void *>((size_t(first) * 24 + c * 4) * sizeof(float)));
+                glVertexAttribDivisor(4 + c, 1);
+            }
+            if (b.indexed)
+                glDrawElementsInstanced(GL_TRIANGLES, b.count, GL_UNSIGNED_INT, nullptr, instances);
+            else
+                glDrawArraysInstanced(GL_TRIANGLES, 0, b.count, instances);
+            ++objectDrawCalls_;
+            objectInstancesDrawn_ += instances;
+        } else if (b.indexed)
             glDrawElements(GL_TRIANGLES, b.count, GL_UNSIGNED_INT, nullptr);
         else
             glDrawArrays(GL_TRIANGLES, 0, b.count);
@@ -1633,6 +1772,9 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     for (auto index : order)
         if (!externalWorldFbo && world_->materials[batches_[index].material].alphaMode != 2)
             drawBatch(index, false);
+    if (!externalWorldFbo)
+        for (const auto &d : objectDraws)
+            drawBatch(d.batch, false, d.first, d.count);
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
@@ -1726,6 +1868,8 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         depthOnly = true;
         for (auto i : order)
             if (world_->materials[batches_[i].material].alphaMode != 2) drawBatch(i, false);
+        for (const auto &d : objectDraws)
+            drawBatch(d.batch, false, d.first, d.count);
         depthOnly = false;
         glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
     } else {
@@ -1819,6 +1963,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         float depth;
         size_t index;
         bool window;
+        GLint record = -1; // a blended world-object batch: its instance record
     };
     std::vector<TransparentDraw> transparent;
     for (size_t i = 0; i < surfaces.size(); ++i)
@@ -1830,6 +1975,9 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
                 auto center = transforms.contains(b.node) ? transforms.at(b.node).point(b.center) : b.center;
                 transparent.push_back({dot(center - camera.position, camera.forward()), i, false});
             }
+    if (!worldOnly && graphics["alpha_haze"].get<bool>())
+        for (auto [batch, record] : objectBlended)
+            transparent.push_back({dot(recordCenters[record] - camera.position, camera.forward()), batch, false, record});
     std::stable_sort(transparent.begin(), transparent.end(),
                      [](const auto &a, const auto &b) { return a.depth > b.depth; });
     // Native target is display-encoded after reconstruction. Blend client buffers
@@ -1837,7 +1985,10 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
     for (const auto &item : transparent) {
         if (!item.window) {
-            drawBatch(item.index, true);
+            if (item.record >= 0)
+                drawBatch(item.index, true, item.record, 1);
+            else
+                drawBatch(item.index, true);
             continue;
         }
         const auto &s = surfaces[item.index];
@@ -2492,6 +2643,8 @@ world::Json Renderer::timings() const {
                            {"output_markers", cost({3})}, {"outline", cost({7,8})}};
     return {{"renderedFrames", frames},
             {"visibility", {{"submitted",submittedBatches_},{"culled",culledBatches_},{"frustumCulled",frustumCulled_},{"total",batches_.size()}}},
+            {"objects", {{"instances", world_ ? world_->objectInstances.size() : 0}, {"visible", objectInstancesVisible_},
+                         {"drawCalls", objectDrawCalls_}, {"instancesDrawn", objectInstancesDrawn_}, {"animating", animating()}}},
             {"shaderCache", {{"hits", ProgramCache::hits}, {"misses", ProgramCache::misses}, {"rejected", ProgramCache::rejected}, {"compileMs", ProgramCache::compileMs}, {"warmupMs", warmMs_}, {"warmupMaxStepMs", warmMaxMs_}, {"warming", warmStep_ >= 0}}},
             {"deliveredFPS", deliveredFPS_},
             {"graphics", graphics},
@@ -2610,6 +2763,8 @@ void Renderer::destroy() {
     glDeleteVertexArrays(1, &collisionVao_);
     glDeleteBuffers(1, &collisionVbo_);
     collisionVao_ = collisionVbo_ = 0;
+    glDeleteBuffers(1, &instanceVbo_);
+    instanceVbo_ = 0;
     collisionCount_ = 0;
     deleteProgram(scene_);
     deleteProgram(inkNormals_); deleteProgram(inkProgram_); deleteProgram(inkComposite_); inkNormals_=inkProgram_=inkComposite_=0;

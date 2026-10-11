@@ -9,6 +9,7 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <iostream>
+#include <thread>
 using namespace hyprune;
 void check(bool ok, const char *why) {
     if (!ok)
@@ -94,7 +95,7 @@ precision highp float;uniform sampler2D image;out vec4 color;void main(){color=t
     glDeleteShader(fragment);
 }
 int main(int argc, char **argv) {
-    if (argc != 2)
+    if (argc < 2 || argc > 3)
         return 1;
     EGLDisplay display = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
     try {
@@ -942,6 +943,53 @@ int main(int argc, char **argv) {
             check(bound == int(buffer) && start == 256 && size == 512 && generic == 0, "uniform buffer state leaked");
             glBindBufferBase(GL_UNIFORM_BUFFER, 0, 0);
             glDeleteBuffers(1, &buffer);
+        }
+        if (argc > 2) {
+            // World 0.8 objects: one asset, three instances, drawn instanced; motion,
+            // swept-bounds culling, render on demand only in view, reduced motion.
+            auto placed = world::load(argv[2]);
+            renderer.prepare(placed);
+            renderer.profile = placed->atmosphere;
+            sim::Camera look; // eye above the spawn, facing -Z toward the objects
+            look.position = {0, 1.7f, 0};
+            auto away = look;
+            away.yaw = 3.14159265f;
+            const float aspect = 320.f / 180.f;
+            check(renderer.animating(), "animated objects run after load");
+            check(renderer.animationVisible(look, aspect), "an animated object in view forces frames");
+            check(!renderer.animationVisible(away, aspect), "objects behind the camera force nothing");
+            auto frame = [&](const sim::Camera &view) {
+                glFinish(); // each checked draw must be fresh
+                renderer.draw(fbo, 320, 180, view, {}, false);
+                std::vector<unsigned char> data(320 * 180 * 4);
+                glReadPixels(0, 0, 320, 180, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
+                return data;
+            };
+            auto difference = [](const std::vector<unsigned char> &a, const std::vector<unsigned char> &b) {
+                size_t changed = 0;
+                for (size_t i = 0; i < a.size(); i += 4)
+                    changed += std::abs(a[i] - b[i]) + std::abs(a[i + 1] - b[i + 1]) + std::abs(a[i + 2] - b[i + 2]) > 24;
+                return changed;
+            };
+            auto first = frame(look);
+            auto objects = renderer.timings()["objects"];
+            size_t assetBatches = placed->objectAssets[0].meshes.size();
+            check(objects["visible"] == 3 && objects["drawCalls"] == assetBatches && objects["instancesDrawn"] == 3 * assetBatches,
+                  "one instanced draw per asset batch covers every visible instance");
+            std::this_thread::sleep_for(std::chrono::milliseconds(400));
+            auto second = frame(look);
+            check(difference(first, second) > 100, "animated object nodes move between frames");
+            frame(away);
+            check(renderer.timings()["objects"]["visible"] == 0 && renderer.timings()["objects"]["drawCalls"] == 0,
+                  "swept bounds cull objects out of view");
+            renderer.graphics["reduced_motion"] = true;
+            check(!renderer.animating() && renderer.animationSeconds() == 0 && !renderer.animationVisible(look, aspect),
+                  "reduced motion stops animation and forces no frames");
+            auto still = frame(look);
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            check(difference(still, frame(look)) == 0, "reduced motion holds the t = 0 pose");
+            renderer.graphics["reduced_motion"] = false;
+            check(glGetError() == GL_NO_ERROR, "objects GL error");
         }
         renderer.destroy();
         glDeleteTextures(1, &app);

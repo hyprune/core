@@ -77,7 +77,7 @@ if(BUILD_TESTING)
   target_link_libraries(material-benchmark PRIVATE hyprune_runtime GLESv2 EGL)
   add_executable(render-tests tests/render.cpp src/render/Renderer.cpp)
   target_link_libraries(render-tests PRIVATE hyprune_runtime GLESv2 EGL)
-  add_test(NAME render COMMAND render-tests ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/atrium)
+  add_test(NAME render COMMAND render-tests ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/atrium ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/objects)
   # GL tests use Mesa (the Intel iGPU here), never the NVIDIA EGL vendor that
   # glvnd would otherwise prefer and that wakes the dGPU.
   find_file(HYPRUNE_MESA_EGL_VENDOR 50_mesa.json PATHS /usr/share/glvnd/egl_vendor.d /etc/glvnd/egl_vendor.d

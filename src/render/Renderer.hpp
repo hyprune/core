@@ -101,6 +101,14 @@ class Renderer {
     } reticle;
     std::vector<interaction::Line> lines;
     std::map<unsigned, Mat4> transforms;
+    // World 0.8 placed objects (RFC-0004): the animation clock starts when a world
+    // becomes current and follows the steady clock; graphics.reduced_motion pins
+    // every animation at its t = 0 pose.
+    double animationSeconds() const;
+    bool animating() const; // an animated object exists and motion is allowed
+    // True while animating and an animated instance's swept bounds are in the
+    // view frustum and not region-culled: the owner keeps frames coming.
+    bool animationVisible(const sim::Camera &, float aspect) const;
     bool materialDetails = true; // Also permits like-for-like benchmark comparisons.
     static constexpr int lightmapMipLevels = 2; // Deepest lightmap mip sampled (4 px bake gutters).
     uint64_t frames = 0;
@@ -111,7 +119,8 @@ class Renderer {
         GLsizei count = 0; // indices when indexed, else vertices
         bool indexed = false;
         unsigned material = 0, node = 0;
-        Vec3 center, lo, hi; // world-space bounds of the pre-transformed vertices
+        int asset = -1;      // world object asset (node is then the asset's node), else a scene batch
+        Vec3 center, lo, hi; // bounds of the pre-transformed vertices (asset space for objects)
     };
     struct PendingUpload {
         struct Job {
@@ -124,6 +133,7 @@ class Renderer {
         world::Json profile;
         decltype(world::World::environmentHigh) levels;
         std::vector<Batch> batches;
+        std::vector<const world::Mesh *> meshes; // scene meshes, then object asset meshes
         std::vector<GLuint> textures, colors, samplers, dataSamplers;
         size_t gpuBytes = 0;
         GLuint materialUbo = 0;
@@ -139,6 +149,11 @@ class Renderer {
     size_t uploadBytes_ = 0, uploadSteps_ = 0;
     std::shared_ptr<const world::World> world_;
     std::vector<Batch> batches_;
+    std::chrono::steady_clock::time_point animationEpoch_{};
+    GLuint instanceVbo_ = 0; // per-frame instance records (model, probe lighting)
+    size_t objectInstancesVisible_ = 0, objectDrawCalls_ = 0, objectInstancesDrawn_ = 0;
+    bool instanceVisible(const world::ObjectInstance &, const std::array<std::array<float, 4>, 6> &planes,
+                         const std::vector<bool> &areas, bool regions) const;
     // textures_/colorTextures_ name the same texture unless an image needs two
     // copies; dataSamplers_ differ from samplers_ only for sRGB skip-decode.
     std::vector<GLuint> textures_, colorTextures_, samplers_, dataSamplers_;

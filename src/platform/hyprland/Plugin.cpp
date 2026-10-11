@@ -389,6 +389,9 @@ struct Runtime {
     std::vector<surfaces::Surface> frameSurfaces();
     uint64_t frameKey(std::span<const surfaces::Surface>);
     bool frameForced();
+    // World 0.8 objects: animation keeps frames coming while an animated object
+    // can be on screen (set each tick; false on the desktop, output off or loading).
+    bool animationFrames = false;
     uint64_t renderedKey = 0;
     void focus(const std::string &, bool keyboard, bool enterUse = true);
     void load(const std::string &, const std::string &spawn = "");
@@ -892,6 +895,8 @@ Json Runtime::performance() const {
     }
     if (!renderer.transforms.empty() && config["graphics"]["offload"] != "off")
         state["reason"] = "edited world transforms use local renderer";
+    else if (world && !world->objectInstances.empty() && config["graphics"]["offload"] != "off")
+        state["reason"] = "world objects use local renderer";
     bool custom = false;
     for (auto &[key, value] : graphicsFile.current.items())
         if (key != "quality" && !value.is_null()) custom = true;
@@ -935,7 +940,7 @@ void Runtime::offloadTick() {
     if (renderPass.active()) throw std::runtime_error("offload lifecycle inside frame");
     auto g = config["graphics"];
     bool enabled = active && world && monitor && !loading && !locked() &&
-                   g["offload"] != "off" && renderer.transforms.empty();
+                   g["offload"] != "off" && renderer.transforms.empty() && world->objectInstances.empty();
     Json request = {{"enabled", enabled}, {"graphics", g}, {"compositorPci", compositorPci()},
                     {"worldPath", world ? (installed / world->id).string() : ""},
                     {"width", monitor ? int(monitor->m_pixelSize.x) : 0},
@@ -4207,6 +4212,7 @@ void Runtime::tick() {
     }
     if (active && monitor)
         transitionTick(dt);
+    animationFrames = false;
     if (active && monitor && layout.desktop.is_null() && fullscreen.phase != 2) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         if (!ownsInput()) {
@@ -4387,6 +4393,12 @@ void Runtime::tick() {
         }
         for (auto &e : capture.entries)
             e.surface.focused = e.surface.id == focused;
+        // Render on demand with animated world objects: only while one's swept bounds
+        // are in view (and not region-culled) on a lit output. Otherwise an unchanged
+        // frame is reused and animation forces nothing.
+        animationFrames = !loading && monitor->m_enabled && monitor->m_dpmsStatus &&
+                          renderer.animationVisible(camera, float(monitor->m_pixelSize.x) /
+                                                                std::max(1.f, float(monitor->m_pixelSize.y)));
         if (frameForced() || frameKey(frameSurfaces()) != renderedKey) {
             g_pHyprRenderer->damageMonitor(monitor.lock());
             monitor->scheduleFrame();
@@ -4481,7 +4493,7 @@ bool Runtime::frameForced() {
     // Time-driven or externally produced frames always render. The environment
     // switch keeps GPU clocks steady for fixed-scale profiling (dev/nested/perf.py).
     static const bool continuous = getenv("HYPRUNE_CONTINUOUS_RENDER");
-    return continuous || debug || loading || handover.phase || fullscreen.phase || capturePending || renderer.captureRequested ||
+    return continuous || debug || animationFrames || loading || handover.phase || fullscreen.phase || capturePending || renderer.captureRequested ||
            offload.connected() || session.recording || session.playing || control.driving() || !renderer.frames;
 }
 uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
@@ -4688,6 +4700,7 @@ int luaCamera(lua_State *state) {
         {"eyeHeight", runtime->camera.eyeHeight},
         {"pitch", runtime->camera.pitch},
         {"frames", runtime->renderer.frames},
+        {"animationFrames", runtime->animationFrames},
         {"grabbed", runtime->grabbed},
         {"gesture", int(runtime->hands.gesture)},
         {"activeHandle", runtime->editor.activeHandle},
