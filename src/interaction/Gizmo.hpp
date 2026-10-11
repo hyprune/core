@@ -86,7 +86,7 @@ struct GizmoOptions {
     bool yawOnly = false;                   // upright objects: the world Y ring only
     bool uniformScaleOnly = false;          // world objects: the centre cube only
     std::array<bool, 3> scaleAxes{true, true, true}; // windows have no depth to scale
-    float pixels = 110;                     // axis length, logical pixels
+    float pixels = 130;                     // axis length, logical pixels
 };
 // Snap steps (Shift or the snapping toggle): M3B values.
 inline constexpr float snapMetres = .1f, snapRadians = .2617993878f, snapFactor = .1f;
@@ -181,6 +181,7 @@ class Gizmo {
     std::string typed_;
     GizmoView view_;
     float ringFactor() const;
+    bool uniformRing() const;
     bool offered(Part) const;
     void buildShapes();
     Result finish(Result, bool snap) const;

@@ -9,7 +9,7 @@ constexpr float shaftStart = .14f, coneBase = .80f, coneRadius = .07f;
 constexpr float planeInner = .24f, planeOuter = .44f;
 constexpr float scaleCube = .92f, scaleHalf = .075f, universalCube = .58f, universalHalf = .06f, uniformHalf = .085f;
 constexpr float rotateRing = .92f, universalRing = 1.28f, viewRing = 1.18f;
-constexpr float centreDiscPx = 9, pickPx = 8;
+constexpr float centreDiscPx = 9, pickPx = 8, uniformRingRadius = .62f;
 constexpr float near = .08f;
 float clamp01(float v) { return std::clamp(v, 0.f, 1.f); }
 float component(Vec3 v, int i) { return i == 0 ? v.x : i == 1 ? v.y : v.z; }
@@ -146,6 +146,9 @@ std::optional<GizmoPoint> GizmoView::project(Vec3 p) const {
 }
 Vec3 GizmoView::ray(float x, float y) const { return camera.ray(x / width, y / height, aspect()); }
 
+bool Gizmo::uniformRing() const {
+    return options.mode == GizmoMode::Scale && (options.uniformScaleOnly || !(options.scaleAxes[0] || options.scaleAxes[1] || options.scaleAxes[2]));
+}
 float Gizmo::ringFactor() const { return options.mode == GizmoMode::Universal ? universalRing : rotateRing; }
 float Gizmo::ringRadius() const { return layout_.size * ringFactor(); }
 bool Gizmo::offered(Part p) const {
@@ -236,6 +239,16 @@ void Gizmo::buildShapes() {
             s.priority = 0;
             s.circle = l.centrePx;
             s.radius = part == Part::MoveView ? centreDiscPx * view_.dpi : std::max(centreDiscPx * view_.dpi, uniformHalf * 1.5f * l.size * l.unitPx);
+            if (part == Part::ScaleUniform && uniformRing()) {
+                // Uniform-only selections also scale from a screen ring around the cube.
+                constexpr int count = 48;
+                float r = l.size * uniformRingRadius * l.unitPx;
+                for (int n = 0; n < count; ++n) {
+                    float a = n * 2 * pi / count, b = (n + 1) * 2 * pi / count;
+                    s.segments.push_back({{l.centrePx.x + std::cos(a) * r, l.centrePx.y + std::sin(a) * r, l.centrePx.depth},
+                                          {l.centrePx.x + std::cos(b) * r, l.centrePx.y + std::sin(b) * r, l.centrePx.depth}});
+                }
+            }
         } else if (isAxis(part)) {
             auto dir = l.axes[i] * l.sign[i];
             bool scale = isScale(part);
@@ -296,6 +309,10 @@ void Gizmo::buildShapes() {
                 auto dir = u * std::cos(t) + w * std::sin(t);
                 auto p = px(c + dir * r);
                 bool front = faceOn || dot(dir, l.toCamera) >= -.02f;
+                // Seen nearly edge-on, a ring's line crosses the centre: only its outer
+                // reaches pick, so the centre handles and the trackball stay reachable.
+                if (p && std::hypot(p->x - l.centrePx.x, p->y - l.centrePx.y) < r * l.unitPx * .45f)
+                    front = false;
                 if (p && prev && front && prevFront) {
                     s.segments.push_back({*prev, *p});
                     s.segmentAngles.push_back(prevAngle);
@@ -418,6 +435,10 @@ bool Gizmo::begin(Part part, float x, float y, const GizmoPose &start, const Giz
     } else if (isPlane(part)) {
         drag_.axis = l.axes[i];
         drag_.grab = rayPlane(o, ray, c, drag_.axis).value_or(c);
+    } else if (part == Part::ScaleUniform) {
+        // From the ring: the ratio of distances to the centre; from the cube: a diagonal drag.
+        float d = std::hypot(x - l.centrePx.x, y - l.centrePx.y);
+        drag_.t0 = d > l.size * uniformRingRadius * l.unitPx * .5f ? d : 0;
     } else if (part == Part::MoveView) {
         drag_.axis = view.camera.forward();
         drag_.grab = rayPlane(o, ray, c, drag_.axis).value_or(c);
@@ -554,7 +575,8 @@ Gizmo::Result Gizmo::drag(float x, float y, bool snap, const GizmoView &view) {
         (j == 0 ? r.factor.x : j == 1 ? r.factor.y : r.factor.z) = f;
         (k == 0 ? r.factor.x : k == 1 ? r.factor.y : r.factor.z) = f;
     } else if (p == Part::ScaleUniform) {
-        float f = 1 + ((x - d.x0) - (y - d.y0)) / (2 * options.pixels * view.dpi);
+        float f = d.t0 > 0 ? std::hypot(x - l.centrePx.x, y - l.centrePx.y) / d.t0
+                           : 1 + ((x - d.x0) - (y - d.y0)) / (2 * options.pixels * view.dpi);
         f = std::clamp(f, .05f, 20.f);
         if (snap)
             f = std::max(snapFactor, snapValue(f, snapFactor));
@@ -829,7 +851,7 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
             auto d0 = u * std::cos(t0) + w * std::sin(t0), d1 = u * std::cos(t1) + w * std::sin(t1);
             bool front = faceOn || dot(d0 + d1, l.toCamera) >= -.04f || part == active;
             size_t before = f.strokes.size();
-            stroke(c + d0 * r, c + d1 * r, front ? color : withAlpha(color, .3f), front ? widthOf(part, 2.6f) : 1.3f, !front);
+            stroke(c + d0 * r, c + d1 * r, front ? color : withAlpha(color, .3f), front ? widthOf(part, 3.f) : 1.4f, !front);
             if (f.strokes.size() > before) {
                 auto &s = f.strokes.back();
                 s.along = along;
@@ -898,7 +920,7 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
         auto move = Part(int(Part::MoveX) + i), scale = Part(int(Part::ScaleX) + i);
         if (alpha(move) > 0) {
             auto color = look(move, palette::axis(i));
-            stroke(c + dir * (l.size * shaftStart), c + dir * (l.size * coneBase), color, widthOf(move, 3.f));
+            stroke(c + dir * (l.size * shaftStart), c + dir * (l.size * coneBase), color, widthOf(move, 3.4f));
             cone(c + dir * (l.size * coneBase), dir, l.size * (1 - coneBase), l.size * coneRadius * (move == hover ? 1.15f : 1), color);
         }
         if (alpha(scale) > 0) {
@@ -907,13 +929,22 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
             // While scaling, the box rides on the cursor's distance along the axis.
             float reach = scale == active ? std::max(half * 2, std::abs(drag_.t0) * component(last_.factor, i)) : l.size * end;
             if (!universal || scale == active)
-                stroke(c + dir * (l.size * shaftStart), c + dir * (reach - half), color, widthOf(scale, 3.f));
+                stroke(c + dir * (l.size * shaftStart), c + dir * (reach - half), color, widthOf(scale, 3.4f));
             box(c + dir * reach, half * (scale == hover ? 1.15f : 1), color);
         }
     }
-    // Centre: screen-plane disc (move) or uniform cube (scale).
-    if (alpha(Part::ScaleUniform) > 0)
-        box(c, uniformHalf * l.size * (hover == Part::ScaleUniform ? 1.15f : 1), look(Part::ScaleUniform, palette::neutral));
+    // Centre: screen-plane disc (move) or uniform cube (scale), with its ring when
+    // uniform scale is the only scale offered.
+    if (alpha(Part::ScaleUniform) > 0) {
+        auto color = look(Part::ScaleUniform, palette::neutral);
+        if (uniformRing()) {
+            float r = l.size * uniformRingRadius * l.unitPx;
+            if (active == Part::ScaleUniform && drag_.t0 > 0)
+                r = drag_.t0 * last_.factor.x;
+            circlePx(l.centrePx, r, withAlpha(color, color.a * .9f), widthOf(Part::ScaleUniform, 2.4f), false, {});
+        }
+        box(c, uniformHalf * l.size * (uniformRing() ? 1.3f : 1) * (hover == Part::ScaleUniform ? 1.15f : 1), color);
+    }
     if (alpha(Part::MoveView) > 0) {
         auto color = look(Part::MoveView, palette::neutral);
         bool lit = hover == Part::MoveView || active == Part::MoveView;

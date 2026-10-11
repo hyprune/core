@@ -475,6 +475,7 @@ bool Runtime::gizmoBegin() {
         preview = {};
         preview.active = true;
         preview.pose = dragStart;
+        preview.startSupported = placementCheck(dragStart).supported;
     } else if (auto e = capture.find(editor.selected)) {
         editBefore = windowPose(*e);
         dragPixelWidth = e->surface.pixelWidth;
@@ -710,24 +711,28 @@ void Runtime::gizmoDraw() {
     if (windowBlocked)
         addBox(*windowBlocked, interaction::palette::invalid, .18f);
     frame.append(gizmo.draw(gizmoHover, snap, view));
+    // The selection never hides its own handles: world depth counts as in front
+    // only beyond the selection's extent around the pivot.
+    auto box = selectionBox(current);
+    frame.occlusionSlack = std::max(frame.occlusionSlack, length(box.half) + length(box.centre - selectionPivot(current)));
     renderer.gizmo = std::move(frame);
     float ox = 22.f / view.width, oy = 26.f / view.height;
     auto [rx, ry] = std::pair{px / view.width, py / view.height};
     std::string where = std::string(editor.localAxes || editor.gizmoMode() == "scale" ? "local" : "world") + " / " +
                         (editor.pivotBase ? "base" : "centre");
     if (gizmo.dragging()) {
-        auto text = gizmo.readout();
-        Vec3 color{.965f, .96f, .92f};
-        if (editor.kind == "object" && !preview.valid) {
-            text += "  BLOCKED: " + preview.verdict.message;
-            color = {1, .45f, .4f};
-        } else if (editor.kind == "object" && !preview.verdict.supported)
-            text += "  (floating: End drops)";
-        if (windowBlocked) {
-            text += "  BLOCKED: collision";
-            color = {1, .45f, .4f};
-        }
-        renderer.readouts.push_back({rx + ox, ry + oy, text, color});
+        // Value first; the placement verdict on its own line below.
+        renderer.readouts.push_back({rx + ox, ry + oy, gizmo.readout(), {.965f, .96f, .92f}});
+        std::string status;
+        if (editor.kind == "object" && !preview.valid)
+            status = "BLOCKED: " + preview.verdict.message;
+        else if (windowBlocked)
+            status = "BLOCKED: collision";
+        else if (editor.kind == "object" && preview.startSupported && !preview.verdict.supported)
+            status = "Floating (End drops to the floor)";
+        if (!status.empty())
+            renderer.readouts.push_back({rx + ox, ry + oy + 30.f * std::clamp(view.width / 1920.f, 1.f, 2.f) / view.height, status,
+                                         status.starts_with("BLOCKED") ? Vec3{1, .45f, .4f} : Vec3{.875f, .74f, .41f}});
     } else if (gizmoHover != interaction::Part::None) {
         std::string name = interaction::partName(gizmoHover);
         for (auto &c : name)
@@ -753,7 +758,12 @@ Json Runtime::gizmoDiagnostics() {
             {"hover", interaction::partName(gizmoHover)},
             {"active", interaction::partName(gizmo.active())},
             {"typed", gizmo.typed()},
-            {"readout", renderer.readouts.empty() ? "" : renderer.readouts[0].text},
+            {"readout", [&] {
+                 std::string text;
+                 for (auto &r : renderer.readouts)
+                     text += (text.empty() ? "" : "  ") + r.text;
+                 return text;
+             }()},
             {"preview", preview.active},
             {"valid", preview.valid && !windowBlocked},
             {"rule", preview.verdict.rule},
@@ -763,6 +773,9 @@ Json Runtime::gizmoDiagnostics() {
             {"canRedo", editor.canRedo()},
             {"objectsEnabled", gizmoObjects},
             {"size", g.size},
+            {"pivotPoint", array3(g.centre)},
+            {"bounds", array3(selectionBox(selectedTransform).half)},
+            {"pivotScreen", {g.centrePx.x / std::max(1.f, gizmoView().width), g.centrePx.y / std::max(1.f, gizmoView().height)}},
             {"sign", {g.sign[0], g.sign[1], g.sign[2]}},
             {"primitives", renderer.gizmo.strokes.size() + renderer.gizmo.fills.size()},
             {"handles", handles},

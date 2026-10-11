@@ -187,16 +187,25 @@ def acceptance(client,children,args,shell_token,socketpath):
  before=cap(sid);mod=s.envrun('wtype','-P','Super_L','-s','800','-p','Super_L');children.append(mod);wait(lambda:diag()['superHeld']);pointer('button',272,1);started=diag();check('SuperLMB_carry_started',started['gesture']!=0,{'gesture':started['gesture'],'aim':started['aim'],'superHeld':started['superHeld']});pointer(70,-15);time.sleep(.35);pointer('button',272,0);mod.wait(timeout=5);after=cap(sid);check('SuperLMB_carry',after['position']!=before['position'] and not after['collision'],{'before':before,'after':after,'aim':diag().get('aim')})
  client.call('surface.place',{'surfaceId':sid,'anchorId':'sun-court-slot-01-operator-desk-01'});target()
  keys('-k','4');pointer();wait(lambda:state()['editor']['selectedId']==sid);check('position_gizmo_select',state()['editor']['submode']=='move');shot('position-gizmo.png');pointer('scroll',-1);check('gizmo_rotate_mode',state()['editor']['submode']=='rotate');pointer('scroll',-1);check('gizmo_scale_mode',state()['editor']['submode']=='scale');shot('position-scale.png')
- pointer('scroll',-1);before=cap(sid);p=before['position'];pose(client,[p[0]+.6,p[1],p[2]+3]);time.sleep(.2);pointer('button',272,1);pointer(100,0);time.sleep(.2);pointer('button',272,0);check('gizmo_window_move',cap(sid)['position']!=before['position'],cap(sid))
- pointer('scroll',-1);pointer('scroll',-1);target();before=cap(sid);pointer('button',272,1);check('gizmo_uniform_pick',diag()['activeHandle']==3,diag());pointer(-80,0);time.sleep(.2);pointer('button',272,0);check('gizmo_uniform_client_scale',cap(sid)['pixels']!=before['pixels'],cap(sid))
+ # Gizmo 2.0: handles keep a constant screen size; aim at them from their published anchors.
+ def gaim(part):
+  for _ in range(6):
+   g=wait(lambda:diag()['gizmo'] if part in diag()['gizmo']['handles'] else None);t=g['handles'][part]['world'];e=diag()['position'];d=[t[k]-e[k] for k in range(3)]
+   pose(client,e,math.atan2(d[0],-d[2]),math.atan2(d[1],math.hypot(d[0],d[2])));time.sleep(.25)
+   if diag()['gizmo']['hover']==part:return
+  wait(lambda:diag()['gizmo']['hover']==part)
+ pointer('scroll',-1);before=cap(sid);target();gaim('move-x');pointer('button',272,1);pointer(100,0);time.sleep(.2);pointer('button',272,0);check('gizmo_window_move',cap(sid)['position']!=before['position'],cap(sid))
+ pointer('scroll',-1);pointer('scroll',-1);target();gaim('scale-uniform');before=cap(sid);pointer('button',272,1);check('gizmo_uniform_pick',diag()['gizmo']['active']=='scale-uniform',diag()['gizmo']);pointer(-80,0);time.sleep(.2);pointer('button',272,0);check('gizmo_uniform_client_scale',cap(sid)['pixels']!=before['pixels'],cap(sid))
 
  for n,delta in enumerate([-60,40,-40]):
-  target();before=cap(sid)['pixels'];pointer('button',272,1);pointer(delta,0);time.sleep(.25);pointer('button',272,0);check('gizmo_scale_configure_ack_'+str(n),cap(sid)['pixels']!=before,{'before':before,'after':cap(sid)['pixels']})
+  target();gaim('scale-uniform');before=cap(sid)['pixels'];pointer('button',272,1);pointer(delta,0);time.sleep(.25);pointer('button',272,0);check('gizmo_scale_configure_ack_'+str(n),cap(sid)['pixels']!=before,{'before':before,'after':cap(sid)['pixels']})
  # Independently editable solid cube: mesh and collision share the persisted transform.
  pointer('scroll',-1);pose(client,[2,1.8,3]);time.sleep(.2);pointer();check('gizmo_object_selection',state()['editor']['selectedKind']=='object',state()['editor']);shot('object-gizmo.png')
- pose(client,[2.6,1.8,3]);time.sleep(.2);pointer('button',272,1);snap=s.envrun('wtype','-P','Shift_L','-s','650','-p','Shift_L');children.append(snap);time.sleep(.1);pointer(100,0);time.sleep(.2);pointer('button',272,0);snap.wait(timeout=5);obj=state()['editor']['objects'][-1];check('gizmo_object_move_snap',obj['position'][0]!=2 and abs((obj['position'][0]-2)*10-round((obj['position'][0]-2)*10))<.001,obj)
- pointer('scroll',-1);p=obj['position'];pose(client,[p[0]+1,p[1],p[2]+3]);time.sleep(.2);pointer('button',272,1);pointer(0,100);time.sleep(.2);pointer('button',272,0);obj=state()['editor']['objects'][-1];check('gizmo_object_rotate',obj['rotation']!=[0,0,0,1],obj)
- pointer('scroll',-1);p=obj['position'];pose(client,[p[0],p[1],p[2]+3]);time.sleep(.2);pointer('button',272,1);pointer(80,0);time.sleep(.2);pointer('button',272,0);obj=state()['editor']['objects'][-1];check('gizmo_object_scale',obj['scale']!=[1,1,1],obj);check('objects_persist',obj in json.loads((s.STATE/'editor.json').read_text())['objects'])
+ pose(client,[2,1.8,3]);time.sleep(.2);gaim('move-x');pointer('button',272,1);snap=s.envrun('wtype','-P','Shift_L','-s','650','-p','Shift_L');children.append(snap);time.sleep(.1);pointer(-100,0);time.sleep(.2);pointer('button',272,0);snap.wait(timeout=5);obj=state()['editor']['objects'][-1];check('gizmo_object_move_snap',obj['position'][0]!=2 and abs((obj['position'][0]-2)*10-round((obj['position'][0]-2)*10))<.001,obj)
+ pointer('scroll',-1);p=obj['position'];pose(client,[p[0],p[1]+.5,p[2]+3]);time.sleep(.2);gaim('rotate-y');pointer('button',272,1);pointer(100,0);time.sleep(.2);pointer('button',272,0);obj=state()['editor']['objects'][-1];check('gizmo_object_rotate',obj['rotation']!=[0,0,0,1],obj)
+ pointer('scroll',-1);p=obj['position'];pose(client,[p[0],p[1],p[2]+3]);time.sleep(.2);gaim('scale-uniform');pointer('button',272,1);pointer(80,0);time.sleep(.2);pointer('button',272,0);obj=state()['editor']['objects'][-1];check('gizmo_object_scale',obj['scale']!=[1,1,1],obj);check('objects_persist',obj in json.loads((s.STATE/'editor.json').read_text())['objects'])
+ # Placement rules: a collision-owning node may not be committed into the player.
+ e=diag()['position'];probe=s.STATE/'probe.json';s.ctl('eval',f'local f = assert(io.open({json.dumps(str(probe))}, "w")); f:write(hl.plugin.hyprune.gizmo_probe({e[0]},{e[1]-.8},{e[2]})); f:close()');verdict=json.loads(probe.read_text());check('gizmo_object_refuses_player',verdict['rule']=='player',verdict)
  keys('-k','3');pose(client,[1,2.5,4],pitch=-.6);time.sleep(.2)
  modes=[]
  for _ in range(6):

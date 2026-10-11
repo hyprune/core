@@ -149,7 +149,7 @@ struct Runtime {
     interaction::Gizmo gizmo;
     interaction::Part gizmoHover = interaction::Part::None;
     struct ObjectPreview {
-        bool active = false, valid = true;
+        bool active = false, valid = true, startSupported = true;
         interaction::Transform pose, candidate;
         interaction::PlacementVerdict verdict;
     } preview;
@@ -4569,8 +4569,8 @@ std::vector<surfaces::Surface> Runtime::frameSurfaces() {
     auto prompt = [&](Vec3 point, std::string text) {
         renderer.toolPrompt = {{"position", {point.x, point.y, point.z}}, {"text", text}};
     };
-    if (renderer.showInteractionHints && editor.slot == 4) {
-        if (auto object = objectAim())
+    if (renderer.showInteractionHints && editor.slot == 4 && gizmoHover == interaction::Part::None && !gizmo.dragging()) {
+        if (auto object = objectAim(); object && object->first != editor.selected)
             prompt(object->second.point, "LMB SELECT / WHEEL " + editor.submode());
     }
     if (renderer.showInteractionHints && editor.slot == 2 && editor.windowMode == 0 && !tagged.empty()) {
@@ -5135,6 +5135,23 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     HyprlandAPI::addLuaFunction(handle, "hyprune", "test_render_fail", [](lua_State *) {
         Event::bus()->m_events.render.stage.emit(RENDER_PRE);
         return 0;
+    });
+#endif
+#ifndef HYPRUNE_LIVE_BUILD
+    // Nested test hook: the placement verdict for the tool 4 selection moved to
+    // (x, y, z), same rotation and scale. Read-only; nothing is committed.
+    HyprlandAPI::addLuaFunction(handle, "hyprune", "gizmo_probe", [](lua_State *state) {
+        Json j = nullptr;
+        if (runtime && runtime->world && runtime->editor.kind == "object" && !runtime->editor.selected.empty()) {
+            auto t = objectTransform(runtime->editor, *runtime->world, runtime->editor.selected);
+            auto box = runtime->selectionBox(t);
+            Vec3 target{float(luaL_checknumber(state, 1)), float(luaL_checknumber(state, 2)), float(luaL_checknumber(state, 3))};
+            t.position += target - box.centre; // (x, y, z) is the bounds centre
+            auto v = runtime->placementCheck(t);
+            j = {{"ok", v.ok}, {"rule", v.rule}, {"message", v.message}, {"supported", v.supported}};
+        }
+        lua_pushstring(state, j.dump().c_str());
+        return 1;
     });
 #endif
     HyprlandAPI::addLuaFunction(handle, "hyprune", "config", luaConfig);
