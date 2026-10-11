@@ -1,0 +1,407 @@
+{
+  "nestedOnly": true,
+  "world": "com.hyprune.lumen-reach",
+  "checks": [
+    {
+      "name": "window placed in the world",
+      "evidence": {
+        "position": [
+          -8.0,
+          1.7002222537994385,
+          7.0
+        ]
+      }
+    },
+    {
+      "name": "tool 4 selected",
+      "evidence": null
+    },
+    {
+      "name": "a world 0.8 object is selectable",
+      "evidence": "object:sun-court-armillary"
+    },
+    {
+      "name": "gizmo drawn at constant screen size",
+      "evidence": {
+        "size": 0.7216620445251465
+      }
+    },
+    {
+      "name": "hovering a handle highlights it and targets the reticle",
+      "evidence": {
+        "hover": "move-x",
+        "reticle": {
+          "action": "grab",
+          "state": "target"
+        }
+      }
+    },
+    {
+      "name": "move X drags along X only, with a live readout",
+      "evidence": {
+        "from": [
+          -7.0,
+          4.179999828338623,
+          -10.0
+        ],
+        "to": [
+          -6.046699523925781,
+          4.179999828338623,
+          -10.0
+        ],
+        "readout": "dX +0.95  dY +0.00  dZ +0.00 m"
+      }
+    },
+    {
+      "name": "the move is an overlay record of the world object",
+      "evidence": {
+        "areaId": "",
+        "objectId": "object:sun-court-armillary",
+        "position": [
+          -6.046699523925781,
+          4.179999828338623,
+          -10.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "worldId": "com.hyprune.lumen-reach"
+      }
+    },
+    {
+      "name": "Shift snaps moves to 0.1 m and draws tick marks",
+      "evidence": {
+        "delta": 0.5,
+        "primitives": [
+          737,
+          817
+        ]
+      }
+    },
+    {
+      "name": "the ZX plane square moves in X and Z, never Y",
+      "evidence": {
+        "from": [
+          -6.046699523925781,
+          5.058059215545654,
+          -10.0
+        ],
+        "to": [
+          -5.50361967086792,
+          5.058059215545654,
+          -9.624646186828613
+        ],
+        "active": "plane-zx",
+        "readout": "dX +0.54  dY +0.00  dZ +0.38 m",
+        "valid": true,
+        "rule": ""
+      }
+    },
+    {
+      "name": "the centre disc moves in the screen plane",
+      "evidence": {
+        "from": [
+          -5.50361967086792,
+          5.058059215545654,
+          -9.624646186828613
+        ],
+        "to": [
+          -5.33200216293335,
+          5.234803676605225,
+          -9.78745174407959
+        ]
+      }
+    },
+    {
+      "name": "Ctrl+Z undoes the last transform",
+      "evidence": {
+        "before": [
+          -5.33200216293335,
+          5.234803676605225,
+          -9.78745174407959
+        ],
+        "after": [
+          -5.50361967086792,
+          5.058059215545654,
+          -9.624646186828613
+        ]
+      }
+    },
+    {
+      "name": "Ctrl+Shift+Z redoes it",
+      "evidence": [
+        -5.33200216293335,
+        5.234803676605225,
+        -9.78745174407959
+      ]
+    },
+    {
+      "name": "numeric entry: typed 0.5 m applies exactly on Enter",
+      "evidence": {
+        "typed": "0.5",
+        "readout": "MOVE Y = 0.5_ m  [Enter / Esc]",
+        "delta": 0.5
+      }
+    },
+    {
+      "name": "Escape cancels the drag",
+      "evidence": [
+        -5.33200216293335,
+        5.734803676605225,
+        -9.78745174407959
+      ]
+    },
+    {
+      "name": "a pose inside walls shows the red ghost and is refused",
+      "evidence": {
+        "rule": "walls",
+        "readout": "MOVE Y = -4.5_ m  [Enter / Esc]  BLOCKED: Inside a wall",
+        "reticle": {
+          "action": "place",
+          "state": "invalid"
+        },
+        "notice": [
+          {
+            "code": "placement.blocked",
+            "level": "info",
+            "message": "Not placed: Inside a wall"
+          }
+        ]
+      }
+    },
+    {
+      "name": "placement rules on Lumen Reach: walls, keep-clear, approach, window, below the world",
+      "evidence": {
+        "open air": {
+          "message": "",
+          "ok": true,
+          "rule": "",
+          "supported": false
+        },
+        "walls": {
+          "message": "Inside a wall",
+          "ok": false,
+          "rule": "walls",
+          "supported": true
+        },
+        "keep-clear": {
+          "message": "Blocks a way",
+          "ok": false,
+          "rule": "keep-clear",
+          "supported": true
+        },
+        "approach": {
+          "message": "Blocks a screen approach",
+          "ok": false,
+          "rule": "approach",
+          "supported": true
+        },
+        "window": {
+          "message": "Covers a window",
+          "ok": false,
+          "rule": "window",
+          "supported": true
+        },
+        "playable": {
+          "message": "Outside the playable area",
+          "ok": false,
+          "rule": "playable",
+          "supported": true
+        }
+      }
+    },
+    {
+      "name": "the Y ring turns about Y only; Shift snaps to 15 degrees",
+      "evidence": {
+        "angle": -45.0000037376257,
+        "readout": "Y -45.0 deg"
+      }
+    },
+    {
+      "name": "the outer view ring turns about the view axis",
+      "evidence": [
+        0.11569364368915558,
+        -0.3453207314014435,
+        0.06918618083000183,
+        0.9287528395652771
+      ]
+    },
+    {
+      "name": "the trackball turns freely inside the sphere",
+      "evidence": [
+        0.16319918632507324,
+        -0.16571886837482452,
+        -0.05489044263958931,
+        0.9710254073143005
+      ]
+    },
+    {
+      "name": "an edge-on ring (a line on screen) still drags",
+      "evidence": {
+        "from": [
+          0.16319918632507324,
+          -0.16571886837482452,
+          -0.05489044263958931,
+          0.9710254073143005
+        ],
+        "to": [
+          0.1424802541732788,
+          0.10096621513366699,
+          -0.0966763123869896,
+          0.9798769950866699
+        ]
+      }
+    },
+    {
+      "name": "an axis pointing at the camera is disabled, never a nub",
+      "evidence": [
+        "move-view",
+        "move-x",
+        "move-y",
+        "plane-xy"
+      ]
+    },
+    {
+      "name": "Secondary toggles local axes; handles follow the rotation",
+      "evidence": {
+        "world": [
+          -4.7284135818481445,
+          5.734803676605225,
+          -9.78745174407959
+        ],
+        "local": [
+          -4.752002716064453,
+          5.637812614440918,
+          -9.923511505126953
+        ]
+      }
+    },
+    {
+      "name": "period puts the pivot at the base",
+      "evidence": {
+        "centre": [
+          -5.33200216293335,
+          5.734803676605225,
+          -9.78745174407959
+        ],
+        "base": [
+          -5.33200216293335,
+          2.8875324726104736,
+          -9.78745174407959
+        ]
+      }
+    },
+    {
+      "name": "End drops the object onto the surface below it",
+      "evidence": {
+        "lifted": [
+          -5.33200216293335,
+          7.234803676605225,
+          -9.78745174407959
+        ],
+        "dropped": [
+          -5.33200216293335,
+          4.047234058380127,
+          -9.78745174407959
+        ]
+      }
+    },
+    {
+      "name": "world objects offer uniform scale only",
+      "evidence": [
+        "scale-uniform"
+      ]
+    },
+    {
+      "name": "uniform scale with Shift snaps to 0.1x",
+      "evidence": {
+        "from": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "to": [
+          0.9000000357627869,
+          0.9000000357627869,
+          0.9000000357627869
+        ],
+        "readout": "SCALE x0.90  Floating (End drops to the floor)"
+      }
+    },
+    {
+      "name": "universal mode shows move, rotate and scale handles together",
+      "evidence": [
+        "move-x",
+        "move-y",
+        "move-z",
+        "plane-xy",
+        "plane-yz",
+        "plane-zx",
+        "rotate-x",
+        "rotate-y",
+        "rotate-z",
+        "scale-uniform"
+      ]
+    },
+    {
+      "name": "universal rotate ring drags",
+      "evidence": null
+    },
+    {
+      "name": "the window is selectable",
+      "evidence": "surface-1"
+    },
+    {
+      "name": "window move along X",
+      "evidence": {
+        "from": [
+          -8.0,
+          1.7002222537994385,
+          7.0
+        ],
+        "to": [
+          -7.436164379119873,
+          1.7002222537994385,
+          7.0
+        ]
+      }
+    },
+    {
+      "name": "windows scale in X and Y (no depth axis)",
+      "evidence": [
+        "scale-uniform",
+        "scale-x",
+        "scale-xy",
+        "scale-y"
+      ]
+    },
+    {
+      "name": "window scale X resizes the client",
+      "evidence": {
+        "from": [
+          1141,
+          636
+        ],
+        "to": [
+          1920,
+          636
+        ]
+      }
+    },
+    {
+      "name": "Ctrl+Z restores the window size",
+      "evidence": [
+        1141,
+        636
+      ]
+    }
+  ]
+}

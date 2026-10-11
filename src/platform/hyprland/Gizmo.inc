@@ -631,7 +631,7 @@ void Runtime::ghostEdges() {
             if (world->collisionNodes[i] != world::objectCollisionNode && belongs(*world, world->collisionNodes[i], *node))
                 rest.push_back(originalCollision[i]);
     }
-    // Feature edges: boundaries and creases over 25 degrees, at most 600.
+    // Feature edges: boundaries and creases over 40 degrees, at most 400.
     std::map<std::array<int64_t, 6>, std::vector<Vec3>> edges;
     auto q = [](Vec3 p) { return std::array<int64_t, 3>{std::llround(p.x * 1000), std::llround(p.y * 1000), std::llround(p.z * 1000)}; };
     std::map<std::array<int64_t, 6>, std::pair<Vec3, Vec3>> ends;
@@ -649,8 +649,8 @@ void Runtime::ghostEdges() {
     for (auto &[key, normals] : edges) {
         bool feature = normals.size() == 1;
         for (size_t i = 1; i < normals.size() && !feature; ++i)
-            feature = std::abs(dot(normals[0], normals[i])) < .906f;
-        if (feature && ghostLines.size() < 600)
+            feature = std::abs(dot(normals[0], normals[i])) < .766f;
+        if (feature && ghostLines.size() < 400)
             ghostLines.push_back(ends[key]);
     }
 }
@@ -699,7 +699,8 @@ void Runtime::gizmoDraw() {
                         frame.strokes.push_back({*a, *c, edge, 1.6f * view.dpi, false, false, 0, sequence++});
                 }
     };
-    if (preview.active && editor.kind == "object") {
+    // A valid preview is the object itself; only a refused pose gets the red ghost.
+    if (preview.active && editor.kind == "object" && !preview.valid) {
         ghostEdges();
         auto m = selectionMatrix(*world, editor.selected, preview.candidate);
         unsigned sequence = frame.next();
@@ -709,10 +710,9 @@ void Runtime::gizmoDraw() {
             if (pa && pb)
                 frame.strokes.push_back({*pa, *pb, edge, 1.4f * view.dpi, false, false, 0, sequence++});
         }
-        if (!preview.valid || gizmo.dragging() || objectCarry)
-            addBox(selectionBox(preview.candidate), preview.valid ? Rgba{.43f, .95f, .69f, .45f} : interaction::palette::invalid,
-                   preview.valid ? 0.f : .22f);
-    }
+        addBox(selectionBox(preview.candidate), interaction::palette::invalid, .22f);
+    } else if (preview.active && editor.kind == "object" && (gizmo.dragging() || objectCarry))
+        addBox(selectionBox(preview.candidate), Rgba{.43f, .95f, .69f, .3f}, 0.f); // faint bounds while dragging
     if (windowBlocked)
         addBox(*windowBlocked, interaction::palette::invalid, .18f);
     frame.append(gizmo.draw(gizmoHover, snap, view));

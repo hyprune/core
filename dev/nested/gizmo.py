@@ -10,7 +10,7 @@ entry, the world/local toggle, the base pivot, undo/redo, drop to floor, the
 red ghost refusing a pose inside a wall, the player and a keepClear volume, and
 stills of each mode from three angles (one near edge-on) for the demo sheet.
 """
-import json, math, os, shutil, subprocess, time
+import json, math, os, pathlib, shutil, subprocess, time
 import session as s
 from m2 import wait, keys
 
@@ -128,6 +128,34 @@ def acceptance(client, children, args, shell_token, socketpath):
             pointer('scroll', -1); time.sleep(.15)
         assert gizmo()['mode'] == name, gizmo()['mode']
 
+    W, H = 1920, 1080
+
+    def along(part, pixels):
+        """Pointer motion of `pixels` along a handle's screen direction (after aim)."""
+        g = gizmo()
+        px, py = g['pivotScreen']
+        dx, dy = (.5 - px) * W, (.5 - py) * H
+        n = math.hypot(dx, dy) or 1
+        return dx / n * pixels, dy / n * pixels
+
+    def probe(x, y, z):
+        path = s.STATE / 'probe.json'
+        s.ctl('eval', f'local f = assert(io.open({json.dumps(str(path))}, "w")); f:write(hl.plugin.hyprune.gizmo_probe({x},{y},{z})); f:close()')
+        return json.loads(path.read_text())
+
+    def pos():
+        return transform()['position']
+
+    def notices(code):
+        return [e['params'] for e in client.events if e.get('method') == 'runtime.notice' and e['params']['code'] == code]
+
+    def undo():
+        keys('-M', 'ctrl', '-P', 'Control_L', '-k', 'z', '-p', 'Control_L', '-m', 'ctrl'); time.sleep(.4)
+
+    def typed(*names):
+        for n in names:
+            keys('-k', n); time.sleep(.08)
+
     def sheet(window):
         """Before/after stills: the placed window in each mode from three angles. Works with
         the M3B plugin too (HYPRUNE_NESTED_PLUGIN): no gizmo diagnostics are needed."""
@@ -150,6 +178,143 @@ def acceptance(client, children, args, shell_token, socketpath):
                 look(at, [w[0] - .95, w[1] - .7, w[2]]); time.sleep(.4)
                 shot(f'sheet-{build}-window-{m}-{name}.png')
         print('PASS gizmo: sheet stills', build, flush=True)
+
+    def demo(window):
+        """45-60 s recording (GIZMO_VIDEO=<file>): object move / snap / plane, rotate with
+        snapping, uniform scale, a refused pose, the window, universal mode."""
+        import signal
+        out = os.environ['GIZMO_VIDEO']
+        timeline = []
+        t0 = [0.]
+
+        def mark(text):
+            timeline.append({'time': round(time.monotonic() - t0[0], 2), 'action': text})
+
+        def glide(eye, target, seconds=1.0):
+            cam = diag()
+            p0 = cam['position']; y0, q0 = cam['yaw'], cam['pitch']
+            d = [target[i] - eye[i] for i in range(3)]
+            y1, q1 = math.atan2(d[0], -d[2]), math.atan2(d[1], math.hypot(d[0], d[2]))
+            while y1 - y0 > math.pi: y1 -= 2 * math.pi
+            while y1 - y0 < -math.pi: y1 += 2 * math.pi
+            n = max(2, int(seconds * 9))  # each camera step is a compositor round trip
+            for k in range(1, n + 1):
+                a = (1 - math.cos(math.pi * k / n)) / 2
+                pos_ = [p0[i] + (eye[i] - p0[i]) * a for i in range(3)]
+                s.ctl('eval', f'hl.plugin.hyprune.camera({pos_[0]},{pos_[1]},{pos_[2]},{y0 + (y1 - y0) * a},{q0 + (q1 - q0) * a})')
+
+        def slow(dx, dy, seconds=1.2, shift_=False, release=True):
+            hold = None
+            pointer('button', 272, 1); time.sleep(.2)
+            if shift_:
+                hold = s.envrun('wtype', '-M', 'shift', '-P', 'Shift_L', '-s', str(int(seconds * 1000) + 900), '-p', 'Shift_L', '-m', 'shift')
+                children.append(hold); time.sleep(.25)
+            n = max(4, int(seconds / .1))  # pointer() itself paces ~0.1 s per step
+            for _ in range(n):
+                pointer(dx / n, dy / n)
+            time.sleep(.5)
+            if release:
+                pointer('button', 272, 0)
+            if hold:
+                hold.wait(timeout=8)
+            time.sleep(.4)
+
+        c = [-7.0, 4.83, -10.0]
+        view = [c[0] + 3.6, c[1] + 1.8, c[2] + 4.2]
+        look(view, [c[0], c[1] - .3, c[2]]); time.sleep(1.5)
+        log = open(s.STATE / 'recorder.log', 'w')
+        recorder = s.envrun('wf-recorder', '-o', 'HEADLESS-1', '-r', '30', '-D', '--no-dmabuf', '-c', 'h264_nvenc', '-x', 'bgr0',
+                            '-p', 'preset=p4', '-p', 'rc=constqp', '-p', 'qp=16', '-f', out, stdout=log, stderr=subprocess.STDOUT)
+        children.append(recorder); time.sleep(1.0); t0[0] = time.monotonic()
+        try:
+            mark('Tool 4 on a world 0.8 object: select the armillary')
+            pointer('button', 272); time.sleep(.15); pointer('button', 272, 0)
+            wait(lambda: editor()['selectedId'] == OBJECT, 5); time.sleep(.8)
+            c = gizmo()['pivotPoint']
+            mode('move'); time.sleep(.3)
+            mark('Hover highlights; drag the X arrow with a live readout')
+            aim('move-x'); time.sleep(.8)
+            slow(*along('move-x', 150), seconds=1.6)
+            mark('Shift: 0.1 m snapping with tick marks')
+            aim('move-y'); time.sleep(.4)
+            slow(*along('move-y', 110), seconds=1.8, shift_=True)
+            mark('Plane square: move in X and Z')
+            aim('plane-zx'); time.sleep(.4)
+            slow(-70, 35, seconds=1.4)
+            mark('Rotate: rings face the camera; Shift snaps to 15 degrees')
+            mode('rotate'); time.sleep(.6)
+            aim('rotate-y'); time.sleep(.4)
+            slow(-150, 60, seconds=2.0, shift_=True)
+            aim('rotate-view'); time.sleep(.4)
+            mark('Outer view ring')
+            slow(40, 70, seconds=1.2)
+            mark('Scale: world objects scale uniformly from the ring')
+            mode('scale'); time.sleep(.6)
+            aim('scale-uniform'); time.sleep(.3)
+            slow(-30, -20, seconds=1.2)
+            mark('Towards a wall or the pedestal: red ghost, BLOCKED, refused on release')
+            mode('move'); time.sleep(.3)
+            c = gizmo()['pivotPoint']
+            # The nearest refused pose along an axis (probe), then a real drag past it.
+            best = None
+            for part, axis, sign in [('move-y', 1, -1), ('move-x', 0, 1), ('move-x', 0, -1), ('move-z', 2, -1), ('move-z', 2, 1)]:
+                for k in range(1, 25):
+                    q = list(c); q[axis] += sign * .25 * k
+                    if not probe(*q)['ok']:
+                        if best is None or k < best[3]:
+                            best = (part, axis, sign, k)
+                        break
+            part, axis, sign, k = best
+            side = [c[0] + 4.2, c[1] + 2.4, c[2] + 5.0]
+            glide(side, [c[0] + (sign * .125 * k if axis == 0 else 0), c[1] - (.125 * k if axis == 1 else .3), c[2] + (sign * .125 * k if axis == 2 else 0)], .8)
+            g = aim(part); time.sleep(.2)
+            hp = g['handles'][part]['screen']; pv = g['pivotScreen']
+            metres_per_px = g['size'] / max(1, math.hypot((hp[0] - pv[0]) * W, (hp[1] - pv[1]) * H) / .9)
+            towards = (1 if (sign > 0) == (g['sign'][axis] > 0) else -1)
+            px = min(500, (.25 * k + .4) / metres_per_px)
+            pointer('button', 272, 1); time.sleep(.2)
+            dx, dy = along(part, px * towards)
+            for _ in range(22):
+                pointer(dx / 22, dy / 22)
+            time.sleep(1.6); refused = gizmo()
+            pointer('button', 272, 0); time.sleep(1.0)
+            mark('refused: ' + (refused['rule'] or 'none'))
+            mark('Undo (Ctrl+Z) and redo')
+            undo(); time.sleep(.8)
+            keys('-M', 'ctrl', '-P', 'Control_L', '-M', 'shift', '-P', 'Shift_L', '-k', 'z', '-p', 'Shift_L', '-m', 'shift', '-p', 'Control_L', '-m', 'ctrl'); time.sleep(.8)
+            mark('A window: select, move along its own X, scale its client')
+            wx = window['position']
+            front = [wx[0] + 1.2, wx[1] + .7, wx[2] + 3.4]
+            glide(front, wx, 1.4)
+            pointer('button', 272); time.sleep(.15); pointer('button', 272, 0)
+            wait(lambda: editor()['selectedKind'] == 'window', 5); time.sleep(.6)
+            aim('move-x'); time.sleep(.3)
+            slow(*along('move-x', 120), seconds=1.4)
+            mode('scale'); time.sleep(.5)
+            aim('scale-x'); time.sleep(.3)
+            slow(*along('scale-x', 70), seconds=1.4)
+            time.sleep(.6)
+            mode('rotate'); time.sleep(.4)
+            aim('rotate-y'); time.sleep(.3)
+            slow(-90, 0, seconds=1.4, shift_=True)
+            mark('Universal mode: move, rotate and scale handles together')
+            glide([c[0] + 3.4, c[1] + 1.6, c[2] + 3.8], c, 1.4)
+            pointer('button', 272); time.sleep(.15); pointer('button', 272, 0)
+            wait(lambda: editor()['selectedId'] == OBJECT, 5)
+            mode('universal'); time.sleep(.5)
+            for k in range(1, 31):  # orbit: axes flip to the visible side, none collapses
+                a = .9 * k / 30
+                eye = [c[0] + 5.1 * math.sin(.75 - a), c[1] + 1.6, c[2] + 5.1 * math.cos(.75 - a)]
+                d = [c[i] - eye[i] for i in range(3)]
+                s.ctl('eval', f'hl.plugin.hyprune.camera({eye[0]},{eye[1]},{eye[2]},{math.atan2(d[0], -d[2]) + .12},{math.atan2(d[1], math.hypot(d[0], d[2]))})')
+            time.sleep(1.0)
+            elapsed = time.monotonic() - t0[0]
+            if elapsed < 46:
+                time.sleep(46 - elapsed)
+        finally:
+            recorder.send_signal(signal.SIGINT); recorder.wait(timeout=30); log.close()
+        pathlib.Path(out).with_suffix('.timeline.json').write_text(json.dumps(timeline, indent=2))
+        print('PASS gizmo: demo recorded', round(time.monotonic() - t0[0], 1), 's', flush=True)
 
     # World, a placed window and tool 4.
     client.call('world.load', {'worldId': WORLD})
@@ -181,6 +346,10 @@ def acceptance(client, children, args, shell_token, socketpath):
         client.call('runtime.exit', {})
         return
     check('tool 4 selected', editor()['tool'] == 4 and gizmo()['objectsEnabled'])
+    if os.environ.get('GIZMO_STAGE') == 'demo':
+        demo(window)
+        client.call('runtime.exit', {})
+        return
     # Select the armillary (a world 0.8 placed object).
     eye = [-7.0, 4.6, -6.2]
     look(eye, [-7.0, 4.18, -10.0]); time.sleep(.3)
@@ -204,34 +373,6 @@ def acceptance(client, children, args, shell_token, socketpath):
         print('PASS gizmo: stills only', flush=True)
         client.call('runtime.exit', {})
         return
-
-    W, H = 1920, 1080
-
-    def along(part, pixels):
-        """Pointer motion of `pixels` along a handle's screen direction (after aim)."""
-        g = gizmo()
-        px, py = g['pivotScreen']
-        dx, dy = (.5 - px) * W, (.5 - py) * H
-        n = math.hypot(dx, dy) or 1
-        return dx / n * pixels, dy / n * pixels
-
-    def probe(x, y, z):
-        path = s.STATE / 'probe.json'
-        s.ctl('eval', f'local f = assert(io.open({json.dumps(str(path))}, "w")); f:write(hl.plugin.hyprune.gizmo_probe({x},{y},{z})); f:close()')
-        return json.loads(path.read_text())
-
-    def pos():
-        return transform()['position']
-
-    def notices(code):
-        return [e['params'] for e in client.events if e.get('method') == 'runtime.notice' and e['params']['code'] == code]
-
-    def undo():
-        keys('-M', 'ctrl', '-P', 'Control_L', '-k', 'z', '-p', 'Control_L', '-m', 'ctrl'); time.sleep(.4)
-
-    def typed(*names):
-        for n in names:
-            keys('-k', n); time.sleep(.08)
 
     three = [c[0] + 3.4, c[1] + 2.0, c[2] + 3.6]  # all three axes and planes readable
     look(three, c); time.sleep(.3)
