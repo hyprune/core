@@ -224,3 +224,21 @@ Nested uses a software cursor and a headless output, so check on the real monito
   an occupied spot. The hardware cursor never appears or flickers while the reticle changes.
 - [ ] E into a window and back, Super+Tab free cursor and back: the reticle hides and returns
   with no cursor flicker.
+
+## Windows into the world, use-mode gestures, Too far (2026-10-11)
+
+Windows brought into the world are floated, resized and moved by core (Hyprland float
+/ resize / move actions from the tick, never inside a hook or the render pass). Nested
+has no DRM or hardware cursor, so check on the real session:
+
+- [ ] Drag a tiled Chrome window from the other monitor into the world (Super+LMB native
+  drag): it appears in front of you at a sensible size; Super+RMB / Super+LMB on its edge
+  resizes it and it stays; nothing flickers (cursor, other windows) while it floats.
+- [ ] Recall (Director) and pull windows from a home wall, pocket and place one with tool
+  5, carry one off its wall: each stays visible through resizes; return one to its wall
+  and it is tiled there again.
+- [ ] E into a window, Super+LMB on its edge resizes, Super+LMB in the middle carries,
+  Super+Wheel pushes/pulls; afterwards you are typing in the same window again. The HUD
+  is hidden while in E and F and comes back on exit.
+- [ ] Super+click a window far away: the reticle turns the warning colour with "Too far:
+  N m" and a notice says so; same for E beyond the use distance.

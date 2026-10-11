@@ -11,7 +11,7 @@ world output; then resized (Super+RMB corner, Super+Shift+Wheel) and carried it 
 visible and floating. Returned to its wall it is tiled there again. Chromium also uses a
 wp_viewporter source crop, which used to keep it out of the world.
 """
-import json, math, shutil, subprocess, time
+import json, math, os, pathlib, shutil, subprocess, time
 import session as s
 from m2 import wait, keys, pose
 
@@ -82,6 +82,11 @@ def acceptance(client, children, args, token, socket):
         for name, key in reversed(mods): t += ['-p', key, '-m', name]
         h = s.envrun('wtype', *a, '-s', str(int(seconds * 1000)), *t); children.append(h); time.sleep(.25); return h
 
+    def shot(name):  # HYPRUNE_HANDOVER_SHOTS=dir: stills of the moments worth showing
+        if os.environ.get('HYPRUNE_HANDOVER_SHOTS'):
+            out = pathlib.Path(os.environ['HYPRUNE_HANDOVER_SHOTS']); out.mkdir(parents=True, exist_ok=True)
+            subprocess.run([str(s.HERE / 'ctl.py'), 'shot', str(out / f'{name}.png')], check=True)
+
     def resize_and_carry(title, workspace, distance):
         """Super+RMB corner resize, Super+Shift+Wheel content scale, Super+LMB carry."""
         face(title, distance); before = report(title)
@@ -89,6 +94,8 @@ def acceptance(client, children, args, token, socket):
         pointer('button', 273, 1); pointer(40, 25); time.sleep(.2); pointer(30, 15); time.sleep(.3); pointer('button', 273, 0); h.wait(timeout=5)
         wait(lambda: s.camera()['gesture'] == 0); time.sleep(1)
         in_world(f'{title}: corner resize keeps it visible and floating', title, workspace)
+        if title == 'Drag-Chromium':
+            face(title, distance); shot('2-chromium-after-resize')
         check(f'{title}: the resize changed its native size', report(title)['native']['size'] != before['native']['size'],
               {'before': before, 'after': report(title)})
         face(title, distance)
@@ -158,6 +165,7 @@ def acceptance(client, children, args, token, socket):
     print('after drag', json.dumps(report('Drag-Chromium')), flush=True)
     chord(); wait(lambda: not s.camera()['layerCursor'])
     in_world('dragged across the outputs: Chromium (viewport crop) floating and visible', 'Drag-Chromium', 20)
+    face('Drag-Chromium', 3.5); shot('1-chromium-dragged-in')
     for title, workspace, distance in (('Room-Kitty', 20, 2.5), ('Move-Kitty', 20, 2.5), ('Drag-Chromium', 20, 3.5)):
         resize_and_carry(title, workspace, distance)
     # 4. Director pull (the pulled window is carried in front of the player) ...
@@ -193,6 +201,7 @@ def acceptance(client, children, args, token, socket):
     time.sleep(.3); pointer('button', 272, 0)
     h.wait(timeout=5); wait(lambda: s.camera()['gesture'] == 0); time.sleep(.5)
     in_world('carried off the home wall: floating and visible', 'Home-Kitty-B', 21)
+    face('Home-Kitty-B', 3); shot('3-kitty-carried-off-its-wall')
     resize_and_carry('Home-Kitty-B', 21, 2.5)
     # 7. Director pull of a tiled window, then recall everything (recalled windows come to the player).
     client.call('surface.pull', {'surfaceId': capture('Home-Kitty-A')['id']})

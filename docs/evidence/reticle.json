@@ -53,6 +53,11 @@
       "evidence": {
         "diagnostics": {
           "action": "place",
+          "color": [
+            0.3490000069141388,
+            0.9490000009536743,
+            0.6000000238418579
+          ],
           "distance": 1.5,
           "hint": "",
           "reach": 12.0,
@@ -69,6 +74,11 @@
       "name": "placement reach reported",
       "evidence": {
         "action": "place",
+        "color": [
+          0.3490000069141388,
+          0.9490000009536743,
+          0.6000000238418579
+        ],
         "distance": 1.5,
         "hint": "",
         "reach": 12.0,
@@ -81,8 +91,13 @@
       "evidence": {
         "diagnostics": {
           "action": "place",
+          "color": [
+            1.0,
+            0.6195999979972839,
+            0.3490000069141388
+          ],
           "distance": 1.5,
-          "hint": "1.5 m",
+          "hint": "Too far: 1.5 m",
           "reach": 1.0,
           "spread": 0.0,
           "state": "out_of_range"
@@ -94,11 +109,32 @@
       }
     },
     {
-      "name": "out of range shows the distance hint",
+      "name": "out of range: \"Too far\" label with the distance",
       "evidence": {
         "action": "place",
+        "color": [
+          1.0,
+          0.6195999979972839,
+          0.3490000069141388
+        ],
         "distance": 1.5,
-        "hint": "1.5 m",
+        "hint": "Too far: 1.5 m",
+        "reach": 1.0,
+        "spread": 0.0,
+        "state": "out_of_range"
+      }
+    },
+    {
+      "name": "out of range draws in the warning colour",
+      "evidence": {
+        "action": "place",
+        "color": [
+          1.0,
+          0.6195999979972839,
+          0.3490000069141388
+        ],
+        "distance": 1.5,
+        "hint": "Too far: 1.5 m",
         "reach": 1.0,
         "spread": 0.0,
         "state": "out_of_range"
@@ -123,6 +159,11 @@
       "evidence": {
         "diagnostics": {
           "action": "place",
+          "color": [
+            0.3490000069141388,
+            0.9490000009536743,
+            0.6000000238418579
+          ],
           "distance": 1.5,
           "hint": "",
           "reach": 12.0,
@@ -144,10 +185,15 @@
       "evidence": {
         "diagnostics": {
           "action": "place",
+          "color": [
+            1.0,
+            0.6195999979972839,
+            0.3490000069141388
+          ],
           "distance": 3.059999942779541,
           "hint": "",
           "reach": 12.0,
-          "spread": 0.2702069580554962,
+          "spread": 0.2551928162574768,
           "state": "invalid"
         },
         "wire": {
@@ -161,10 +207,15 @@
       "evidence": {
         "diagnostics": {
           "action": "pocket",
+          "color": [
+            0.3490000069141388,
+            0.9490000009536743,
+            0.6000000238418579
+          ],
           "distance": 3.0,
           "hint": "",
           "reach": 12.0,
-          "spread": 9.95835858219607e-09,
+          "spread": 3.641605382043514e-14,
           "state": "valid"
         },
         "wire": {
@@ -178,10 +229,15 @@
       "evidence": {
         "diagnostics": {
           "action": "pocket",
+          "color": [
+            1.0,
+            0.6195999979972839,
+            0.3490000069141388
+          ],
           "distance": 3.0,
-          "hint": "3.0 m",
+          "hint": "Too far: 3.0 m",
           "reach": 2.0,
-          "spread": 5.3204365357828465e-09,
+          "spread": 1.998055854882802e-14,
           "state": "out_of_range"
         },
         "wire": {
@@ -199,10 +255,15 @@
       "evidence": {
         "diagnostics": {
           "action": "select",
+          "color": [
+            0.3490000069141388,
+            0.9490000009536743,
+            0.6000000238418579
+          ],
           "distance": 3.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 1.2629708053441295e-15,
+          "spread": 3.9432047151636616e-21,
           "state": "valid"
         },
         "wire": {
@@ -219,7 +280,7 @@
           2.3,
           0
         ],
-        2.1707963267948966,
+        2.6707963267948966,
         0
       ]
     },
@@ -228,10 +289,15 @@
       "evidence": {
         "diagnostics": {
           "action": "mount",
-          "distance": 8.239073753356934,
+          "color": [
+            0.3490000069141388,
+            0.9490000009536743,
+            0.6000000238418579
+          ],
+          "distance": 9.874246597290039,
           "hint": "",
           "reach": 12.0,
-          "spread": 0.7535445690155029,
+          "spread": 0.13041861355304718,
           "state": "valid"
         },
         "wire": {
@@ -245,10 +311,15 @@
       "evidence": {
         "diagnostics": {
           "action": "mount",
-          "distance": 8.239073753356934,
-          "hint": "8.2 m",
+          "color": [
+            1.0,
+            0.6195999979972839,
+            0.3490000069141388
+          ],
+          "distance": 9.874246597290039,
+          "hint": "Too far: 9.9 m",
           "reach": 1.0,
-          "spread": 0.41073501110076904,
+          "spread": 0.08737320452928543,
           "state": "out_of_range"
         },
         "wire": {
@@ -273,10 +344,15 @@
         "notices": 1,
         "reticle": {
           "action": "mount",
-          "distance": 8.239073753356934,
-          "hint": "8.2 m",
+          "color": [
+            1.0,
+            0.6195999979972839,
+            0.3490000069141388
+          ],
+          "distance": 9.874246597290039,
+          "hint": "Too far: 9.9 m",
           "reach": 1.0,
-          "spread": 6.005925570207182e-06,
+          "spread": 1.082002881958033e-06,
           "state": "out_of_range"
         },
         "aim": "",
@@ -290,10 +366,15 @@
       "evidence": {
         "diagnostics": {
           "action": "path",
-          "distance": 8.239073753356934,
+          "color": [
+            0.3490000069141388,
+            0.9490000009536743,
+            0.6000000238418579
+          ],
+          "distance": 9.874246597290039,
           "hint": "",
           "reach": 12.0,
-          "spread": 1.7445083813072415e-06,
+          "spread": 7.0892629544516694e-09,
           "state": "valid"
         },
         "wire": {
@@ -307,10 +388,15 @@
       "evidence": {
         "diagnostics": {
           "action": "click",
+          "color": [
+            0.9646999835968018,
+            0.9607999920845032,
+            0.9175999760627747
+          ],
           "distance": 3.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 9.698153391468622e-09,
+          "spread": 4.5834454287518867e-11,
           "state": "target"
         },
         "wire": {
@@ -324,10 +410,15 @@
       "evidence": {
         "diagnostics": {
           "action": "",
+          "color": [
+            0.9646999835968018,
+            0.9607999920845032,
+            0.9175999760627747
+          ],
           "distance": -1.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 3.9538486003875732,
+          "spread": 2.9846233123853594e-11,
           "state": "neutral"
         },
         "wire": {
@@ -341,10 +432,15 @@
       "evidence": {
         "diagnostics": {
           "action": "grab",
+          "color": [
+            0.3490000069141388,
+            0.9490000009536743,
+            0.6000000238418579
+          ],
           "distance": 3.0,
           "hint": "",
           "reach": 15.0,
-          "spread": 0.0034544519148766994,
+          "spread": 8.215069317624342e-15,
           "state": "valid"
         },
         "wire": {
@@ -357,10 +453,15 @@
       "name": "grab reach reported",
       "evidence": {
         "action": "grab",
+        "color": [
+          0.3490000069141388,
+          0.9490000009536743,
+          0.6000000238418579
+        ],
         "distance": 3.0,
         "hint": "",
         "reach": 15.0,
-        "spread": 0.0034544519148766994,
+        "spread": 8.215069317624342e-15,
         "state": "valid"
       }
     },
@@ -369,10 +470,15 @@
       "evidence": {
         "diagnostics": {
           "action": "grab",
+          "color": [
+            1.0,
+            0.6195999979972839,
+            0.3490000069141388
+          ],
           "distance": 3.0,
-          "hint": "3.0 m",
+          "hint": "Too far: 3.0 m",
           "reach": 2.0,
-          "spread": 4.680038682442526e-17,
+          "spread": 6.506847604343958e-29,
           "state": "out_of_range"
         },
         "wire": {
@@ -386,14 +492,49 @@
       "evidence": null
     },
     {
+      "name": "the refused grab shows the out-of-range reticle",
+      "evidence": {
+        "action": "grab",
+        "color": [
+          1.0,
+          0.6195999979972839,
+          0.3490000069141388
+        ],
+        "distance": 3.0,
+        "hint": "Too far: 3.0 m",
+        "reach": 2.0,
+        "spread": 2.5084182519463884e-32,
+        "state": "out_of_range"
+      }
+    },
+    {
+      "name": "a refused grab says \"Too far\"",
+      "evidence": [
+        {
+          "jsonrpc": "2.0",
+          "method": "runtime.notice",
+          "params": {
+            "code": "interaction.out_of_range",
+            "level": "info",
+            "message": "Too far: 3.0 m (reach 2 m)"
+          }
+        }
+      ]
+    },
+    {
       "name": "carrying, release leaves it in place: holding",
       "evidence": {
         "diagnostics": {
           "action": "",
+          "color": [
+            0.9646999835968018,
+            0.9607999920845032,
+            0.9175999760627747
+          ],
           "distance": -1.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 0.07490468770265579,
+          "spread": 0.0,
           "state": "holding"
         },
         "wire": {
@@ -407,6 +548,11 @@
       "evidence": {
         "diagnostics": {
           "action": "",
+          "color": [
+            0.5,
+            1.0,
+            0.6499999761581421
+          ],
           "distance": -1.0,
           "hint": "",
           "reach": -1.0,
@@ -424,10 +570,15 @@
       "evidence": {
         "diagnostics": {
           "action": "click",
+          "color": [
+            0.9646999835968018,
+            0.9607999920845032,
+            0.9175999760627747
+          ],
           "distance": 3.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 0.0003990931436419487,
+          "spread": 0.0,
           "state": "target"
         },
         "wire": {
@@ -437,14 +588,48 @@
       }
     },
     {
+      "name": "E beyond the use distance: refused, \"Too far\", out-of-range flash",
+      "evidence": {
+        "reticle": {
+          "action": "use",
+          "color": [
+            1.0,
+            0.6195999979972839,
+            0.3490000069141388
+          ],
+          "distance": 9.0,
+          "hint": "Too far: 9.0 m",
+          "reach": 6.0,
+          "spread": 0.0,
+          "state": "out_of_range"
+        },
+        "notice": [
+          {
+            "jsonrpc": "2.0",
+            "method": "runtime.notice",
+            "params": {
+              "code": "interaction.out_of_range",
+              "level": "info",
+              "message": "Too far: 9.0 m (reach 6 m)"
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "free cursor: hidden",
       "evidence": {
         "diagnostics": {
           "action": "",
+          "color": [
+            0.9646999835968018,
+            0.9607999920845032,
+            0.9175999760627747
+          ],
           "distance": -1.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 3.99767577619059e-06,
+          "spread": 0.0,
           "state": "hidden"
         },
         "wire": {
@@ -458,10 +643,15 @@
       "evidence": {
         "diagnostics": {
           "action": "click",
+          "color": [
+            0.9646999835968018,
+            0.9607999920845032,
+            0.9175999760627747
+          ],
           "distance": 3.0,
           "hint": "",
           "reach": -1.0,
-          "spread": 4.860767077730088e-08,
+          "spread": 0.0,
           "state": "target"
         },
         "wire": {
@@ -473,8 +663,8 @@
     {
       "name": "dynamic reticle opens while moving and settles",
       "evidence": {
-        "moving": 3.99999737739563,
-        "still": 1.4713493783347076e-06
+        "moving": 4.000000953674316,
+        "still": 1.1818619896075688e-06
       }
     },
     {
@@ -488,9 +678,9 @@
     {
       "name": "walk speed about 4 m/s",
       "evidence": {
-        "minBob": -0.006798727437853813,
+        "minBob": -0.00679171783849597,
         "maxBob": 0.0,
-        "peakSpeed": 3.9964797496795654,
+        "peakSpeed": 3.9971327781677246,
         "rest": [
           0.0,
           0.0,
@@ -501,9 +691,9 @@
     {
       "name": "subtle bob while walking, never above eye height, settles",
       "evidence": {
-        "minBob": -0.006798727437853813,
+        "minBob": -0.00679171783849597,
         "maxBob": 0.0,
-        "peakSpeed": 3.9964797496795654,
+        "peakSpeed": 3.9971327781677246,
         "rest": [
           0.0,
           0.0,
@@ -514,9 +704,9 @@
     {
       "name": "run speed about 10 m/s (or a wall first)",
       "evidence": {
-        "minBob": -0.0034376312978565693,
+        "minBob": -0.0036963217426091433,
         "maxBob": 0.0,
-        "peakSpeed": 9.349138259887695,
+        "peakSpeed": 9.037405014038086,
         "rest": [
           0.0,
           0.0,
@@ -527,16 +717,16 @@
     {
       "name": "running bobs less than walking",
       "evidence": {
-        "walk": -0.006798727437853813,
-        "run": -0.0034376312978565693
+        "walk": -0.00679171783849597,
+        "run": -0.0036963217426091433
       }
     },
     {
       "name": "walk speed applies live",
       "evidence": {
-        "minBob": -0.009940849617123604,
-        "maxBob": -2.2703002855450904e-07,
-        "peakSpeed": 2.000030755996704,
+        "minBob": -0.00996028445661068,
+        "maxBob": -2.834356746461708e-05,
+        "peakSpeed": 1.9999881982803345,
         "rest": [
           0.0,
           0.0,
@@ -549,7 +739,7 @@
       "evidence": {
         "minBob": 0.0,
         "maxBob": 0.0,
-        "peakSpeed": 3.9964308738708496,
+        "peakSpeed": 3.9977431297302246,
         "rest": [
           0.0,
           0.0,
@@ -562,7 +752,7 @@
       "evidence": {
         "minBob": 0.0,
         "maxBob": 0.0,
-        "peakSpeed": 3.9965415000915527,
+        "peakSpeed": 3.9971296787261963,
         "rest": [
           0.0,
           0.0,
@@ -573,8 +763,8 @@
     {
       "name": "normal bob is larger than subtle",
       "evidence": {
-        "normal": -0.02001584693789482,
-        "subtle": -0.006798727437853813
+        "normal": -0.020506421104073524,
+        "subtle": -0.00679171783849597
       }
     },
     {
@@ -582,12 +772,166 @@
       "evidence": {
         "minBob": 0.0,
         "maxBob": 0.0,
-        "peakSpeed": 4.976955890655518,
+        "peakSpeed": 4.984930515289307,
         "rest": [
           0.0,
           0.0,
           0.0
         ]
+      }
+    },
+    {
+      "name": "shots: neutral",
+      "evidence": {
+        "diagnostics": {
+          "action": "",
+          "color": [
+            0.9646999835968018,
+            0.9607999920845032,
+            0.9175999760627747
+          ],
+          "distance": -1.0,
+          "hint": "",
+          "reach": -1.0,
+          "spread": 4.5134070126315404e-15,
+          "state": "neutral"
+        },
+        "wire": {
+          "action": "",
+          "state": "neutral"
+        }
+      }
+    },
+    {
+      "name": "shots: target",
+      "evidence": {
+        "diagnostics": {
+          "action": "click",
+          "color": [
+            0.9646999835968018,
+            0.9607999920845032,
+            0.9175999760627747
+          ],
+          "distance": 3.0,
+          "hint": "",
+          "reach": -1.0,
+          "spread": 0.0,
+          "state": "target"
+        },
+        "wire": {
+          "action": "click",
+          "state": "target"
+        }
+      }
+    },
+    {
+      "name": "shots: pocket valid",
+      "evidence": {
+        "diagnostics": {
+          "action": "pocket",
+          "color": [
+            0.6234999895095825,
+            0.8902000188827515,
+            0.6783999800682068
+          ],
+          "distance": 3.0,
+          "hint": "",
+          "reach": 12.0,
+          "spread": 0.0,
+          "state": "valid"
+        },
+        "wire": {
+          "action": "pocket",
+          "state": "valid"
+        }
+      }
+    },
+    {
+      "name": "shots: out of range",
+      "evidence": {
+        "diagnostics": {
+          "action": "pocket",
+          "color": [
+            0.9490000009536743,
+            0.6549000144004822,
+            0.4666999876499176
+          ],
+          "distance": 3.0,
+          "hint": "Too far: 3.0 m",
+          "reach": 2.0,
+          "spread": 0.0,
+          "state": "out_of_range"
+        },
+        "wire": {
+          "action": "pocket",
+          "state": "out_of_range"
+        }
+      }
+    },
+    {
+      "name": "shots: invalid place",
+      "evidence": {
+        "diagnostics": {
+          "action": "place",
+          "color": [
+            0.9490000009536743,
+            0.6549000144004822,
+            0.4666999876499176
+          ],
+          "distance": 3.0500001907348633,
+          "hint": "",
+          "reach": 12.0,
+          "spread": 0.0,
+          "state": "invalid"
+        },
+        "wire": {
+          "action": "place",
+          "state": "invalid"
+        }
+      }
+    },
+    {
+      "name": "shots: holding",
+      "evidence": {
+        "diagnostics": {
+          "action": "",
+          "color": [
+            0.9646999835968018,
+            0.9607999920845032,
+            0.9175999760627747
+          ],
+          "distance": -1.0,
+          "hint": "",
+          "reach": -1.0,
+          "spread": 0.0,
+          "state": "holding"
+        },
+        "wire": {
+          "action": "",
+          "state": "holding"
+        }
+      }
+    },
+    {
+      "name": "shots: typing",
+      "evidence": {
+        "diagnostics": {
+          "action": "",
+          "color": [
+            0.5,
+            1.0,
+            0.6499999761581421
+          ],
+          "distance": -1.0,
+          "hint": "",
+          "reach": -1.0,
+          "spread": 0.0,
+          "state": "typing"
+        },
+        "wire": {
+          "action": "",
+          "state": "typing"
+        }
       }
     }
   ]
