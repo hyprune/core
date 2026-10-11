@@ -1680,7 +1680,8 @@ bool Runtime::tooFar(float distance, const char *reachKey, const char *action) {
     return true;
 }
 std::string tooFarText(float distance) {
-    return distance < 10 ? std::format("Too far · {:.1f} m", distance) : std::format("Too far · {:.0f} m", distance);
+    // ASCII: the reticle label uses core's own glyph atlas.
+    return distance < 10 ? std::format("Too far: {:.1f} m", distance) : std::format("Too far: {:.0f} m", distance);
 }
 void Runtime::refuseTooFar(float distance, float reach, const char *action, const char *code) {
     // A reach-limited action refused: say so (notice) and flash the out-of-range reticle,

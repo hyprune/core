@@ -123,7 +123,7 @@ def acceptance(client, children, args, token, socket):
     check('placement reach reported', r['reach'] == 12 and 0 < r['distance'] < 12, r)
     player({'reach_placement': max(1, math.floor(r['distance']) - 1)})
     r = expect('beyond placement reach: out of range', 'out_of_range', 'place')
-    too_far = lambda d: f"Too far · {d:.1f} m" if d < 10 else f"Too far · {d:.0f} m"
+    too_far = lambda d: f"Too far: {d:.1f} m" if d < 10 else f"Too far: {d:.0f} m"
     check('out of range: "Too far" label with the distance', r['hint'] == too_far(r['distance']), r)
     check('out of range draws in the warning colour', all(abs(a - b) < .01 for a, b in zip(r['color'], rgb(PALETTES['adventure'][2]))), r)
     before = queue()['count']; n = len(notices('placement.out_of_range'))
@@ -287,7 +287,7 @@ def shots(client, children, pointer, player, palette, capture, queue, held, logo
                 player({'reticle_style': st}); time.sleep(.25)
                 subprocess.run([str(s.HERE / 'ctl.py'), 'shot', str(full)], check=True)
                 img = Image.open(full).convert('RGB'); cx, cy = img.width // 2, img.height // 2
-                img.crop((cx - 80, cy - 80, cx + 80, cy + 80)).save(out / f'{pal}-{state_name}-{st}.png')
+                img.crop((cx - 160, cy - 80, cx + 160, cy + 120)).save(out / f'{pal}-{state_name}-{st}.png')
         print('SHOT reticle', state_name, flush=True)
     client.call('movement.set', {'modeId': 'com.hyprune.fly'})
     keys('-k', '1'); pose(client, [0, 2.3, 4], 0, 1.3); expect('shots: neutral', 'neutral'); snap('neutral')
