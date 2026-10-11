@@ -678,7 +678,7 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
         // Room clients have no binding: their tool-mount placement names its own area.
         const Json home = b ? b->at("areaId") : p->at("areaId");
         auto fit = [&](const Json &mount) {
-            auto fitted = fitToMount(mount, pw, ph, w->collision);
+            auto fitted = mountFit(mount, pw, ph, *w);
             if (fitted)
                 s = *fitted;
             return fitted.has_value();
@@ -798,7 +798,7 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
             });
         };
         auto fits = [&](const Json &a) {
-            auto fitted = fitToMount(a, pw, ph, w->collision);
+            auto fitted = mountFit(a, pw, ph, *w);
             if (fitted)
                 s = *fitted;
             return fitted.has_value();
@@ -844,6 +844,14 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                                                               : "placed"}});
     if (instances.back()["areaId"] == "") instances.back().erase("areaId");
     return s;
+}
+std::optional<Surface> Layout::mountFit(const Json &mount, int pw, int ph, const world::World &w) {
+    std::tuple<const world::World *, std::string, int, int> key{&w, mount.at("id"), pw, ph};
+    if (auto found = fits.find(key); found != fits.end())
+        return found->second;
+    if (fits.size() > 256)
+        fits.clear();
+    return fits[key] = fitToMount(mount, pw, ph, w.collision);
 }
 std::optional<Surface> fitToMount(const Json &mount, int pw, int ph, std::span<const Triangle> collision) {
     Surface s;

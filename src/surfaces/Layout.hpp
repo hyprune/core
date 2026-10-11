@@ -36,7 +36,10 @@ class Layout {
     void mount(const Instance &, const world::World *, Surface);
     // Fit into an authored tool-mount frame (room clients too); RFC-0005 snap targets.
     void placeOnMount(const Instance &, const Json &mount, const world::World *);
-    void invalidateCollision() { recovered.clear(); }
+    void invalidateCollision() {
+        recovered.clear();
+        fits.clear();
+    }
     Json desktop = nullptr;
     Json state(const world::World *) const;
     const Json *binding(int workspace, const world::World *) const;
@@ -71,6 +74,10 @@ class Layout {
         Surface surface;
     };
     std::map<std::string, Recovered> recovered;
+    // fitToMount per world, anchor and client size: a full collision test, too costly
+    // to repeat for every mounted window on every tick.
+    std::map<std::tuple<const world::World *, std::string, int, int>, std::optional<Surface>> fits;
+    std::optional<Surface> mountFit(const Json &mount, int pw, int ph, const world::World &);
     std::map<std::string, int> recalled;
     std::map<std::string, std::string> temporaryAnchors;
     // Last holder of each tool anchor: the compositor's window order (a focus raise moves a
