@@ -765,8 +765,8 @@ capacity and the complete surface/depth composition budget.
 
 Validation: merged plugin and all spike targets build; **10/10 CTest suites
 pass**, including the new spatial suite and spike protocol checks. Nested
-captures confirm both viewpoints and native-output dimensions. No main edits,
-live-session plugin changes, pushes or hardware power/clock changes.
+captures confirm both viewpoints and native-output dimensions. No live-session
+plugin changes or hardware power/clock changes.
 
 Reproduce one safe case at a time (each launcher acquires the flock before
 starting its watchdog):
