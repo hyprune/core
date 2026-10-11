@@ -108,6 +108,10 @@ Server::~Server() {
     if (fd_ >= 0) {
         close(fd_);
         unlink(path_.c_str());
+        // Drop the per-instance directory, and the shared one when this was the last.
+        auto directory = path_.substr(0, path_.rfind('/'));
+        rmdir(directory.c_str());
+        rmdir(directory.substr(0, directory.rfind('/')).c_str());
     }
 }
 Json Server::snapshot() const {

@@ -122,6 +122,16 @@ class Tests(unittest.TestCase):
             self.assertEqual(live.json.loads(p.read_text())['phase'],'down')
             self.assertFalse((root/'worlds').exists() or (root/'hyprune-core.so').exists())
             self.assertTrue((root/'core.log').exists())
+    def test_restored_down_removes_the_runtime_run(self):
+        session={'signature':'nested','start':'1'}
+        with tempfile.TemporaryDirectory() as d,patch.object(live,'select',return_value=session),patch.object(live,'query',return_value=[]):
+            live_root=pathlib.Path(d)/'runtime/hyprune-live';runroot=live_root/'nested/1';(runroot/'worlds/w').mkdir(parents=True)
+            (runroot/'ready.json').write_text('{}');(live_root/'nested/bootstrap.json').write_text('{}')
+            p=pathlib.Path(d)/'state/state.json'
+            live.atomic(p,{'phase':'up','runroot':str(runroot),'session':session,'processes':[],'binds':[],'oldUnloaded':[],'qs':[],'restoredHUD':{}})
+            live.down(types.SimpleNamespace(),p)
+            self.assertEqual(live.json.loads(p.read_text())['phase'],'down')
+            self.assertFalse(live_root.exists())
     def test_ABI_mismatch_refuses(self):
         with patch.object(live,'query',return_value={'commit':'wrong','tag':'v0.56.2','abiHash':'wrong'}),patch.object(live,'run',return_value='{"commit":"right","tag":"v0.56.2","abiHash":"right"}'):
             with self.assertRaisesRegex(RuntimeError,'ABI/version mismatch'):live.abi({})
