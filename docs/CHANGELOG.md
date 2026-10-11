@@ -97,6 +97,27 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   (`placed: false`). Pocket membership stays `editor.unplaced.windows`.
   `spatial.map.levels` carries the world's blueprint levels
   (`com.hyprune.blueprint` 0.1) as `{id,name,minY,maxY,svg,sha256}`.
+- **0.21** Markers, personal quests and focus sessions (RFC-0012 P1). New grant
+  `quest.control` (requestable from 0.21). New required state keys:
+  `markers {reveal,persistent,calm,coreDraw,list}` (at most 64 resolved markers: tier,
+  kind, icon, target, position, range, occlusion, source), `quests {enabled,tracked,
+  active[<=16],counts,world:null}` and `focus {state,pausedState,sessionId,
+  phaseStartedAtMs,phaseEndsAtMs,phaseMs,remainingMs,creditedMs,crediting,cycle,cycles,
+  breakKind,countMode,target,calm}` (monotonic milliseconds, like `keymap.holds`;
+  `creditedMs` is sampled at most every 10 s and on phase changes). Methods:
+  `markers.reveal {durationMs?}` (`shell.control`); `guidance.get`/`guidance.set
+  {patch}` (the `player.get` pattern, flat dotted keys); `quests.list`/`get`
+  (`state.read`); `quests.track`/`accept`/`abandon`/`resume`/`create`/`update`/
+  `delete`/`mark` (`quest.control`; personal quests only, -32007 for others);
+  `focus.start {target?,questRef?,objectiveId?,overrides?}`/`pause`/`resume`/`skip`/
+  `stop` (`quest.control`) and `focus.history {days?}` (`state.read`). Events
+  `quest.progress` and `focus.phase` (`focusSessionId`; the IPC `sessionId` is the
+  usual one). World mode gains the action `markers.reveal` (default `Tab`): a TAB
+  tap/hold pair with `menu` on `Tab[L]`; files without it are migrated. `overlay.style`
+  gains `questColor`; `spatial.projection` markers gain `markerId` when
+  `markers.core_draw` is off. Quests and focus run in hypruned and persist privately
+  under `$XDG_STATE_HOME/hyprune/{quests,focus}`; guidance is
+  `$XDG_CONFIG_HOME/hyprune/guidance.json`. Older sessions see none of this.
 
 ### Changes without a protocol bump
 

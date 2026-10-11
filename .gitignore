@@ -36,3 +36,5 @@ tests/fixtures/m3b/
 /dev/nested/.objects-state/
 /dev/nested/.npc-state/
 /dev/nested/.gizmo-state/
+
+/dev/nested/.quests-state/

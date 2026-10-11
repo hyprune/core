@@ -298,6 +298,18 @@ keeps frames coming only while an animated object is in view;
 and each object's probe. Fixture: `tests/fixtures/objects.py`; nested check:
 `dev/nested/run.sh --objects`.
 
+### Markers, quests and focus sessions
+
+IPC 0.21 (RFC-0012 P1). A TAB tap reveals markers (the hold still opens the
+Director): the waypoint and route, tracked and active quest steps, area homes and
+workspaces, places and zones. Core resolves them against the loaded world and draws
+icons, labels, stacks and edge arrows with each frame's camera under the clutter
+rules; the tracked step keeps an edge arrow. hypruned owns personal quests, focus
+sessions (credit from the focused window's app class and workspace plus an input
+timestamp, never titles) and the guidance settings, all in private local files.
+Nested check: `dev/nested/run.sh --quests` (Lumen Reach, focus clock scaled with
+`HYPRUNE_FOCUS_TIME_SCALE`).
+
 Regression commands: `ctest --test-dir build --output-on-failure` and
 `dev/nested/run.sh --playable` (the runner acquires the nested lifetime flock).
 

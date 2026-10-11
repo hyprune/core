@@ -291,3 +291,23 @@ environment enables world objects and the universal mode):
 - [ ] Super+LMB carry the armillary into a wall and release: it stays at its last valid
   place. During every drag above, open the Director (TAB hold): the drag is cancelled
   cleanly and the cursor policy is the Director's.
+
+## TAB tap and hold, markers, focus sessions (IPC 0.21)
+
+A short TAB tap now reveals markers; the hold still opens the Director. Markers draw in
+the present pass under the GL guard; no cursor, focus or workspace call was added. Focus
+credit reads only the focused window's app class and workspace. Nested has a software
+cursor and a headless output, so check on the real session:
+
+- [ ] Tap TAB while walking (and while sprinting with Shift): markers fade in, hold about
+  4 s and fade out; the hold ring never flashes on a tap; the hardware cursor never shows.
+- [ ] Hold TAB: the ring fills after a short delay and the Director opens on the Map; no
+  markers flash first. Release before the ring completes: only the markers.
+- [ ] Tap TAB, then press E (use) or F (focus) on a window, or Super+Tab (free cursor)
+  while markers show: they disappear at once, the cursor transition is clean (no flicker,
+  no crash), and coming back shows no stale markers.
+- [ ] Track a personal quest with a target behind you: a small arrow at the screen edge;
+  turn towards it: a small diamond. No marker ever draws over the window you aim at.
+- [ ] Start a short focus session on a workspace from the Quests page: the HUD timer
+  counts down; typing in that workspace's window on the desktop credits; pause, skip and
+  stop work from the HUD/Director.
