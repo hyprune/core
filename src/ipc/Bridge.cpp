@@ -134,6 +134,10 @@ void Bridge::poll() {
         }
         if (j.at("type") == "heartbeat")
             continue;
+        if (j.at("type") == "quests.sync") {
+            handler_("_quests.sync", j.at("sync"));
+            continue;
+        }
         if (j.at("type") == "cancel") {
             handler_("_operation.cancel", Json::object());
             continue;

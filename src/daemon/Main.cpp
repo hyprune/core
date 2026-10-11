@@ -2,7 +2,10 @@
 #include "offload/Supervisor.hpp"
 #include "ipc/Server.hpp"
 #include "ipc/GrantIssuer.hpp"
+#include "quests/Engine.hpp"
+#include <algorithm>
 #include <csignal>
+#include <cstdlib>
 #include <cstdio>
 #include <poll.h>
 #include <sys/socket.h>
@@ -44,6 +47,34 @@ int main() {
         uint64_t command = 0;
         Server *server = nullptr;
         std::function<void()> renewGrants = [] {};
+        // RFC-0012 quest engine: owns the `quests` and `focus` keys and their methods.
+        double focusScale = 1;
+        if (const char *scale = getenv("HYPRUNE_FOCUS_TIME_SCALE"))
+            focusScale = std::clamp(std::atof(scale), 1., 600.);
+        hyprune::quests::Engine quests(hyprune::quests::Engine::Paths::fromEnvironment(), focusScale);
+        // Flushed on every exit path, including a plugin disconnect: core exit pauses a running session.
+        struct QuestFlush {
+            hyprune::quests::Engine &engine;
+            ~QuestFlush() {
+                try {
+                    engine.flush(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::steady_clock::now().time_since_epoch()).count(),
+                                 true);
+                } catch (...) {
+                }
+            }
+        } questFlush{quests};
+        Json pluginState = nullptr;
+        auto steadyMs = [] {
+            return std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now().time_since_epoch())
+                .count();
+        };
+        auto republish = [&] {
+            quests.changed = false;
+            if (server && !pluginState.is_null())
+                server->publish(quests.decorate(pluginState, steadyMs()));
+        };
         auto receive = [&]() -> Json {
             char buffer[196609];
             auto n = recv(fd, buffer, sizeof buffer, 0);
@@ -84,16 +115,31 @@ int main() {
                 if (persistReady && j.at("state").contains("mounts"))
                     layouts.save(hyprune::daemon::durableLayout(j.at("state").at("mounts"),
                                                                 j.value("derivedBindings", Json::array())));
-                server->publish(j.at("state"));
+                pluginState = j.at("state");
+                quests.pluginState(pluginState);
+                republish();
+            } else if (j.at("type") == "facts") {
+                quests.facts(j.at("facts"));
             } else if (j.at("type") == "event") {
                 server->notify(j.at("event"), j.at("params"), j.value("actor", ""));
                 server->flush();
             } else if (j.at("type") == "methods") {
-                server->advertise(j.at("methods").get<std::map<std::string, std::string>>());
+                auto methods = j.at("methods").get<std::map<std::string, std::string>>();
+                methods.merge(hyprune::quests::Engine::methods());
+                server->advertise(std::move(methods));
                 advertised = true;
             }
         };
+        std::function<void()> questOutput = [] {};
         auto handler = [&](const std::string &method, const Json &params) -> Json {
+            if (hyprune::quests::Engine::handles(method)) {
+                auto result = quests.call(method, params, steadyMs(), std::time(nullptr));
+                republish();
+                if (result.contains("revision"))
+                    result["revision"] = server->revision();
+                questOutput();
+                return result;
+            }
             auto id = std::to_string(++command);
             auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(29);
             send({{"type", "command"},
@@ -143,6 +189,13 @@ int main() {
         server = &endpoint;
         renewGrants = [&] { issuer.poll(endpoint); };
         endpoint.contextual(true);
+        questOutput = [&] {
+            for (auto &[event, params] : quests.events)
+                endpoint.notify(event, params);
+            quests.events.clear();
+            if (auto message = quests.sync(); message && !epoch.empty())
+                send({{"type", "quests.sync"}, {"sync", *message}});
+        };
         auto heartbeat = std::chrono::steady_clock::now();
         while (running) {
             pollfd p{fd, POLLIN, 0};
@@ -159,6 +212,10 @@ int main() {
             }
             renderer.tick();
             issuer.poll(endpoint);
+            quests.tick(steadyMs(), std::time(nullptr));
+            if (quests.changed)
+                republish();
+            questOutput();
             // The plugin flushes its method table on its next bridge tick. Until
             // it arrives, clients wait in the listen backlog: a hello answered
             // now would advertise no methods for the whole connection.

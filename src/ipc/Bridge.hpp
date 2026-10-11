@@ -21,6 +21,14 @@ class Bridge {
         send({{"type", "event"}, {"event", event}, {"params", std::move(params)}, {"actor", actor}});
     }
     void renderer(Json request) { send({{"type", "renderer.request"}, {"request", std::move(request)}}); }
+    // RFC-0012: facts for hypruned's quest engine (focus as app class + workspace,
+    // an input timestamp, the lock, reach containment). Sent only when they change.
+    void facts(Json facts) {
+        if (facts == facts_)
+            return;
+        facts_ = facts;
+        send({{"type", "facts"}, {"facts", std::move(facts)}});
+    }
     void poll();
     void complete(Json result);
     void fail(int code, const std::string &message);
@@ -31,7 +39,7 @@ class Bridge {
     int fd_ = -1;
     pid_t child_ = -1;
     Handler handler_;
-    Json state_, derived_ = Json::array();
+    Json state_, derived_ = Json::array(), facts_;
     uint64_t revision_ = 0;
     std::string pending_, epoch_;
     std::deque<std::string> output_;
