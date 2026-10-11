@@ -14,7 +14,6 @@ from m2 import wait,keys
 
 LUMEN='com.hyprune.lumen-reach'
 LECTERN='array-hall-slot-02-lectern-01'
-GALLERY=pathlib.Path(os.environ.get('HYPRUNE_LIVE_FINDINGS_STILLS',str(pathlib.Path.home()/'workspace/rick-the-alien/worldshell-gallery/screenshots/live-findings-2026-10-10')))
 
 def prepare(installed):
     shutil.copytree(s.ROOT.parent/'worlds/dist'/LUMEN,installed/LUMEN,dirs_exist_ok=True)
@@ -135,6 +134,8 @@ def acceptance(client,children,args,shell_token,socketpath):
     check('carry release on the lectern snaps into its frame',snapped.get('anchorId')==LECTERN and math.dist(surf['position'],expected)<.08,
           {'instance':snapped,'distance':math.dist(surf['position'],expected)})
     client.call('runtime.exit',{})
+    # The remote runner redirects stills into its artifacts; otherwise they go to the gallery.
+    GALLERY=pathlib.Path(os.environ['HYPRUNE_LIVE_FINDINGS_STILLS']) if os.environ.get('HYPRUNE_LIVE_FINDINGS_STILLS') else s.devenv.gallery_dir('screenshots/live-findings-2026-10-10')
     GALLERY.mkdir(parents=True,exist_ok=True)
     for path in stills:  # temp name + rename: the gallery autocommit never sees a partial file
         shutil.copy2(path,GALLERY/('.'+path.name));(GALLERY/('.'+path.name)).rename(GALLERY/path.name)

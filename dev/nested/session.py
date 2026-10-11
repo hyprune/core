@@ -3,14 +3,14 @@ import argparse, json, math, os, pathlib, secrets, shutil, signal, socket, struc
 HERE=pathlib.Path(__file__).resolve().parent;ROOT=HERE.parent.parent
 # Isolated instances (isolated.py) keep every .*-state dir under their own root.
 STATE_ROOT=pathlib.Path(os.environ.get('HYPRUNE_NESTED_STATE_ROOT',str(HERE)));STATE=STATE_ROOT/'.state'
-sys.path.insert(0,str(HERE))
+sys.path.insert(0,str(HERE));sys.path.insert(1,str(HERE.parent))
 # Keep dynamically imported integration helpers on this exact harness module.
 sys.modules.setdefault('session',sys.modules[__name__])
 from ctl import verified
+import devenv
 def video_dir():
-    """Finished demo videos land here; set HYPRUNE_VIDEO_DIR to publish elsewhere."""
-    path=pathlib.Path(os.environ.get('HYPRUNE_VIDEO_DIR') or pathlib.Path(os.environ.get('XDG_STATE_HOME') or pathlib.Path.home()/'.local/state')/'hyprune/videos')
-    path.mkdir(parents=True,exist_ok=True);return path
+    """Finished demo videos: HYPRUNE_VIDEO_DIR (environment or ~/.config/hyprune/dev.env)."""
+    return devenv.video_dir()
 class Client:
     def __init__(self,path,token=None,protocol="0.1",client_id="org.hyprune.nested"):
         self.socket=socket.socket(socket.AF_UNIX);self.socket.settimeout(5);self.socket.connect(path);self.count=0;self.events=[];self.transcript=[]

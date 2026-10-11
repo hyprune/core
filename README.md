@@ -48,7 +48,8 @@ dev/nested/run.sh --serve         # interactive nested session, Ctrl+C to stop
 ```
 
 Recordings are encoded under `/tmp`; the finished MP4 and its JSON sidecar then
-move to `$HYPRUNE_VIDEO_DIR` (default `~/.local/state/hyprune/videos`).
+move to `$HYPRUNE_VIDEO_DIR` (environment or `~/.config/hyprune/dev.env`, see
+CONTRIBUTING.md; unset, a warning names the fallback `~/.local/state/hyprune/videos`).
 
 `run.sh` wraps the **entire** session lifetime in
 `flock /tmp/worldshell-nested.lock`. Do not bypass it. It starts a 1600×900 Wayland

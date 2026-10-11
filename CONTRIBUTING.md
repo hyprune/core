@@ -47,6 +47,25 @@ On unload, cancel idle callbacks and timers, remove retained pass elements,
 unregister listeners/hooks, join workers, then retire resources. Preserve
 `-fno-gnu-unique`: GNU-unique symbols can keep a plugin mapped after unload.
 
+## Developer settings (`dev.env`)
+
+Machine-specific values never go into the repository. Tools read them from the
+environment, or from an optional `~/.config/hyprune/dev.env` (`$XDG_CONFIG_HOME`
+if set): one `KEY=VALUE` per line, `#` comments, `~` expanded. An environment
+variable wins over the file.
+
+```sh
+# ~/.config/hyprune/dev.env
+HYPRUNE_GALLERY_DIR=~/review/gallery        # stills and pages for review
+HYPRUNE_VIDEO_DIR=~/review/gallery/videos   # finished demo videos
+HYPRUNE_BUILD_HOST=buildbox                 # SSH host for dev/remote runs
+HYPRUNE_BAKE_HOST=buildbox                  # worlds Blender bakes ("local" on that host)
+```
+
+When a gallery or video directory is not configured, the tool prints one warning
+naming where its output went instead (under `~/.local/state/hyprune/`).
+`dev/devenv.py` prints the effective values.
+
 Commit locally; the owner reviews and pushes. Requested collaboration commits end
 with this trailer:
 

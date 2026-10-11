@@ -17,7 +17,17 @@ import argparse, datetime, fcntl, html, json, os, pathlib, re, shutil, socket, s
 HERE = pathlib.Path(__file__).resolve().parent
 HOME = pathlib.Path.home()
 WS = pathlib.Path(os.environ.get('HYPRUNE_NIGHTLY_WS', str(HOME / 'hyprune-nightly')))
-GALLERY = pathlib.Path(os.environ.get('HYPRUNE_NIGHTLY_GALLERY', str(HOME / 'workspace/rick-the-alien/worldshell-gallery')))
+# dev/devenv.py: beside this file once installed, one level up in a checkout.
+sys.path[:0] = [str(HERE), str(HERE.parent)]
+import devenv
+
+
+def gallery():
+    """Pages go to HYPRUNE_NIGHTLY_GALLERY, else HYPRUNE_GALLERY_DIR (environment or dev.env)."""
+    override = os.environ.get('HYPRUNE_NIGHTLY_GALLERY')
+    return pathlib.Path(override) if override else devenv.gallery_dir()
+
+
 RUNS = pathlib.Path(os.environ.get('HYPRUNE_REMOTE_RUNS', str(HOME / 'hyprune-remote-runs')))
 INSTALL = HOME / '.local/share/hyprune-nightly'
 KEEP = 14
@@ -167,7 +177,7 @@ b.pass{{color:#147a3c}}b.fail,b.error{{color:#b3261e}}code{{font-size:12px}}</st
 
 
 def index():
-    runs = sorted(GALLERY.joinpath('pages/nightly').glob('????-??-??.json'), reverse=True)
+    runs = sorted(gallery().joinpath('pages/nightly').glob('????-??-??.json'), reverse=True)
     items = []
     for p in runs:
         r = json.loads(p.read_text())
@@ -179,7 +189,7 @@ def index():
 
 
 def prune():
-    out = GALLERY / 'pages/nightly'
+    out = gallery() / 'pages/nightly'
     for stem in sorted({p.stem for p in out.glob('????-??-??.*')}, reverse=True)[KEEP:]:
         for p in out.glob(stem + '.*'):
             p.unlink()
@@ -246,17 +256,17 @@ def run():
     result['counts'] = {'pass': sum(r['status'] == 'pass' for r in rows), 'fail': sum(r['status'] != 'pass' for r in rows)}
     result['status'] = 'error' if 'error' in result or result['core'].get('status') == 'error' else 'pass' if result['counts']['fail'] == 0 else 'fail'
     result['finished'] = datetime.datetime.now().astimezone().isoformat(timespec='seconds')
-    out = GALLERY / 'pages/nightly'
+    out = gallery() / 'pages/nightly'
     out.mkdir(parents=True, exist_ok=True)
     (out / f'{date}.json').write_text(json.dumps(result, indent=2) + '\n')
     (out / f'{date}.html').write_text(page(result))
     prune()
     (out / 'index.html').write_text(index())
-    link = GALLERY / 'pages/nightly.html'  # the gallery lists top-level pages only
+    link = gallery() / 'pages/nightly.html'  # the gallery lists top-level pages only
     if not link.exists():
         link.write_text('<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=nightly/index.html">'
                         '<a href="nightly/index.html">Hyprune nightly</a>')
-        (GALLERY / 'pages/nightly.json').write_text(json.dumps({'title': 'Hyprune nightly regression (remote work host)'}) + '\n')
+        (gallery() / 'pages/nightly.json').write_text(json.dumps({'title': 'Hyprune nightly regression (remote work host)'}) + '\n')
     log('result', result['status'], result['counts'], out / f'{date}.html')
     return 0 if result['status'] == 'pass' else 1
 
@@ -265,6 +275,7 @@ def install():
     INSTALL.mkdir(parents=True, exist_ok=True)
     for name in ('nightly', 'run'):
         shutil.copy2(HERE / name, INSTALL / name)
+    shutil.copy2(HERE.parent / 'devenv.py', INSTALL / 'devenv.py')
     units = HOME / '.config/systemd/user'
     units.mkdir(parents=True, exist_ok=True)
     (units / 'hyprune-nightly.service').write_text(f'''[Unit]
@@ -296,7 +307,7 @@ WantedBy=timers.target
 
 
 def status():
-    runs = sorted((GALLERY / 'pages/nightly').glob('????-??-??.json'))
+    runs = sorted((gallery() / 'pages/nightly').glob('????-??-??.json'))
     if not runs:
         print(json.dumps({'status': 'none'})); return 2
     r = json.loads(runs[-1].read_text())
