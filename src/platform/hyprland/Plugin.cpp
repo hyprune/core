@@ -4859,6 +4859,7 @@ int luaCamera(lua_State *state) {
                                    {"heading", a.heading},
                                    {"clip", a.clip},
                                    {"clipTime", a.clipTime},
+                                   {"walkSpeed", a.walkSpeed},
                                    {"yielding", a.yielding}});
              return Json{{"state", runtime->npcState},
                          {"forcesFrames", runtime->npcForcesFrames},

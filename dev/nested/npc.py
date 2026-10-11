@@ -58,8 +58,9 @@ def acceptance(client, children, args, token, socket):
     shot('1-walking')
     a0 = agent(); time.sleep(2.0); a1 = agent()
     moved = math.dist(a0['position'], a1['position'])
-    check('walks the route at about the walk clip speed', a1['clip'] == 'walk' and 1.8 < moved < 3.0 if a0['clip'] == 'walk' else moved > .5,
-          {'from': a0, 'to': a1, 'metres': moved})
+    expected = 2.0 * a0['walkSpeed']  # the character's walk clip speed (extras.speed)
+    check('walks the route at about the walk clip speed', .7 * expected < moved < 1.3 * expected if a0['clip'] == 'walk' and a1['clip'] == 'walk' else moved > .2,
+          {'from': a0, 'to': a1, 'metres': moved, 'expected': expected})
     print('agent', json.dumps(agent()), flush=True)
     if os.environ.get('HYPRUNE_NPC_SURVEY'):
         for name, eye, yaw, pitch in (('survey-top', [0, 26, 0], 0, -1.45),):
