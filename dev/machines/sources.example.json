@@ -1,0 +1,28 @@
+{
+  "client": {"id": "com.hyprune.sources", "name": "Source helper (prototype)"},
+  "protocol": "0.2",
+  "devFastIntervals": true,
+  "sources": [
+    {"id": "ci", "kind": "command", "argv": ["sims/ci-sim.py"], "output": "json",
+     "intervalS": 1, "timeoutS": 2, "ttlMs": 8000},
+    {"id": "queue", "kind": "command", "argv": ["sims/queue-sim.py"], "output": "json",
+     "intervalS": 1, "timeoutS": 2, "ttlMs": 8000},
+    {"id": "rack", "kind": "command", "argv": ["sims/rack-sim.py"], "output": "json",
+     "intervalS": 1, "timeoutS": 2, "ttlMs": 8000},
+    {"id": "deploy", "kind": "command", "argv": ["sims/deploy-sim.py"], "output": "json",
+     "intervalS": 1, "timeoutS": 2, "ttlMs": 8000},
+    {"id": "build", "kind": "command", "argv": ["sims/build-sim.py"], "output": "json",
+     "intervalS": 1, "timeoutS": 2, "ttlMs": 8000},
+    {"id": "status-page", "kind": "http", "enabled": false,
+     "url": "https://example.invalid/status.json", "method": "GET",
+     "intervalS": 60, "timeoutS": 10,
+     "headers": {"Authorization": {"prefix": "Bearer ", "secret": "status-token"}},
+     "fields": [
+       {"name": "status", "pointer": "/status/indicator", "type": "string"},
+       {"name": "incidents", "length": "/incidents", "type": "int"},
+       {"name": "degraded", "countWhere": {"array": "/components", "pointer": "/status", "equals": "degraded"}, "type": "int"},
+       {"name": "firstIncident", "first": {"array": "/incidents", "select": "/name"}, "type": "string", "default": ""}
+     ]},
+    {"id": "minute", "kind": "timer", "timer": "pulse", "everyS": 60, "key": "minutes", "enabled": false}
+  ]
+}

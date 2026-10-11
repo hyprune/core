@@ -1,0 +1,844 @@
+"""Tests for the source helper prototype and the machine simulators.
+
+Run from the repository root: python3 -m unittest dev/machines/test_machines.py
+"""
+import collections
+import http.server
+import importlib.util
+import json
+import os
+import pathlib
+import re
+import signal
+import socket
+import struct
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import unittest
+
+HERE = pathlib.Path(__file__).resolve().parent
+SIMS = HERE / "sims"
+_spec = importlib.util.spec_from_file_location("source_helper", HERE / "source-helper.py")
+helper = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(helper)
+helper.log.setLevel("CRITICAL")
+
+
+class FakeClock:
+    def __init__(self, now=1000.0):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+
+def spec_for(source, dev=True, client="com.hyprune.sources", base=HERE):
+    return helper.SourceSpec(source, client, base, dev)
+
+
+def command(argv, **extra):
+    return spec_for({"id": "t", "kind": "command", "argv": argv, "intervalS": 1, "timeoutS": 5, **extra})
+
+
+PY = sys.executable
+
+
+class ScriptOutput(unittest.TestCase):
+    def test_single_object(self):
+        self.assertEqual(helper.parse_json_output('{"a": 1, "b": "x"}\n'), {"a": 1, "b": "x"})
+
+    def test_pretty_object(self):
+        self.assertEqual(helper.parse_json_output('{\n  "a": 1,\n  "b": [1]\n}\n'), {"a": 1, "b": [1]})
+
+    def test_lines_merge_in_order(self):
+        text = '{"a": 1}\n\n{"b": 2, "a": 3}\n'
+        self.assertEqual(helper.parse_json_output(text), {"a": 3, "b": 2})
+
+    def test_bad_output(self):
+        for text in ["", "  \n", "[1, 2]", '{"a": 1}\nnot json', '{"a": 1}\n[1]']:
+            with self.assertRaises(helper.PollError, msg=text):
+                helper.parse_json_output(text)
+
+    def test_scalars_only_and_caps(self):
+        values = {"s": "x" * 400, "n": 1.5, "b": True, "i": 3, "list": [1], "obj": {}, "nan": float("nan"),
+                  "_status": "mine", "k" * 129: 1}
+        clean = helper.clean_values(values)
+        self.assertEqual(set(clean), {"s", "n", "b", "i"})
+        self.assertEqual(len(clean["s"].encode()), 256)
+        many = {f"k{i}": i for i in range(40)}
+        self.assertEqual(len(helper.clean_values(many, 29)), 29)
+
+    def test_utf8_truncation_keeps_characters(self):
+        text = helper.truncate_utf8("é" * 200, 256)
+        self.assertEqual(text, "é" * 128)
+
+    def test_json_without_fields_drops_non_scalars(self):
+        spec = command([PY, "-c", 'print(\'{"a": 1, "b": {"c": 2}, "d": "x"}\')'])
+        values, errors, meta = helper.command_values(spec)
+        self.assertEqual((values, errors, meta), ({"a": 1, "d": "x"}, [], {"_exitCode": 0}))
+
+    def test_json_lines_from_a_script(self):
+        spec = command([PY, "-c", 'print(\'{"a": 1}\'); print(\'{"b": 2}\')'])
+        self.assertEqual(helper.command_values(spec)[0], {"a": 1, "b": 2})
+
+    def test_json_fields(self):
+        spec = command([PY, "-c", 'print(\'{"p": [{"s": "ok", "n": "7"}]}\')'],
+                       fields=[{"name": "status", "pointer": "/p/0/s", "type": "string"},
+                               {"name": "count", "pointer": "/p/0/n", "type": "counter"}])
+        self.assertEqual(helper.command_values(spec)[0], {"status": "ok", "count": 7})
+
+    def test_other_outputs(self):
+        lines = [PY, "-c", 'print("3.5 apples"); print("b"); print(""); print("c")']
+        self.assertEqual(helper.command_values(command(lines, output="lines", key="n"))[0], {"n": 3})
+        self.assertEqual(helper.command_values(command(lines, output="text"))[0], {"value": "3.5 apples"})
+        number = command([PY, "-c", 'print(" 42 ")'], output="number", key="x")
+        self.assertEqual(helper.command_values(number)[0], {"x": 42})
+        with self.assertRaises(helper.PollError):
+            helper.command_values(command(lines, output="number"))
+
+    def test_exit_code_is_an_error(self):
+        spec = command([PY, "-c", 'import sys; print("{}"); sys.stderr.write("boom\\n"); sys.exit(3)'])
+        with self.assertRaises(helper.PollError) as caught:
+            helper.command_values(spec)
+        self.assertEqual(caught.exception.meta, {"_exitCode": 3})
+        self.assertIn("boom", str(caught.exception))
+
+    def test_stdout_cap(self):
+        argv = [PY, "-c", "import sys; sys.stdout.write('x' * 70000)"]
+        with self.assertRaises(helper.PollError) as caught:
+            helper.run_command(argv, HERE, {}, 5)
+        self.assertIn("64 KiB", str(caught.exception))
+
+    def test_stderr_tail_kept(self):
+        argv = [PY, "-c", "import sys; sys.stderr.write('a' * 9000 + 'END')"]
+        code, out, err = helper.run_command(argv, HERE, {}, 5)
+        self.assertEqual((code, len(err)), (0, 4096))
+        self.assertTrue(err.endswith("END"))
+
+    def test_timeout_kills_the_process_group(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pidfile = pathlib.Path(tmp) / "pid"
+            argv = ["sh", "-c", f"sleep 30 & echo $! > {pidfile}; sleep 30"]
+            start = time.monotonic()
+            with self.assertRaises(helper.PollError) as caught:
+                helper.run_command(argv, HERE, {}, 1)
+            self.assertLess(time.monotonic() - start, 3)
+            self.assertIn("timed out", str(caught.exception))
+            child = int(pidfile.read_text())
+            time.sleep(0.1)
+            state = pathlib.Path(f"/proc/{child}/stat")
+            self.assertTrue(not state.exists() or state.read_text().split()[2] == "Z")
+
+    def test_env_and_cwd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            spec = spec_for({"id": "t", "kind": "command", "intervalS": 5, "timeoutS": 5, "env": {"X_TEST": "y"},
+                             "argv": [PY, "-c", 'import os, json; print(json.dumps({"x": os.environ["X_TEST"], "cwd": os.getcwd()}))']},
+                            dev=False, base=pathlib.Path(tmp))
+            values = helper.command_values(spec)[0]
+            self.assertEqual(values["x"], "y")
+            self.assertEqual(pathlib.Path(values["cwd"]).resolve(), pathlib.Path(tmp).resolve())
+
+
+class Pointers(unittest.TestCase):
+    DOC = {"foo": ["bar", "baz"], "": 0, "a/b": 1, "c%d": 2, "e^f": 3, "g|h": 4, "i\\j": 5, "k\"l": 6,
+           " ": 7, "m~n": 8}
+
+    def test_rfc6901_examples(self):
+        p = helper.json_pointer
+        self.assertEqual(p(self.DOC, ""), self.DOC)
+        self.assertEqual(p(self.DOC, "/foo"), ["bar", "baz"])
+        self.assertEqual(p(self.DOC, "/foo/0"), "bar")
+        for pointer, value in [("/", 0), ("/a~1b", 1), ("/c%d", 2), ("/e^f", 3), ("/g|h", 4), ("/i\\j", 5),
+                               ('/k"l', 6), ("/ ", 7), ("/m~0n", 8)]:
+            self.assertEqual(p(self.DOC, pointer), value, pointer)
+
+    def test_errors(self):
+        for pointer in ["foo", "/missing", "/foo/2", "/foo/01", "/foo/-", "/foo/0/x"]:
+            with self.assertRaises(helper.FieldError, msg=pointer):
+                helper.json_pointer(self.DOC, pointer)
+
+    def test_fields_and_aggregates(self):
+        doc = {"jobs": [{"status": "queued", "name": "a"}, {"status": "running", "name": "b"},
+                        {"status": "queued", "name": "c"}], "build": {"number": 12, "ok": "true"}, "obj": {"x": 1}}
+        fields = [{"name": "jobs", "length": "/jobs", "type": "int"},
+                  {"name": "queued", "countWhere": {"array": "/jobs", "pointer": "/status", "equals": "queued"}},
+                  {"name": "running", "first": {"array": "/jobs", "pointer": "/status", "equals": "running",
+                                                "select": "/name"}},
+                  {"name": "failed", "first": {"array": "/jobs", "pointer": "/status", "equals": "failed",
+                                               "select": "/name"}, "default": "none"},
+                  {"name": "number", "pointer": "/build/number", "type": "counter"},
+                  {"name": "ok", "pointer": "/build/ok", "type": "bool"},
+                  {"name": "obj", "pointer": "/obj"},
+                  {"name": "gone", "pointer": "/nope"}]
+        values, errors = helper.extract_fields(doc, fields)
+        self.assertEqual(values, {"jobs": 3, "queued": 2, "running": "b", "failed": "none", "number": 12, "ok": True})
+        self.assertEqual(len(errors), 2)
+        self.assertTrue(errors[0].startswith("obj:") and errors[1].startswith("gone:"))
+
+    def test_types(self):
+        c = helper.coerce
+        self.assertEqual(c("3", "int", "x"), 3)
+        self.assertEqual(c(2.6, "int", "x"), 3)
+        self.assertEqual(c(4.0, "number", "x"), 4)
+        self.assertEqual(c(True, "string", "x"), "true")
+        self.assertEqual(c(5, "string", "x"), "5")
+        self.assertEqual(c(0, "bool", "x"), False)
+        for value, kind in [(-1, "counter"), (1.5, "counter"), ("abc", "number"), (True, "int"), ("maybe", "bool")]:
+            with self.assertRaises(helper.FieldError, msg=(value, kind)):
+                c(value, kind, "x")
+
+
+class BackoffAndSequence(unittest.TestCase):
+    def test_backoff_growth_and_cap(self):
+        class Mid:
+            @staticmethod
+            def uniform(a, b):
+                return (a + b) / 2
+        delays = [helper.backoff_delay(5, n, Mid) for n in range(0, 12)]
+        self.assertEqual(delays[:4], [5, 10, 20, 40])
+        self.assertEqual(delays[-1], 600)
+        self.assertTrue(all(a <= b for a, b in zip(delays, delays[1:])))
+        for n in range(1, 20):
+            self.assertLessEqual(helper.backoff_delay(60, n), 600)
+
+    def test_source_backs_off_and_resets(self):
+        clock = FakeClock()
+        source = helper.Source(command(["true"]), clock)
+        source.succeeded({"a": 1}, [], {"_exitCode": 0})
+        self.assertEqual(source.next_due, clock.now + 1)
+        gaps = []
+        for _ in range(4):
+            source.failed(helper.PollError("exit code 1", {"_exitCode": 1}))
+            gaps.append(source.next_due - clock.now)
+        self.assertEqual(source.failures, 4)
+        self.assertTrue(gaps[0] < gaps[1] < gaps[2] < gaps[3], gaps)
+        self.assertEqual(source.publication(),
+                         {"a": 1, "_status": "error", "_error": "exit code 1", "_exitCode": 1})
+        source.succeeded({"a": 2}, [], {"_exitCode": 0})
+        self.assertEqual((source.failures, source.next_due), (0, clock.now + 1))
+        self.assertEqual(source.publication(), {"a": 2, "_status": "ok", "_exitCode": 0})
+
+    def test_retry_after_wins(self):
+        clock = FakeClock()
+        source = helper.Source(command(["true"]), clock)
+        source.failed(helper.PollError("HTTP 429", {"_httpStatus": 429}, retry_after=120))
+        self.assertGreaterEqual(source.next_due - clock.now, 120)
+
+    def test_field_error_keeps_last_good_value(self):
+        spec = command(["true"], fields=[{"name": "a", "pointer": "/a"}, {"name": "b", "pointer": "/b"}])
+        source = helper.Source(spec, FakeClock())
+        source.succeeded({"a": 1, "b": 2}, [], {})
+        source.succeeded({"a": 3}, ["b: /b: no member 'b'"], {})
+        self.assertEqual(source.publication()["a"], 3)
+        self.assertEqual(source.publication()["b"], 2)
+        self.assertEqual(source.publication()["_status"], "error")
+        self.assertEqual(source.failures, 0)
+
+    def test_sequence_strictly_increases(self):
+        clock = FakeClock(1_700_000_000.0)
+        sequence = helper.Sequence(clock)
+        seen = [sequence.next() for _ in range(5)]
+        clock.now -= 10  # the wall clock steps back
+        seen += [sequence.next() for _ in range(3)]
+        clock.now += 100
+        seen.append(sequence.next())
+        self.assertTrue(all(a < b for a, b in zip(seen, seen[1:])), seen)
+        self.assertEqual(seen[0], 1_700_000_000_000)
+        self.assertLessEqual(seen[-1], 2**53 - 1)
+
+    def test_sanitized_errors(self):
+        message = helper.sanitize_error("GET https://ci.example.com/api?token=abc123&x=1 failed: Bearer s3cret!",
+                                        ["s3cret!"])
+        self.assertEqual(message, "GET https://ci.example.com/api failed: Bearer ***")
+        self.assertEqual(len(helper.sanitize_error("x" * 1000)), 256)
+
+
+class Publishing(unittest.TestCase):
+    def source(self, ttl=8000):
+        clock = FakeClock()
+        return helper.Source(command(["true"], ttlMs=ttl), clock), clock
+
+    def test_nothing_before_data(self):
+        source, clock = self.source()
+        self.assertIsNone(source.due_publication(clock.now))
+
+    def test_change_then_keepalive(self):
+        source, clock = self.source(ttl=8000)
+        source.succeeded({"a": 1}, [], {})
+        first = source.due_publication(clock.now)
+        self.assertEqual(first, {"a": 1, "_status": "ok"})
+        source.mark_published(first, clock.now)
+        clock.now += 1
+        self.assertIsNone(source.due_publication(clock.now))  # unchanged
+        source.succeeded({"a": 1}, [], {})
+        self.assertIsNone(source.due_publication(clock.now))  # same values again
+        clock.now += 3.0  # 4 s = ttl / 2 since the publication
+        self.assertEqual(source.due_publication(clock.now), first)
+        self.assertEqual(source.next_publish_time(), 1000.0 + 4.0)
+
+    def test_change_is_rate_limited(self):
+        source, clock = self.source()
+        source.succeeded({"a": 1}, [], {})
+        source.mark_published(source.publication(), clock.now)
+        source.succeeded({"a": 2}, [], {})
+        clock.now += 0.05
+        self.assertIsNone(source.due_publication(clock.now))
+        self.assertAlmostEqual(source.next_publish_time(), 1000.1)
+        clock.now += 0.06
+        self.assertEqual(source.due_publication(clock.now)["a"], 2)
+
+    def test_reconnect_republishes(self):
+        source, clock = self.source()
+        source.succeeded({"a": 1}, [], {})
+        source.mark_published(source.publication(), clock.now)
+        source.reset_connection()
+        self.assertIsNotNone(source.due_publication(clock.now + 0.2))
+
+
+class Config(unittest.TestCase):
+    def load(self, sources, **top):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "sources.json"
+            path.write_text(json.dumps({"sources": sources, **top}))
+            return helper.load_config(path)
+
+    def test_example_config_loads(self):
+        config = helper.load_config(HERE / "sources.example.json")
+        ids = [s.source_id for s in config["sources"]]
+        self.assertEqual(ids, [f"com.hyprune.sources.{n}" for n in ["ci", "queue", "rack", "deploy", "build"]])
+        self.assertTrue(all(s.ttl_ms == 8000 and s.interval == 1 for s in config["sources"]))
+        for s in config["sources"]:
+            self.assertTrue(helper.ID_RE.fullmatch(s.source_id))
+
+    def test_interval_floors(self):
+        fast = {"id": "a", "kind": "command", "argv": ["true"], "intervalS": 1, "timeoutS": 1}
+        with self.assertRaisesRegex(helper.ConfigError, "devFastIntervals"):
+            self.load([fast])
+        self.assertEqual(len(self.load([fast], devFastIntervals=True)["sources"]), 1)
+        self.assertEqual(self.load([dict(fast, intervalS=5)])["sources"][0].timeout, 1)
+        http = {"id": "h", "kind": "http", "url": "https://example.com/x", "intervalS": 5}
+        with self.assertRaises(helper.ConfigError):
+            self.load([http])
+        self.load([dict(http, url="http://127.0.0.1:9/x", intervalS=2)])
+        with self.assertRaises(helper.ConfigError):
+            self.load([dict(http, url="http://127.0.0.1:9/x", intervalS=1)])
+
+    def test_defaults(self):
+        source = self.load([{"id": "h", "kind": "http", "url": "https://example.com/x"}])["sources"][0]
+        self.assertEqual((source.interval, source.timeout, source.ttl_ms), (60, 10, 60000))
+        source = self.load([{"id": "c", "kind": "command", "argv": ["true"]}])["sources"][0]
+        self.assertEqual((source.interval, source.timeout, source.ttl_ms), (60, 10, 60000))
+
+    def test_rejections(self):
+        bad = [
+            {"id": "Bad", "kind": "command", "argv": ["true"]},
+            {"id": "a", "kind": "shell", "argv": ["true"]},
+            {"id": "a", "kind": "command", "argv": "true"},
+            {"id": "a", "kind": "command", "argv": ["true"], "timeoutS": 90},
+            {"id": "a", "kind": "command", "argv": ["true"], "ttlMs": 70000},
+            {"id": "a", "kind": "command", "argv": ["true"], "fields": [{"name": "_x", "pointer": "/x"}]},
+            {"id": "a", "kind": "command", "argv": ["true"], "fields": [{"name": "x"}]},
+            {"id": "a", "kind": "command", "argv": ["true"], "fields": [{"name": "x", "pointer": "/x", "type": "date"}]},
+            {"id": "a", "kind": "http", "url": "http://example.com/x"},
+            {"id": "a", "kind": "http", "url": "file:///etc/passwd"},
+            {"id": "a", "kind": "http", "url": "https://example.com/x", "method": "PUT"},
+            {"id": "a", "kind": "timer", "timer": "schedule"},
+        ]
+        for source in bad:
+            with self.assertRaises(helper.ConfigError, msg=source):
+                self.load([source])
+        with self.assertRaises(helper.ConfigError):
+            self.load([{"id": "a", "kind": "timer", "timer": "pulse"}] * 2)
+        with self.assertRaises(helper.ConfigError):
+            self.load([], client={"id": "nodots"})
+
+    def test_disabled_sources_are_skipped(self):
+        config = self.load([{"id": "a", "kind": "http", "url": "http://example.com/x", "enabled": False}])
+        self.assertEqual(config["sources"], [])
+
+    def test_timers(self):
+        pulse = self.load([{"id": "p", "kind": "timer", "timer": "pulse", "everyS": 10}])["sources"][0]
+        self.assertEqual(helper.timer_values(pulse, 1005.0)[0], {"pulse": 100})
+        until = self.load([{"id": "c", "kind": "timer", "timer": "countdown", "untilS": 1100}])["sources"][0]
+        self.assertEqual(helper.timer_values(until, 1000.5)[0], {"remaining": 100})
+        self.assertEqual(helper.timer_values(until, 2000)[0], {"remaining": 0})
+        span = self.load([{"id": "d", "kind": "timer", "timer": "countdown", "durationS": 30}])["sources"][0]
+        self.assertEqual(helper.timer_values(span, 50.0)[0], {"remaining": 30})
+        self.assertEqual(helper.timer_values(span, 70.0)[0], {"remaining": 10})
+
+
+class _Handler(http.server.BaseHTTPRequestHandler):
+    routes = {}
+    seen = []
+
+    def log_message(self, *args):
+        pass
+
+    def _reply(self):
+        self.seen.append((self.command, self.path, dict(self.headers),
+                          self.rfile.read(int(self.headers.get("Content-Length", 0) or 0))))
+        status, headers, body = self.routes[self.path.split("?")[0]]
+        self.send_response(status)
+        for k, v in headers.items():
+            self.send_header(k, v)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    do_GET = do_POST = _reply
+
+
+class Http(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        cls.other = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        for server in (cls.server, cls.other):
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{cls.server.server_port}"
+        other = f"http://127.0.0.1:{cls.other.server_port}"
+        doc = json.dumps({"current": {"temperature": 21.5, "name": "x"}, "list": [1, 2], "obj": {}}).encode()
+        _Handler.routes = {
+            "/ok": (200, {"Content-Type": "application/json"}, doc),
+            "/busy": (429, {"Retry-After": "90"}, b"{}"),
+            "/big": (200, {}, b'{"a": "' + b"x" * (1024 * 1024) + b'"}'),
+            "/text": (200, {}, b"<html>"),
+            "/same": (302, {"Location": base + "/ok"}, b""),
+            "/away": (302, {"Location": other + "/ok"}, b""),
+        }
+        cls.base = base
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.other.shutdown()
+
+    def spec(self, path, **extra):
+        return spec_for({"id": "h", "kind": "http", "url": self.base + path, "intervalS": 2, "timeoutS": 5,
+                         **extra}, dev=False)
+
+    def test_fields(self):
+        spec = self.spec("/ok?key=1", fields=[{"name": "temp", "pointer": "/current/temperature", "type": "number"},
+                                               {"name": "items", "length": "/list"}])
+        self.assertEqual(helper.http_values(spec), ({"temp": 21.5, "items": 2}, [], {"_httpStatus": 200}))
+
+    def test_without_fields_publishes_scalars(self):
+        self.assertEqual(helper.http_values(self.spec("/ok"))[0], {})  # top level has objects only
+
+    def test_non_scalar_target_is_a_field_error(self):
+        spec = self.spec("/ok", fields=[{"name": "obj", "pointer": "/obj"}])
+        values, errors, _ = helper.http_values(spec)
+        self.assertEqual(values, {})
+        self.assertIn("not a scalar", errors[0])
+
+    def test_post_body_and_secret_header(self):
+        os.environ["HYPRUNE_SOURCES_SECRET_CI_TOKEN"] = "abcd1234"
+        try:
+            spec = self.spec("/ok", method="POST", body={"q": 1},
+                             headers={"Authorization": {"prefix": "Bearer ", "secret": "ci-token"}},
+                             fields=[{"name": "n", "pointer": "/current/name"}])
+            helper.http_values(spec)
+        finally:
+            del os.environ["HYPRUNE_SOURCES_SECRET_CI_TOKEN"]
+        method, _, headers, body = _Handler.seen[-1]
+        self.assertEqual((method, json.loads(body), headers["Authorization"]), ("POST", {"q": 1}, "Bearer abcd1234"))
+
+    def test_missing_secret(self):
+        spec = self.spec("/ok", headers={"X-Key": {"secret": "absent"}})
+        with self.assertRaisesRegex(helper.PollError, "secret"):
+            helper.http_values(spec)
+
+    def test_429_retry_after(self):
+        with self.assertRaises(helper.PollError) as caught:
+            helper.http_values(self.spec("/busy"))
+        self.assertEqual((caught.exception.retry_after, caught.exception.meta), (90.0, {"_httpStatus": 429}))
+
+    def test_body_cap_is_an_error(self):
+        with self.assertRaisesRegex(helper.PollError, "1 MiB"):
+            helper.http_values(self.spec("/big"))
+
+    def test_not_json(self):
+        with self.assertRaisesRegex(helper.PollError, "not JSON"):
+            helper.http_values(self.spec("/text"))
+
+    def test_redirects_stay_in_origin(self):
+        spec = self.spec("/same", fields=[{"name": "t", "pointer": "/current/temperature"}])
+        self.assertEqual(helper.http_values(spec)[0], {"t": 21.5})
+        with self.assertRaisesRegex(helper.PollError, "another origin"):
+            helper.http_values(self.spec("/away"))
+
+
+# --- simulators ----------------------------------------------------------------------
+
+T0 = 1_800_000_000 - 600  # crosses a template super-cycle boundary of every block simulator
+KEYS = {
+    "ci": ["stage.1", "stage.2", "stage.3", "stage.4", "status", "jobsStarted", "jobsSucceeded", "jobsFailed",
+           "queued", "active", "progress", "lastJob", "lastResult"],
+    "queue": ["depth", "oldestAgeS", "rateIn", "rateOut", "level"],
+    "rack": [f"health.{i}" for i in range(1, 9)] + [f"load.{i}" for i in range(1, 9)] + ["load", "down", "name"],
+    "deploy": ["phase", "progress", "version", "environment", "deploys"],
+    "build": ["status", "progress", "successes", "failures", "streak", "lastJob"],
+}
+COUNTERS = {"ci": ["jobsStarted", "jobsSucceeded", "jobsFailed"], "deploy": ["deploys"],
+            "build": ["successes", "failures"]}
+_timelines = {}
+
+
+def sim_env(**extra):
+    env = {k: v for k, v in os.environ.items() if not k.startswith("MACHINES_SIM_")}
+    env.update(extra)
+    return env
+
+
+def timeline(name, start=T0, seconds=1800, step=1, **env):
+    key = (name, start, seconds, step, tuple(sorted(env.items())))
+    if key not in _timelines:
+        out = subprocess.run([str(SIMS / f"{name}-sim.py"), "--timeline", str(start), str(start + seconds), str(step)],
+                             capture_output=True, text=True, check=True, env=sim_env(**env)).stdout
+        _timelines[key] = [json.loads(line) for line in out.splitlines()]
+    return _timelines[key]
+
+
+def increments(rows, key):
+    return [i for i in range(1, len(rows)) if rows[i][key] > rows[i - 1][key]]
+
+
+class Simulators(unittest.TestCase):
+    def test_keys_exactly_and_scalar(self):
+        for name, keys in KEYS.items():
+            rows = timeline(name)
+            self.assertEqual(len(rows), 1801)
+            for row in rows:
+                self.assertEqual(list(row), keys, name)
+                self.assertTrue(all(helper.is_scalar(v) for v in row.values()))
+                self.assertLessEqual(helper.values_size(row), 16384)
+
+    def test_counters_monotonic_and_moving(self):
+        for name, keys in COUNTERS.items():
+            rows = timeline(name)
+            for key in keys:
+                values = [r[key] for r in rows]
+                self.assertTrue(all(isinstance(v, int) and v >= 0 for v in values))
+                self.assertTrue(all(a <= b for a, b in zip(values, values[1:])), (name, key))
+                self.assertGreater(values[-1], values[0], (name, key))
+
+    def test_counters_monotonic_on_a_coarse_day(self):
+        for name, keys in COUNTERS.items():
+            rows = timeline(name, start=T0, seconds=86400, step=97)
+            for key in keys:
+                values = [r[key] for r in rows]
+                self.assertTrue(all(a <= b for a, b in zip(values, values[1:])), (name, key))
+
+    def test_ci(self):
+        rows = timeline("ci")
+        states = {"pending", "running", "success", "failed"}
+        for r in rows:
+            for k in range(1, 5):
+                self.assertIn(r[f"stage.{k}"], states)
+            self.assertIn(r["status"], states)
+            self.assertIn(r["lastResult"], {"success", "failed", "none"})
+            self.assertTrue(0 <= r["progress"] <= 1)
+            self.assertTrue(0 <= r["queued"] <= 12)
+            self.assertTrue(r["queued"] <= r["active"])
+            self.assertEqual(r["active"], r["jobsStarted"] - r["jobsSucceeded"] - r["jobsFailed"])
+            self.assertRegex(r["lastJob"], r"^main #\d+$")
+        self.assertTrue(increments(rows, "jobsFailed") and increments(rows, "jobsSucceeded"))
+        started = increments(rows, "jobsStarted")
+        self.assertTrue(150 <= len(started) <= 360, len(started))  # a job every ~5-9 s while busy
+        seen = collections.Counter(r[f"stage.{k}"] for r in rows for k in range(1, 5))
+        self.assertTrue(all(seen[s] for s in states), seen)
+        self.assertTrue(any(r["queued"] for r in rows))
+        # A job's number appears when it starts.
+        for i in started:
+            self.assertEqual(rows[i]["lastJob"], f"main #{1000 + rows[i]['jobsStarted'] % 100000}")
+
+    def test_queue(self):
+        rows = timeline("queue")
+        for r in rows:
+            self.assertTrue(0 <= r["depth"] <= 500 and r["oldestAgeS"] >= 0)
+            self.assertTrue(r["rateIn"] >= 0 and r["rateOut"] >= 0)
+            expected = "fail" if r["oldestAgeS"] > 90 else "warn" if r["oldestAgeS"] > 30 else "ok"
+            self.assertEqual(r["level"], expected)
+        # Backlogs are occasional (a 45% chance per 7 minutes): look over two hours.
+        longer = timeline("queue", seconds=7200, step=2)
+        self.assertGreaterEqual(max(r["depth"] for r in longer), 300)
+        self.assertEqual({r["level"] for r in longer}, {"ok", "warn", "fail"})
+        jumps = [abs(a["depth"] - b["depth"]) for a, b in zip(rows, rows[1:])]
+        self.assertLess(max(jumps), 30)  # continuous at 1 s steps
+
+    def test_rack(self):
+        rows = timeline("rack")
+        for r in rows:
+            loads = [r[f"load.{i}"] for i in range(1, 9)]
+            health = [r[f"health.{i}"] for i in range(1, 9)]
+            self.assertTrue(all(0 <= x <= 1 for x in loads))
+            self.assertAlmostEqual(r["load"], sum(loads) / 8, places=2)
+            self.assertEqual(r["down"], health.count("fail"))
+            self.assertLessEqual(r["down"], 2)
+            for h, x in zip(health, loads):
+                self.assertIn(h, {"ok", "warn", "fail", "off"})
+                if h in ("fail", "off"):
+                    self.assertEqual(x, 0)
+                else:
+                    self.assertEqual(h == "warn", x > 0.85)
+            self.assertEqual(r["name"], "rack-a")
+        self.assertTrue(any(r["down"] for r in rows))
+        self.assertTrue(any(r[f"health.{i}"] == "warn" for r in rows for i in range(1, 9)))
+        outage = [i for i, r in enumerate(rows) if r["down"]]
+        self.assertTrue(20 <= len(outage) <= 900)
+
+    def test_deploy(self):
+        rows = timeline("deploy")
+        phases = collections.Counter(r["phase"] for r in rows)
+        self.assertEqual(set(phases), {"queued", "building", "rolling", "live", "failed"})
+        for a, b in zip(rows, rows[1:]):
+            self.assertTrue(0 <= b["progress"] <= 1)
+            self.assertRegex(b["version"], r"^v\d+\.\d+\.\d+$")
+            self.assertEqual(b["environment"], "production")
+            if b["phase"] == "live":
+                self.assertEqual(b["progress"], 1)
+            if b["phase"] == "building":
+                self.assertLessEqual(b["progress"], 0.4)
+            if b["deploys"] > a["deploys"]:
+                self.assertEqual((b["phase"], b["deploys"] - a["deploys"]), ("live", 1))
+            if a["phase"] == "failed" and b["phase"] != "failed":
+                self.assertEqual(b["phase"], "queued")
+                self.assertEqual(b["version"], a["version"])  # a retry of the same version
+        held = [len(list(g)) for g in _runs([r["phase"] for r in rows]) if g[0] == "failed"]
+        self.assertTrue(held and all(7 <= h <= 9 for h in held[1:-1] or held), held)
+        self.assertTrue(20 <= len(increments(rows, "deploys")) <= 30)
+
+    def test_build(self):
+        rows = timeline("build")
+        for r in rows:
+            self.assertIn(r["status"], {"idle", "running", "success", "failed"})
+            self.assertTrue(0 <= r["progress"] <= 1)
+            if r["status"] == "idle":
+                self.assertEqual(r["progress"], 0)
+            self.assertRegex(r["lastJob"], r"^web #\d+$")
+        ok, bad = increments(rows, "successes"), increments(rows, "failures")
+        self.assertTrue(ok and bad)
+        for i in bad:
+            self.assertEqual(rows[i]["streak"], 0)
+            self.assertEqual(rows[i]["status"], "failed")
+        for i in ok:
+            self.assertEqual(rows[i]["streak"], rows[i - 1]["streak"] + 1)
+            self.assertEqual(rows[i]["status"], "success")
+        # A burst: three or more successes within 30 s.
+        self.assertTrue(any(ok[j + 2] - ok[j] <= 30 for j in range(len(ok) - 2)))
+
+    def test_deterministic_seeded_and_epoch(self):
+        for name in KEYS:
+            a = timeline(name, start=T0, seconds=20, step=5)
+            b = timeline(name, start=T0, seconds=20, step=5, MACHINES_SIM_SEED="hyprune")
+            other = timeline(name, start=T0, seconds=20, step=5, MACHINES_SIM_SEED="other")
+            self.assertEqual(a, b)
+            self.assertNotEqual(a, other, name)
+            now = json.loads(subprocess.run([str(SIMS / f"{name}-sim.py")], capture_output=True, text=True,
+                                            check=True, env=sim_env(MACHINES_SIM_TIME=str(T0))).stdout)
+            self.assertEqual(now, a[0])
+        for name, keys in COUNTERS.items():
+            before = timeline(name, start=T0 - 10, seconds=10, step=10, MACHINES_SIM_EPOCH=str(T0))
+            self.assertTrue(all(r[k] == 0 for r in before for k in keys))
+            after = timeline(name, start=T0, seconds=1800, step=10, MACHINES_SIM_EPOCH=str(T0))
+            self.assertTrue(all(after[-1][k] < 1000 for k in keys))
+
+    def test_fast(self):
+        for name in KEYS:
+            spec = importlib.util.spec_from_file_location(f"{name}_sim", SIMS / f"{name}-sim.py")
+            sys.path.insert(0, str(SIMS))
+            try:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                start = time.perf_counter()
+                module.simulate(T0 + 123.4)
+                self.assertLess(time.perf_counter() - start, 0.1, name)
+            finally:
+                sys.path.remove(str(SIMS))
+
+
+def _runs(items):
+    runs, current = [], []
+    for item in items:
+        if current and item != current[0]:
+            runs.append(current)
+            current = []
+        current.append(item)
+    if current:
+        runs.append(current)
+    return runs
+
+
+# --- the helper against a fake core ---------------------------------------------------
+
+class FakeCore:
+    """A Unix socket speaking core's framing: 4-byte big-endian length + JSON-RPC 2.0."""
+
+    def __init__(self, path, token, refuse_first_publish=False):
+        self.path, self.token, self.refuse = path, token, refuse_first_publish
+        self.listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.listener.bind(path)
+        self.listener.listen(4)
+        self.requests, self.problems = [], []
+        self.lock = threading.Lock()
+        threading.Thread(target=self.serve, daemon=True).start()
+
+    def serve(self):
+        while True:
+            try:
+                connection, _ = self.listener.accept()
+            except OSError:
+                return
+            threading.Thread(target=self.session, args=(connection,), daemon=True).start()
+
+    def session(self, connection):
+        ids, hello = set(), False
+
+        def exact(n):
+            data = b""
+            while len(data) < n:
+                chunk = connection.recv(n - len(data))
+                if not chunk:
+                    raise EOFError
+                data += chunk
+            return data
+
+        try:
+            while True:
+                request = json.loads(exact(struct.unpack(">I", exact(4))[0]))
+                with self.lock:
+                    self.requests.append(request)
+                if set(request) != {"jsonrpc", "id", "method", "params"} or request["jsonrpc"] != "2.0" \
+                        or not isinstance(request["id"], str) or request["id"] in ids:
+                    self.problems.append(f"bad request profile: {request}")
+                ids.add(request["id"])
+                method, params = request["method"], request["params"]
+                result, error = {}, None
+                if not hello:
+                    if method != "session.hello":
+                        self.problems.append("hello required")
+                    hello = True
+                    granted = params.get("token") == self.token
+                    result = {"protocol": params["protocols"][0], "sessionId": "s",
+                              "capabilities": ["data.publish"] if granted else [],
+                              "methods": ["session.hello", "session.ping"] + (["data.publish", "data.remove"] if granted else []),
+                              "events": []}
+                elif method == "data.publish":
+                    if self.refuse:
+                        self.refuse = False
+                        error = {"code": -32008, "message": "publication rate exceeds 10 Hz"}
+                elif method != "data.remove":
+                    error = {"code": -32601, "message": "unknown method"}
+                reply = {"jsonrpc": "2.0", "id": request["id"]}
+                reply.update({"error": error} if error else {"result": result})
+                data = json.dumps(reply).encode()
+                connection.sendall(struct.pack(">I", len(data)) + data)
+        except (EOFError, OSError):
+            pass
+        finally:
+            connection.close()
+
+    def methods(self, name):
+        with self.lock:
+            return [r for r in self.requests if r["method"] == name]
+
+    def close(self):
+        self.listener.close()
+
+
+class HelperAgainstFakeCore(unittest.TestCase):
+    def test_hello_publish_and_remove_on_sigterm(self):
+        token = "ab" * 32
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            core = FakeCore(str(tmp / "control.sock"), token, refuse_first_publish=True)
+            config = tmp / "sources.json"
+            config.write_text(json.dumps({"devFastIntervals": True, "sources": [
+                {"id": "ci", "kind": "command", "argv": [str(SIMS / "ci-sim.py")], "intervalS": 1, "timeoutS": 2,
+                 "ttlMs": 8000},
+                {"id": "tick", "kind": "timer", "timer": "pulse", "everyS": 1},
+                {"id": "off", "kind": "command", "argv": ["true"], "enabled": False}]}))
+            (tmp / "token").write_text(token + "\n")
+            process = subprocess.Popen([PY, str(HERE / "source-helper.py"), "--config", str(config),
+                                        "--socket", str(tmp / "control.sock"), "--token-file", str(tmp / "token"), "-v"],
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    ci = [r for r in core.methods("data.publish") if r["params"]["sourceId"].endswith(".ci")]
+                    if len(ci) >= 3:
+                        break
+                    time.sleep(0.05)
+                process.send_signal(signal.SIGTERM)
+                out, err = process.communicate(timeout=10)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                core.close()
+            self.assertEqual(process.returncode, 0, err)
+            self.assertEqual(core.problems, [])
+            hello = core.requests[0]
+            self.assertEqual(hello["method"], "session.hello")
+            self.assertEqual(hello["params"], {"protocols": ["0.2"], "client": {"id": "com.hyprune.sources",
+                                               "name": "Source helper (prototype)"},
+                                               "capabilities": ["data.publish"], "token": token})
+            publishes = core.methods("data.publish")
+            by_source = collections.defaultdict(list)
+            for request in publishes:
+                params = request["params"]
+                self.assertEqual(set(params), {"sourceId", "sequence", "values", "ttlMs"})
+                by_source[params["sourceId"]].append(params)
+            self.assertEqual(set(by_source), {"com.hyprune.sources.ci", "com.hyprune.sources.tick"})
+            ci = by_source["com.hyprune.sources.ci"]
+            self.assertGreaterEqual(len(ci), 3)  # the refused first publication was retried
+            sequences = [p["sequence"] for p in ci]
+            self.assertTrue(all(a < b for a, b in zip(sequences, sequences[1:])))
+            for params in ci:
+                self.assertEqual(params["ttlMs"], 8000)
+                values = params["values"]
+                self.assertEqual(list(values), KEYS["ci"] + ["_status", "_exitCode"])
+                self.assertEqual((values["_status"], values["_exitCode"]), ("ok", 0))
+            self.assertEqual(by_source["com.hyprune.sources.tick"][0]["ttlMs"], 10000)
+            self.assertIn("pulse", by_source["com.hyprune.sources.tick"][0]["values"])
+            removes = [r["params"] for r in core.methods("data.remove")]
+            self.assertEqual(sorted(p["sourceId"] for p in removes),
+                             ["com.hyprune.sources.ci", "com.hyprune.sources.tick"])
+            self.assertGreater(core.requests.index(core.methods("data.remove")[0]),
+                               core.requests.index(publishes[-1]))
+            self.assertRegex(err, re.compile(r"publish com\.hyprune\.sources\.ci #\d+ "))
+
+    def test_reconnects_without_grant_then_with_fresh_token(self):
+        token = "cd" * 32
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            core = FakeCore(str(tmp / "control.sock"), token)
+            config = tmp / "sources.json"
+            config.write_text(json.dumps({"sources": [{"id": "tick", "kind": "timer", "timer": "pulse", "everyS": 1}]}))
+            (tmp / "token").write_text("ef" * 32)  # not granted
+            process = subprocess.Popen([PY, str(HERE / "source-helper.py"), "--config", str(config),
+                                        "--socket", str(tmp / "control.sock"), "--token-file", str(tmp / "token")],
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                time.sleep(0.5)
+                self.assertEqual(core.methods("data.publish"), [])
+                (tmp / "token").write_text(token)
+                deadline = time.monotonic() + 10
+                while time.monotonic() < deadline and not core.methods("data.publish"):
+                    time.sleep(0.05)
+                process.send_signal(signal.SIGINT)
+                _, err = process.communicate(timeout=10)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                core.close()
+            self.assertTrue(core.methods("data.publish"), err)
+            self.assertGreaterEqual(len(core.methods("session.hello")), 2)
+            self.assertIn("no data.publish grant", err)
+            self.assertEqual(process.returncode, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
