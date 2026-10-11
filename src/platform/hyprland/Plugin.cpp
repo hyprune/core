@@ -313,7 +313,10 @@ struct Runtime {
         bool operator==(const ReticleView &) const = default;
     } reticle;
     void reticleTick();
-    bool tooFar(float distance, const char *reachKey);
+    bool tooFar(float distance, const char *reachKey, const char *action = "place");
+    void refuseTooFar(float distance, float reach, const char *action, const char *code);
+    ReticleView reticleFlash;
+    std::chrono::steady_clock::time_point reticleFlashUntil{};
     Vec3 motionLast{};
     float motionYaw = 0, motionSpeed = 0, motionTurn = 0; // smoothed m/s and rad/s, for the bob and reticle
     std::shared_ptr<world::World> world;
@@ -1113,7 +1116,8 @@ void Runtime::publish() {
           {"noclip", noclip},
           {"cursor", cursorState},
           {"taggedSurfaceId", tagged.empty() ? Json(nullptr) : Json(tagged)},
-          {"reticle", {{"state", reticle.state}, {"action", reticle.action}}}}},
+          // "use" (a refused E beyond the use distance) is not an IPC 0.19 action: "" on the wire.
+          {"reticle", {{"state", reticle.state}, {"action", reticle.action == "use" ? "" : reticle.action}}}}},
         {"keymap",
          {{"config", input.config},
           {"path", ipc::boundedText(inputFile.path.string(), ipc::PathLimit)},
@@ -1665,15 +1669,23 @@ void Runtime::motionTick(float dt) {
     viewBob.update(dt, motionSpeed, config["player"]["walk_speed"], config["player"]["run_speed"], level, walking, camera.yaw);
     camera.viewBob = viewBob.offset;
 }
-bool Runtime::tooFar(float distance, const char *reachKey) {
+bool Runtime::tooFar(float distance, const char *reachKey, const char *action) {
     float reach = config["player"][reachKey];
     if (distance <= reach)
         return false;
-    ipc->notify("runtime.notice", {{"level", "info"},
-                                   {"code", "placement.out_of_range"},
-                                   {"message", distance < 10 ? std::format("Too far: {:.1f} m (reach {:g} m)", distance, reach)
-                                                           : std::format("Too far: {:.0f} m (reach {:g} m)", distance, reach)}});
+    refuseTooFar(distance, reach, action, "placement.out_of_range");
     return true;
+}
+std::string tooFarText(float distance) {
+    return distance < 10 ? std::format("Too far · {:.1f} m", distance) : std::format("Too far · {:.0f} m", distance);
+}
+void Runtime::refuseTooFar(float distance, float reach, const char *action, const char *code) {
+    // A reach-limited action refused: say so (notice) and flash the out-of-range reticle,
+    // also when the player didn't look at the reticle before clicking.
+    ipc->notify("runtime.notice", {{"level", "info"}, {"code", code},
+                                   {"message", std::format("{} (reach {:g} m)", tooFarText(distance), reach)}});
+    reticleFlash = {"out_of_range", action, distance, reach};
+    reticleFlashUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(1200);
 }
 void Runtime::reticleTick() {
     ReticleView next;
@@ -1770,6 +1782,8 @@ void Runtime::reticleTick() {
             break;
         }
     }
+    if (next.state != "hidden" && next.state != "typing" && std::chrono::steady_clock::now() < reticleFlashUntil)
+        next = reticleFlash; // a refused action: out of range for a moment
     bool changed = next.state != reticle.state || next.action != reticle.action;
     reticle = next;
     if (changed)
@@ -1895,8 +1909,12 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         if (!hit && event.button == config["input"]["carry_button"].get<uint32_t>())
             if (auto back = aim(true); back && back->second.back && !capture.workspace(back->first))
                 hit = back;
-        if (!hit || hit->second.distance > config["player"]["reach_grab"].get<float>())
-            return; // beyond reach: the reticle shows out of range
+        if (!hit)
+            return;
+        if (hit->second.distance > config["player"]["reach_grab"].get<float>()) {
+            refuseTooFar(hit->second.distance, config["player"]["reach_grab"], "grab", "interaction.out_of_range");
+            return;
+        }
         auto e = capture.find(hit->first);
         if (auto wall = capture.workspace(hit->first)) {
             // Pull the actual topmost native client under the workspace-wall hit.
@@ -2263,6 +2281,8 @@ void Runtime::useAim(bool zoom) {
                 }
             }
     }
+    if (hit && !zoom && hit->second.distance > input.config["useDistance"].get<float>() && !capture.workspace(hit->first))
+        refuseTooFar(hit->second.distance, input.config["useDistance"], "use", "interaction.out_of_range");
     if (!hit || (!zoom && hit->second.distance > input.config["useDistance"].get<float>()))
         return;
     cancelGrab();
@@ -3024,7 +3044,7 @@ void Runtime::toolInput(const std::string &slot, interaction::Action event) {
     if (action == "placement.pocket") {
         auto h = aim();
         auto e = h ? capture.find(h->first) : nullptr;
-        if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance) || tooFar(h->second.distance, "reach_placement"))
+        if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance) || tooFar(h->second.distance, "reach_placement", "pocket"))
             return;
         cancelGrab();
         layout.stash(e->instance, e->surface);
@@ -3133,7 +3153,7 @@ void Runtime::toolClick(const std::string &action) {
                     return;
                 }
                 if (auto wall = worldHit()) {
-                    if (tooFar(wall->distance, "reach_placement"))
+                    if (tooFar(wall->distance, "reach_placement", "mount"))
                         return;
                     auto s = e->surface;
                     s.yaw = 0;
@@ -3151,7 +3171,7 @@ void Runtime::toolClick(const std::string &action) {
         return;
     }
     if (action == "path.add") {
-        if (auto h = worldHit(); h && !tooFar(h->distance, "reach_placement")) {
+        if (auto h = worldHit(); h && !tooFar(h->distance, "reach_placement", "path")) {
             auto b =
                 layout.binding(monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
             editor.point(world->id, b ? b->at("areaId").get<std::string>() : "", h->point + h->normal * .03f);
@@ -4271,8 +4291,8 @@ void Runtime::tick() {
                 auto &c = renderer.overlayStyle[key];
                 return Vec3{c[0], c[1], c[2]};
             };
-            r.color = r.state == r.Valid    ? colour("validColor")
-                      : r.state == r.Invalid ? colour("invalidColor")
+            r.color = r.state == r.Valid                               ? colour("validColor")
+                      : r.state == r.Invalid || r.state == r.OutOfRange ? colour("invalidColor")
                       : r.state == r.Typing  ? Vec3{.5f, 1.f, .65f}
                       : player["reticle_colour"].is_array()
                           ? Vec3{player["reticle_colour"][0], player["reticle_colour"][1], player["reticle_colour"][2]}
@@ -4281,7 +4301,7 @@ void Runtime::tick() {
             bool dynamic = player["reticle_dynamic"] == true && config["graphics"]["reduced_motion"] != true;
             float motion = std::clamp(motionSpeed / std::max(.5f, player["run_speed"].get<float>()) + motionTurn / 4.f, 0.f, 1.f);
             r.spread = dynamic && r.state != r.Typing ? motion * (6 + r.gap * .5f) : 0;
-            r.hint = reticle.state == "out_of_range" && reticle.distance > 0 ? (reticle.distance < 10 ? std::format("{:.1f} m", reticle.distance) : std::format("{:.0f} m", reticle.distance)) : "";
+            r.hint = reticle.state == "out_of_range" && reticle.distance > 0 ? tooFarText(reticle.distance) : "";
         }
         auto pointerHit = aim();
         if (!grabbed.empty()) {
@@ -4624,7 +4644,8 @@ int luaCamera(lua_State *state) {
           {"distance", runtime->reticle.distance},
           {"reach", runtime->reticle.reach},
           {"spread", runtime->renderer.reticle.spread},
-          {"hint", runtime->renderer.reticle.hint}}},
+          {"hint", runtime->renderer.reticle.hint},
+          {"color", {runtime->renderer.reticle.color.x, runtime->renderer.reticle.color.y, runtime->renderer.reticle.color.z}}}},
         {"viewBob", {runtime->camera.viewBob.x, runtime->camera.viewBob.y, runtime->camera.viewBob.z}},
         {"motion", {{"speed", runtime->motionSpeed}, {"turn", runtime->motionTurn}}},
         {"mountTarget", runtime->snapTarget},

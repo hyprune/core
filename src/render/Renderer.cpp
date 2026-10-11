@@ -216,9 +216,9 @@ void main(){vec2 p=gl_FragCoord.xy-centre;float d=1e9,t=thick*.5;
  if(wantsDot)d=min(d,hollow?abs(length(p)-dot-px*.6)-px*.55:length(p)-dot);
  if(state==2||state==5)d=min(d,brackets(p,len+gap*.5+3.*px));
  float inner=clamp(.5-d,0.,1.),outer=outline!=0?clamp(.5-(d-px),0.,1.):0.;
- float a=max(inner,outer*.6)*opacity*(hollow?.55:1.);
+ float a=max(inner,outer*.6)*opacity; // out of range: the warning colour, hollow centre (not dimmed)
  if(a<=0.)discard;
- result=vec4(color*inner*opacity*(hollow?.55:1.),a);}
+ result=vec4(color*inner*opacity,a);}
 )";
 const char *bloomFragment = R"(#version 300 es
 precision highp float;
@@ -2055,7 +2055,7 @@ void Renderer::drawReticle(int w, int h, bool typing) {
         float scale = std::clamp(w / 1920.f, 1.f, 2.f), width = 0;
         for (unsigned char c : reticle.hint)
             width += glyphs_[c >= 32 && c < 127 ? c : '?'].advance * scale;
-        text(cx - width / 2, cy + extent, reticle.hint, reticle.color * (.75f * reticle.opacity), w, h, scale);
+        text(cx - width / 2, cy + extent, reticle.hint, reticle.color * reticle.opacity, w, h, scale);
     }
 }
 void Renderer::panel(float x, float y, float width, float height) {

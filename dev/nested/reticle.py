@@ -123,7 +123,9 @@ def acceptance(client, children, args, token, socket):
     check('placement reach reported', r['reach'] == 12 and 0 < r['distance'] < 12, r)
     player({'reach_placement': max(1, math.floor(r['distance']) - 1)})
     r = expect('beyond placement reach: out of range', 'out_of_range', 'place')
-    check('out of range shows the distance hint', r['hint'] == (f"{r['distance']:.1f} m" if r['distance'] < 10 else f"{r['distance']:.0f} m"), r)
+    too_far = lambda d: f"Too far · {d:.1f} m" if d < 10 else f"Too far · {d:.0f} m"
+    check('out of range: "Too far" label with the distance', r['hint'] == too_far(r['distance']), r)
+    check('out of range draws in the warning colour', all(abs(a - b) < .01 for a, b in zip(r['color'], rgb(PALETTES['adventure'][2]))), r)
     before = queue()['count']; n = len(notices('placement.out_of_range'))
     pointer('button', 273); time.sleep(.6)
     check('surface placement beyond reach is refused', queue()['count'] == before and len(notices('placement.out_of_range')) == n + 1,
@@ -182,9 +184,13 @@ def acceptance(client, children, args, token, socket):
     player({'reach_grab': 2})
     h = held(logo, 2.5); wait(lambda: s.camera()['superHeld'])
     expect('Super on a window beyond grab reach: out of range', 'out_of_range', 'grab')
+    n = len(notices('interaction.out_of_range'))
     pointer('button', 272, 1); time.sleep(.4)
     check('Super+LMB beyond grab reach does not grab', s.camera()['gesture'] == 0)
+    check('the refused grab shows the out-of-range reticle', reticle()['state'] == 'out_of_range' and reticle()['action'] == 'grab', reticle())
     pointer('button', 272, 0); h.wait(timeout=5)
+    check('a refused grab says "Too far"', len(notices('interaction.out_of_range')) == n + 1 and 'Too far' in notices('interaction.out_of_range')[-1]['params']['message'],
+          notices('interaction.out_of_range')[-1:])
     player({'reach_grab': None})
     h = held(logo, 1.5); wait(lambda: s.camera()['superHeld'])
     pointer('button', 272, 1); wait(lambda: s.camera()['gesture'] == 1); h.wait(timeout=5)
@@ -196,6 +202,12 @@ def acceptance(client, children, args, token, socket):
     facing(second, 3); keys('-k', 'e')
     expect('typing mode (E use): typing', 'typing')
     chord(); wait(lambda: s.camera()['mode'] != 'typing'); expect('typing off (exit): back to target', 'target')
+    # E beyond the use distance (6 m): refused with "Too far" and the out-of-range flash.
+    facing(second, 9); time.sleep(.3); n = len(notices('interaction.out_of_range')); keys('-k', 'e'); time.sleep(.4)
+    check('E beyond the use distance: refused, "Too far", out-of-range flash', s.camera()['mode'] != 'typing' and
+          len(notices('interaction.out_of_range')) == n + 1 and reticle()['state'] == 'out_of_range' and reticle()['action'] == 'use',
+          {'reticle': reticle(), 'notice': notices('interaction.out_of_range')[-1:]})
+    time.sleep(1.4); facing(second, 3)
     chord(); expect('free cursor: hidden', 'hidden')
     chord(); expect('back from the free cursor', 'target')
 

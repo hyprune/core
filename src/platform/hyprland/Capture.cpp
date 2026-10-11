@@ -119,9 +119,12 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         }
         leasedBytes += bytes;
         auto it = std::find_if(entries.begin(), entries.end(), [&](auto &e) { return e.window == w; });
-        if (it == entries.end() && !attached && inRoom && !w->m_isFloating && !Fullscreen::controller()->isFullscreen(w)) {
-            // Arrived tiled (moved or dragged in): adopted once floating, at its own size,
-            // so the spawn search never sees a full-output tile.
+        if (it == entries.end() && spawnNew && !attached && inRoom && !w->m_isFloating &&
+            !Fullscreen::controller()->isFullscreen(w)) {
+            // Arrived tiled during the session (moved or dragged in): adopted once floating, at
+            // its own size, so the spawn search never sees a full-output tile. Clients already
+            // in the room when the world starts are adopted as before (anchor or pocket) and
+            // floated below.
             floatRequests.push_back(w);
             skip(w, "floating first");
             continue;
