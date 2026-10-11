@@ -1,0 +1,202 @@
+{
+  "nestedOnly": true,
+  "world": "com.hyprune.switchyard",
+  "character": "make-mannequin.py placeholder",
+  "checks": [
+    {
+      "name": "the prototype character is loaded",
+      "evidence": {
+        "agents": [
+          {
+            "clip": "idle",
+            "clipTime": 0.0,
+            "heading": 3.1415927410125732,
+            "position": [
+              -6.5,
+              0.0,
+              7.0
+            ],
+            "yielding": false
+          }
+        ],
+        "drawn": 0,
+        "forcesFrames": false,
+        "state": "paused: battery"
+      }
+    },
+    {
+      "name": "animating and drawn in view",
+      "evidence": {
+        "agents": [
+          {
+            "clip": "walk",
+            "clipTime": 1.4533042907714844,
+            "heading": 3.1415927410125732,
+            "position": [
+              -6.5,
+              0.0,
+              5.110703945159912
+            ],
+            "yielding": false
+          }
+        ],
+        "drawn": 1,
+        "forcesFrames": true,
+        "state": "animating"
+      }
+    },
+    {
+      "name": "walks the route at about the walk clip speed",
+      "evidence": {
+        "from": {
+          "clip": "walk",
+          "clipTime": 1.487038493156433,
+          "heading": 3.1415927410125732,
+          "position": [
+            -6.5,
+            0.0,
+            5.066849231719971
+          ],
+          "yielding": false
+        },
+        "to": {
+          "clip": "walk",
+          "clipTime": 3.5202996730804443,
+          "heading": 3.1415927410125732,
+          "position": [
+            -6.5,
+            0.0,
+            2.423610210418701
+          ],
+          "yielding": false
+        },
+        "metres": 2.6432390213012695
+      }
+    },
+    {
+      "name": "idles at a route point, then turns in place and walks on",
+      "evidence": {
+        "before": 3.1415927410125732,
+        "after": 1.5627294778823853
+      }
+    },
+    {
+      "name": "yields to a player standing in its way",
+      "evidence": {
+        "agent": {
+          "clip": "idle",
+          "clipTime": 1.71821928024292,
+          "heading": 1.555372714996338,
+          "position": [
+            -5.071714878082275,
+            0.0,
+            -3.155407190322876
+          ],
+          "yielding": true
+        },
+        "moved": 0.0
+      }
+    },
+    {
+      "name": "walks on once the way is clear",
+      "evidence": {
+        "clip": "walk",
+        "clipTime": 0.5676645040512085,
+        "heading": 1.555368185043335,
+        "position": [
+          -4.333837985992432,
+          0.0,
+          -3.1440234184265137
+        ],
+        "yielding": false
+      }
+    },
+    {
+      "name": "animating in view renders frames",
+      "evidence": {
+        "framesPerSecond": 60.666666666666664
+      }
+    },
+    {
+      "name": "animating out of view costs no frames",
+      "evidence": {
+        "framesPerSecond": 0.0
+      }
+    },
+    {
+      "name": "free cursor: paused (free cursor), frozen, no frames",
+      "evidence": {
+        "state": "paused: free cursor",
+        "framesPerSecond": 0.0
+      }
+    },
+    {
+      "name": "reduced motion: paused (reduced motion), frozen, no frames",
+      "evidence": {
+        "state": "paused: reduced motion",
+        "framesPerSecond": 0.0
+      }
+    },
+    {
+      "name": "auto follows the power source (mains animates; battery or USB-C pauses)",
+      "evidence": {
+        "state": "paused: battery",
+        "supplies": {
+          "ucsi-source-psy-USBC000:002": "USB",
+          "AC0": "Mains",
+          "ucsi-source-psy-USBC000:001": "USB",
+          "BAT0": "Battery"
+        }
+      }
+    },
+    {
+      "name": "player away: paused (idle), frozen, no frames",
+      "evidence": {
+        "state": "paused: idle",
+        "framesPerSecond": 0.0
+      }
+    },
+    {
+      "name": "still: posed, not moving",
+      "evidence": {
+        "agents": [
+          {
+            "clip": "idle",
+            "clipTime": 0.9461365342140198,
+            "heading": 1.5553644895553589,
+            "position": [
+              5.0,
+              0.0,
+              -3.0
+            ],
+            "yielding": false
+          }
+        ],
+        "drawn": 1,
+        "forcesFrames": false,
+        "state": "still"
+      }
+    },
+    {
+      "name": "off: hidden",
+      "evidence": {
+        "agents": [
+          {
+            "clip": "idle",
+            "clipTime": 0.9461365342140198,
+            "heading": 1.5553644895553589,
+            "position": [
+              5.0,
+              0.0,
+              -3.0
+            ],
+            "yielding": false
+          }
+        ],
+        "drawn": 0,
+        "forcesFrames": false,
+        "state": "off"
+      }
+    }
+  ]
+}

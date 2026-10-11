@@ -53,6 +53,9 @@ extern "C" {
 #include "ipc/Protocol.hpp"
 #include "ipc/Text.hpp"
 #include "offload/Client.hpp"
+#include "offload/Supervisor.hpp"
+#include "sim/Npc.hpp"
+#include "world/Character.hpp"
 #include "offload/Pci.hpp"
 #include "render/PNG.hpp"
 #include "render/Renderer.hpp"
@@ -306,6 +309,16 @@ struct Runtime {
     sim::MotionStrategy *movement = &walk;
     sim::Climbing climbing;
     sim::ViewBob viewBob;
+    // NPCs (RFC-0010 prototype): one character, agents on routes from HYPRUNE_NPC_PROTOTYPE.
+    std::shared_ptr<world::Character> npcCharacter;
+    std::vector<sim::NpcAgent> npcAgents;
+    std::vector<std::optional<Vec3>> npcAccents;
+    std::string npcState = "off"; // animating, paused (reason), still, off
+    bool npcForcesFrames = false, npcOnMains = true;
+    std::chrono::steady_clock::time_point npcLastActive = std::chrono::steady_clock::now(), npcSupplyChecked{};
+    std::vector<std::vector<Mat4>> npcSkins;
+    void npcLoad();
+    void npcTick(float dt);
     // What the reticle tells the player (IPC 0.19 interaction.reticle); distance/reach in m, -1 = none.
     struct ReticleView {
         std::string state = "hidden", action;
@@ -1259,6 +1272,7 @@ void Runtime::finishLoad() {
         renderer.profile = graphicsBaseProfile;
         applyGraphics(graphicsFile.current);
         world = std::move(candidate);
+        npcLoad();
         outsidePlayable = false;
         capture.release();
         layout.invalidateCollision();
@@ -1654,6 +1668,105 @@ void Runtime::focusWall(const std::string &id) {
     handover.to.pitch = std::asin(forward.y);
     handover.elapsed = 0;
     handover.phase = 1;
+}
+void Runtime::npcLoad() {
+    // Prototype only (RFC-0010 draft): the world format has no NPCs yet. A JSON file names the
+    // world, the character and the routes: {"worldId", "character", "agents":[{"route":[[x,y,z],..],
+    // "idleSeconds", "accent":[r,g,b]}]}.
+    npcAgents.clear();
+    npcAccents.clear();
+    npcSkins.clear();
+    renderer.npcs.clear();
+    renderer.releaseCharacters();
+    npcCharacter.reset();
+    auto file = getenv("HYPRUNE_NPC_PROTOTYPE");
+    if (!file || !world)
+        return;
+    try {
+        auto spec = interaction::readJSON(file);
+        if (spec.value("worldId", "") != world->id)
+            return;
+        npcCharacter = std::make_shared<world::Character>(world::loadCharacter(spec.at("character").get<std::string>()));
+        for (auto &a : spec.at("agents")) {
+            sim::NpcAgent agent;
+            for (auto &p : a.at("route"))
+                agent.route.push_back({p[0], p[1], p[2]});
+            agent.idleSeconds = a.value("idleSeconds", 3.f);
+            if (auto walk = npcCharacter->clip("walk"); walk && walk->speed > 0)
+                agent.walkSpeed = walk->speed;
+            agent.start();
+            npcAgents.push_back(agent);
+            npcAccents.push_back(a.contains("accent") ? std::optional<Vec3>(Vec3{a["accent"][0], a["accent"][1], a["accent"][2]})
+                                                      : std::nullopt);
+        }
+        npcSkins.resize(npcAgents.size());
+    } catch (const std::exception &e) {
+        lastError = std::string("npc prototype: ") + e.what();
+        npcAgents.clear();
+        npcCharacter.reset();
+    }
+}
+void Runtime::npcTick(float dt) {
+    npcForcesFrames = false;
+    if (!npcCharacter || npcAgents.empty()) {
+        npcState = "off";
+        renderer.npcs.clear();
+        return;
+    }
+    auto now = std::chrono::steady_clock::now();
+    if (motionSpeed > .05f || motionTurn > .05f || !keys.empty())
+        npcLastActive = now;
+    if (now - npcSupplyChecked > std::chrono::seconds(5)) { // sysfs, a few small reads
+        auto supply = offload::supply();
+        npcOnMains = supply.mains || (supply.ac && !supply.usb && !supply.discharging);
+        npcSupplyChecked = now;
+    }
+    std::string motion = config["npc"]["motion"];
+    bool reduced = config["graphics"]["reduced_motion"] == true;
+    // Animate only when someone is there to see it: ambient motion never costs frames while
+    // the player types, reads a wall, idles, or runs on battery / USB-C (auto).
+    std::string paused = motion == "off" || motion == "still" ? motion
+                         : reduced                            ? "reduced motion"
+                         : !active || loading                 ? "inactive"
+                         : motion == "always"                 ? ""
+                         : typing                             ? "typing"
+                         : !layout.desktop.is_null() || fullscreen.phase ? "focus"
+                         : layerCursor                        ? "free cursor"
+                         : now - npcLastActive > std::chrono::seconds(30) ? "idle"
+                         : !npcOnMains                        ? "battery"
+                                                              : "";
+    npcState = paused.empty() ? "animating" : paused == "off" || paused == "still" ? paused : "paused: " + paused;
+    if (motion == "off") {
+        renderer.npcs.clear();
+        return;
+    }
+    auto &c = *npcCharacter;
+    auto walk = c.clip("walk");
+    float clipSpeed = walk && walk->speed > 0 ? walk->speed : 1.3f;
+    bool animate = paused.empty();
+    float aspect = monitor ? monitor->m_size.x / float(monitor->m_size.y) : 16 / 9.f;
+    renderer.npcs.resize(npcAgents.size());
+    for (size_t i = 0; i < npcAgents.size(); ++i) {
+        auto &agent = npcAgents[i];
+        if (animate)
+            agent.update(dt, camera.position, clipSpeed);
+        bool rest = motion == "still" || reduced;
+        if (animate || rest || npcSkins[i].empty()) {
+            if (rest)
+                c.pose(c.clip("idle"), 0, true, npcSkins[i]);
+            else
+                c.blend(c.clip(agent.previous), agent.previousTime, c.clip(agent.clip), agent.clipTime,
+                        agent.previous.empty() ? 1.f : agent.fade, npcSkins[i]);
+        }
+        renderer.npcs[i] = {npcCharacter, agent.model(), npcSkins[i], npcAccents[i]};
+        // In view (feet or head inside a slightly widened frustum): only then does it cost frames.
+        if (animate)
+            for (float y : {.1f, 1.7f}) {
+                auto at = camera.project(agent.position + Vec3{0, y, 0}, aspect);
+                if (at.depth > .01f && at.depth < 80 && at.x > -.15f && at.x < 1.15f && at.y > -.15f && at.y < 1.15f)
+                    npcForcesFrames = true;
+            }
+    }
 }
 void Runtime::motionTick(float dt) {
     // Measured motion (not intent): walking into a wall neither bobs nor spreads the reticle.
@@ -4309,6 +4422,7 @@ void Runtime::tick() {
             cancelGrab();
         }
         motionTick(dt);
+        npcTick(dt);
         handTick(dt);
         toolsTick();
         reticleTick();
@@ -4494,13 +4608,23 @@ bool Runtime::frameForced() {
     // switch keeps GPU clocks steady for fixed-scale profiling (dev/nested/perf.py).
     static const bool continuous = getenv("HYPRUNE_CONTINUOUS_RENDER");
     return continuous || debug || animationFrames || loading || handover.phase || fullscreen.phase || capturePending || renderer.captureRequested ||
-           offload.connected() || session.recording || session.playing || control.driving() || !renderer.frames;
+           offload.connected() || session.recording || session.playing || control.driving() || !renderer.frames ||
+           npcForcesFrames;
 }
 uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     FrameHash h;
     auto &r = renderer;
     h(reinterpret_cast<uintptr_t>(world.get()))(camera.position)(camera.yaw)(camera.pitch)(camera.roll)(camera.fov);
     h(camera.shiftX)(camera.shiftY)(camera.eyeHeight)(camera.climbBob);
+    // NPCs: shown/hidden, placed and posed (a paused or still NPC keeps the key stable; an
+    // animating one out of view doesn't change the image).
+    h(r.npcs.size());
+    if (npcForcesFrames || npcState != "animating")
+        for (auto &npc : r.npcs) {
+            h.bytes(npc.model.v.data(), sizeof npc.model.v);
+            if (!npc.skin.empty())
+                h.bytes(npc.skin.data(), npc.skin.size() * sizeof(Mat4));
+        }
     if (auto m = monitor.lock())
         h(m->m_pixelSize.x)(m->m_pixelSize.y)(m->m_scale);
     for (auto &s : surfaces) {
@@ -4727,6 +4851,20 @@ int luaCamera(lua_State *state) {
           {"hint", runtime->renderer.reticle.hint},
           {"color", {runtime->renderer.reticle.color.x, runtime->renderer.reticle.color.y, runtime->renderer.reticle.color.z}}}},
         {"viewBob", {runtime->camera.viewBob.x, runtime->camera.viewBob.y, runtime->camera.viewBob.z}},
+        {"npcs",
+         [] {
+             Json agents = Json::array();
+             for (auto &a : runtime->npcAgents)
+                 agents.push_back({{"position", {a.position.x, a.position.y, a.position.z}},
+                                   {"heading", a.heading},
+                                   {"clip", a.clip},
+                                   {"clipTime", a.clipTime},
+                                   {"yielding", a.yielding}});
+             return Json{{"state", runtime->npcState},
+                         {"forcesFrames", runtime->npcForcesFrames},
+                         {"drawn", runtime->renderer.npcsDrawn},
+                         {"agents", agents}};
+         }()},
         {"motion", {{"speed", runtime->motionSpeed}, {"turn", runtime->motionTurn}}},
         {"mountTarget", runtime->snapTarget},
         {"renderPasses", runtime->renderPass.passes()},

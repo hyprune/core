@@ -25,6 +25,9 @@ Json defaultConfig() {
             {"fly", "F4"},
             {"zoom", "c"}}}}},
         {"movement", {{"climb_mode", "grab"}}},
+        // NPCs (RFC-0010 prototype, Lua only): auto animates them only while the player is
+        // present in the world on mains power; still poses them; off hides them.
+        {"npc", {{"motion", "auto"}}},
         {"player",
          {{"walk_speed", 4.0},
           {"run_speed", 10.0},
@@ -170,6 +173,8 @@ Json configPatch(const Json &current, const Json &patch) {
                 result[section][key] = v;
                 continue;
             }
+            if (section == "npc" && key == "motion" && v != "auto" && v != "always" && v != "still" && v != "off")
+                throw std::runtime_error("npc.motion must be auto, always, still or off");
             if (section == "movement" && key == "climb_mode") {
                 if (!v.is_string())
                     throw std::runtime_error("climb_mode must be a string");

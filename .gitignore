@@ -33,3 +33,4 @@ tests/fixtures/m3b/
 /dev/nested/.capture-pose-state/
 /dev/nested/.handover-state/
 /dev/nested/.objects-state/
+/dev/nested/.npc-state/
