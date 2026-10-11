@@ -43,7 +43,7 @@
       "evidence": {
         "result": {
           "placed": false,
-          "revision": 22
+          "revision": 23
         },
         "tool": 5,
         "selected": "surface-1"
@@ -60,6 +60,39 @@
     {
       "name": "bad params answer -32602",
       "evidence": null
+    },
+    {
+      "name": "a blueprint world publishes spatial.map.levels to 0.20 clients",
+      "evidence": [
+        {
+          "id": "lower-1",
+          "name": "Lower 1 - Rime Vault",
+          "minY": -7.0,
+          "maxY": -3.8,
+          "bytes": 7581
+        },
+        {
+          "id": "ground",
+          "name": "Ground",
+          "minY": -3.8,
+          "maxY": 3.2,
+          "bytes": 17348
+        },
+        {
+          "id": "level-1",
+          "name": "Level 1",
+          "minY": 3.2,
+          "maxY": 10.0,
+          "bytes": 9594
+        },
+        {
+          "id": "level-2",
+          "name": "Level 2 - Sun Court",
+          "minY": 10.0,
+          "maxY": 18.9,
+          "bytes": 5182
+        }
+      ]
     }
   ]
 }
