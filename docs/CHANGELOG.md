@@ -126,6 +126,17 @@ These are wire-compatible behavior changes that integrators may notice:
   with action `""` for a refused use). Use mode (E) accepts the Super window gestures;
   Super+LMB on a window edge resizes. `interaction.mode` `workspace`, `fullscreen` and
   `typing` hide the shell HUD.
+- Position tool (tool 4, [GIZMO.md](GIZMO.md)): constant-size 3D handles with plane,
+  screen, view-ring, trackball and uniform-scale handles. Object edits are previewed
+  and committed on release, so `editor.objects` changes once per gesture (not every
+  tick) and collision follows commits only. A pose breaking a placement rule is
+  refused with `runtime.notice` `placement.blocked`; in tool 4, `interaction.reticle`
+  shows `target`/`grab` over a handle, `holding`/`grab` while dragging and
+  `invalid`/`place` for a refused pose. Undo/redo send `editor.undo`/`editor.redo`
+  notices, drop/align `gizmo.drop`/`gizmo.align` on failure, the pivot toggle
+  `gizmo.pivot`. Development switches (`HYPRUNE_GIZMO_OBJECTS`, `HYPRUNE_GIZMO_UNIVERSAL`)
+  add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
+  `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
 ## World format versions
 
