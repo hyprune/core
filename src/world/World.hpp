@@ -79,6 +79,7 @@ struct ObjectAsset {
     std::vector<Triangle> collision;   // static proxy, asset space
     Vec3 center{};                     // swept bounds: sphere holding the asset at every pose
     float radius = 0;
+    Vec3 low{}, high{};                // rest-pose bounds, asset space
     bool animated() const { return !animations.empty(); }
     int animationOf(unsigned node) const { return node < nodeAnimation.size() ? nodeAnimation[node] : -1; }
 };
@@ -87,6 +88,12 @@ struct ObjectInstance {
     unsigned asset = 0;
     Mat4 model = Mat4::identity(); // pose · uniform scale
     float scale = 1, speed = 1, phase = 0;
+    // The authored pose (model is rebuilt from an editor overlay pose when one applies)
+    // and this instance's proxy triangles in World::collision.
+    Vec3 position{};
+    std::array<float, 4> rotation{0, 0, 0, 1};
+    float authoredScale = 1;
+    size_t collisionFirst = 0, collisionCount = 0;
     // Lighting (mode "probe"): ambient irradiance for upward/downward-facing
     // normals and the direct sun strength, from the world's baked light at load
     // (or the authored `ambient`). Linear RGB, world shader units.

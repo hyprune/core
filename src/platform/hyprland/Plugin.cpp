@@ -7,9 +7,12 @@
 #ifdef HYPRUNE_LIVE_BUILD
 #include "../../../dev/live/Bootstrap.hpp"
 #endif
+#include "interaction/Gizmo.hpp"
+#include "interaction/Placement.hpp"
 #include "interaction/Tools.hpp"
 #include "sim/ViewBob.hpp"
 #include "world/Mounts.hpp"
+#include "world/Objects.hpp"
 #include "world/Spatial.hpp"
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
@@ -141,6 +144,55 @@ struct Runtime {
     Vec3 dragPoint{}, dragNormal{};
     bool objectCarry = false;
     float objectDistance = 0;
+    // Gizmo 2.0 (Gizmo.inc). Object edits preview during a drag or carry and are
+    // committed (with an undo record) on release; collision follows commits only.
+    interaction::Gizmo gizmo;
+    interaction::Part gizmoHover = interaction::Part::None;
+    struct ObjectPreview {
+        bool active = false, valid = true;
+        interaction::Transform pose, candidate;
+        interaction::PlacementVerdict verdict;
+    } preview;
+    Vec3 dragPivot{};
+    Json editBefore = nullptr;
+    uint64_t objectRevision = 0;
+    std::set<uint32_t> gizmoKeys;
+    std::optional<interaction::Box> windowBlocked;
+    std::string ghostFor;
+    std::vector<std::pair<Vec3, Vec3>> ghostLines;
+    std::map<size_t, Mat4> instanceOverrides;
+    bool gizmoObjects = false;
+    std::vector<interaction::Box> gizmoKeepClear;
+    interaction::GizmoView gizmoView();
+    std::pair<float, float> gizmoPointer(const interaction::GizmoView &);
+    interaction::Box selectionBox(const interaction::Transform &);
+    Vec3 selectionPivot(const interaction::Transform &);
+    std::vector<Triangle> selectionTriangles(const interaction::Transform &);
+    interaction::PlacementScene placementScene();
+    interaction::PlacementVerdict placementCheck(const interaction::Transform &);
+    Json objectRecord(const interaction::Transform &);
+    Json currentRecord(const std::string &worldId, const std::string &id);
+    void writeObjectRecord(const std::string &worldId, const std::string &id, const Json &record);
+    bool commitObject(const interaction::Transform &, const std::string &what);
+    Json windowPose(const Capture::Entry &);
+    void resizeClient(Capture::Entry &, surfaces::Surface &, double width, double height);
+    void applyWindowPose(Capture::Entry &, const Json &pose);
+    void applyUndo(bool redo);
+    void dropSelection(bool align);
+    std::optional<std::pair<std::string, interaction::WorldHit>> instanceAim();
+    std::map<size_t, Mat4> applyInstanceModels();
+    void previewObject(const interaction::Transform &, bool carry);
+    void commitPreview();
+    void gizmoConfigure();
+    bool gizmoBegin();
+    interaction::Transform gizmoTransform(const interaction::Gizmo::Result &);
+    void gizmoUpdate();
+    void gizmoRelease(bool cancel);
+    void cancelGizmo();
+    bool gizmoKey(const std::string &key, unsigned mods, bool down, uint32_t code);
+    void ghostEdges();
+    void gizmoDraw();
+    Json gizmoDiagnostics();
     void projectCursor();
 
     Json config = interaction::defaultConfig(), configured = config;
@@ -1315,7 +1367,7 @@ void Runtime::finishLoad() {
         handover = {};
         relativeSurface.clear();
         editor.selected.clear();
-        editor.activeHandle = -1;
+        cancelGizmo(); ghostFor.clear(); instanceOverrides.clear();
         objectModels.clear();
         renderer.transforms.clear();
         originalCollision = world->collision;
@@ -1498,7 +1550,7 @@ void Runtime::exit() {
     input.clear();
     relativeSurface.clear();
     captureRequest = nullptr;
-    editor.activeHandle = -1;
+    cancelGizmo();
     objectCarry = false;
     pendingCursorHide.reset(); // an old hide request must not outlive cursor restoration
     cursorWarpPending = false;
@@ -1901,6 +1953,18 @@ void Runtime::reticleTick() {
         case 3:
             if (blocker)
                 ranged(blocker->distance, "reach_placement", "path");
+            break;
+        case 4:
+            // Position tool: a handle under the reticle, a drag (refused poses invalid),
+            // or something to select.
+            if (gizmo.dragging() || objectCarry)
+                next = {preview.active && !preview.valid ? "invalid" : "holding", preview.active && !preview.valid ? "place" : "grab", -1, -1};
+            else if (gizmoHover != interaction::Part::None)
+                next = {"target", "grab", -1, -1};
+            else if (auto h = aim(); h && !capture.workspace(h->first))
+                next = {"valid", "select", h->second.distance, -1};
+            else if (auto o = objectAim())
+                next = {"valid", "select", o->second.distance, -1};
             break;
         case 5:
             if (unplaced) {
@@ -2329,7 +2393,7 @@ void Runtime::applyInput(const Json &j) {
         smoothIntent = {};
         lookHeld = false;
         zoomHeld = false;
-        editor.activeHandle = -1;
+        cancelGizmo();
         objectCarry = false;
     }
     input.apply(next);
@@ -2524,7 +2588,7 @@ void Runtime::leaveInteraction() {
     zoomHeld = false;
     relativeSurface.clear();
     objectCarry = false;
-    editor.activeHandle = -1;
+    cancelGizmo();
     if (control.uiVisible()) {
         control.stop();
         cursor();
@@ -2714,18 +2778,25 @@ void Runtime::action(interaction::Action a) {
     } else if (a.name == "carry" || a.name == "resize") {
         uint32_t code = a.name == "carry" ? config["input"]["carry_button"].get<uint32_t>()
                                           : config["input"]["resize_button"].get<uint32_t>();
-        if (a.name == "carry" && a.pressed && editor.slot == 4 && !aim())
+        if (a.name == "carry" && a.pressed && editor.slot == 4 && !aim() && !gizmo.dragging())
             if (auto object = objectAim()) {
+                if (editor.selected != object->first)
+                    gizmo.resetFlips();
                 editor.selected = object->first;
                 editor.kind = "object";
                 objectCarry = true;
                 objectDistance = object->second.distance;
-                dragPoint = object->second.point - objectTransform(editor, *world, editor.selected).position;
+                dragStart = selectedTransform = objectTransform(editor, *world, editor.selected);
+                dragPoint = object->second.point - dragStart.position;
+                editBefore = currentRecord(world->id, editor.selected);
+                preview = {};
+                preview.active = true;
+                preview.pose = dragStart;
                 return;
             }
         if (objectCarry && !a.pressed) {
             objectCarry = false;
-            saveEditor();
+            commitPreview();
             return;
         }
         button({.timeMs = 0,
@@ -2759,25 +2830,10 @@ void Runtime::action(interaction::Action a) {
                     selectedTransform.rotation = {q[0] * cs + q[1] * sn, q[1] * cs - q[0] * sn, q[2] * cs + q[3] * sn,
                                                   q[3] * cs - q[2] * sn};
                 }
-                auto b =
-                    layout.binding(monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
-                Json next = {
-                    {"worldId", world->id},
-                    {"areaId", b ? b->at("areaId").get<std::string>() : ""},
-                    {"objectId", editor.selected},
-                    {"position",
-                     {selectedTransform.position.x, selectedTransform.position.y, selectedTransform.position.z}},
-                    {"rotation", selectedTransform.rotation},
-                    {"scale", {selectedTransform.scale.x, selectedTransform.scale.y, selectedTransform.scale.z}}};
-                auto it = std::find_if(editor.objects.begin(), editor.objects.end(), [&](auto &v) {
-                    return v["worldId"] == world->id && v["objectId"] == editor.selected;
-                });
-                if (it != editor.objects.end())
-                    *it = next;
-                else if (editor.objects.size() < 128)
-                    editor.objects.push_back(next);
-                toolsTick();
-                saveEditor();
+                if (objectCarry)
+                    ; // the carry previews and commits on release
+                else if (commitObject(selectedTransform, a.name == "distance" ? "Move" : "Rotate"))
+                    toolsTick();
                 publish();
             }
             return;
@@ -2870,7 +2926,7 @@ void Runtime::action(interaction::Action a) {
                                            {"message", "Set a waypoint or route before enabling autopilot."}});
     } else if (a.name.starts_with("tool")) {
         cancelGrab();
-        editor.activeHandle = -1;
+        cancelGizmo();
         objectCarry = false;
         editor.slot = tool = std::stoi(a.name.substr(4));
         tagged.clear();
@@ -2892,6 +2948,16 @@ std::optional<unsigned> editorNode(const world::World &w, const std::string &id)
     }
     return {};
 }
+// World 0.8 placed objects are editor targets as "object:<instance id>" (overlay
+// records keep the M3B shape; P1's overrides list would key them by instance id).
+std::optional<size_t> instanceIndex(const world::World &w, const std::string &id) {
+    if (!id.starts_with("object:"))
+        return {};
+    for (size_t k = 0; k < w.objectInstances.size(); ++k)
+        if (id.compare(7, std::string::npos, w.objectInstances[k].id) == 0)
+            return k;
+    return {};
+}
 bool belongs(const world::World &w, unsigned n, unsigned root) {
     for (int i = n; i >= 0 && size_t(i) < w.nodeParents.size(); i = w.nodeParents[i])
         if (unsigned(i) == root)
@@ -2899,6 +2965,8 @@ bool belongs(const world::World &w, unsigned n, unsigned root) {
     return false;
 }
 Vec3 objectOrigin(const world::World &w, const std::string &id) {
+    if (auto k = instanceIndex(w, id))
+        return w.objectInstances[*k].position;
     for (auto &o : w.objects)
         if (o["id"] == id)
             return {o["pose"]["position"][0], o["pose"]["position"][1], o["pose"]["position"][2]};
@@ -2919,6 +2987,11 @@ Vec3 objectOrigin(const world::World &w, const std::string &id) {
 interaction::Transform objectTransform(const interaction::Tools &editor, const world::World &w, const std::string &id) {
     interaction::Transform t;
     t.position = objectOrigin(w, id);
+    if (auto k = instanceIndex(w, id)) {
+        auto &inst = w.objectInstances[*k];
+        t.rotation = inst.rotation;
+        t.scale = {inst.authoredScale, inst.authoredScale, inst.authoredScale};
+    }
     for (auto &o : editor.objects)
         if (o["worldId"] == w.id && o["objectId"] == id) {
             t.position = {o["position"][0], o["position"][1], o["position"][2]};
@@ -2928,28 +3001,8 @@ interaction::Transform objectTransform(const interaction::Tools &editor, const w
         }
     return t;
 }
-std::array<float, 4> turn(std::array<float, 4> q, Vec3 axis, float angle) {
-    auto u = axis * std::sin(angle / 2);
-    float w = std::cos(angle / 2);
-    Vec3 v{q[0], q[1], q[2]};
-    auto n = v * w + u * q[3] + cross(u, v);
-    return {n.x, n.y, n.z, w * q[3] - dot(u, v)};
-}
-std::optional<Vec3> planePoint(Vec3 origin, Vec3 ray, Vec3 center, Vec3 normal) {
-    float d = dot(ray, normal);
-    if (std::abs(d) < .001f)
-        return {};
-    float distance = dot(center - origin, normal) / d;
-    if (distance <= 0)
-        return {};
-    return origin + ray * distance;
-}
-float axisPoint(Vec3 origin, Vec3 ray, Vec3 center, Vec3 axis) {
-    auto v = center - origin;
-    float a = dot(axis, ray);
-    return std::abs(1 - a * a) > .01f ? (a * dot(v, ray) - dot(v, axis)) / (1 - a * a) : 0;
-}
 } // namespace
+#include "Gizmo.inc"
 void Runtime::saveEditor() {
     if (session.playing) return;
     auto value = editor.saved();
@@ -2962,6 +3015,10 @@ void Runtime::saveEditor() {
 // mesh in front blocks the aim. World package geometry is otherwise static.
 std::optional<std::pair<std::string, interaction::WorldHit>> Runtime::objectAim() {
     auto hit = meshAim();
+    // World 0.8 objects (env-gated): the nearest of a placed object and scene geometry.
+    // Characters are never targets: NPCs are neither scene nodes nor placed objects.
+    if (auto object = instanceAim(); object && (!hit || object->second.distance < hit->second.distance))
+        return object;
     if (!hit)
         return {};
     auto node = editorNode(*world, hit->first);
@@ -3183,8 +3240,10 @@ void Runtime::toolInput(const std::string &slot, interaction::Action event) {
         return;
     }
     if (action == "gizmo.drag" && !event.pressed) {
-        editor.activeHandle = -1;
-        saveEditor();
+        // Typed values keep the drag open until Enter or Escape.
+        if (!gizmo.numeric())
+            gizmoRelease(false);
+        publish();
         return;
     }
     if (!event.pressed || !event.edge || !world)
@@ -3212,7 +3271,7 @@ void Runtime::toolInput(const std::string &slot, interaction::Action event) {
         }
     } else if (action == "tool.cycle") {
         editor.wheel(event.value > 0 ? 1 : -1);
-        editor.activeHandle = -1;
+        cancelGizmo();
     } else if (action == "window.lock") {
         if (auto h = aim())
             if (auto e = capture.find(h->first)) {
@@ -3227,7 +3286,7 @@ void Runtime::toolInput(const std::string &slot, interaction::Action event) {
         saveEditor();
     } else if (action == "gizmo.space") {
         editor.localAxes = !editor.localAxes;
-        editor.activeHandle = -1;
+        cancelGizmo();
     } else if (action == "gizmo.snap")
         editor.snap = !editor.snap;
     else if (action == "placement.ahead" || action == "placement.surface")
@@ -3340,39 +3399,21 @@ void Runtime::toolClick(const std::string &action) {
                 e->surface.center, {e->surface.width, e->surface.height, 1}, normalized.start.rotation};
         }
     if (!editor.selected.empty()) {
-        auto handles = editor.handles(selectedTransform.position, selectedTransform.rotation);
-        if (auto picked = interaction::pickHandle(handles, pointerCamera().position, pointerRay())) {
-            if (editor.kind == "window")
-                if (auto e = capture.find(editor.selected))
-                    if (editor.locked(world->id, e->instance))
-                        return;
-            editor.activeHandle = *picked;
-            dragStart = selectedTransform;
-            if (editor.kind == "window")
-                if (auto e = capture.find(editor.selected)) {
-                    dragPixelWidth = e->surface.pixelWidth;
-                    dragPixelHeight = e->surface.pixelHeight;
-                }
-            auto h = handles[*picked];
-            std::array<Vec3, 3> axes = {Vec3{1, 0, 0}, Vec3{0, 1, 0}, Vec3{0, 0, 1}};
-            dragNormal = h.axis < 3
-                             ? (editor.localAxes ? rotate(selectedTransform.rotation, axes[h.axis]) : axes[h.axis])
-                             : camera.forward();
-            if (editor.positionMode == 1)
-                dragPoint =
-                    planePoint(pointerCamera().position, pointerRay(), selectedTransform.position, dragNormal).value_or(h.end) -
-                    selectedTransform.position;
-            else
-                dragPoint = {axisPoint(pointerCamera().position, pointerRay(), selectedTransform.position, dragNormal), .5f,
-                             .5f};
-            pointerX = pointerY = .5f;
-            keys.clear();
-            smoothIntent = {};
+        if (editor.kind == "window")
+            if (auto e = capture.find(editor.selected); e && editor.locked(world->id, e->instance)) {
+                // Locked windows keep their handles but refuse edits.
+                if (gizmoHover != interaction::Part::None)
+                    return;
+            }
+        if (editor.kind == "object")
+            selectedTransform = objectTransform(editor, *world, editor.selected);
+        if (gizmoBegin())
             return;
-        }
     }
     if (auto h = aim())
         if (auto e = capture.find(h->first)) {
+            if (editor.selected != e->surface.id)
+                gizmo.resetFlips();
             editor.selected = e->surface.id;
             editor.kind = "window";
             auto s = e->surface;
@@ -3383,6 +3424,8 @@ void Runtime::toolClick(const std::string &action) {
             return;
         }
     if (auto h = objectAim()) {
+        if (editor.selected != h->first)
+            gizmo.resetFlips();
         editor.selected = h->first;
         editor.kind = "object";
         selectedTransform = objectTransform(editor, *world, editor.selected);
@@ -3394,125 +3437,68 @@ void Runtime::toolsTick() {
         return;
     if (originalCollision.empty())
         originalCollision = world->collision;
-    if (objectCarry) {
-        selectedTransform = objectTransform(editor, *world, editor.selected);
-        selectedTransform.position = camera.position + pointerRay() * objectDistance - dragPoint;
+    // Object carry (Super+LMB, tool 4) previews like a gizmo drag; release commits
+    // the last valid pose (RFC-0011 placement rules).
+    if (objectCarry && editor.kind == "object") {
+        auto candidate = preview.active ? preview.pose : objectTransform(editor, *world, editor.selected);
+        candidate.position = camera.position + pointerRay() * objectDistance - dragPoint;
+        previewObject(candidate, true);
     }
-    if (editor.activeHandle >= 0) {
-        auto handles = editor.handles(dragStart.position, dragStart.rotation);
-        if (size_t(editor.activeHandle) >= handles.size()) {
-            editor.activeHandle = -1;
-            return;
-        }
-        auto h = handles[editor.activeHandle];
-        selectedTransform = dragStart;
-        float delta = axisPoint(pointerCamera().position, pointerRay(), dragStart.position, dragNormal) - dragPoint.x;
-        if (std::abs(dot(dragNormal, camera.forward())) > .95f)
-            delta = (pointerX - .5f) * length(dragStart.position - camera.position) * 2;
-        if (editor.snap || keys.contains(KEY_LEFTSHIFT))
-            delta = std::round(delta / .1f) * .1f;
-        if (editor.positionMode == 0)
-            selectedTransform.position += dragNormal * delta;
-        else if (editor.positionMode == 1) {
-            auto p = planePoint(pointerCamera().position, pointerRay(), dragStart.position, dragNormal);
-            float angle = p ? std::atan2(dot(cross(dragPoint, *p - dragStart.position), dragNormal),
-                                         dot(dragPoint, *p - dragStart.position))
-                            : (pointerX - .5f) * 6.283185f;
-            if (editor.snap || keys.contains(KEY_LEFTSHIFT))
-                angle = std::round(angle / .2617994f) * .2617994f;
-            selectedTransform.rotation = turn(dragStart.rotation, dragNormal, angle);
-        } else {
-            float factor = std::clamp(1 + delta, .05f, 20.f);
-            if (h.uniform)
-                factor = std::clamp(1 + (pointerX - .5f - pointerY + .5f) * 3, .05f, 20.f);
-            if (editor.snap || keys.contains(KEY_LEFTSHIFT))
-                factor = std::max(.1f, std::round(factor / .1f) * .1f);
-            if (h.uniform)
-                selectedTransform.scale = dragStart.scale * factor;
-            else if (h.axis == 0)
-                selectedTransform.scale.x = dragStart.scale.x * factor;
-            else if (h.axis == 1)
-                selectedTransform.scale.y = dragStart.scale.y * factor;
-            else
-                selectedTransform.scale.z = dragStart.scale.z * factor;
-        }
-    }
-    selectedTransform.scale = {std::clamp(selectedTransform.scale.x, .01f, 100.f),
-                               std::clamp(selectedTransform.scale.y, .01f, 100.f),
-                               std::clamp(selectedTransform.scale.z, .01f, 100.f)};
-    if (editor.activeHandle >= 0 || objectCarry) {
-        if (editor.kind == "window") {
-            if (auto e = capture.find(editor.selected)) {
-                auto next = e->surface;
-                next.center = selectedTransform.position;
-                next.rotation = selectedTransform.rotation;
-                next.yaw = 0;
-                next.width = std::clamp(selectedTransform.scale.x, .1f, 12.f);
-                next.height = std::clamp(selectedTransform.scale.y, .1f, 8.f);
-                if (interaction::sweepSafe(e->surface, next, world->collision, &world->collisionIndex)) {
-                    layout.freePoses[e->surface.id] = next;
-                    layout.carried.clear();
-                    if (editor.positionMode == 2 && e->window->m_target) {
-                        auto w = e->window.lock();
-                        auto box = w->m_target->position();
-                        // Configure against the gesture baseline: the world pose
-                        // updates before the client acknowledges its new pixels.
-                        // Feeding those pending pixels back cancels the resize.
-                        auto width = interaction::resizeExtent(double(next.width / dragStart.scale.x * dragPixelWidth),
-                                                               160., monitor->m_size.x),
-                             height = interaction::resizeExtent(
-                                 double(next.height / dragStart.scale.y * dragPixelHeight), 100., monitor->m_size.y);
-                        if (auto content = layout.contentFor(e->instance, world.get())) {
-                            auto sizing = *content;
-                            sizing["worldSize"] = {next.width, next.height};
-                            sizing["logicalSize"] = {int(width), int(height)};
-                            layout.setContent(e->instance, world.get(), sizing);
-                        }
-                        if (std::abs(box.w - width) > 1 || std::abs(box.h - height) > 1) {
-                            Fullscreen::controller()->setFullscreenMode(w, Fullscreen::FSMODE_NONE,
-                                                                        Fullscreen::FSMODE_NONE);
-                            Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_ENABLE, w);
-                            Config::Actions::resize({width, height}, false, w);
-                            w->sendWindowSize(true);
-                        }
-                    }
-                    if (layout.binding(e->instance.workspaceId, world.get()))
-                        layout.mount(e->instance, world.get(), next);
+    if (gizmo.dragging())
+        gizmoUpdate();
+    // Windows follow the gizmo live; a swept pose that would enter collision stops
+    // the window and shows where it was refused.
+    if (gizmo.dragging() && editor.kind == "window") {
+        if (auto e = capture.find(editor.selected)) {
+            auto next = e->surface;
+            next.center = selectedTransform.position;
+            next.rotation = selectedTransform.rotation;
+            next.yaw = 0;
+            next.width = std::clamp(selectedTransform.scale.x, .1f, 12.f);
+            next.height = std::clamp(selectedTransform.scale.y, .1f, 8.f);
+            windowBlocked.reset();
+            if (interaction::sweepSafe(e->surface, next, world->collision, &world->collisionIndex)) {
+                layout.freePoses[e->surface.id] = next;
+                layout.carried.clear();
+                if (interaction::isScale(gizmo.active()) && e->window->m_target) {
+                    // Configure against the gesture baseline: the world pose
+                    // updates before the client acknowledges its new pixels.
+                    // Feeding those pending pixels back cancels the resize.
+                    auto width = interaction::resizeExtent(double(next.width / dragStart.scale.x * dragPixelWidth), 160.,
+                                                           monitor->m_size.x),
+                         height = interaction::resizeExtent(double(next.height / dragStart.scale.y * dragPixelHeight), 100.,
+                                                            monitor->m_size.y);
+                    resizeClient(*e, next, width, height);
                 }
-            } else
-                editor.selected.clear();
-        } else if (editor.kind == "object") {
-            auto b =
-                layout.binding(monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
-            Json next = {{"worldId", world->id},
-                         {"areaId", b ? b->at("areaId").get<std::string>() : ""},
-                         {"objectId", editor.selected},
-                         {"position",
-                          {selectedTransform.position.x, selectedTransform.position.y, selectedTransform.position.z}},
-                         {"rotation", selectedTransform.rotation},
-                         {"scale", {selectedTransform.scale.x, selectedTransform.scale.y, selectedTransform.scale.z}}};
-            auto it = std::find_if(editor.objects.begin(), editor.objects.end(), [&](auto &o) {
-                return o["worldId"] == world->id && o["objectId"] == editor.selected;
-            });
-            if (it != editor.objects.end())
-                *it = next;
-            else if (editor.objects.size() < 128)
-                editor.objects.push_back(next);
-        }
+                if (layout.binding(e->instance.workspaceId, world.get()))
+                    layout.mount(e->instance, world.get(), next);
+            } else {
+                interaction::Box b;
+                b.centre = next.center;
+                b.axes = {next.right(), next.up(), next.normal()};
+                b.half = {next.width * .5f, next.height * .5f, .03f};
+                windowBlocked = b;
+            }
+        } else
+            editor.selected.clear();
     }
     // Persisted moves of static geometry (from before this rule) are dropped, not applied.
+    // Records of world objects stay (dormant while their instance is absent, RFC-0011).
     Json kept = Json::array();
     for (auto &o : editor.objects) {
-        auto node = o["worldId"] == world->id ? editorNode(*world, o["objectId"]) : std::optional<unsigned>{0};
-        if (o["worldId"] != world->id || (node && world::movableNode(*world, *node)))
+        std::string id = o["objectId"];
+        bool mine = o["worldId"] == world->id, instance = id.starts_with("object:");
+        auto node = mine && !instance ? editorNode(*world, id) : std::optional<unsigned>{0};
+        if (!mine || instance || (node && world::movableNode(*world, *node)))
             kept.push_back(o);
     }
     if (editor.kind == "object") {
-        auto node = editorNode(*world, editor.selected);
-        if (!node || !world::movableNode(*world, *node)) {
+        bool instance = instanceIndex(*world, editor.selected).has_value();
+        auto node = instance ? std::nullopt : editorNode(*world, editor.selected);
+        if (!instance && (!node || !world::movableNode(*world, *node))) {
+            cancelGizmo();
             editor.selected.clear();
             editor.kind.clear();
-            editor.activeHandle = -1;
             objectCarry = false;
         }
     }
@@ -3520,42 +3506,73 @@ void Runtime::toolsTick() {
         editor.objects = std::move(kept);
         saveEditor();
     }
-    renderer.transforms.clear();
+    // Committed transforms move meshes and collision together; previews draw only.
+    std::map<unsigned, Mat4> committed;
     for (auto &o : editor.objects)
         if (o["worldId"] == world->id) {
-            auto node = editorNode(*world, o["objectId"]);
+            std::string id = o["objectId"];
+            auto node = instanceIndex(*world, id) ? std::nullopt : editorNode(*world, id);
             if (!node)
                 continue;
-            auto t = objectTransform(editor, *world, o["objectId"]);
-            auto matrix = t.matrix(objectOrigin(*world, o["objectId"]));
+            auto matrix = objectTransform(editor, *world, id).matrix(objectOrigin(*world, id));
             for (size_t n = 0; n < world->nodeParents.size(); n++)
                 if (belongs(*world, n, *node))
-                    renderer.transforms[n] = matrix;
+                    committed[n] = matrix;
         }
-    if (renderer.transforms != objectModels) {
-        objectModels = renderer.transforms;
+    auto instances = applyInstanceModels();
+    if (committed != objectModels || instances != instanceOverrides) {
+        std::set<size_t> relight;
+        for (auto &[k, m] : instances)
+            if (!instanceOverrides.contains(k) || !(instanceOverrides.at(k) == m))
+                relight.insert(k);
+        for (auto &[k, m] : instanceOverrides)
+            if (!instances.contains(k))
+                relight.insert(k);
+        objectModels = committed;
+        instanceOverrides = instances;
         world->collision = originalCollision;
         for (size_t i = 0; i < world->collision.size(); i++)
-            if (i < world->collisionNodes.size() && renderer.transforms.contains(world->collisionNodes[i])) {
-                auto m = renderer.transforms.at(world->collisionNodes[i]);
+            if (i < world->collisionNodes.size() && committed.contains(world->collisionNodes[i])) {
+                auto m = committed.at(world->collisionNodes[i]);
                 auto &t = world->collision[i];
                 t = {m.point(t.a), m.point(t.b), m.point(t.c)};
             }
+        for (auto &[k, m] : instances) {
+            auto &inst = world->objectInstances[k];
+            auto &asset = world->objectAssets[inst.asset];
+            for (size_t j = 0; j < inst.collisionCount && j < asset.collision.size(); ++j)
+                if (inst.collisionFirst + j < world->collision.size()) {
+                    auto &t = asset.collision[j];
+                    world->collision[inst.collisionFirst + j] = {m.point(t.a), m.point(t.b), m.point(t.c)};
+                }
+        }
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         layout.invalidateCollision();
         world->collisionIndex.rebuild(world->collision);
         world->visualTriangles.clear();
         for (const auto &mesh : world->meshes) {
-            auto it = renderer.transforms.find(mesh.node);
-            auto matrix = it == renderer.transforms.end() ? Mat4::identity() : it->second;
+            auto it = committed.find(mesh.node);
+            auto matrix = it == committed.end() ? Mat4::identity() : it->second;
             for (size_t i = 0; i + 2 < mesh.vertices.size(); i += 3)
                 world->visualTriangles.push_back({matrix.point(mesh.vertices[i].position),
                                                   matrix.point(mesh.vertices[i + 1].position),
                                                   matrix.point(mesh.vertices[i + 2].position)});
         }
         world->visualIndex.rebuild(world->visualTriangles);
+        // A moved object takes the visibility and probe light of its new place.
+        for (auto k : relight)
+            world::lightObjects(*world, k);
         renderer.collisionChanged();
+        ++objectRevision;
     }
+    renderer.transforms = committed;
+    if (preview.active && editor.kind == "object" && !instanceIndex(*world, editor.selected))
+        if (auto node = editorNode(*world, editor.selected)) {
+            auto matrix = preview.pose.matrix(objectOrigin(*world, editor.selected));
+            for (size_t n = 0; n < world->nodeParents.size(); n++)
+                if (belongs(*world, n, *node))
+                    renderer.transforms[n] = matrix;
+        }
     renderer.lines.clear();
     // A compatible tool mount under the aim lights up while a client is being placed.
     snapTarget.clear();
@@ -3598,41 +3615,17 @@ void Runtime::toolsTick() {
             renderer.lines.push_back({c - r * .7f + u * 1.7f, c + r * .7f + u * 1.7f, gold});
             renderer.lines.push_back({c + r * .7f + u * 1.7f, c + r * .7f + u, gold});
         }
-    if (editor.slot == 4 && !editor.selected.empty()) {
-        if (editor.activeHandle < 0) {
-            if (editor.kind == "window") {
-                if (auto e = capture.find(editor.selected))
-                    selectedTransform.position = e->surface.center;
-                else
-                    editor.selected.clear();
+    if (editor.slot == 4 && !editor.selected.empty() && !gizmo.dragging() && !objectCarry) {
+        if (editor.kind == "window") {
+            if (auto e = capture.find(editor.selected)) {
+                selectedTransform.position = e->surface.center;
+                selectedTransform.scale = {e->surface.width, e->surface.height, 1};
             } else
-                selectedTransform = objectTransform(editor, *world, editor.selected);
-        }
-        for (auto &h : editor.handles(selectedTransform.position, selectedTransform.rotation)) {
-            Vec3 color = h.axis == 0   ? Vec3{1, .2f, .2f}
-                         : h.axis == 1 ? Vec3{.2f, 1, .3f}
-                         : h.axis == 2 ? Vec3{.2f, .5f, 1}
-                                       : Vec3{1, .9f, .6f};
-            renderer.lines.push_back({h.start, h.end, color});
-            if (h.shape == "arrow") {
-                auto axis = normalized(h.end - h.start), side = normalized(cross(axis, camera.forward()));
-                if (length(side) < .1f)
-                    side = {1, 0, 0};
-                renderer.lines.push_back({h.end, h.end - axis * .18f + side * .09f, color});
-                renderer.lines.push_back({h.end, h.end - axis * .18f - side * .09f, color});
-            }
-            if (h.shape == "cube") {
-                auto c = h.uniform ? selectedTransform.position : h.end;
-                std::array<Vec3, 8> p;
-                for (int i = 0; i < 8; i++)
-                    p[i] = c + Vec3{(i & 1) ? .065f : -.065f, (i & 2) ? .065f : -.065f, (i & 4) ? .065f : -.065f};
-                for (int i = 0; i < 8; i++)
-                    for (int bit : {1, 2, 4})
-                        if (!(i & bit))
-                            renderer.lines.push_back({p[i], p[i | bit], color});
-            }
-        }
+                editor.selected.clear();
+        } else
+            selectedTransform = objectTransform(editor, *world, editor.selected);
     }
+    gizmoDraw();
 }
 std::optional<Json> Runtime::method(const std::string &method, const Json &wire) {
     Json params = wire;
@@ -4675,6 +4668,17 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     h(r.waypoint)(r.route)(r.toolPrompt)(r.overlayStyle)(r.graphics)(r.profile);
     for (auto &l : r.lines)
         h(l.a)(l.b)(l.color)(l.width);
+    h(objectRevision)(r.gizmo.strokes.size())(r.gizmo.fills.size());
+    for (auto &st : r.gizmo.strokes)
+        h(st.a.x)(st.a.y)(st.b.x)(st.b.y)(st.color.r)(st.color.a)(st.width);
+    for (auto &f : r.gizmo.fills)
+        for (auto &p : f.points)
+            h(p.x)(p.y)(f.color.r)(f.color.a);
+    for (auto &l : r.readouts)
+        h(l.text)(l.x)(l.y);
+    if (world)
+        for (auto &inst : world->objectInstances)
+            h.bytes(inst.model.v.data(), sizeof inst.model.v);
     for (auto &[node, m] : r.transforms) {
         h(node);
         for (auto v : m.v)
@@ -4854,6 +4858,7 @@ int luaCamera(lua_State *state) {
         {"gesture", int(runtime->hands.gesture)},
         {"activeHandle", runtime->editor.activeHandle},
         {"positionMode", runtime->editor.positionMode},
+        {"gizmo", runtime->gizmoDiagnostics()},
         {"selectedScale",
          {runtime->selectedTransform.scale.x, runtime->selectedTransform.scale.y, runtime->selectedTransform.scale.z}},
         {"superHeld", runtime->superHeld},
@@ -5018,6 +5023,18 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                                               : std::filesystem::path(getenv("HOME")) / ".local/state";
     runtime->captureDirectory = getenv("HYPRUNE_CAPTURE_DIR") ? std::filesystem::path(getenv("HYPRUNE_CAPTURE_DIR"))
                                                               : stateHome / "hyprune/captures";
+    // Gizmo 2.0 switches that need a contract change before they can be defaults
+    // (RFC-0011 P1): world 0.8 objects as targets, the universal mode, keepClear volumes.
+    runtime->gizmoObjects = getenv("HYPRUNE_GIZMO_OBJECTS") && std::string(getenv("HYPRUNE_GIZMO_OBJECTS")) == "1";
+    runtime->editor.universal = getenv("HYPRUNE_GIZMO_UNIVERSAL") && std::string(getenv("HYPRUNE_GIZMO_UNIVERSAL")) == "1";
+    if (auto file = getenv("HYPRUNE_GIZMO_KEEPCLEAR"))
+        try {
+            for (auto &k : interaction::readJSON(file))
+                runtime->gizmoKeepClear.push_back(interaction::aabbBox({k["min"][0], k["min"][1], k["min"][2]},
+                                                                       {k["max"][0], k["max"][1], k["max"][2]}));
+        } catch (const std::exception &e) {
+            std::fprintf(stderr, "[hyprune] HYPRUNE_GIZMO_KEEPCLEAR ignored: %s\n", e.what());
+        }
     if (auto p = getenv("HYPRUNE_EDITOR_FILE"))
         runtime->editorFile = p;
     else if (auto p = getenv("XDG_STATE_HOME"))
@@ -5283,6 +5300,14 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                         runtime->session.event({{"type","key"},{"key",key},{"mods",runtime->modifiers},{"down",true},{"value",0},{"mode",runtime->inputMode()}});
                         runtime->deferInput([] { runtime->toggleFreeCursor(); });
                     }
+                    return;
+                }
+                // Tool 4 keys (numeric entry, Escape cancels a drag, undo/redo, drop,
+                // pivot) win over the adventure escape and the keymap while they apply.
+                if (bindingScoped && !runtime->layerCursor && runtime->gizmoKey(key, runtime->modifiers, down, event.keycode)) {
+                    info.cancelled = true;
+                    if (down)
+                        runtime->swallowedKeys.insert(event.keycode);
                     return;
                 }
                 // Escape without an application focus is always an adventure

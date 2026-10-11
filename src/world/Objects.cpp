@@ -116,6 +116,7 @@ void loadObjects(World &w, const std::filesystem::path &root, const std::string 
                 lo = {std::min(lo.x, v.position.x), std::min(lo.y, v.position.y), std::min(lo.z, v.position.z)},
                 hi = {std::max(hi.x, v.position.x), std::max(hi.y, v.position.y), std::max(hi.z, v.position.z)};
         a.center = (lo + hi) * .5f;
+        a.low = lo, a.high = hi;
         for (const auto &mesh : a.meshes) {
             int i = a.animationOf(mesh.node);
             for (const auto &v : mesh.vertices)
@@ -146,11 +147,13 @@ void loadObjects(World &w, const std::filesystem::path &root, const std::string 
             o.ambientUp = o.ambientDown = vec(entry["ambient"]);
             o.authoredAmbient = true;
         }
+        o.position = position, o.rotation = q, o.authoredScale = o.scale;
         o.model = instanceModel(position, q, o.scale);
         const auto &a = w.objectAssets[o.asset];
         o.center = o.model.point(a.center);
         o.radius = a.radius * o.scale;
-        // The static collision proxy at the instance pose; it never moves.
+        // The static collision proxy at the instance pose (only an editor overlay moves it).
+        o.collisionFirst = w.collision.size(), o.collisionCount = a.collision.size();
         for (const auto &t : a.collision) {
             w.collision.push_back({o.model.point(t.a), o.model.point(t.b), o.model.point(t.c)});
             w.collisionNodes.push_back(objectCollisionNode);
@@ -195,9 +198,10 @@ Vec3 decodeSrgb(Vec3 c) {
     return {f(c.x), f(c.y), f(c.z)};
 }
 } // namespace
-void lightObjects(World &w) {
-    if (w.objectInstances.empty())
+void lightObjects(World &w, std::optional<size_t> only) {
+    if (w.objectInstances.empty() || (only && *only >= w.objectInstances.size()))
         return;
+    auto skip = [&](const ObjectInstance &o) { return only && &o != &w.objectInstances[*only]; };
     // An object shares the visibility of the static geometry around it: the areas
     // owning scene meshes its swept sphere overlaps. Bounds alone say nothing:
     // derived regions are camera cells that own no nodes and are visible from
@@ -210,6 +214,8 @@ void lightObjects(World &w) {
             hi = {std::max(hi.x, v.position.x), std::max(hi.y, v.position.y), std::max(hi.z, v.position.z)};
         }
     for (auto &o : w.objectInstances) {
+        if (skip(o))
+            continue;
         std::set<int> owners;
         for (size_t m = 0; m < w.meshes.size(); ++m) {
             unsigned node = w.meshes[m].node;
@@ -264,7 +270,7 @@ void lightObjects(World &w) {
     };
     constexpr int rays = 64;
     for (auto &o : w.objectInstances) {
-        if (w.objectAssets[o.asset].unlit)
+        if (skip(o) || w.objectAssets[o.asset].unlit)
             continue;
         Vec3 up{}, down{};
         float upWeight = 0, downWeight = 0;
