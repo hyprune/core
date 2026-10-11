@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Developer settings: environment variables over ~/.config/hyprune/dev.env.
 
 dev.env is optional, one KEY=VALUE per line (# comments, optional quotes, ~ expanded).
