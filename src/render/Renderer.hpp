@@ -8,6 +8,7 @@
 #include "surfaces/Surface.hpp"
 #include "world/Character.hpp"
 #include "world/World.hpp"
+#include "quests/Markers.hpp"
 #include <GLES3/gl3.h>
 #include <chrono>
 #include <deque>
@@ -75,6 +76,10 @@ class Renderer {
     float useDistance = 6;
     void applyOverlayStyle(const world::Json &patch); // Deferred, validates before any upload.
     world::Json overlayDiagnostics = world::Json::object();
+    // RFC-0012 markers: the runtime that lays them out per frame (set by the owner) and
+    // the last frame's layout for diagnostics. Drawn in present() (MarkerOverlay.cpp).
+    const quests::MarkerRuntime *markers = nullptr;
+    world::Json markerDiagnostics = world::Json::object();
     std::string font = "monospace";
     world::Json profile;
     static bool intelTier(const std::string &quality, const std::string &device) {
@@ -238,6 +243,15 @@ class Renderer {
     std::vector<Icon> icons_;
     void icon(const Icon &, int, int);
     void worldOverlays(const sim::Camera &, std::span<const surfaces::Surface>, int, int);
+    quests::MarkerLayout markerLayout_;
+    GLuint markerProgram_ = 0, markerTextProgram_ = 0;
+    void prepareMarkers(const sim::Camera &, std::span<const surfaces::Surface>, int, int);
+    void drawMarkers(int, int);
+    void destroyMarkers();
+    void markerText(float x, float y, const std::string &, Vec3 color, float alpha, int w, int h, float scale);
+    float markerTextWidth(const std::string &, float scale) const;
+    void markerShape(float x, float y, int shape, float radius, Vec3 color, float alpha, int ring, bool dashed,
+                     float angle, int w, int h, float extentX = 0, float extentY = 0);
     GLuint textProgram_ = 0, textTexture_ = 0, textVao_ = 0, textBuffer_ = 0;
     std::string loadedFont_;
     struct Glyph {

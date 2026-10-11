@@ -2123,6 +2123,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
     if (!worldOnly) worldOverlays(camera, surfaces, w, h);
+    if (!worldOnly) prepareMarkers(camera, surfaces, w, h);
     // Editor primitives are plain vertices under the same GL guard. No seat or
     // compositor callbacks occur while the render pass draws handles/path strokes.
     glDisable(GL_DEPTH_TEST);
@@ -2225,6 +2226,7 @@ void Renderer::present(GLuint target, int w, int h, bool typing) {
     drawLabels(readouts, w, h);
     for (auto &sprite : icons_)
         icon(sprite, w, h);
+    drawMarkers(w, h);
     drawReticle(w, h, typing);
     debugHUD(w, h);
 }
@@ -3028,6 +3030,7 @@ void Renderer::releaseCharacters() {
 }
 void Renderer::destroy() {
     releaseCharacters();
+    destroyMarkers();
     if (jointUbo_)
         glDeleteBuffers(1, &jointUbo_);
     jointUbo_ = 0;

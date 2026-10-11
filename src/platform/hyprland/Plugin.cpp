@@ -14,6 +14,7 @@
 #include "world/Mounts.hpp"
 #include "world/Objects.hpp"
 #include "world/Spatial.hpp"
+#include "quests/Markers.hpp"
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
@@ -82,6 +83,11 @@ struct Runtime {
     sim::Camera displayedCamera;
     const sim::Camera &pointerCamera() const { return renderedOffload ? displayedCamera : camera; }
     void offloadTick();
+    // RFC-0012 (Quests.inc): markers, the TAB-tap reveal and quest facts for hypruned.
+    quests::MarkerRuntime markers;
+    int64_t nextFacts = 0;
+    std::string markerMode() const;
+    void questsTick();
     void offloadPump();
     SP<CEventLoopTimer> offloadTimer;
     uint64_t offloadDeferred = 0;
@@ -520,6 +526,8 @@ void keyboardInput(void *self, const IKeyboard::SKeyEvent &event, SP<IKeyboard> 
     // event source only for that synchronous call; native processing remains intact.
     auto previous = runtime->eventKeyboard;
     runtime->eventKeyboard = keyboard;
+    runtime->markers.input(std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch()).count());
     originalKeyboardInput(self, event, keyboard);
     runtime->eventKeyboard = previous;
 }
@@ -528,6 +536,8 @@ using MouseAxisInput = void (*)(void *, IPointer::SAxisEvent, SP<IPointer>);
 MouseButtonInput originalMouseButton = nullptr;
 MouseAxisInput originalMouseAxis = nullptr;
 void mouseButtonInput(void *self, IPointer::SButtonEvent event, SP<IPointer> pointer) {
+    runtime->markers.input(std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch()).count());
     auto previous = runtime->eventPointer;
     runtime->eventPointer = pointer;
     originalMouseButton(self, event, pointer);
@@ -570,6 +580,9 @@ bool ownsInput() {
            !runtime->handover.phase;
 }
 void motion(void *self, const Vector2D &delta) {
+    if (runtime) // input activity for focus credit (a timestamp only)
+        runtime->markers.input(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   std::chrono::steady_clock::now().time_since_epoch()).count());
     if (runtime && runtime->session.playing && !runtime->replayDispatch) return;
     if (runtime && runtime->session.recording && ownsInput())
         runtime->session.event({{"type","motion"},{"dx",delta.x},{"dy",delta.y},{"mode",runtime->inputMode()}});
@@ -1181,6 +1194,13 @@ void Runtime::publish() {
                     {"markers", world::projectMarkers(*world, camera, float(monitor->m_size.x) / monitor->m_size.y)}};
             }
             spatial["projection"] = legacyProjection;
+            // A shell drawing markers itself (markers.core_draw off) reads them here (IPC 0.21).
+            if (!markers.settings.coreDraw)
+                for (auto &m : markers.projection(camera, float(monitor->m_size.x) / monitor->m_size.y,
+                                                  std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                      now.time_since_epoch()).count()))
+                    if (spatial["projection"]["markers"].size() < 64)
+                        spatial["projection"]["markers"].push_back(m);
         }
     }
     Json apps = Json::array();
@@ -1279,6 +1299,7 @@ void Runtime::publish() {
         {"shell", {{"leases", control.leases}}},
         {"location", control.location},
         {"integrations", {{"sources", control.sources}}}};
+    publication["markers"] = markers.stateKey();
     for (auto &e : capture.entries)
         if (world && editor.locked(world->id, e.instance))
             publication["editor"]["locked"].push_back(e.surface.id);
@@ -2880,6 +2901,9 @@ void Runtime::action(interaction::Action a) {
     else if (a.name == "menu") {
         input.clear();
         control.openMenu();
+    } else if (a.name == "markers.reveal") {
+        markers.tap(std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch()).count());
     } else if (a.name == "use") {
         if (!world || noclip || movement != &walk ||
             !climbing.use(camera, world->climbables,
@@ -3820,6 +3844,9 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             throw ipc::Error(-32602, "overlay style needs owning shell lease");
         static constexpr std::array reticleColours{"reticleColor", "validColor", "invalidColor"};
         bool reticleAware = ipc::protocol::atLeast(protocol, "0.19");
+        bool questAware = ipc::protocol::atLeast(protocol, "0.21");
+        if (!questAware && params["style"].is_object() && params["style"].contains("questColor"))
+            throw ipc::Error(-32602, "setting requires IPC 0.21");
         if (!reticleAware && params["style"].is_object())
             for (auto key : reticleColours)
                 if (params["style"].contains(key))
@@ -3830,6 +3857,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (!reticleAware)
             for (auto key : reticleColours)
                 style.erase(key);
+        if (!questAware)
+            style.erase("questColor");
         return Json{{"style", style}};
     }
     if (method == "input.set" || method == "input.preview") {
@@ -3884,6 +3913,25 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             throw ipc::Error(-32602, "unknown capture slot");
         captureRequest = {
             {"mode", mode}, {"action", name}, {"slot", params["slot"]}, {"status", "waiting"}, {"binding", nullptr}};
+        publish();
+        return Json{{"revision", ipc->revision()}};
+    }
+    if (method == "_quests.sync") {
+        markers.sync(params);
+        return Json::object();
+    }
+    if (method == "markers.reveal") {
+        if (params.size() > 1 || (params.size() == 1 && !params.contains("durationMs")))
+            throw ipc::Error(-32602, "markers.reveal takes only durationMs");
+        std::optional<int64_t> duration;
+        if (params.contains("durationMs")) {
+            if (!params["durationMs"].is_number_integer() || params["durationMs"] < 1000 || params["durationMs"] > 15000)
+                throw ipc::Error(-32602, "durationMs must be 1000-15000");
+            duration = params["durationMs"].get<int64_t>();
+        }
+        markers.request(std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch()).count(),
+                        duration);
         publish();
         return Json{{"revision", ipc->revision()}};
     }
@@ -4235,6 +4283,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     return Json{{"revision", ipc->revision()}};
 }
 #include "Replay.inc"
+#include "Quests.inc"
 void Runtime::tick() {
     if (renderPass.active())
         throw std::runtime_error("deferred work inside compositor render pass");
@@ -4261,7 +4310,7 @@ void Runtime::tick() {
         applyInput(*next);
     renderer.debug = debug;
     replayBeforeTick();
-    for (auto &a : input.tick(inputClock()))
+    for (auto &a : input.tick(inputClock(), inputMode()))
         action(a);
     if (!ipc->healthy()) {
         if (active)
@@ -4544,6 +4593,7 @@ void Runtime::tick() {
     renderer.updateMs =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - updateStarted).count();
     cursor();
+    questsTick();
     auto ipcStarted = std::chrono::steady_clock::now();
     if (ipcStarted >= nextPublish || !control.events.empty() || !layout.events.empty()) {
         nextPublish = ipcStarted + std::chrono::milliseconds(33);
@@ -4669,6 +4719,8 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     h(typing && !layerCursor)(r.debug)(r.showAreaMarkers)(r.showInteractionHints)(r.useDistance)(r.renderScale);
     h(r.logicalScale)(r.pointerX)(r.pointerY)(r.scopeVignette)(r.materialDetails)(r.effects)(r.worldOnly)(r.font);
     h(r.waypoint)(r.route)(r.toolPrompt)(r.overlayStyle)(r.graphics)(r.profile);
+    h(markers.frameHash(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count()));
     for (auto &l : r.lines)
         h(l.a)(l.b)(l.color)(l.width);
     h(objectRevision)(r.gizmo.strokes.size())(r.gizmo.fills.size());
@@ -4992,6 +5044,11 @@ int luaCamera(lua_State *state) {
         j["presentLog"].push_back(Json(p));
     runtime->renderer.presentLog.clear();
     j["collisionChecksum"] = collisionSum;
+    j["markers"] = {{"mode", runtime->markers.mode},
+                    {"state", runtime->markers.stateKey()},
+                    {"layout", runtime->renderer.markerDiagnostics},
+                    {"occluded", runtime->markers.occluded},
+                    {"inside", runtime->markers.inside}};
     j["workspaceFrames"] = Json::array();
     for (auto &f : runtime->capture.workspaces)
         j["workspaceFrames"].push_back({{"id", f.surface.id},
@@ -5089,6 +5146,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     {"atmosphere.get", "state.read"},
                     {"atmosphere.set", "world.control"},
                     {"overlay.style", "shell.control"},
+                    {"markers.reveal", "shell.control"},
                     {"camera.fov", "movement.control"},
                     {"shell.bind", "shell.control"},
                     {"workspace.activate", "world.control"},

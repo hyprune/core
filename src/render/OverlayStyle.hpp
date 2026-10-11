@@ -6,7 +6,9 @@ inline world::Json overlayDefaults() {
     return {{"fontFamily", "monospace"},  {"waypointColor", {.25, 1., .65}}, {"routeColor", {.25, 1., .65}},
             {"labelColor", {1., 1., 1.}}, {"promptColor", {.7, .9, 1.}},     {"iconAtlas", nullptr},
             // IPC 0.19: the reticle's neutral, valid-target and invalid-target colours.
-            {"reticleColor", {.95, .95, .95}}, {"validColor", {.35, .95, .6}}, {"invalidColor", {1., .62, .35}}};
+            {"reticleColor", {.95, .95, .95}}, {"validColor", {.35, .95, .6}}, {"invalidColor", {1., .62, .35}},
+            // IPC 0.21: quest, focus and break markers (RFC-0012).
+            {"questColor", {1., .78, .3}}};
 }
 inline world::Json overlayStylePatch(const world::Json &old, const world::Json &patch) {
     if (!patch.is_object())
