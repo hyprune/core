@@ -248,10 +248,10 @@ void Renderer::drawMarkers(int w, int h) {
                  : item.kind == "quest" || item.kind == "focus" || item.kind == "break"
                      ? quest
                      : label * (item.tier == 4 ? .85f : 1.f);
-        float radius = (item.small ? 6.f : 12.f) * s; // 24 px icons, 12 px for the persistent diamond
+        float radius = (item.small ? 8.f : 12.f) * s; // 24 px icons, 16 px for the persistent diamond
         int shape = shapeOf(item.icon, item.arrow);
         if (item.arrow)
-            radius = (item.small ? 9.f : 12.f) * s;
+            radius = (item.small ? 11.f : 12.f) * s;
         markerShape(item.x, item.y, shape, radius, c, item.alpha, item.tier == 1 && !item.small && !item.arrow, item.occluded,
                     item.angle, w, h);
         if (item.chevron && !item.arrow)
