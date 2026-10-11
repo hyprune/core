@@ -2870,10 +2870,13 @@ void Renderer::drawNpcs(const std::array<std::array<float, 4>, 6> &planes, int t
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, m.slots[0].texture >= 0 ? gpu.textures[m.slots[0].texture] : 0);
             glBindSampler(0, repeat_);
-            for (int unit : {1, 2, 3, 4, 5}) {
+            for (int unit : {1, 2, 3, 4}) {
                 glActiveTexture(GL_TEXTURE0 + unit);
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
+            glActiveTexture(GL_TEXTURE5); // emissive (visor / eyes)
+            glBindTexture(GL_TEXTURE_2D, m.slots[4].texture >= 0 ? gpu.textures[m.slots[4].texture] : 0);
+            glBindSampler(5, repeat_);
             glBindVertexArray(prim.vao);
             glDrawElements(GL_TRIANGLES, prim.count, GL_UNSIGNED_INT, nullptr);
         }

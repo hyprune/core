@@ -68,6 +68,28 @@ const Character::Clip *Character::clip(std::string_view name) const {
             return &c;
     return nullptr;
 }
+namespace {
+std::string boneKey(std::string name) {
+    // mixamorig:Hips, mixamorig1:Hips, Armature_Hips -> hips
+    if (auto colon = name.rfind(':'); colon != std::string::npos)
+        name = name.substr(colon + 1);
+    std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+    return name;
+}
+bool fingerBone(const std::string &name) {
+    auto k = boneKey(name);
+    return k.find("finger") != std::string::npos || k.find("thumb") != std::string::npos ||
+           k.find("index") != std::string::npos || k.find("pinky") != std::string::npos;
+}
+} // namespace
+int Character::role(std::string_view r) const {
+    for (size_t i = 0; i < joints.size(); ++i) {
+        auto k = boneKey(joints[i].name);
+        if (k == r || (r == "hips" && k == "pelvis"))
+            return int(i);
+    }
+    return -1;
+}
 int Character::joint(std::string_view name) const {
     for (size_t i = 0; i < joints.size(); ++i)
         if (joints[i].name == name)
@@ -132,6 +154,7 @@ Character loadCharacter(const std::filesystem::path &path) {
         throw std::runtime_error("glTF buffers could not be loaded");
     if (cgltf_validate(raw) != cgltf_result_success)
         throw std::runtime_error("invalid glTF (run a glTF validator)");
+    decodeMeshopt(raw); // EXT_meshopt_compression, as world packages (format 0.7)
     Character c;
     c.skins = int(raw->skins_count);
     if (!raw->skins_count)
@@ -190,6 +213,12 @@ Character loadCharacter(const std::filesystem::path &path) {
         Image out;
         int w = 0, h = 0, n = 0;
         unsigned char *pixels = nullptr;
+        bool ktx2 = img.mime_type && std::string_view(img.mime_type) == "image/ktx2";
+        if (ktx2 && img.buffer_view && cgltf_buffer_view_data(img.buffer_view)) { // KHR_texture_basisu: transcode to RGBA
+            auto decoded = decodeKtx2(cgltf_buffer_view_data(img.buffer_view), img.buffer_view->size, 0);
+            c.images.push_back(std::move(decoded));
+            continue;
+        }
         if (img.buffer_view && cgltf_buffer_view_data(img.buffer_view))
             pixels = stbi_load_from_memory(cgltf_buffer_view_data(img.buffer_view), int(img.buffer_view->size), &w, &h, &n, 4);
         else if (img.uri && !std::string_view(img.uri).starts_with("data:"))
@@ -208,10 +237,19 @@ Character loadCharacter(const std::filesystem::path &path) {
                      m.pbr_metallic_roughness.base_color_factor[2]};
         out.metallic = m.pbr_metallic_roughness.metallic_factor;
         out.roughness = m.pbr_metallic_roughness.roughness_factor;
-        if (auto tex = m.pbr_metallic_roughness.base_color_texture.texture; tex && tex->image) {
-            out.slots[0].texture = int(tex->image - raw->images);
-            out.baseTexture = out.slots[0].texture;
+        auto image = [&](const cgltf_texture *tex) {
+            return !tex ? -1 : tex->basisu_image ? int(tex->basisu_image - raw->images) : tex->image ? int(tex->image - raw->images) : -1;
+        };
+        if (int i = image(m.pbr_metallic_roughness.base_color_texture.texture); i >= 0) {
+            out.slots[0].texture = i;
+            out.baseTexture = i;
         }
+        out.emissive = {m.emissive_factor[0], m.emissive_factor[1], m.emissive_factor[2]};
+        if (m.has_emissive_strength)
+            out.emissive = out.emissive * m.emissive_strength.emissive_strength;
+        if (int i = image(m.emissive_texture.texture); i >= 0)
+            out.slots[4].texture = i;
+        c.emissive.push_back(length(out.emissive) > 0 || out.slots[4].texture >= 0);
         out.doubleSided = m.double_sided;
         c.materials.push_back(out);
         c.materialNames.push_back(m.name ? m.name : "");
@@ -219,6 +257,7 @@ Character loadCharacter(const std::filesystem::path &path) {
     if (c.materials.empty()) {
         c.materials.push_back({});
         c.materialNames.push_back("");
+        c.emissive.push_back(false);
     }
     // Skinned primitives of the mesh nodes using this skin.
     bool first = true;
@@ -226,6 +265,7 @@ Character loadCharacter(const std::filesystem::path &path) {
         auto &node = raw->nodes[ni];
         if (!node.mesh || node.skin != &skin)
             continue;
+        c.meshNodes.push_back(node.name ? node.name : "");
         for (size_t pi = 0; pi < node.mesh->primitives_count; ++pi) {
             auto &prim = node.mesh->primitives[pi];
             if (prim.type != cgltf_primitive_type_triangles)
@@ -335,12 +375,22 @@ std::vector<CharacterProblem> checkCharacter(const Character &c, const Character
     if (c.skins != 1)
         warn(std::format("{} skins: one shared skeleton is expected; only the first is used", c.skins));
     // Skeleton: at most 40 bones, one root named `root` at the feet.
-    if (c.joints.size() > 40)
-        error(std::format("{} bones: the limit is 40", c.joints.size()));
-    int root = c.joint("root");
+    // Bones: 40 is the performance target; up to 65 (a Mixamo skeleton with fingers) is accepted.
+    size_t fingers = std::count_if(c.joints.begin(), c.joints.end(), [](auto &j) { return fingerBone(j.name); });
+    if (c.joints.size() > 65)
+        error(std::format("{} bones: the limit is 65 (40 without finger bones)", c.joints.size()));
+    else if (c.joints.size() > 40)
+        warn(std::format("{} bones ({} finger bones): over the 40-bone performance target; tools/npc-import --strip-fingers removes them",
+                         c.joints.size(), fingers));
+    int root = c.role("root");
     if (root < 0)
-        error("no bone named `root`: add a root bone at the feet, parent of the hips");
-    else if (c.joints[root].parent != -1)
+        error(c.role("hips") >= 0 ? "no `root` bone above the hips: run tools/npc-import, which adds one at the feet"
+                                  : "no bone named `root`: add a root bone at the feet, parent of the hips");
+    if (c.role("hips") < 0)
+        error("no hips bone (`Hips`, `mixamorig:Hips` or `pelvis`)");
+    if (c.role("head") < 0)
+        warn("no head bone (`Head` or `mixamorig:Head`): core can't turn the head towards the player");
+    if (root >= 0 && c.joints[root].parent != -1)
         error("`root` is not the top of the skeleton: every other bone must descend from it");
     if (c.skeletonRoots > 1)
         error(std::format("{} top-level bones: the skeleton must have the single root `root`", c.skeletonRoots));
@@ -401,14 +451,25 @@ std::vector<CharacterProblem> checkCharacter(const Character &c, const Character
         error(std::format("{} triangles: the budget is 4,000-8,000 (16,000 at most)", c.triangles));
     else if (c.triangles > 8000 || c.triangles < 4000)
         warn(std::format("{} triangles: aim for 4,000-8,000", c.triangles));
-    if (c.materials.size() > 2)
-        error(std::format("{} materials: use 1 or 2 (body, and `accent` for the per-area colour)", c.materials.size()));
-    if (c.materials.size() == 2 && std::none_of(c.materialNames.begin(), c.materialNames.end(), [](auto &n) {
+    // Materials: the base, one `accent` (recoloured per area) and one emissive (visor/eyes).
+    size_t emissive = std::count(c.emissive.begin(), c.emissive.end(), true);
+    if (c.materials.size() > 3 || (c.materials.size() == 3 && emissive == 0))
+        error(std::format("{} materials ({} emissive): use the base, `accent` and one emissive visor/eyes material",
+                          c.materials.size(), emissive));
+    if (emissive > 1)
+        warn(std::format("{} emissive materials: keep one (visor/eyes)", emissive));
+    if (c.materials.size() >= 2 && std::none_of(c.materialNames.begin(), c.materialNames.end(), [](auto &n) {
             std::string l = n;
             std::transform(l.begin(), l.end(), l.begin(), ::tolower);
             return l.find("accent") != std::string::npos;
         }))
-        warn("two materials but none is named `accent`: name the recolourable one `accent`");
+        warn("no material named `accent`: name the per-area recolourable one `accent`");
+    for (auto &n : c.meshNodes) {
+        std::string l = n;
+        std::transform(l.begin(), l.end(), l.begin(), ::tolower);
+        if (l != "body" && l != "head" && l != "visor")
+            warn(std::format("mesh node `{}`: name the mesh nodes body, head and visor", n));
+    }
     // Clips.
     static const std::set<std::string> loops{"idle", "walk", "run", "sit_idle"},
         known{"idle", "walk", "run", "turn_left", "turn_right", "look_around", "wave", "nod", "sit", "sit_idle"};
@@ -438,11 +499,7 @@ std::vector<CharacterProblem> checkCharacter(const Character &c, const Character
                             break;
                         }
             }
-        int hips = c.joint("hips");
-        if (hips < 0)
-            for (size_t i = 0; i < c.joints.size(); ++i)
-                if (c.joints[i].parent == root && root >= 0)
-                    hips = int(i);
+        int hips = c.role("hips");
         if (hips >= 0) {
             float travel = std::hypot(b[hips].v[12] - a[hips].v[12], b[hips].v[14] - a[hips].v[14]);
             if (travel > .05f * std::max(1.f, height))

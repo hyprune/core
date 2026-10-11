@@ -47,8 +47,12 @@ struct Character {
     size_t triangles = 0;
     int skins = 0, extraWeightSets = 0, matrixJoints = 0, skeletonRoots = 0;
     float weightError = 0; // largest |sum of weights - 1|
+    std::vector<std::string> meshNodes;       // names of the skinned mesh nodes (body, head, visor)
+    std::vector<bool> emissive;               // per material
     const Clip *clip(std::string_view name) const;
     int joint(std::string_view name) const;
+    // Humanoid roles by name, Mixamo or plain: "hips" (mixamorig:Hips, pelvis), "head", "root".
+    int role(std::string_view role) const;
     // Skinning matrices (joint world x inverse bind) for a clip at time t (wrapped for loops).
     void pose(const Clip *clip, float t, bool loop, std::vector<Mat4> &out) const;
     // Crossfade: clip a at ta blended towards clip b at tb by weight wb (0..1), both looping.
