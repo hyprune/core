@@ -16,6 +16,11 @@ KEYS = ('HYPRUNE_GALLERY_DIR', 'HYPRUNE_VIDEO_DIR', 'HYPRUNE_BUILD_HOST', 'HYPRU
 _warned = set()
 
 
+def fallback_root():
+    """Where unconfigured output goes (with a warning): this machine's state directory."""
+    return pathlib.Path(os.environ.get('XDG_STATE_HOME') or pathlib.Path.home() / '.local/state') / 'hyprune'
+
+
 def config_file():
     return pathlib.Path(os.environ.get('XDG_CONFIG_HOME') or pathlib.Path.home() / '.config') / 'hyprune/dev.env'
 
@@ -65,20 +70,26 @@ def output_dir(key, fallback, what):
 
 
 def gallery_dir(sub=''):
-    """HYPRUNE_GALLERY_DIR[/sub], or the local state directory with a warning."""
-    state = pathlib.Path(os.environ.get('XDG_STATE_HOME') or pathlib.Path.home() / '.local/state')
-    root = output_dir('HYPRUNE_GALLERY_DIR', state / 'hyprune/gallery', 'gallery stills and pages')
+    """HYPRUNE_GALLERY_DIR[/sub], or the fallback root's gallery/ with a warning."""
+    root = output_dir('HYPRUNE_GALLERY_DIR', fallback_root() / 'gallery', 'gallery stills and pages')
     path = root / sub if sub else root
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def video_dir():
-    """HYPRUNE_VIDEO_DIR, or the local state directory with a warning."""
-    state = pathlib.Path(os.environ.get('XDG_STATE_HOME') or pathlib.Path.home() / '.local/state')
-    return output_dir('HYPRUNE_VIDEO_DIR', state / 'hyprune/videos', 'finished videos')
+    """HYPRUNE_VIDEO_DIR, or the fallback root's videos/ with a warning."""
+    return output_dir('HYPRUNE_VIDEO_DIR', fallback_root() / 'videos', 'finished videos')
 
 
-if __name__ == '__main__':  # dev/devenv.py [KEY ...]: print the effective values
-    for key in sys.argv[1:] or KEYS:
-        print(f'{key}={get(key, "")}')
+if __name__ == '__main__':
+    # devenv.py [KEY ...]       print the effective values (KEY=VALUE)
+    # devenv.py --gallery [SUB] print the gallery directory (warns on stderr if unconfigured)
+    # devenv.py --videos        print the video directory (likewise)
+    if sys.argv[1:2] == ['--gallery']:
+        print(gallery_dir(sys.argv[2] if len(sys.argv) > 2 else ''))
+    elif sys.argv[1:2] == ['--videos']:
+        print(video_dir())
+    else:
+        for key in sys.argv[1:] or KEYS:
+            print(f'{key}={get(key, "")}')
