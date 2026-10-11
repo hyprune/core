@@ -163,6 +163,51 @@ int main(int argc, char **argv) {
               "<svg><rect fill='url(https://bad)'/></svg>", "<?xml version='1.0'?><svg/>",
               "<svg><foreignObject/></svg>"})
             rejects([&] { world::validateMapSvg(bad); }, "unsafe SVG accepted");
+        {
+            // com.hyprune.blueprint 0.1: per-level SVGs in the map's frame, sent as map.levels.
+            auto dir = std::filesystem::temp_directory_path() / ("hyprune-blueprint-" + std::to_string(getpid()));
+            std::filesystem::create_directories(dir / "blueprint");
+            const std::string level = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\">"
+                                      "<path class=\"wall\" d=\"M 0 0 L 10 0\"/><text class=\"label\" x=\"1\" y=\"2\">Hall</text></svg>";
+            std::ofstream(dir / "map.svg") << "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"/>";
+            std::ofstream(dir / "blueprint/ground.svg") << level;
+            std::ofstream(dir / "blueprint/upper.svg") << level;
+            auto spatialWith = [&](const world::Json &blueprint) {
+                world::World w;
+                w.manifest = {{"extensions",
+                               {{"com.hyprune.map", {{"version", "0.1"}, {"path", "map.svg"}, {"projection", "xz"},
+                                                      {"north", {0, 0, -1}}, {"bounds", {-5, -5, 5, 5}},
+                                                      {"worldToMap", {.1, 0, 0, .1, .5, .5}}}},
+                                {"com.hyprune.blueprint", blueprint}}}};
+                world::loadSpatial(w, dir);
+                return w.map;
+            };
+            auto lv = [](std::string id, double lo, double hi, std::string path) {
+                return world::Json{{"id", id}, {"name", id}, {"minY", lo}, {"maxY", hi}, {"path", path}};
+            };
+            auto map = spatialWith({{"version", "0.1"},
+                                    {"levels", {lv("ground", -2, 4.5, "blueprint/ground.svg"), lv("upper", 4.5, 40, "blueprint/upper.svg")}}});
+            check(map["levels"].size() == 2 && map["levels"][1]["id"] == "upper" && map["levels"][0]["svg"] == level &&
+                      map["levels"][0]["sha256"].get<std::string>().size() == 64 && map.contains("svg"),
+                  "blueprint levels");
+            for (const auto &bad : {world::Json{{"version", "0.2"}, {"levels", {lv("a", 0, 1, "blueprint/ground.svg")}}},
+                                    world::Json{{"version", "0.1"}, {"levels", world::Json::array()}},
+                                    world::Json{{"version", "0.1"}, {"levels", {lv("a", 0, 5, "blueprint/ground.svg"), lv("b", 4, 9, "blueprint/upper.svg")}}},
+                                    world::Json{{"version", "0.1"}, {"levels", {lv("a", 0, 1, "blueprint/ground.svg"), lv("a", 1, 2, "blueprint/upper.svg")}}},
+                                    world::Json{{"version", "0.1"}, {"levels", {lv("Bad", 0, 1, "blueprint/ground.svg")}}},
+                                    world::Json{{"version", "0.1"}, {"levels", {lv("a", 1, 1, "blueprint/ground.svg")}}},
+                                    world::Json{{"version", "0.1"}, {"levels", {lv("a", 0, 1, "../escape.svg")}}},
+                                    world::Json{{"version", "0.1"}, {"levels", {lv("a", 0, 1, "map.svg")}}, {"extra", 1}}})
+                rejects([&] { spatialWith(bad); }, "invalid blueprint accepted");
+            std::ofstream(dir / "blueprint/upper.svg") << "<svg xmlns=\"http://www.w3.org/2000/svg\"><path class=\"lava\" d=\"M0 0\"/></svg>";
+            rejects([&] { spatialWith({{"version", "0.1"}, {"levels", {lv("u", 0, 1, "blueprint/upper.svg")}}}); },
+                    "unknown blueprint class accepted");
+            rejects([&] { world::validateMapSvg(level); }, "class accepted in a plain map SVG");
+            world::World noMap;
+            noMap.manifest = {{"extensions", {{"com.hyprune.blueprint", {{"version", "0.1"}}}}}};
+            rejects([&] { world::loadSpatial(noMap, dir); }, "blueprint without a map accepted");
+            std::filesystem::remove_all(dir);
+        }
         world::World projected;
         projected.places =
             world::Json::array({world::Json{{"id", "front"}, {"name", "Front"}, {"position", {0, 1.7, -5}}},

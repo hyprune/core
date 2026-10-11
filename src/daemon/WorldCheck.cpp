@@ -16,7 +16,15 @@ int main(int argc, char **argv) {
                                           {"objects", w->objects.size()},
                                           {"placementZones", w->placementZones.size()},
                                           {"estimatedGpuBytes", bytes},
-                                          {"collisionTriangles", w->collision.size()}}
+                                          {"collisionTriangles", w->collision.size()},
+                                          {"blueprintLevels", [&] {
+                                               auto levels = hyprune::world::Json::array();
+                                               if (w->map.is_object() && w->map.contains("levels"))
+                                                   for (auto &l : w->map["levels"])
+                                                       levels.push_back({{"id", l["id"]}, {"minY", l["minY"]}, {"maxY", l["maxY"]},
+                                                                         {"bytes", l["svg"].get<std::string>().size()}});
+                                               return levels;
+                                           }()}}
                          .dump(2)
                   << '\n';
         return 0;

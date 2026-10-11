@@ -5,5 +5,6 @@ namespace hyprune::world {
 void loadSpatial(World &, const std::filesystem::path &);
 Json projectMarkers(const World &, const sim::Camera &, float aspect);
 std::vector<Vec3> walkingRoute(const World &, Vec3 from, Vec3 to);
-void validateMapSvg(const std::string &);
+// blueprint: also accept the class attribute with the blueprint role vocabulary.
+void validateMapSvg(const std::string &, bool blueprint = false);
 } // namespace hyprune::world

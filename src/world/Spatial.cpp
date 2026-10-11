@@ -1,4 +1,5 @@
 #include "Spatial.hpp"
+#include <cmath>
 #include <fstream>
 #include <libxml/parser.h>
 #include <openssl/sha.h>
@@ -10,7 +11,7 @@ void check(bool ok, const char *why) {
     if (!ok)
         throw std::runtime_error(why);
 }
-void nodes(xmlNode *node, size_t &count, int depth) {
+void nodes(xmlNode *node, size_t &count, int depth, bool classes) {
     const std::set<std::string> elements{"svg",  "g",        "rect",    "path", "circle", "ellipse",
                                          "line", "polyline", "polygon", "text", "tspan"};
     const std::set<std::string> attributes{"viewBox",
@@ -51,22 +52,27 @@ void nodes(xmlNode *node, size_t &count, int depth) {
         check(!node->ns || std::string(reinterpret_cast<const char *>(node->ns->href)) == "http://www.w3.org/2000/svg",
               "unsafe map SVG namespace");
         for (auto *a = node->properties; a; a = a->next) {
-            check(!a->ns && attributes.contains(reinterpret_cast<const char *>(a->name)), "unsafe map SVG attribute");
+            const std::string name = reinterpret_cast<const char *>(a->name);
+            check(!a->ns && (attributes.contains(name) || (classes && name == "class")), "unsafe map SVG attribute");
             auto *v = xmlNodeListGetString(node->doc, a->children, 1);
             std::string value = v ? reinterpret_cast<const char *>(v) : "";
             xmlFree(v);
+            // Blueprint levels name drawing roles; consumers colour them from their theme.
+            static const std::set<std::string> roles{"grid",   "floor", "wall",  "stair", "opening",  "screen", "mount",
+                                                     "area",   "label", "route", "waypoint", "void", "outline"};
+            check(name != "class" || roles.contains(value), "unknown blueprint class");
             check(value.size() <= 8192 && value.find_first_of("&<>") == std::string::npos &&
                       !std::regex_search(value, std::regex("url|href|://", std::regex::icase)),
                   "unsafe map SVG value");
         }
-        nodes(node->children, count, depth + 1);
+        nodes(node->children, count, depth + 1, classes);
     }
 }
 Vec3 xyz(const Json &v) {
     return {v[0], v[1], v[2]};
 }
 } // namespace
-void validateMapSvg(const std::string &svg) {
+void validateMapSvg(const std::string &svg, bool blueprint) {
     check(!svg.empty() && svg.size() <= 65536, "map SVG byte limit");
     // Reject declarations before parsing: neither entities nor a DTD are permitted.
     check(svg.find("<!") == std::string::npos && svg.find("<?") == std::string::npos, "map SVG declarations forbidden");
@@ -77,13 +83,67 @@ void validateMapSvg(const std::string &svg) {
         auto *root = xmlDocGetRootElement(doc);
         check(root && std::string(reinterpret_cast<const char *>(root->name)) == "svg", "map root must be SVG");
         size_t count = 0;
-        nodes(root, count, 0);
+        nodes(root, count, 0, blueprint);
     } catch (...) {
         xmlFreeDoc(doc);
         throw;
     }
     xmlFreeDoc(doc);
 }
+namespace {
+std::string sha256Hex(const std::string &data) {
+    unsigned char digest[SHA256_DIGEST_LENGTH];
+    SHA256(reinterpret_cast<const unsigned char *>(data.data()), data.size(), digest);
+    std::string hash;
+    const char *hex = "0123456789abcdef";
+    for (auto byte : digest) {
+        hash += hex[byte >> 4];
+        hash += hex[byte & 15];
+    }
+    return hash;
+}
+size_t codePoints(const std::string &text) {
+    size_t chars = 0;
+    for (unsigned char c : text)
+        if ((c & 0xc0) != 0x80)
+            ++chars;
+    return chars;
+}
+// com.hyprune.blueprint 0.1 (RFC-0004): per-level SVGs in the map's frame.
+void loadBlueprint(World &w, const std::filesystem::path &package, const Json &ext) {
+    if (!ext.contains("com.hyprune.blueprint"))
+        return;
+    const auto &bp = ext.at("com.hyprune.blueprint");
+    check(bp.is_object() && bp.size() == 2 && bp.value("version", "") == "0.1", "unsupported blueprint version");
+    const auto &levels = bp.at("levels");
+    check(levels.is_array() && !levels.empty() && levels.size() <= 6, "blueprint level count");
+    Json out = Json::array();
+    std::set<std::string> ids;
+    size_t total = 0;
+    double floor = -INFINITY;
+    for (const auto &l : levels) {
+        check(l.is_object() && l.size() == 5, "invalid blueprint level");
+        auto id = l.at("id").get<std::string>();
+        auto name = l.at("name").get<std::string>();
+        check(std::regex_match(id, std::regex("[a-z][a-z0-9-]{0,31}")) && ids.insert(id).second, "invalid blueprint level ID");
+        check(codePoints(name) >= 1 && codePoints(name) <= 64, "blueprint level name length");
+        check(l.at("minY").is_number() && l.at("maxY").is_number(), "blueprint level heights must be numbers");
+        double minY = l.at("minY"), maxY = l.at("maxY");
+        check(std::isfinite(minY) && std::isfinite(maxY) && minY < maxY && minY >= floor,
+              "blueprint levels must be ordered and must not overlap");
+        floor = maxY;
+        auto path = safePath(package, l.at("path"));
+        check(path.extension() == ".svg" && std::filesystem::file_size(path) <= 65536, "blueprint SVG byte limit");
+        std::ifstream input(path);
+        std::string svg((std::istreambuf_iterator<char>(input)), {});
+        total += svg.size();
+        check(total <= 262144, "blueprint total byte limit");
+        validateMapSvg(svg, true);
+        out.push_back({{"id", id}, {"name", name}, {"minY", minY}, {"maxY", maxY}, {"svg", svg}, {"sha256", sha256Hex(svg)}});
+    }
+    w.map["levels"] = out;
+}
+} // namespace
 void loadSpatial(World &w, const std::filesystem::path &package) {
     w.places = Json::array();
     w.map = nullptr;
@@ -146,8 +206,10 @@ void loadSpatial(World &w, const std::filesystem::path &package) {
             w.places.push_back(
                 {{"id", s.id}, {"name", s.id}, {"position", {s.position.x, s.position.y + 1.7f, s.position.z}}});
     const bool legacy = ext.contains("com.hyprune.switchyard.map");
-    if (!ext.contains("com.hyprune.map") && !legacy)
+    if (!ext.contains("com.hyprune.map") && !legacy) {
+        check(!ext.contains("com.hyprune.blueprint"), "com.hyprune.blueprint requires com.hyprune.map");
         return;
+    }
     const auto &m = ext.at(ext.contains("com.hyprune.map") ? "com.hyprune.map" : "com.hyprune.switchyard.map");
     check(m.at("version") == "0.1" && m.at("projection") == "xz" && m.at("north") == Json::array({0, 0, -1}),
           "unsupported map profile");
@@ -165,15 +227,9 @@ void loadSpatial(World &w, const std::filesystem::path &package) {
     std::ifstream input(path);
     std::string svg((std::istreambuf_iterator<char>(input)), {});
     validateMapSvg(svg);
-    unsigned char digest[SHA256_DIGEST_LENGTH];
-    SHA256(reinterpret_cast<const unsigned char *>(svg.data()), svg.size(), digest);
-    std::string hash;
-    const char *hex = "0123456789abcdef";
-    for (auto byte : digest) {
-        hash += hex[byte >> 4];
-        hash += hex[byte & 15];
-    }
+    auto hash = sha256Hex(svg);
     w.map = {{"svg", svg}, {"sha256", hash}, {"bounds", b}, {"worldToMap", transform}};
+    loadBlueprint(w, package, ext);
 }
 std::vector<Vec3> walkingRoute(const World &w, Vec3 from, Vec3 to) {
     if (w.walkingNodes.empty())

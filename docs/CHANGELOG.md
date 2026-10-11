@@ -90,6 +90,13 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   `validColor`, `invalidColor`; state gains `interaction.reticle {state,action}`.
   Out-of-reach actions are refused with `runtime.notice` `placement.out_of_range`.
   See [VIEW-BOB.md](VIEW-BOB.md).
+- **0.20** `surface.pocket {surfaceId}` puts a world window into the pocket (the
+  Placement queue; idempotent, placement kept). `surface.unpocket {surfaceId}`
+  takes it out: back to its saved placement or a free spot in front of the player
+  (`placed: true`), else it stays pocketed, selected, with the Placement tool on
+  (`placed: false`). Pocket membership stays `editor.unplaced.windows`.
+  `spatial.map.levels` carries the world's blueprint levels
+  (`com.hyprune.blueprint` 0.1) as `{id,name,minY,maxY,svg,sha256}`.
 
 ### Changes without a protocol bump
 
@@ -137,3 +144,9 @@ These are wire-compatible behavior changes that integrators may notice:
   and `KHR_mesh_quantization`. Lightmaps stay PNG.
 
 Older packages remain accepted by core at every format version above.
+
+Optional world extensions, at any format version: `com.hyprune.map` 0.1 (overview
+map SVG and its affine frame) and, since IPC 0.20, `com.hyprune.blueprint` 0.1
+(1–6 per-level blueprint SVGs in that frame, at most 64 KiB each and 256 KiB in
+total, with drawing roles named by a `class` vocabulary). Older cores ignore the
+blueprint extension.
