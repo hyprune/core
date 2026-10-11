@@ -1,0 +1,245 @@
+{
+  "formatVersion": "0.8",
+  "id": "org.hyprune.objects",
+  "version": "1.0.0",
+  "name": "World objects laboratory",
+  "license": "CC0-1.0",
+  "scene": "scene.gltf",
+  "defaultSpawn": "arrival",
+  "spawns": [
+    {
+      "id": "arrival",
+      "pose": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ]
+      }
+    }
+  ],
+  "collision": [
+    {
+      "node": 0,
+      "shape": "mesh",
+      "layer": "static"
+    },
+    {
+      "node": 1,
+      "shape": "mesh",
+      "layer": "static"
+    }
+  ],
+  "lightmaps": [
+    {
+      "material": 0,
+      "texture": 0,
+      "texCoord": 1,
+      "encoding": "srgb",
+      "intensity": 1.5
+    }
+  ],
+  "objectAssets": [
+    {
+      "id": "armillary",
+      "scene": "objects/armillary.gltf",
+      "animations": [
+        {
+          "node": "ring-equator",
+          "type": "spin",
+          "axis": [
+            1,
+            0,
+            0
+          ],
+          "pivot": [
+            0,
+            1.5,
+            0
+          ],
+          "period": 4
+        },
+        {
+          "node": "ring-tilted",
+          "type": "spin",
+          "axis": [
+            -0.955,
+            0,
+            0.295
+          ],
+          "pivot": [
+            0,
+            1.5,
+            0
+          ],
+          "period": 6,
+          "phase": 0.3
+        },
+        {
+          "node": "moon",
+          "type": "orbit",
+          "axis": [
+            0,
+            1,
+            0
+          ],
+          "pivot": [
+            0,
+            1.5,
+            0
+          ],
+          "period": 8
+        },
+        {
+          "node": "buoy",
+          "type": "bob",
+          "axis": [
+            0,
+            1,
+            0
+          ],
+          "amplitude": 0.15,
+          "period": 2
+        }
+      ],
+      "collision": {
+        "node": "proxy"
+      },
+      "lighting": {
+        "mode": "probe"
+      }
+    }
+  ],
+  "objects": [
+    {
+      "id": "west",
+      "asset": "armillary",
+      "pose": {
+        "position": [
+          -3,
+          0,
+          -6
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ]
+      },
+      "phase": 0
+    },
+    {
+      "id": "centre",
+      "asset": "armillary",
+      "pose": {
+        "position": [
+          0,
+          0,
+          -6
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ]
+      },
+      "phase": 0.33
+    },
+    {
+      "id": "east",
+      "asset": "armillary",
+      "pose": {
+        "position": [
+          3,
+          0,
+          -6
+        ],
+        "rotation": [
+          0,
+          0.3826834,
+          0,
+          0.9238795
+        ]
+      },
+      "phase": 0.66,
+      "scale": 1.2
+    }
+  ],
+  "atmosphere": {
+    "fog": {
+      "color": [
+        0.028,
+        0.045,
+        0.065
+      ],
+      "density": 0.008,
+      "heightFalloff": 0,
+      "baseHeight": 0,
+      "excludeUnlit": true
+    },
+    "sky": {
+      "zenith": [
+        0.18,
+        0.3,
+        0.52
+      ],
+      "horizon": [
+        0.55,
+        0.61,
+        0.65
+      ],
+      "ground": [
+        0.055,
+        0.07,
+        0.085
+      ],
+      "sun": {
+        "direction": [
+          0.3,
+          1,
+          0.5
+        ],
+        "color": [
+          1,
+          0.83,
+          0.6
+        ],
+        "intensity": 3,
+        "angularRadius": 0.025
+      }
+    },
+    "exposure": 1,
+    "toneMapping": "aces",
+    "bloom": {
+      "strength": 0.12,
+      "threshold": 1,
+      "radius": 3
+    },
+    "outline": {
+      "enabled": true,
+      "colour": [
+        0.02,
+        0.025,
+        0.04
+      ],
+      "widthPx": 2,
+      "depthThreshold": 0.02,
+      "normalThreshold": 0.2
+    }
+  },
+  "attribution": [
+    {
+      "path": ".",
+      "author": "Hyprune contributors",
+      "license": "CC0-1.0"
+    }
+  ]
+}

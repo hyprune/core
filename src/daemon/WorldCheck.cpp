@@ -17,6 +17,23 @@ int main(int argc, char **argv) {
                                           {"placementZones", w->placementZones.size()},
                                           {"estimatedGpuBytes", bytes},
                                           {"collisionTriangles", w->collision.size()},
+                                          {"worldObjects", [&] {
+                                               // World 0.8 placed objects: assets (swept radius, animations) and instances.
+                                               hyprune::world::Json assets = hyprune::world::Json::array(), list = hyprune::world::Json::array();
+                                               for (auto &a : w->objectAssets) {
+                                                   size_t triangles = 0;
+                                                   for (auto &m : a.meshes) triangles += m.vertices.size() / 3;
+                                                   assets.push_back({{"id", a.id}, {"animations", a.animations.size()}, {"meshes", a.meshes.size()},
+                                                                     {"triangles", triangles}, {"proxyTriangles", a.collision.size()},
+                                                                     {"sweptRadius", a.radius}, {"unlit", a.unlit}});
+                                               }
+                                               for (auto &o : w->objectInstances)
+                                                   list.push_back({{"id", o.id}, {"asset", w->objectAssets[o.asset].id}, {"region", o.region},
+                                                                   {"ambientUp", {o.ambientUp.x, o.ambientUp.y, o.ambientUp.z}},
+                                                                   {"ambientDown", {o.ambientDown.x, o.ambientDown.y, o.ambientDown.z}},
+                                                                   {"sun", o.sun}});
+                                               return hyprune::world::Json{{"assets", assets}, {"instances", list}};
+                                           }()},
                                           {"blueprintLevels", [&] {
                                                auto levels = hyprune::world::Json::array();
                                                if (w->map.is_object() && w->map.contains("levels"))

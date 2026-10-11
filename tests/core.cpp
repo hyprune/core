@@ -128,7 +128,8 @@ int main(int argc, char **argv) {
         }
         {
             // World-format inheritance: the same package loads under every supported
-            // format; 0.7's compressed-asset extensions are rejected below 0.7.
+            // format (0.8's objects are covered by the world-objects test); 0.7's
+            // compressed-asset extensions are rejected below 0.7.
             auto dir = std::filesystem::temp_directory_path() / ("hyprune-format-" + std::to_string(getpid()));
             std::filesystem::remove_all(dir);
             std::filesystem::copy(argv[1], dir, std::filesystem::copy_options::recursive);
@@ -143,8 +144,8 @@ int main(int argc, char **argv) {
             }
             // Numeric comparison; formats this core does not know never pass a gate.
             assert(world::format::atLeast("0.7", "0.6") && !world::format::atLeast("0.6", "0.7") &&
-                   !world::format::atLeast("0.8", "0.7"));
-            relabel("0.8");
+                   world::format::atLeast("0.8", "0.7") && !world::format::atLeast("0.9", "0.7"));
+            relabel("0.9");
             rejects([&] { world::load(dir); }, "unknown world format accepted");
             auto scene = world::Json::parse(std::ifstream(dir / "scene.gltf"));
             scene["extensionsUsed"] = scene["extensionsRequired"] = {"KHR_mesh_quantization"};

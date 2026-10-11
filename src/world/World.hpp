@@ -1,6 +1,7 @@
 #pragma once
 struct cgltf_data;
 #include <span>
+#include "Animation.hpp"
 #include "Playable.hpp"
 #include "sim/Camera.hpp"
 #include "sim/Climbing.hpp"
@@ -66,6 +67,36 @@ struct CubeLevel {
     int size;
     std::array<std::vector<float>, 6> faces;
 };
+// A world 0.8 object asset: a package glTF in asset space (node transforms
+// applied), drawn once per instance with the instance and animation models.
+struct ObjectAsset {
+    std::string id;
+    bool unlit = false;                // lighting.mode "unlit": every material drawn unlit
+    std::vector<Mesh> meshes;          // rendered meshes; Mesh::node is the asset's node index
+    std::vector<int> nodeParents;
+    std::vector<Animation> animations; // Animation::node is the asset's node index
+    std::vector<int> nodeAnimation;    // asset node -> animation index (whole subtree), else -1
+    std::vector<Triangle> collision;   // static proxy, asset space
+    Vec3 center{};                     // swept bounds: sphere holding the asset at every pose
+    float radius = 0;
+    bool animated() const { return !animations.empty(); }
+    int animationOf(unsigned node) const { return node < nodeAnimation.size() ? nodeAnimation[node] : -1; }
+};
+struct ObjectInstance {
+    std::string id;
+    unsigned asset = 0;
+    Mat4 model = Mat4::identity(); // pose · uniform scale
+    float scale = 1, speed = 1, phase = 0;
+    // Lighting (mode "probe"): ambient irradiance for upward/downward-facing
+    // normals and the direct sun strength, from the world's baked light at load
+    // (or the authored `ambient`). Linear RGB, world shader units.
+    Vec3 ambientUp{.24f, .24f, .24f}, ambientDown{.24f, .24f, .24f};
+    float sun = .76f, sunVisibility = 1; // strength (visibility included) and visibility 0..1
+    bool authoredAmbient = false;
+    Vec3 center{}; // world-space swept sphere
+    float radius = 0;
+    int region = -1; // visibility area holding `center`, else -1 (always region-visible)
+};
 struct World {
     PlayableBounds playable;
     std::vector<std::string> warnings;
@@ -86,6 +117,10 @@ struct World {
     // (its collision moves with it). Everything else in a package is static.
     std::vector<bool> ownsCollision;
     std::vector<int> nodeParents;
+    // World 0.8 placed objects (RFC-0004): assets are uploaded once, instances
+    // are drawn instanced. Render-only apart from their static collision proxies.
+    std::vector<ObjectAsset> objectAssets;
+    std::vector<ObjectInstance> objectInstances;
     std::map<std::string, unsigned> objectNodes;
     Json manifest, map = nullptr, places = Json::array();
     Json walkingNodes = Json::array(), walkingEdges = Json::array();
@@ -100,6 +135,9 @@ std::shared_ptr<World> load(const std::filesystem::path &package, LoadOptions = 
 // Marks ownsCollision from collisionNodes and nodeParents (load calls it).
 void markCollisionOwners(World &);
 bool movableNode(const World &, unsigned node);
+// collisionNodes entry of world-object proxy triangles: never a scene node, so
+// no gesture or editor transform can move them.
+inline constexpr unsigned objectCollisionNode = 0xffffffffu;
 // How materials sample each image: colour (sRGB base/emissive) and/or data
 // (normal, metal/rough, occlusion, lightmap). Shared by budget and uploader.
 struct ImageUse {

@@ -4,6 +4,8 @@
 #include <basisu/transcoder/basisu_transcoder.h>
 #include <mutex>
 #include "Visibility.hpp"
+#include "Gltf.hpp"
+#include "Objects.hpp"
 #include "Environment.hpp"
 #include "Mounts.hpp"
 #include "Schema.hpp"
@@ -177,9 +179,16 @@ std::vector<ImageUse> imageUses(const World &world) {
 }
 size_t gpuBytes(const World &world, bool srgbDecode, std::span<const CubeLevel> environment) {
     size_t bytes = 0;
+    auto meshBytes = [](const Mesh &mesh) {
+        return mesh.indices.empty() ? mesh.vertices.size() * sizeof(Vertex)
+                                    : mesh.gpuVertices.size() * sizeof(Vertex) + mesh.indices.size() * 4;
+    };
     for (const auto &mesh : world.meshes)
-        bytes += mesh.indices.empty() ? mesh.vertices.size() * sizeof(Vertex)
-                                      : mesh.gpuVertices.size() * sizeof(Vertex) + mesh.indices.size() * 4;
+        bytes += meshBytes(mesh);
+    // Object assets count once however many instances place them.
+    for (const auto &asset : world.objectAssets)
+        for (const auto &mesh : asset.meshes)
+            bytes += meshBytes(mesh);
     auto uses = imageUses(world);
     for (size_t i = 0; i < world.images.size(); ++i) {
         size_t chain = 0;
@@ -196,6 +205,339 @@ size_t gpuBytes(const World &world, bool srgbDecode, std::span<const CubeLevel> 
     for (const auto &level : environment)
         bytes += size_t(level.size) * level.size * 6 * 8;
     return bytes;
+}
+unsigned nodeNamed(std::span<const std::string> names, const std::string &name, const std::string &path) {
+    std::optional<unsigned> found;
+    for (size_t i = 0; i < names.size(); ++i)
+        if (names[i] == name) {
+            require(!found, path + ": node \"" + name + "\" is not unique");
+            found = unsigned(i);
+        }
+    require(bool(found), path + ": node \"" + name + "\" not found");
+    return *found;
+}
+GltfScene loadGltf(World &into, const std::filesystem::path &root, const std::string &path, const std::string &formatVersion,
+                   LoadOptions options, const Json &lightmaps, const Json &collision, const std::string &collisionName,
+                   size_t &memory) {
+    GltfScene loaded;
+    auto scene = safePath(root, path);
+    const size_t materialBase = into.materials.size(), textureBase = into.images.size();
+    cgltf_options opts{};
+    cgltf_data *raw = nullptr;
+    require(cgltf_parse_file(&opts, scene.c_str(), &raw) == cgltf_result_success, "glTF parse failed");
+    std::unique_ptr<cgltf_data, decltype(&cgltf_free)> data(raw, cgltf_free);
+    require(raw->nodes_count < 10000 && raw->meshes_count < 10000, "scene too complex");
+    // RFC-0004: world 0.7 adds compressed/optimised assets; earlier formats keep the base set.
+    auto allowedExtension = [&](std::string_view id) {
+        for (auto base : {"KHR_materials_unlit", "KHR_texture_transform", "KHR_materials_emissive_strength"})
+            if (id == base)
+                return true;
+        for (auto compressed : {"KHR_texture_basisu", "EXT_meshopt_compression", "KHR_mesh_quantization"})
+            if (id == compressed)
+                return format::atLeast(formatVersion, "0.7");
+        return false;
+    };
+    for (size_t i = 0; i < raw->extensions_required_count; i++)
+        require(allowedExtension(raw->extensions_required[i]), "unsupported required glTF extension for this world format");
+    auto relative = std::filesystem::relative(scene.parent_path(), root);
+    auto asset = [&](const char *uri) {
+        std::string p = relative == "." ? uri : (relative / std::string(uri)).generic_string();
+        return safePath(root, p);
+    };
+    size_t bufferBytes = 0;
+    for (size_t i = 0; i < raw->buffers_count; i++) {
+        require(raw->buffers[i].size <= 128 * 1024 * 1024, "buffer exceeds per-file limit");
+        bufferBytes += raw->buffers[i].size;
+        require(bufferBytes <= 512 * 1024 * 1024, "CPU buffer budget exceeded");
+        if (raw->buffers[i].uri)
+            asset(raw->buffers[i].uri);
+    }
+    // Validate parent chains before cgltf_node_transform_world follows them.
+    for (size_t i = 0; i < raw->nodes_count; i++) {
+        std::set<cgltf_node *> seen;
+        for (auto *n = &raw->nodes[i]; n; n = n->parent)
+            require(seen.insert(n).second, "node cycle");
+    }
+    std::vector<int> parents(raw->nodes_count, 0);
+    for (size_t i = 0; i < raw->nodes_count; i++)
+        for (size_t c = 0; c < raw->nodes[i].children_count; c++)
+            require(++parents[raw->nodes[i].children[c] - raw->nodes] <= 1, "multiple node parents");
+    require(cgltf_load_buffers(&opts, raw, scene.c_str()) == cgltf_result_success, "glTF buffers failed");
+    for (size_t i = 0; i < raw->buffer_views_count; i++)
+        require(!raw->buffer_views[i].has_meshopt_compression || format::atLeast(formatVersion, "0.7"),
+                "EXT_meshopt_compression needs world format 0.7");
+    decodeMeshopt(raw);
+    require(cgltf_validate(raw) == cgltf_result_success, "invalid glTF");
+    for (size_t i = 0; i < raw->textures_count; i++) {
+        Sampler sampler;
+        if (auto *s = raw->textures[i].sampler) {
+            sampler = {int(s->wrap_s), int(s->wrap_t), s->min_filter ? int(s->min_filter) : 9987,
+                       s->mag_filter ? int(s->mag_filter) : 9729};
+        }
+        into.samplers.push_back(sampler);
+        bool irradiance = false;
+        for (auto &l : lightmaps)
+            if (l.at("texture").get<size_t>() == i)
+                irradiance = true;
+        if (raw->textures[i].has_basisu && raw->textures[i].basisu_image) {
+            require(format::atLeast(formatVersion, "0.7"), "KHR_texture_basisu needs world format 0.7");
+            // v0 lightmaps stay PNG; material textures may be KTX2.
+            require(!irradiance, "lightmap must be PNG");
+            auto *ktx = raw->textures[i].basisu_image;
+            std::vector<unsigned char> bytes;
+            if (ktx->uri) {
+                auto path = asset(ktx->uri);
+                require(std::filesystem::file_size(path) <= 128 * 1024 * 1024, "asset exceeds 128 MiB");
+                std::ifstream input(path, std::ios::binary);
+                bytes.assign(std::istreambuf_iterator<char>(input), {});
+            } else {
+                require(ktx->buffer_view && cgltf_buffer_view_data(ktx->buffer_view), "missing KTX2 data");
+                auto *b = cgltf_buffer_view_data(ktx->buffer_view);
+                bytes.assign(b, b + ktx->buffer_view->size);
+            }
+            auto image = decodeKtx2(bytes.data(), bytes.size(), options.compressedFormats);
+            memory += image.rgba.size();
+            for (auto &level : image.levels)
+                memory += level.size();
+            require(memory <= 512 * 1024 * 1024, "world GPU budget exceeded");
+            into.images.push_back(std::move(image));
+            continue;
+        }
+        auto *img = raw->textures[i].image;
+        require(img, "missing texture image");
+        if (irradiance) {
+            static const unsigned char png[8] = {137, 80, 78, 71, 13, 10, 26, 10};
+            if (img->uri) {
+                auto path = asset(img->uri);
+                std::ifstream input(path, std::ios::binary);
+                unsigned char magic[8]{};
+                input.read(reinterpret_cast<char *>(magic), 8);
+                require(input.gcount() == 8 && std::equal(magic, magic + 8, png), "lightmap must be PNG");
+            } else {
+                require(img->buffer_view && img->buffer_view->size >= 8, "missing PNG lightmap");
+                auto *bytes = (const unsigned char *)img->buffer_view->buffer->data + img->buffer_view->offset;
+                require(std::equal(bytes, bytes + 8, png), "lightmap must be PNG");
+            }
+        }
+        int w = 0, h = 0, n = 0;
+        unsigned char *pixels = nullptr;
+        if (img->uri) {
+            auto p = asset(img->uri);
+            require(stbi_info(p.c_str(), &w, &h, &n), "invalid image");
+            require(w <= 8192 && h <= 8192, "image dimensions exceed budget");
+            memory += size_t(w) * h * 4;
+            require(memory <= 512 * 1024 * 1024, "world GPU budget exceeded");
+            pixels = stbi_load(p.c_str(), &w, &h, &n, 4);
+        } else {
+            require(img->buffer_view, "missing image data");
+            auto *b = img->buffer_view;
+            const auto *bytes = (const stbi_uc *)b->buffer->data + b->offset;
+            require(stbi_info_from_memory(bytes, b->size, &w, &h, &n), "invalid image");
+            require(w <= 8192 && h <= 8192, "image dimensions exceed budget");
+            memory += size_t(w) * h * 4;
+            require(memory <= 512 * 1024 * 1024, "world GPU budget exceeded");
+            pixels = stbi_load_from_memory(bytes, b->size, &w, &h, &n, 4);
+        }
+        require(pixels, "image decode failed");
+        Image image{w, h, {pixels, pixels + size_t(w) * h * 4}};
+        stbi_image_free(pixels);
+        into.images.push_back(std::move(image));
+    }
+    auto slot = [&](const cgltf_texture_view &view) {
+        TextureSlot out;
+        if (!view.texture)
+            return out;
+        out.texture = int(textureBase + (view.texture - raw->textures));
+        out.texCoord = view.texcoord;
+        if (view.has_transform) {
+            const auto &t = view.transform;
+            std::copy_n(t.offset, 2, out.offset);
+            std::copy_n(t.scale, 2, out.scale);
+            out.rotation = t.rotation;
+            if (t.has_texcoord)
+                out.texCoord = t.texcoord;
+        }
+        require(out.texCoord == 0 || out.texCoord == 1, "material requires unsupported UV set (only UV0/UV1)");
+        require(std::isfinite(out.offset[0] + out.offset[1] + out.scale[0] + out.scale[1] + out.rotation),
+                "nonfinite UV transform");
+        return out;
+    };
+    for (size_t i = 0; i < raw->materials_count; i++) {
+        auto &m = raw->materials[i];
+        Material out;
+        if (m.has_pbr_metallic_roughness) {
+            auto &p = m.pbr_metallic_roughness;
+            out.color = {p.base_color_factor[0], p.base_color_factor[1], p.base_color_factor[2]};
+            out.alpha = p.base_color_factor[3];
+            out.slots[0] = slot(p.base_color_texture);
+            out.slots[2] = slot(p.metallic_roughness_texture);
+            out.metallic = p.metallic_factor;
+            out.roughness = p.roughness_factor;
+            if (p.base_color_texture.texture)
+                out.baseTexture = int(textureBase + (p.base_color_texture.texture - raw->textures));
+        }
+        // Legacy glTF diffuse inputs remain meaningful even when no metallic-
+        // roughness block exists. Preserve transforms/UV sets through slot().
+        if (m.has_pbr_specular_glossiness && !m.has_pbr_metallic_roughness) {
+            auto &p = m.pbr_specular_glossiness;
+            out.color = {p.diffuse_factor[0], p.diffuse_factor[1], p.diffuse_factor[2]};
+            out.alpha = p.diffuse_factor[3];
+            out.slots[0] = slot(p.diffuse_texture);
+            out.baseTexture = out.slots[0].texture;
+            out.metallic = 0;
+            out.roughness = 1 - p.glossiness_factor;
+        }
+        out.emissive = {m.emissive_factor[0], m.emissive_factor[1], m.emissive_factor[2]};
+        out.unlit = m.unlit;
+        out.alphaMode = m.alpha_mode == cgltf_alpha_mode_blend ? 2 : m.alpha_mode == cgltf_alpha_mode_mask ? 1 : 0;
+        out.alphaCutoff = m.alpha_cutoff;
+        out.doubleSided = m.double_sided;
+        if (m.has_emissive_strength)
+            out.emissive = out.emissive * m.emissive_strength.emissive_strength;
+        require(std::isfinite(out.emissive.x + out.emissive.y + out.emissive.z), "invalid emission");
+        out.slots[1] = slot(m.normal_texture);
+        out.slots[3] = slot(m.occlusion_texture);
+        out.slots[4] = slot(m.emissive_texture);
+        out.normalScale = m.normal_texture.scale;
+        out.occlusionStrength = m.occlusion_texture.scale;
+        into.materials.push_back(out);
+    }
+    into.materials.push_back(Material{}); // primitives without a material
+    std::set<unsigned> baked;
+    for (auto &l : lightmaps) {
+        unsigned m = l.at("material"), t = l.at("texture");
+        require(m < raw->materials_count && t < raw->textures_count, "invalid lightmap binding");
+        require(baked.insert(m).second && l.at("texCoord") == 1, "invalid lightmap UV contract");
+        auto &mat = into.materials[materialBase + m];
+        mat.lightmap = int(textureBase + t);
+        mat.intensity = l.at("intensity");
+        auto encoding = l.at("encoding").get<std::string>();
+        require(encoding == "linear" || encoding == "srgb", "unknown lightmap encoding");
+        mat.lightmapSrgb = encoding == "srgb";
+        require(mat.intensity >= 0 && std::isfinite(mat.intensity), "invalid lightmap intensity");
+    }
+    std::set<unsigned> collisionNodes;
+    for (auto &c : collision) {
+        unsigned node = c.at("node");
+        require(node < raw->nodes_count && c.at("shape") == "mesh" && c.at("layer") == "static",
+                "M0 supports static mesh collision only");
+        require(raw->nodes[node].mesh, "collision node has no mesh");
+        collisionNodes.insert(node);
+    }
+    for (size_t i = 0; i < raw->nodes_count; i++)
+        loaded.names.push_back(raw->nodes[i].name ? raw->nodes[i].name : "");
+    if (!collisionName.empty()) {
+        auto node = nodeNamed(loaded.names, collisionName, path);
+        require(raw->nodes[node].mesh, path + ": collision node \"" + collisionName + "\" has no mesh");
+        collisionNodes.insert(node);
+    }
+    std::set<cgltf_node *> visible;
+    std::function<void(cgltf_node *)> visit = [&](cgltf_node *node) {
+        if (!visible.insert(node).second)
+            return;
+        for (size_t i = 0; i < node->children_count; i++)
+            visit(node->children[i]);
+    };
+    auto *sceneGraph = raw->scene ? raw->scene : (raw->scenes_count ? raw->scenes : nullptr);
+    require(sceneGraph, "glTF requires a scene");
+    for (size_t i = 0; i < sceneGraph->nodes_count; i++)
+        visit(sceneGraph->nodes[i]);
+    for (size_t ni = 0; ni < raw->nodes_count; ni++) {
+        auto &node = raw->nodes[ni];
+        if (!node.mesh)
+            continue;
+        Mat4 transform;
+        cgltf_node_transform_world(&node, transform.v.data());
+        for (float f : transform.v)
+            require(std::isfinite(f), "nonfinite node transform");
+        for (size_t pi = 0; pi < node.mesh->primitives_count; pi++) {
+            auto &p = node.mesh->primitives[pi];
+            require(p.type == cgltf_primitive_type_triangles, "M0 requires triangle primitives");
+            const cgltf_accessor *pos = nullptr, *uv = nullptr, *uv1 = nullptr, *normal = nullptr;
+            for (size_t a = 0; a < p.attributes_count; a++) {
+                auto &attr = p.attributes[a];
+                if (attr.type == cgltf_attribute_type_position)
+                    pos = attr.data;
+                if (attr.type == cgltf_attribute_type_normal)
+                    normal = attr.data;
+                if (attr.type == cgltf_attribute_type_texcoord) {
+                    if (attr.index == 0)
+                        uv = attr.data;
+                    if (attr.index == 1)
+                        uv1 = attr.data;
+                }
+            }
+            require(pos, "missing positions");
+            Mesh mesh;
+            mesh.node = ni;
+            mesh.material = unsigned(materialBase + (p.material ? p.material - raw->materials : raw->materials_count));
+            require(into.materials[mesh.material].lightmap < 0 || uv1, "declared lightmap needs TEXCOORD_1");
+            for (const auto &slot : into.materials[mesh.material].slots)
+                require(slot.texture < 0 || (slot.texCoord == 0 ? uv : uv1), "material references missing UV set");
+            size_t count = p.indices ? p.indices->count : pos->count;
+            require(count % 3 == 0 && count < 3000000, "invalid triangle count");
+            require(pos->count < 3000000, "invalid vertex count");
+            memory += count * sizeof(Vertex);
+            require(memory <= 512 * 1024 * 1024, "world GPU budget exceeded");
+            // Each accessor vertex is decoded once; the flat triangle list used by
+            // collision, editing and picking is expanded from these.
+            Vec3 a{transform.v[0], transform.v[1], transform.v[2]}, b{transform.v[4], transform.v[5], transform.v[6]},
+                c{transform.v[8], transform.v[9], transform.v[10]};
+            float det = dot(a, cross(b, c));
+            require(!normal || std::abs(det) > 1e-8f, "singular node transform");
+            std::vector<Vertex> unique(pos->count);
+            for (size_t index = 0; index < pos->count; ++index) {
+                float v[3];
+                require(cgltf_accessor_read_float(pos, index, v, 3), "invalid position");
+                Vertex &vert = unique[index];
+                vert.position = transform.point({v[0], v[1], v[2]});
+                require(std::isfinite(vert.position.x + vert.position.y + vert.position.z), "nonfinite vertex");
+                if (uv)
+                    require(cgltf_accessor_read_float(uv, index, vert.uv, 2), "invalid UV0");
+                if (uv1)
+                    require(cgltf_accessor_read_float(uv1, index, vert.uv1, 2), "invalid UV1");
+                require(std::isfinite(vert.uv[0] + vert.uv[1] + vert.uv1[0] + vert.uv1[1]), "nonfinite UV");
+                if (normal) {
+                    float n[3];
+                    require(cgltf_accessor_read_float(normal, index, n, 3), "invalid normal");
+                    vert.normal = normalized((cross(b, c) * n[0] + cross(c, a) * n[1] + cross(a, b) * n[2]) / det);
+                }
+            }
+            std::vector<uint32_t> indices(count);
+            for (size_t i = 0; i < count; i++) {
+                size_t index = p.indices ? cgltf_accessor_read_index(p.indices, i) : i;
+                require(index < unique.size(), "index out of range");
+                indices[i] = uint32_t(index);
+                mesh.vertices.push_back(unique[index]);
+            }
+            // Without authored normals the flat list carries per-face normals: draw it.
+            if (visible.contains(&node) && normal)
+                buildGpuMesh(mesh, unique, std::move(indices), into.materials[mesh.material].alphaMode == 2);
+            for (size_t i = 0; i < count; i += 3) {
+                Triangle t{mesh.vertices[i].position, mesh.vertices[i + 1].position, mesh.vertices[i + 2].position};
+                Vec3 n = normalized(cross(t.b - t.a, t.c - t.a));
+                if (!normal)
+                    for (int k = 0; k < 3; k++)
+                        mesh.vertices[i + k].normal = n;
+                if (collisionNodes.contains(ni) && length(n) > .1f) {
+                    loaded.collision.push_back(t);
+                    loaded.collisionNodes.push_back(ni);
+                }
+            }
+            if (visible.contains(&node))
+                loaded.meshes.push_back(std::move(mesh));
+        }
+    }
+    loaded.parents.assign(raw->nodes_count, -1);
+    loaded.origins.resize(raw->nodes_count);
+    for (size_t i = 0; i < raw->nodes_count; i++) {
+        if (raw->nodes[i].parent)
+            loaded.parents[i] = int(raw->nodes[i].parent - raw->nodes);
+        Mat4 m;
+        cgltf_node_transform_world(&raw->nodes[i], m.v.data());
+        loaded.origins[i] = {m.v[12], m.v[13], m.v[14]};
+    }
+    return loaded;
 }
 std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions options) {
     require(!std::filesystem::is_symlink(root), "package root is a symlink");
@@ -284,307 +626,14 @@ std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions optio
         require(length(c.bottomExit - c.bottom) <= 3 && length(c.topExit - c.top) <= 3, "climb exit too far away");
         result->climbables.push_back(c);
     }
-    auto scene = safePath(root, j["scene"]);
-    cgltf_options opts{};
-    cgltf_data *raw = nullptr;
-    require(cgltf_parse_file(&opts, scene.c_str(), &raw) == cgltf_result_success, "glTF parse failed");
-    std::unique_ptr<cgltf_data, decltype(&cgltf_free)> data(raw, cgltf_free);
-    require(raw->nodes_count < 10000 && raw->meshes_count < 10000, "scene too complex");
-    // RFC-0004: world 0.7 adds compressed/optimised assets; earlier formats keep the base set.
-    auto allowedExtension = [&](std::string_view id) {
-        for (auto base : {"KHR_materials_unlit", "KHR_texture_transform", "KHR_materials_emissive_strength"})
-            if (id == base)
-                return true;
-        for (auto compressed : {"KHR_texture_basisu", "EXT_meshopt_compression", "KHR_mesh_quantization"})
-            if (id == compressed)
-                return format::atLeast(formatVersion, "0.7");
-        return false;
-    };
-    for (size_t i = 0; i < raw->extensions_required_count; i++)
-        require(allowedExtension(raw->extensions_required[i]), "unsupported required glTF extension for this world format");
-    auto relative = std::filesystem::relative(scene.parent_path(), root);
-    auto asset = [&](const char *uri) {
-        std::string p = relative == "." ? uri : (relative / std::string(uri)).generic_string();
-        return safePath(root, p);
-    };
-    size_t bufferBytes = 0;
-    for (size_t i = 0; i < raw->buffers_count; i++) {
-        require(raw->buffers[i].size <= 128 * 1024 * 1024, "buffer exceeds per-file limit");
-        bufferBytes += raw->buffers[i].size;
-        require(bufferBytes <= 512 * 1024 * 1024, "CPU buffer budget exceeded");
-        if (raw->buffers[i].uri)
-            asset(raw->buffers[i].uri);
-    }
-    // Validate parent chains before cgltf_node_transform_world follows them.
-    for (size_t i = 0; i < raw->nodes_count; i++) {
-        std::set<cgltf_node *> seen;
-        for (auto *n = &raw->nodes[i]; n; n = n->parent)
-            require(seen.insert(n).second, "node cycle");
-    }
-    std::vector<int> parents(raw->nodes_count, 0);
-    for (size_t i = 0; i < raw->nodes_count; i++)
-        for (size_t c = 0; c < raw->nodes[i].children_count; c++)
-            require(++parents[raw->nodes[i].children[c] - raw->nodes] <= 1, "multiple node parents");
-    require(cgltf_load_buffers(&opts, raw, scene.c_str()) == cgltf_result_success, "glTF buffers failed");
-    for (size_t i = 0; i < raw->buffer_views_count; i++)
-        require(!raw->buffer_views[i].has_meshopt_compression || format::atLeast(formatVersion, "0.7"),
-                "EXT_meshopt_compression needs world format 0.7");
-    decodeMeshopt(raw);
-    require(cgltf_validate(raw) == cgltf_result_success, "invalid glTF");
     size_t memory = 0;
-    for (size_t i = 0; i < raw->textures_count; i++) {
-        Sampler sampler;
-        if (auto *s = raw->textures[i].sampler) {
-            sampler = {int(s->wrap_s), int(s->wrap_t), s->min_filter ? int(s->min_filter) : 9987,
-                       s->mag_filter ? int(s->mag_filter) : 9729};
-        }
-        result->samplers.push_back(sampler);
-        bool irradiance = false;
-        for (auto &l : j.value("lightmaps", Json::array()))
-            if (l.at("texture").get<size_t>() == i)
-                irradiance = true;
-        if (raw->textures[i].has_basisu && raw->textures[i].basisu_image) {
-            require(format::atLeast(formatVersion, "0.7"), "KHR_texture_basisu needs world format 0.7");
-            // v0 lightmaps stay PNG; material textures may be KTX2.
-            require(!irradiance, "lightmap must be PNG");
-            auto *ktx = raw->textures[i].basisu_image;
-            std::vector<unsigned char> bytes;
-            if (ktx->uri) {
-                auto path = asset(ktx->uri);
-                require(std::filesystem::file_size(path) <= 128 * 1024 * 1024, "asset exceeds 128 MiB");
-                std::ifstream input(path, std::ios::binary);
-                bytes.assign(std::istreambuf_iterator<char>(input), {});
-            } else {
-                require(ktx->buffer_view && cgltf_buffer_view_data(ktx->buffer_view), "missing KTX2 data");
-                auto *b = cgltf_buffer_view_data(ktx->buffer_view);
-                bytes.assign(b, b + ktx->buffer_view->size);
-            }
-            auto image = decodeKtx2(bytes.data(), bytes.size(), options.compressedFormats);
-            memory += image.rgba.size();
-            for (auto &level : image.levels)
-                memory += level.size();
-            require(memory <= 512 * 1024 * 1024, "world GPU budget exceeded");
-            result->images.push_back(std::move(image));
-            continue;
-        }
-        auto *img = raw->textures[i].image;
-        require(img, "missing texture image");
-        if (irradiance) {
-            static const unsigned char png[8] = {137, 80, 78, 71, 13, 10, 26, 10};
-            if (img->uri) {
-                auto path = asset(img->uri);
-                std::ifstream input(path, std::ios::binary);
-                unsigned char magic[8]{};
-                input.read(reinterpret_cast<char *>(magic), 8);
-                require(input.gcount() == 8 && std::equal(magic, magic + 8, png), "lightmap must be PNG");
-            } else {
-                require(img->buffer_view && img->buffer_view->size >= 8, "missing PNG lightmap");
-                auto *bytes = (const unsigned char *)img->buffer_view->buffer->data + img->buffer_view->offset;
-                require(std::equal(bytes, bytes + 8, png), "lightmap must be PNG");
-            }
-        }
-        int w = 0, h = 0, n = 0;
-        unsigned char *pixels = nullptr;
-        if (img->uri) {
-            auto p = asset(img->uri);
-            require(stbi_info(p.c_str(), &w, &h, &n), "invalid image");
-            require(w <= 8192 && h <= 8192, "image dimensions exceed budget");
-            memory += size_t(w) * h * 4;
-            require(memory <= 512 * 1024 * 1024, "world GPU budget exceeded");
-            pixels = stbi_load(p.c_str(), &w, &h, &n, 4);
-        } else {
-            require(img->buffer_view, "missing image data");
-            auto *b = img->buffer_view;
-            const auto *bytes = (const stbi_uc *)b->buffer->data + b->offset;
-            require(stbi_info_from_memory(bytes, b->size, &w, &h, &n), "invalid image");
-            require(w <= 8192 && h <= 8192, "image dimensions exceed budget");
-            memory += size_t(w) * h * 4;
-            require(memory <= 512 * 1024 * 1024, "world GPU budget exceeded");
-            pixels = stbi_load_from_memory(bytes, b->size, &w, &h, &n, 4);
-        }
-        require(pixels, "image decode failed");
-        Image image{w, h, {pixels, pixels + size_t(w) * h * 4}};
-        stbi_image_free(pixels);
-        result->images.push_back(std::move(image));
-    }
-    auto slot = [&](const cgltf_texture_view &view) {
-        TextureSlot out;
-        if (!view.texture)
-            return out;
-        out.texture = view.texture - raw->textures;
-        out.texCoord = view.texcoord;
-        if (view.has_transform) {
-            const auto &t = view.transform;
-            std::copy_n(t.offset, 2, out.offset);
-            std::copy_n(t.scale, 2, out.scale);
-            out.rotation = t.rotation;
-            if (t.has_texcoord)
-                out.texCoord = t.texcoord;
-        }
-        require(out.texCoord == 0 || out.texCoord == 1, "material requires unsupported UV set (only UV0/UV1)");
-        require(std::isfinite(out.offset[0] + out.offset[1] + out.scale[0] + out.scale[1] + out.rotation),
-                "nonfinite UV transform");
-        return out;
-    };
-    for (size_t i = 0; i < raw->materials_count; i++) {
-        auto &m = raw->materials[i];
-        Material out;
-        if (m.has_pbr_metallic_roughness) {
-            auto &p = m.pbr_metallic_roughness;
-            out.color = {p.base_color_factor[0], p.base_color_factor[1], p.base_color_factor[2]};
-            out.alpha = p.base_color_factor[3];
-            out.slots[0] = slot(p.base_color_texture);
-            out.slots[2] = slot(p.metallic_roughness_texture);
-            out.metallic = p.metallic_factor;
-            out.roughness = p.roughness_factor;
-            if (p.base_color_texture.texture)
-                out.baseTexture = p.base_color_texture.texture - raw->textures;
-        }
-        // Legacy glTF diffuse inputs remain meaningful even when no metallic-
-        // roughness block exists. Preserve transforms/UV sets through slot().
-        if (m.has_pbr_specular_glossiness && !m.has_pbr_metallic_roughness) {
-            auto &p = m.pbr_specular_glossiness;
-            out.color = {p.diffuse_factor[0], p.diffuse_factor[1], p.diffuse_factor[2]};
-            out.alpha = p.diffuse_factor[3];
-            out.slots[0] = slot(p.diffuse_texture);
-            out.baseTexture = out.slots[0].texture;
-            out.metallic = 0;
-            out.roughness = 1 - p.glossiness_factor;
-        }
-        out.emissive = {m.emissive_factor[0], m.emissive_factor[1], m.emissive_factor[2]};
-        out.unlit = m.unlit;
-        out.alphaMode = m.alpha_mode == cgltf_alpha_mode_blend ? 2 : m.alpha_mode == cgltf_alpha_mode_mask ? 1 : 0;
-        out.alphaCutoff = m.alpha_cutoff;
-        out.doubleSided = m.double_sided;
-        if (m.has_emissive_strength)
-            out.emissive = out.emissive * m.emissive_strength.emissive_strength;
-        require(std::isfinite(out.emissive.x + out.emissive.y + out.emissive.z), "invalid emission");
-        out.slots[1] = slot(m.normal_texture);
-        out.slots[3] = slot(m.occlusion_texture);
-        out.slots[4] = slot(m.emissive_texture);
-        out.normalScale = m.normal_texture.scale;
-        out.occlusionStrength = m.occlusion_texture.scale;
-        result->materials.push_back(out);
-    }
-    result->materials.push_back(Material{});
-    std::set<unsigned> baked;
-    for (auto &l : j.value("lightmaps", Json::array())) {
-        unsigned m = l.at("material"), t = l.at("texture");
-        require(m < raw->materials_count && t < raw->textures_count, "invalid lightmap binding");
-        require(baked.insert(m).second && l.at("texCoord") == 1, "invalid lightmap UV contract");
-        auto &mat = result->materials[m];
-        mat.lightmap = t;
-        mat.intensity = l.at("intensity");
-        auto encoding = l.at("encoding").get<std::string>();
-        require(encoding == "linear" || encoding == "srgb", "unknown lightmap encoding");
-        mat.lightmapSrgb = encoding == "srgb";
-        require(mat.intensity >= 0 && std::isfinite(mat.intensity), "invalid lightmap intensity");
-    }
-    std::set<unsigned> collisionNodes;
-    for (auto &c : j.value("collision", Json::array())) {
-        unsigned node = c.at("node");
-        require(node < raw->nodes_count && c.at("shape") == "mesh" && c.at("layer") == "static",
-                "M0 supports static mesh collision only");
-        require(raw->nodes[node].mesh, "collision node has no mesh");
-        collisionNodes.insert(node);
-    }
-    std::set<cgltf_node *> visible;
-    std::function<void(cgltf_node *)> visit = [&](cgltf_node *node) {
-        if (!visible.insert(node).second)
-            return;
-        for (size_t i = 0; i < node->children_count; i++)
-            visit(node->children[i]);
-    };
-    auto *sceneGraph = raw->scene ? raw->scene : (raw->scenes_count ? raw->scenes : nullptr);
-    require(sceneGraph, "glTF requires a scene");
-    for (size_t i = 0; i < sceneGraph->nodes_count; i++)
-        visit(sceneGraph->nodes[i]);
-    for (size_t ni = 0; ni < raw->nodes_count; ni++) {
-        auto &node = raw->nodes[ni];
-        if (!node.mesh)
-            continue;
-        Mat4 transform;
-        cgltf_node_transform_world(&node, transform.v.data());
-        for (float f : transform.v)
-            require(std::isfinite(f), "nonfinite node transform");
-        for (size_t pi = 0; pi < node.mesh->primitives_count; pi++) {
-            auto &p = node.mesh->primitives[pi];
-            require(p.type == cgltf_primitive_type_triangles, "M0 requires triangle primitives");
-            const cgltf_accessor *pos = nullptr, *uv = nullptr, *uv1 = nullptr, *normal = nullptr;
-            for (size_t a = 0; a < p.attributes_count; a++) {
-                auto &attr = p.attributes[a];
-                if (attr.type == cgltf_attribute_type_position)
-                    pos = attr.data;
-                if (attr.type == cgltf_attribute_type_normal)
-                    normal = attr.data;
-                if (attr.type == cgltf_attribute_type_texcoord) {
-                    if (attr.index == 0)
-                        uv = attr.data;
-                    if (attr.index == 1)
-                        uv1 = attr.data;
-                }
-            }
-            require(pos, "missing positions");
-            Mesh mesh;
-            mesh.node = ni;
-            mesh.material = p.material ? p.material - raw->materials : raw->materials_count;
-            require(result->materials[mesh.material].lightmap < 0 || uv1, "declared lightmap needs TEXCOORD_1");
-            for (const auto &slot : result->materials[mesh.material].slots)
-                require(slot.texture < 0 || (slot.texCoord == 0 ? uv : uv1), "material references missing UV set");
-            size_t count = p.indices ? p.indices->count : pos->count;
-            require(count % 3 == 0 && count < 3000000, "invalid triangle count");
-            require(pos->count < 3000000, "invalid vertex count");
-            memory += count * sizeof(Vertex);
-            require(memory <= 512 * 1024 * 1024, "world GPU budget exceeded");
-            // Each accessor vertex is decoded once; the flat triangle list used by
-            // collision, editing and picking is expanded from these.
-            Vec3 a{transform.v[0], transform.v[1], transform.v[2]}, b{transform.v[4], transform.v[5], transform.v[6]},
-                c{transform.v[8], transform.v[9], transform.v[10]};
-            float det = dot(a, cross(b, c));
-            require(!normal || std::abs(det) > 1e-8f, "singular node transform");
-            std::vector<Vertex> unique(pos->count);
-            for (size_t index = 0; index < pos->count; ++index) {
-                float v[3];
-                require(cgltf_accessor_read_float(pos, index, v, 3), "invalid position");
-                Vertex &vert = unique[index];
-                vert.position = transform.point({v[0], v[1], v[2]});
-                require(std::isfinite(vert.position.x + vert.position.y + vert.position.z), "nonfinite vertex");
-                if (uv)
-                    require(cgltf_accessor_read_float(uv, index, vert.uv, 2), "invalid UV0");
-                if (uv1)
-                    require(cgltf_accessor_read_float(uv1, index, vert.uv1, 2), "invalid UV1");
-                require(std::isfinite(vert.uv[0] + vert.uv[1] + vert.uv1[0] + vert.uv1[1]), "nonfinite UV");
-                if (normal) {
-                    float n[3];
-                    require(cgltf_accessor_read_float(normal, index, n, 3), "invalid normal");
-                    vert.normal = normalized((cross(b, c) * n[0] + cross(c, a) * n[1] + cross(a, b) * n[2]) / det);
-                }
-            }
-            std::vector<uint32_t> indices(count);
-            for (size_t i = 0; i < count; i++) {
-                size_t index = p.indices ? cgltf_accessor_read_index(p.indices, i) : i;
-                require(index < unique.size(), "index out of range");
-                indices[i] = uint32_t(index);
-                mesh.vertices.push_back(unique[index]);
-            }
-            // Without authored normals the flat list carries per-face normals: draw it.
-            if (visible.contains(&node) && normal)
-                buildGpuMesh(mesh, unique, std::move(indices), result->materials[mesh.material].alphaMode == 2);
-            for (size_t i = 0; i < count; i += 3) {
-                Triangle t{mesh.vertices[i].position, mesh.vertices[i + 1].position, mesh.vertices[i + 2].position};
-                Vec3 n = normalized(cross(t.b - t.a, t.c - t.a));
-                if (!normal)
-                    for (int k = 0; k < 3; k++)
-                        mesh.vertices[i + k].normal = n;
-                if (collisionNodes.contains(ni) && length(n) > .1f) {
-                    result->collision.push_back(t);
-                    result->collisionNodes.push_back(ni);
-                }
-            }
-            if (visible.contains(&node))
-                result->meshes.push_back(std::move(mesh));
-        }
-    }
+    auto scene = loadGltf(*result, root, j["scene"], formatVersion, options, j.value("lightmaps", Json::array()),
+                          j.value("collision", Json::array()), "", memory);
+    result->meshes = std::move(scene.meshes);
+    result->collision = std::move(scene.collision);
+    result->collisionNodes = std::move(scene.collisionNodes);
+    // World 0.8 placed objects: assets, instances and their static collision proxies.
+    loadObjects(*result, root, formatVersion, options, memory);
     require(result->collision.size() <= 20000, "M0 collision triangle budget exceeded");
     // Spawn positions are capsule feet; the camera sits 1.7 m above them.
     for (auto &s : result->spawns) {
@@ -607,17 +656,14 @@ std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions optio
     }
     require(!result->meshes.empty(), "empty scene");
     loadSpatial(*result, root);
-    result->nodeParents.resize(raw->nodes_count, -1);
-    for (size_t i = 0; i < raw->nodes_count; i++)
-        if (raw->nodes[i].parent)
-            result->nodeParents[i] = raw->nodes[i].parent - raw->nodes;
-    loadMounts(*result, raw->nodes_count);
+    result->nodeParents = scene.parents;
+    loadMounts(*result, scene.parents.size());
     result->atmosphere = j.value("atmosphere", defaultAtmosphere());
     validateAtmosphere(result->atmosphere);
     loadVisibility(*result);
     result->playable = loadPlayable(j);
     for (auto &card : j.value("backdrop", Json::object()).value("farCards", Json::array())) {
-        if (card.get<uint64_t>() >= raw->nodes_count)
+        if (card.get<uint64_t>() >= scene.parents.size())
             throw std::runtime_error("backdrop farCards: unknown node");
         unsigned node = card.get<unsigned>();
         for (auto &mesh : result->meshes) {
@@ -664,6 +710,8 @@ std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions optio
             result->visualTriangles.push_back(
                 {mesh.vertices[i].position, mesh.vertices[i + 1].position, mesh.vertices[i + 2].position});
     result->visualIndex.rebuild(result->visualTriangles);
+    // Object probe lighting samples the static world (baked light, sky), so it runs last.
+    lightObjects(*result);
     markCollisionOwners(*result);
     return result;
 }
