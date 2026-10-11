@@ -1,9 +1,10 @@
 # Hyprune core
 
+> **Hyprune** is an explorable, world-driven desktop environment for Hyprland: your workspaces become places you can walk through, with live windows on the walls. This repository is **core**: the Hyprland plugin, the `hypruned` daemon and the 3D world runtime. Install Hyprune through the [hyprune](https://github.com/hyprune/hyprune) repository (starter kits, Nix, Arch); learn more at [hyprune.com](https://hyprune.com). Licence: MIT.
+
 “What if the computer itself were an explorable world?”
 
-Hyprune core integrates a small 3D runtime with Hyprland. This is the M1 developer
-implementation, pinned to **Hyprland 0.56.x** and checked against the exact running
+Hyprune core integrates a small 3D runtime with Hyprland. It is pinned to **Hyprland 0.56.x** and checked against the exact running
 compositor ABI hash. The shell, worlds, SDK, documentation and schemas live in
 separate repositories. This repository contains no proprietary game assets.
 
