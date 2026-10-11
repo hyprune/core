@@ -7,6 +7,7 @@ using Json = world::Json;
 struct Instance {
     std::string id, appClass, title;
     int workspaceId = 0;
+    bool floating = false; // floated natively by the user's compositor, not by the world
 };
 // Pure authority: all identity rules and bindings are independent of compositor handles.
 class Layout {
@@ -44,7 +45,8 @@ class Layout {
     void restore(const Json &);
     void pull(const Instance &, const world::World *);
     std::string place(const Instance &, const std::string &anchorId, const world::World *);
-    void release(const Instance &, const world::World *);
+    // Back to a workspace wall (its own by default, or the one it is dropped onto).
+    void release(const Instance &, const world::World *, int wallWorkspace = 0);
     void recall(std::span<const Instance>);
     bool pulled(const Instance &, const world::World *) const;
     bool hasPlacement(const Instance &instance, const world::World *world) const {
@@ -52,6 +54,14 @@ class Layout {
     }
     std::optional<Surface> locate(const Instance &, const world::World *, const sim::Camera &, int pw, int ph);
     std::vector<std::pair<std::string, Json>> events;
+    // A window without a durable rule that arrives on a home workspace (opened there or
+    // moved there): the first keeps the area's primary wall, later ones take its free tool
+    // anchors in authored order. Runtime only, like a spawn pose; durable rules still come
+    // from explicit placement. walled: surface -> the workspace whose wall shows it.
+    std::map<std::string, int> walled;
+    std::map<std::string, std::pair<int, std::string>> arrivals; // surface -> {workspace, anchor}
+    // A closed or departed window gives up its wall, arrival anchor and holds.
+    void forget(const std::string &surfaceId);
 
   private:
     struct Recovered {
@@ -63,6 +73,15 @@ class Layout {
     std::map<std::string, Recovered> recovered;
     std::map<std::string, int> recalled;
     std::map<std::string, std::string> temporaryAnchors;
+    // Last holder of each tool anchor: the compositor's window order (a focus raise moves a
+    // window last) or two windows matching one rule never swap clients between anchors.
+    std::map<std::string, std::string> holders;
+    std::map<std::string, Json> identities; // surface -> its bounded rule identity
+    std::map<std::string, int> lastWorkspace;
+    std::string holder(const std::string &anchorId, const std::string &except) const;
+    bool taken(const std::string &anchorId, const std::string &except) const;
+    void hold(const std::string &surfaceId, const std::string &anchorId);
+    void leaveHome(const std::string &surfaceId);
     Json rule(const Instance &) const;
     bool matches(const Json &, const Instance &) const;
     const Json *saved(const Instance &, const world::World *) const;

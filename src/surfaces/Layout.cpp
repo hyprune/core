@@ -61,6 +61,22 @@ Vec3 zoneRest(const world::World &w, Vec3 lo, Vec3 hi, float margin, float heigh
     c.y = std::clamp(base + 1.7f, low, high);
     return c;
 }
+// An area's tool mounts in authored (toolAnchors) order, then any other tool mount
+// the world assigns to it.
+std::vector<const Json *> toolAnchors(const world::World &w, const Json &areaId) {
+    std::vector<const Json *> out;
+    auto area = std::find_if(w.areas.begin(), w.areas.end(), [&](auto &a) { return a.at("id") == areaId; });
+    auto mine = [&](const Json &a) { return a.at("areaId") == areaId && a.at("mount").at("role") == "tool-mount"; };
+    if (area != w.areas.end())
+        for (auto &id : area->value("toolAnchors", Json::array()))
+            for (auto &a : w.anchors)
+                if (a.at("id") == id && mine(a))
+                    out.push_back(&a);
+    for (auto &a : w.anchors)
+        if (mine(a) && std::find(out.begin(), out.end(), &a) == out.end())
+            out.push_back(&a);
+    return out;
+}
 } // namespace
 bool overlaps(const Surface &s, std::span<const Triangle> triangles, float margin) {
     for (const auto &t : triangles)
@@ -238,6 +254,32 @@ const Json *Layout::saved(const Instance &i, const world::World *w) const {
             return &p;
     return nullptr;
 }
+std::string Layout::holder(const std::string &anchorId, const std::string &except) const {
+    for (auto &v : instances)
+        if (v.value("anchorId", "") == anchorId && v.at("surfaceId") != except)
+            return v.at("surfaceId");
+    auto held = holders.find(anchorId);
+    return held != holders.end() && held->second != except ? held->second : "";
+}
+bool Layout::taken(const std::string &anchorId, const std::string &except) const {
+    return !holder(anchorId, except).empty();
+}
+void Layout::hold(const std::string &surfaceId, const std::string &anchorId) {
+    std::erase_if(holders, [&](auto &h) { return h.second == surfaceId && h.first != anchorId; });
+    if (!anchorId.empty())
+        holders[anchorId] = surfaceId;
+}
+void Layout::leaveHome(const std::string &surfaceId) {
+    arrivals.erase(surfaceId);
+    walled.erase(surfaceId);
+}
+void Layout::forget(const std::string &surfaceId) {
+    identities.erase(surfaceId);
+    lastWorkspace.erase(surfaceId);
+    leaveHome(surfaceId);
+    hold(surfaceId, "");
+    temporaryAnchors.erase(surfaceId);
+}
 void Layout::bind(int id, const std::string &worldId, const std::string &areaId, const world::World *w) {
     need(id > 0 && w && worldId == w->id, -32003, "binding requires loaded world");
     need(std::any_of(w->areas.begin(), w->areas.end(), [&](auto &a) { return a.at("id") == areaId; }), -32003,
@@ -308,10 +350,11 @@ void Layout::pull(const Instance &i, const world::World *w) {
     carried = i.id;
     recalled.erase(i.id);
     temporaryAnchors.erase(i.id);
+    leaveHome(i.id);
 }
 bool Layout::pulled(const Instance &i, const world::World *w) const {
     if (unplaced.contains(i.id) || freePoses.contains(i.id) || carried == i.id || recalled.contains(i.id) ||
-        saved(i, w))
+        arrivals.contains(i.id) || saved(i, w))
         return true;
     if (!w)
         if (auto b = binding(i.workspaceId, nullptr))
@@ -330,11 +373,7 @@ std::string Layout::place(const Instance &i, const std::string &requested, const
         if (a.at("areaId") != b->at("areaId") || a.at("mount").at("role") != "tool-mount" ||
             (!requested.empty() && a.at("id") != requested))
             continue;
-        bool occupied = false;
-        for (auto &live : instances)
-            if (a.at("id") == live.value("anchorId", "") && live.at("surfaceId") != i.id)
-                occupied = true;
-        if (occupied)
+        if (taken(a.at("id"), i.id))
             continue;
         chosen = &a;
         break;
@@ -349,9 +388,10 @@ std::string Layout::place(const Instance &i, const std::string &requested, const
     carried.clear();
     recalled.erase(i.id);
     temporaryAnchors.erase(i.id);
+    leaveHome(i.id);
     return id;
 }
-void Layout::release(const Instance &i, const world::World *w) {
+void Layout::release(const Instance &i, const world::World *w, int wallWorkspace) {
     freePoses.erase(i.id);
     occupiedPoses.erase(i.id);
     auto b = binding(i.workspaceId, w);
@@ -366,6 +406,8 @@ void Layout::release(const Instance &i, const world::World *w) {
         carried.clear();
     recalled.erase(i.id);
     temporaryAnchors.erase(i.id);
+    leaveHome(i.id);
+    walled[i.id] = wallWorkspace ? wallWorkspace : i.workspaceId;
 }
 void Layout::recall(std::span<const Instance> live) {
     freePoses.clear();
@@ -384,6 +426,7 @@ void Layout::stash(const Instance &i, Surface s) {
     pocketOrder.insert(pocketOrder.begin(), i.id);
     freePoses.erase(i.id);
     occupiedPoses.erase(i.id);
+    leaveHome(i.id);
     if (carried == i.id)
         carried.clear();
 }
@@ -528,14 +571,36 @@ bool Layout::spawn(const Instance &i, const world::World *w, const sim::Camera &
 }
 std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, const sim::Camera &camera, int pw,
                                       int ph) {
-    if (unplaced.contains(i.id))
+    // An arrival belongs to the workspace it arrived on; moving on starts over. A free
+    // window moved onto a home workspace arrives there, wherever it was in the world.
+    if (auto a = arrivals.find(i.id); a != arrivals.end() && a->second.first != i.workspaceId)
+        arrivals.erase(a);
+    if (auto h = walled.find(i.id); h != walled.end() && h->second != i.workspaceId)
+        walled.erase(h);
+    auto last = lastWorkspace.find(i.id);
+    if (last != lastWorkspace.end() && last->second != i.workspaceId && carried != i.id && binding(i.workspaceId, w)) {
+        freePoses.erase(i.id);
+        occupiedPoses.erase(i.id);
+        fittedScale.erase(i.id);
+        spawnAreas.erase(i.id);
+        recalled.erase(i.id);
+        temporaryAnchors.erase(i.id);
+        unplaced.erase(i.id);
+        std::erase(pocketOrder, i.id);
+    }
+    lastWorkspace[i.id] = i.workspaceId;
+    if (unplaced.contains(i.id)) {
+        hold(i.id, "");
         return {};
+    }
     auto b = binding(i.workspaceId, w);
     if (!b && recalled.contains(i.id))
         b = binding(i.workspaceId, nullptr);
     // Recalled room clients have no home binding: they come to the player like the rest.
-    if (!b && !freePoses.contains(i.id) && !saved(i, w) && !recalled.contains(i.id))
+    if (!b && !freePoses.contains(i.id) && !saved(i, w) && !recalled.contains(i.id)) {
+        hold(i.id, "");
         return {};
+    }
     Surface s;
     s.id = i.id;
     s.title = i.title;
@@ -635,27 +700,26 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                         valid =
                             s.width > 0 && s.height < hi.y - lo.y - 2 * margin && !overlaps(s, w->collision, margin);
                     }
-        bool occupied = std::any_of(instances.begin(), instances.end(), [&](auto &v) {
-            return v.value("anchorId", "") == anchorId && v.at("surfaceId") != i.id;
-        });
+        bool occupied = taken(anchorId, i.id);
+        // Another live window matching the same rule holds the saved target: ambiguous
+        // concurrent matches occupy different free targets (RFC-0005 M2), not a relocation.
+        bool ambiguous = false;
+        if (occupied) {
+            auto other = identities.find(holder(anchorId, i.id));
+            ambiguous = other != identities.end() && p->at("rule").at("appClass") == other->second["appClass"] &&
+                        (p->at("rule").at("title") == "" || p->at("rule").at("title") == other->second["title"]);
+        }
         if (occupied)
             valid = false;
         if (a && !occupied && a->at("areaId") == home && a->at("mount").at("role") == "tool-mount")
             valid = fit(*a);
         if (!valid) {
             const Json *free = nullptr;
-            for (const auto &candidate : w->anchors) {
-                if (candidate.at("areaId") != home || candidate.at("mount").at("role") != "tool-mount")
-                    continue;
-                if (std::any_of(instances.begin(), instances.end(), [&](auto &v) {
-                        return candidate.at("id") == v.value("anchorId", "") && v.at("surfaceId") != i.id;
-                    }))
-                    continue;
-                if (fit(candidate)) {
-                    free = &candidate;
+            for (auto candidate : toolAnchors(*w, home))
+                if (!taken(candidate->at("id"), i.id) && fit(*candidate)) {
+                    free = candidate;
                     break;
                 }
-            }
             if (free) {
                 auto old = anchorId;
                 anchorId = free->at("id");
@@ -665,11 +729,12 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                     for (auto &entry : placements)
                         if (&entry == p)
                             entry["anchorId"] = anchorId;
-                events.push_back({"runtime.notice",
-                                  {{"level", "warning"},
-                                   {"code", "placement.relocated"},
-                                   {"message", "Relocated " + i.title + " in " + home.get<std::string>() +
-                                                   " from " + old}}});
+                if (!ambiguous)
+                    events.push_back({"runtime.notice",
+                                      {{"level", "warning"},
+                                       {"code", "placement.relocated"},
+                                       {"message", "Relocated " + i.title + " in " + home.get<std::string>() +
+                                                       " from " + old}}});
             } else {
                 bool zoned = false;
                 auto area = std::find_if(w->areas.begin(), w->areas.end(),
@@ -677,10 +742,7 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                 if (area != w->areas.end())
                     for (auto &id : area->value("freePlacementZones", Json::array()))
                         for (auto &zone : w->placementZones)
-                            if (zone.at("id") == id && !std::any_of(instances.begin(), instances.end(), [&](auto &v) {
-                                    return v.value("anchorId", "") == id.get<std::string>() &&
-                                           v.at("surfaceId") != i.id;
-                                })) {
+                            if (zone.at("id") == id && !taken(id, i.id)) {
                                 auto lo = vec(zone["bounds"]["min"]), hi = vec(zone["bounds"]["max"]);
                                 float margin = zone.at("clearance");
                                 s.rotation = {0, 0, 0, 1};
@@ -716,13 +778,61 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                                         : "No safe free mount; recalled " + i.title + " in front of player"}}});
             }
         }
-    } else
+    } else if (b) {
+        // Arrived on its home workspace without a durable rule: the first window keeps the
+        // area's primary wall, later ones take its free tool anchors in authored order,
+        // leaving anchors that durable rules restore to until nothing else is free. A window
+        // the user floats there is part of that workspace's own layout: it stays on the wall.
+        bool wallTaken = std::any_of(walled.begin(), walled.end(),
+                                     [&](auto &v) { return v.second == i.workspaceId && v.first != i.id; });
+        if (walled.contains(i.id) || (!arrivals.contains(i.id) && (!wallTaken || i.floating))) {
+            walled[i.id] = i.workspaceId;
+            hold(i.id, "");
+            identities[i.id] = rule(i);
+            return {};
+        }
+        const Json home = b->at("areaId");
+        auto reserved = [&](const Json &a) {
+            return std::any_of(placements.begin(), placements.end(), [&](auto &q) {
+                return q.at("worldId") == w->id && q.at("anchorId") == a.at("id");
+            });
+        };
+        auto fits = [&](const Json &a) {
+            auto fitted = fitToMount(a, pw, ph, w->collision);
+            if (fitted)
+                s = *fitted;
+            return fitted.has_value();
+        };
+        const Json *chosen = nullptr;
+        if (auto a = arrivals.find(i.id); a != arrivals.end())
+            if (auto kept = anchor(a->second.second, w);
+                kept && kept->at("areaId") == home && !taken(a->second.second, i.id) && fits(*kept))
+                chosen = kept;
+        for (bool allowReserved : {false, true})
+            for (auto candidate : toolAnchors(*w, home))
+                if (!chosen && (allowReserved || !reserved(*candidate)) && !taken(candidate->at("id"), i.id) &&
+                    fits(*candidate))
+                    chosen = candidate;
+        if (!chosen) { // no free tool: it stays on the wall with the workspace's other windows
+            arrivals.erase(i.id);
+            walled[i.id] = i.workspaceId;
+            hold(i.id, "");
+            identities[i.id] = rule(i);
+            return {};
+        }
+        anchorId = chosen->at("id");
+        arrivals[i.id] = {i.workspaceId, anchorId};
+    } else {
+        hold(i.id, "");
         return {};
+    }
     s.id = i.id;
     s.title = i.title;
     s.pixelWidth = pw;
     s.pixelHeight = ph;
     occupiedPoses[i.id] = s;
+    identities[i.id] = rule(i);
+    hold(i.id, anchorId);
     instances.push_back({{"surfaceId", i.id},
                          {"workspaceId", i.workspaceId},
                          {"areaId", b                    ? b->at("areaId")
@@ -763,9 +873,7 @@ void Layout::placeOnMount(const Instance &i, const Json &mount, const world::Wor
     need(w && mount.at("mount").at("role") == "tool-mount", -32003, "not a tool mount");
     auto b = binding(i.workspaceId, w);
     need(!b || b->at("areaId") == mount.at("areaId"), -32004, "tool mount belongs to another area");
-    for (auto &live : instances)
-        need(live.value("anchorId", "") != mount.at("id").get<std::string>() || live.at("surfaceId") == i.id, -32004,
-             "tool mount occupied");
+    need(!taken(mount.at("id"), i.id), -32004, "tool mount occupied");
     // One placement per client and world (room clients) or per home area (homed clients).
     std::erase_if(placements.get_ref<Json::array_t &>(), [&](auto &p) {
         return p.at("worldId") == w->id && (!b || p.at("areaId") == b->at("areaId")) && matches(p, i);
@@ -782,6 +890,7 @@ void Layout::placeOnMount(const Instance &i, const Json &mount, const world::Wor
         carried.clear();
     recalled.erase(i.id);
     temporaryAnchors.erase(i.id);
+    leaveHome(i.id);
 }
 void Layout::mount(const Instance &i, const world::World *w, Surface s) {
     s.rotation = quaternionProduct(s.rotation, {0, std::sin(s.yaw / 2), 0, std::cos(s.yaw / 2)});
@@ -807,6 +916,7 @@ void Layout::mount(const Instance &i, const world::World *w, Surface s) {
     spawnAreas[i.id] = area;
     recalled.erase(i.id);
     temporaryAnchors.erase(i.id);
+    leaveHome(i.id);
     if (carried == i.id)
         carried.clear();
 }

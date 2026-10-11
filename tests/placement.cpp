@@ -90,6 +90,108 @@ void spawnReachability() {
     if (zoned.spawn(second, &blocked, camera, against, 16.f / 9))
         assert(std::abs(zoned.freePoses.at(second.id).center.y - placed.center.y) < .3f);
 }
+// Windows arriving on a home workspace without a durable rule (opened or moved there):
+// the first keeps the primary wall, later ones take the area's tool anchors in authored
+// order and keep them, whatever order the compositor lists windows in (live take: moved
+// windows got no pose, and a second matching client "relocated" off a free anchor).
+void homeArrivals() {
+    world::World w;
+    w.id = "org.hyprune.test.homes";
+    auto tool = [](const char *id, float x) {
+        return world::Json{{"id", id}, {"areaId", "court"}, {"size", {2.4, 1.35}},
+                           {"pose", {{"position", {x, 1.5, -4}}, {"rotation", {0, 0, 0, 1}}}},
+                           {"mount", {{"type", "operator-desk"}, {"role", "tool-mount"}, {"interaction", "in-place"}}}};
+    };
+    w.anchors = world::Json::array(
+        {{{"id", "wall"}, {"areaId", "court"}, {"size", {16, 9}},
+          {"pose", {{"position", {0, 6, -20}}, {"rotation", {0, 0, 0, 1}}}},
+          {"mount", {{"type", "facade-wall"}, {"role", "mounted-workspace"}, {"interaction", "focus-in"}}}},
+         tool("desk-b", 6), tool("desk-a", -6), tool("rig", 0)});
+    // Authored order differs from the manifest's anchor order on purpose.
+    w.areas = world::Json::array({{{"id", "court"}, {"workspaceSlot", "01"}, {"primaryAnchor", "wall"},
+                                   {"toolAnchors", {"desk-a", "desk-b", "rig"}}}});
+    sim::Camera camera;
+    camera.position = {0, 1.7f, 4};
+    surfaces::Layout layout;
+    layout.workspaceBase = 20;
+    layout.deriveDefaults(&w);
+    surfaces::Instance desk{"desk", "kitty", "Desk", 21}, kiosk{"kiosk", "kitty", "Kiosk", 21},
+        signal{"signal", "kitty", "Signal", 21};
+    auto refresh = [&](std::vector<surfaces::Instance *> order) {
+        layout.instances = world::Json::array();
+        std::map<std::string, std::string> at;
+        for (auto *i : order)
+            if (layout.locate(*i, &w, camera, 1200, 675))
+                at[i->id] = layout.instances.back()["anchorId"];
+        return at;
+    };
+    auto first = refresh({&desk, &kiosk, &signal});
+    assert(!first.contains("desk") && first.at("kiosk") == "desk-a" && first.at("signal") == "desk-b");
+    assert(!layout.pulled(desk, &w) && layout.pulled(kiosk, &w) && layout.walled.at("desk") == 21);
+    for (int k = 0; k < 3; ++k) // a focus raise reorders the compositor's list: nobody moves
+        assert(refresh({&signal, &kiosk, &desk}) == first && refresh({&kiosk, &desk, &signal}) == first);
+    assert(layout.placements.empty() && layout.events.empty()); // runtime only, no notices
+    // The wall window closes: the next arrival takes the wall, tools stay where they are.
+    layout.forget(desk.id);
+    surfaces::Instance late{"late", "foot", "Late", 21};
+    auto after = refresh({&late, &kiosk, &signal});
+    assert(!after.contains("late") && after.at("kiosk") == "desk-a" && after.at("signal") == "desk-b");
+    // A window floated natively on the workspace belongs to its wall's own layout.
+    surfaces::Instance floated{"floated", "kitty", "Floated", 21, true};
+    after = refresh({&late, &kiosk, &signal, &floated});
+    assert(!after.contains("floated") && !layout.pulled(floated, &w) && after.at("signal") == "desk-b");
+    // Returned (or dropped) onto the wall: it stays there.
+    layout.release(signal, &w);
+    after = refresh({&late, &kiosk, &signal});
+    assert(!after.contains("signal") && !layout.pulled(signal, &w) && layout.walled.at("signal") == 21);
+
+    // Anchors that durable rules restore to are left for them while others are free.
+    surfaces::Layout reserved;
+    reserved.workspaceBase = 20;
+    reserved.deriveDefaults(&w);
+    surfaces::Instance owner{"owner", "btop", "", 20};
+    reserved.placeOnMount(owner, w.anchors[2], &w); // desk-a, for the room's btop
+    reserved.instances = world::Json::array();
+    surfaces::Instance a{"a", "kitty", "A", 21}, b{"b", "kitty", "B", 21};
+    reserved.locate(a, &w, camera, 1200, 675);
+    assert(reserved.locate(b, &w, camera, 1200, 675) && reserved.instances.back()["anchorId"] == "desk-b");
+    assert(reserved.locate(owner, &w, camera, 1200, 675) && reserved.instances.back()["anchorId"] == "desk-a");
+
+    // Two live clients matching one rule share no target and raise no relocation notice.
+    surfaces::Layout twins;
+    twins.workspaceBase = 20;
+    twins.deriveDefaults(&w);
+    surfaces::Instance one{"one", "kitty", "~", 20}, two{"two", "kitty", "~", 20};
+    twins.placeOnMount(one, w.anchors[2], &w);
+    std::map<std::string, std::string> seen;
+    for (auto order : {std::vector{&one, &two}, std::vector{&two, &one}, std::vector{&one, &two}}) {
+        twins.instances = world::Json::array();
+        for (auto *i : order)
+            if (twins.locate(*i, &w, camera, 1200, 675)) {
+                std::string anchor = twins.instances.back()["anchorId"];
+                assert(!seen.contains(i->id) || seen[i->id] == anchor);
+                seen[i->id] = anchor;
+            }
+    }
+    assert(seen.at("one") != seen.at("two") && twins.events.empty());
+
+    // A free room window moved onto a home workspace arrives there: no stale room pose.
+    surfaces::Layout moved;
+    moved.workspaceBase = 20;
+    moved.deriveDefaults(&w);
+    surfaces::Instance wall{"walled", "kitty", "Wall", 21}, room{"room", "kitty", "Room", 20};
+    moved.locate(wall, &w, camera, 1200, 675);
+    surfaces::Surface pose;
+    pose.logicalSize(1200, 675, .002f);
+    pose.center = {0, 1.7f, 0};
+    assert(moved.spawn(room, &w, camera, pose, 16.f / 9) && moved.freePoses.contains(room.id));
+    moved.locate(room, &w, camera, 1200, 675);
+    room.workspaceId = 21;
+    moved.instances = world::Json::array();
+    moved.locate(wall, &w, camera, 1200, 675);
+    assert(moved.locate(room, &w, camera, 1200, 675) && moved.instances.back()["anchorId"] == "desk-a");
+    assert(!moved.freePoses.contains(room.id));
+}
 } // namespace
 int main() {
     world::World world;
@@ -239,5 +341,7 @@ int main() {
     }
     spawnReachability();
     std::cout << "PASS spawn in front of the player on reachable floor, zone fallback at viewing height\n";
+    homeArrivals();
+    std::cout << "PASS home arrivals: wall first, tool anchors in authored order, stable, no stale poses\n";
     std::cout << "PASS placement queue, pocket ordering, durable client size, workspace scope and facing toggle\n";
 }

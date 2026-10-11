@@ -1976,7 +1976,7 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
                     wall = {{f.workspaceId, h->distance}};
             if (held && wall) {
                 auto w = held->window.lock();
-                layout.release(held->instance, world.get());
+                layout.release(held->instance, world.get(), wall->first);
                 auto r = g_pKeybindManager->m_dispatchers.at("movetoworkspacesilent")(
                     std::to_string(wall->first) +
                     ",address:" + std::format("{:x}", reinterpret_cast<uintptr_t>(w.get())));
@@ -2551,7 +2551,8 @@ void Runtime::debugCapture() {
                             {"rotation", e.surface.rotation},
                             {"size", {e.surface.width, e.surface.height}},
                             {"parentId", e.parentId},
-                            {"visible", e.visible}});
+                            {"visible", e.visible},
+                            {"wall", e.wall}});
     for (auto &child : capture.children)
         surfaces.push_back({{"id", child.surface.id},
                             {"parentId", child.parentId},
@@ -4919,6 +4920,7 @@ int luaCamera(lua_State *state) {
              {"floating", e.window->m_isFloating},
              {"commits", *e.commits},
              {"visible", e.visible},
+             {"wall", e.wall},
              {"queued", e.queued},
              {"placed", runtime->layout.freePoses.contains(e.surface.id)},
              {"size", {e.surface.width, e.surface.height}},
@@ -5136,8 +5138,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         // A static float rule sees the initial workspace and leaks to clients
         // redirected elsewhere. Test the final workspace and output instead.
         if (runtime->active && window->m_monitor == runtime->monitor && window->m_workspace &&
-            window->m_workspace->m_id == runtime->worldWorkspace)
+            window->m_workspace->m_id == runtime->worldWorkspace) {
             window->m_isFloating = true;
+            runtime->capture.worldFloated.insert(window.get()); // floated by the world, not the user
+        }
     }));
     runtime->listeners.push_back(Event::bus()->m_events.render.stage.listen([](eRenderStage stage) {
         safe([&] {

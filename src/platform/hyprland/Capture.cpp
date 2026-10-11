@@ -44,6 +44,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             remove = !layout->binding(identity.workspaceId, world) && !layout->hasPlacement(identity, world);
         }
         if (remove && layout) {
+            layout->forget(e.surface.id);
             layout->occupiedPoses.erase(e.surface.id);
             layout->freePoses.erase(e.surface.id);
             layout->unplaced.erase(e.surface.id);
@@ -183,7 +184,8 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         it->texture = texture;
         it->surface.texture = texture->m_texID;
         it->surface.title = identity.title;
-        it->instance = {it->surface.id, identity.appClass, identity.title, identity.workspaceId};
+        it->instance = {it->surface.id, identity.appClass, identity.title, identity.workspaceId,
+                        w->m_isFloating && !worldFloated.contains(w.get())};
         it->visible = true;
         it->surface.pixelWidth = std::max(1, int(surface->m_current.size.x));
         it->surface.pixelHeight = std::max(1, int(surface->m_current.size.y));
@@ -252,6 +254,8 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
     std::erase_if(entries, [&](Entry &e) {
         if (refreshed.contains(e.surface.id))
             return false;
+        if (layout)
+            layout->forget(e.surface.id);
         if (e.window && e.window->m_isMapped) {
             auto ws = e.window->m_workspace;
             e.window->setSuspended(ws && !ws->isVisible());
@@ -573,6 +577,8 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         }
         backdrops.push_back(d);
     }
+    for (auto &e : entries)
+        e.wall.clear();
     std::set<int> live;
     for (const auto &b : layout.effectiveBindings()) {
         if (b.at("worldId") != world->id)
@@ -615,6 +621,19 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
                 continue;
             size_t at = std::find(native.begin(), native.end(), window) - native.begin();
             stack.push_back({{layer(window), at}, &entry});
+            // Not drawn on its own: its pose is its rectangle on the wall, never a placeholder.
+            auto box = *window->logicalBox();
+            auto &wall = it->surface;
+            float u = float((box.x - monitor->m_position.x) / monitor->m_size.x),
+                  v = float((box.y - monitor->m_position.y) / monitor->m_size.y),
+                  du = float(box.w / monitor->m_size.x), dv = float(box.h / monitor->m_size.y);
+            entry.wall = wall.id;
+            entry.surface.rotation = wall.rotation;
+            entry.surface.yaw = wall.yaw;
+            entry.surface.width = du * wall.width;
+            entry.surface.height = dv * wall.height;
+            entry.surface.center = wall.center + wall.right() * ((u + du * .5f - .5f) * wall.width) +
+                                   wall.up() * ((.5f - v - dv * .5f) * wall.height);
         }
         std::stable_sort(stack.begin(), stack.end(), [](auto &a, auto &b) { return a.first < b.first; });
         // Recompose only when stacking, a window, popup, rectangle or pull changed: an idle
