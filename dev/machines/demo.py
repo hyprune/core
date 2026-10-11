@@ -70,6 +70,14 @@ def run(client, s, source):
             if m['inputs'][hold['input']]['value'] == hold['value']:
                 break
             time.sleep(.25)
+    # HYPRUNE_MACHINES_RECORD_AT (Unix seconds): the film's t = 0, so simulator stories
+    # slid with MACHINES_SIM_SHIFT put their events where the camera is.
+    record_at = float(os.environ.get('HYPRUNE_MACHINES_RECORD_AT', '0'))
+    if record_at:
+        late = time.time() - (record_at - 1)
+        if late > 0:
+            print(f'MACHINES DEMO: {late:.1f} s late for RECORD_AT', flush=True)
+        time.sleep(max(0, record_at - 1 - time.time()))
     out = pathlib.Path(os.environ['HYPRUNE_MACHINES_OUT'])
     codec = os.environ.get('HYPRUNE_MACHINES_CODEC', 'h264_nvenc')
     quality = ['-x', 'bgr0', '-p', 'preset=p5', '-p', 'rc=constqp', '-p', 'qp=14'] if 'nvenc' in codec else \
@@ -109,6 +117,8 @@ def stills(client, s, shots, camera, machines):
     out = pathlib.Path(os.environ['HYPRUNE_MACHINES_STILLS']); out.mkdir(parents=True, exist_ok=True)
     sequence = [int(time.time() * 1000)]
     for still in shots['stills']:
+        if still.get('remove'):
+            client.call('data.remove', {'sourceId': still['remove']})
         if still.get('publish'):
             sequence[0] = max(sequence[0] + 1, int(time.time() * 1000))
             client.call('data.publish', {'sourceId': still['publish']['sourceId'], 'sequence': sequence[0],
