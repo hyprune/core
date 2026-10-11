@@ -1,0 +1,156 @@
+{
+  "nestedOnly": true,
+  "world": "org.hyprune.objects",
+  "checks": [
+    {
+      "name": "the fixture places three instances of one asset",
+      "evidence": {
+        "animating": true,
+        "drawCalls": 8,
+        "instances": 3,
+        "instancesDrawn": 24,
+        "visible": 3
+      }
+    },
+    {
+      "name": "objects move between two stills while visible",
+      "evidence": {
+        "changedFraction": 0.04344
+      }
+    },
+    {
+      "name": "frames keep coming while an animated object is in view",
+      "evidence": {
+        "perSecond": 60.2,
+        "frames": 123,
+        "seconds": 2.04,
+        "animationFrames": true,
+        "objects": {
+          "animating": true,
+          "drawCalls": 8,
+          "instances": 3,
+          "instancesDrawn": 24,
+          "visible": 3
+        }
+      }
+    },
+    {
+      "name": "one instanced draw per asset batch covers all three instances",
+      "evidence": {
+        "animating": true,
+        "drawCalls": 8,
+        "instances": 3,
+        "instancesDrawn": 24,
+        "visible": 3
+      }
+    },
+    {
+      "name": "no frames are forced while objects are out of view",
+      "evidence": {
+        "perSecond": 0.0,
+        "frames": 0,
+        "seconds": 3.04,
+        "animationFrames": false,
+        "objects": {
+          "animating": true,
+          "drawCalls": 0,
+          "instances": 3,
+          "instancesDrawn": 0,
+          "visible": 0
+        }
+      }
+    },
+    {
+      "name": "reduced_motion freezes the objects",
+      "evidence": {
+        "changedFraction": 0.0
+      }
+    },
+    {
+      "name": "reduced_motion forces no frames",
+      "evidence": {
+        "perSecond": 0.0,
+        "frames": 0,
+        "seconds": 2.04,
+        "animationFrames": false,
+        "objects": {
+          "animating": false,
+          "drawCalls": 8,
+          "instances": 3,
+          "instancesDrawn": 24,
+          "visible": 3
+        }
+      }
+    },
+    {
+      "name": "instances with different phases are drawn differently",
+      "evidence": {
+        "changedFraction": 0.08663,
+        "boxes": [
+          [
+            366,
+            398,
+            705,
+            737
+          ],
+          [
+            790,
+            398,
+            1129,
+            737
+          ]
+        ]
+      }
+    },
+    {
+      "name": "the ink outline is drawn on the objects",
+      "evidence": {
+        "inkFraction": 0.01757
+      }
+    },
+    {
+      "name": "static-world gestures on an object move nothing",
+      "evidence": {
+        "aim": [
+          "",
+          ""
+        ],
+        "transforms": 0,
+        "editorObjects": [],
+        "changedFraction": 0.0
+      }
+    },
+    {
+      "name": "motion resumes when reduced_motion is switched off",
+      "evidence": {
+        "perSecond": 59.8,
+        "frames": 122,
+        "seconds": 2.04,
+        "animationFrames": true,
+        "objects": {
+          "animating": true,
+          "drawCalls": 8,
+          "instances": 3,
+          "instancesDrawn": 24,
+          "visible": 3
+        }
+      }
+    },
+    {
+      "name": "the desktop forces no world frames",
+      "evidence": {
+        "perSecond": 0.0,
+        "frames": 0,
+        "seconds": 2.04,
+        "animationFrames": false,
+        "objects": {
+          "animating": true,
+          "drawCalls": 8,
+          "instances": 3,
+          "instancesDrawn": 24,
+          "visible": 3
+        }
+      }
+    }
+  ]
+}
