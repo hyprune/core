@@ -15,7 +15,7 @@ def acceptance(client,children,args,shell_token,socketpath):
     before=state()['world']
     r,w=os.pipe();os.write(w,(shell_token+'\n').encode());os.close(w)
     _,env=verified();env.update(HYPRUNE_TOKEN_FD=str(r),HYPRUNE_PROTOCOL='0.10',HYPRUNE_SOCKET=str(socketpath),HYPRUNE_OUTPUT_SCREEN='HEADLESS-1',HYPRUNE_DEV_AUTOMATION='1')
-    shell=subprocess.Popen(['python3',str(s.ROOT.parent/'shell/bridge/launch.py'),'--protocol','0.10'],env=env,pass_fds=(r,),stdout=open(s.STATE/'shell.log','w'),stderr=subprocess.STDOUT)
+    shell=subprocess.Popen(['python3',str(pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR',str(s.ROOT.parent/'shell')))/'bridge/launch.py'),'--protocol','0.10'],env=env,pass_fds=(r,),stdout=open(s.STATE/'shell.log','w'),stderr=subprocess.STDOUT)
     os.close(r);children.append(shell)
     def child():
         assert shell.poll() is None
@@ -26,7 +26,7 @@ def acceptance(client,children,args,shell_token,socketpath):
         try:return json.loads(ui('status'))
         except (subprocess.CalledProcessError,json.JSONDecodeError):return {}
     wait(lambda:status().get('lease'));keys('-P','Tab','-s','1300','-p','Tab');wait(lambda:status().get('director'))
-    ui('tab',7);wait(lambda:status().get('graphics',{}).get('performance'))
+    ui('tabNamed','performance');wait(lambda:status().get('graphics',{}).get('performance'))
     def choose(move):
         assert ui('graphicsFocus','offload')=='true'
         keys('-k','space');time.sleep(.15);keys('-k',move);keys('-k','Return')

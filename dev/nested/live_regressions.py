@@ -202,13 +202,13 @@ ShellRoot {
     original_pid=qpid()
     original_connections=(logs/'shell.log').read_text().count('"type": "presentation.peer"')
     for n in range(3):
-        for tab in [3,4,6,0]:
-            ui('tab',tab);time.sleep(.12)
-            assert status()['tab']==tab and status()['director']
+        for tab in ['workspaces','help','settings','map']:
+            ui('tabNamed',tab);time.sleep(.12)
+            assert status()['tabName']==tab and status()['director']
     check('Workspaces_and_Help_repeat_without_Qt_crash',qpid()==original_pid)
     keys('-M','logo','-P','Super_L','-k','u','-p','Super_L','-m','logo');wait(lambda:any(p.stat().st_mtime>capture_json.stat().st_mtime for p in capture_dir.glob('capture-*.json')))
     check('U_works_in_Director_menu',True)
-    ui('tab',4)
+    ui('tabNamed','help')
     # Exercise Quickshell's own crash supervisor: the replacement QML PID must
     # supersede even a retained old socket and retain the authenticated bridge.
     subprocess.run(['prlimit','--pid',str(original_pid),'--core=0'],check=True)
@@ -217,7 +217,7 @@ ShellRoot {
     wait(lambda:status().get('status')=='live',20)
     check('Quickshell_crash_reconnects_through_owned_bridge',(logs/'shell.log').read_text().count('"type": "presentation.peer"')>original_connections and status()['lease']==initial['lease'])
     keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status()['director'])
-    ui('tab',4);time.sleep(.4);check('Help_opens_after_QML_crash_recovery',status()['director'] and status()['tab']==4)
+    ui('tabNamed','help');time.sleep(.4);check('Help_opens_after_QML_crash_recovery',status()['director'] and status()['tabName']=='help')
     keys('-k','Escape');wait(lambda:not status()['director'])
     check('daemon_lifecycle_logging', 'IPC ready' in (logs/'hypruned.log').read_text())
     (logs/'regression-ui.json').write_text(json.dumps(status(),indent=2)+'\n')

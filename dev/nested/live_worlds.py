@@ -55,7 +55,7 @@ def acceptance(logs,recorded,children,check,expected_protocol):
     for index in [1,0]:
         if not status()['director']:
             subprocess.run(['wtype','-P','Tab','-s','1100','-p','Tab'],env=env,check=True)
-        wait(lambda:status()['director']);ui('tab',1);time.sleep(.7)
+        wait(lambda:status()['director']);ui('tabNamed','places');time.sleep(.7)
         # Click the real Places destination buttons. OCR locates visible labels,
         # avoiding a test-only world-load backdoor or hard-coded screen geometry.
         shot=logs/('destinations-'+str(index)+'.png')

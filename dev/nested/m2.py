@@ -111,7 +111,7 @@ def acceptance(client,children,args,shell_token,socketpath):
  # Real reference Director, authenticated Wayland child on only the nested output.
  read,write=os.pipe();os.write(write,(shell_token+'\n').encode());os.close(write)
  _,environment=verified();environment.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_PROTOCOL='0.4',HYPRUNE_SOCKET=str(socketpath),HYPRUNE_OUTPUT_SCREEN='HEADLESS-1',HYPRUNE_DEV_AUTOMATION='1')
- log=open(s.STATE/'shell.log','w');shell=subprocess.Popen(['python3',str(ROOT.parent/'shell/bridge/launch.py'),'--protocol','0.4'],env=environment,pass_fds=(read,),stdout=log,stderr=subprocess.STDOUT);os.close(read);children.append(shell)
+ log=open(s.STATE/'shell.log','w');shell=subprocess.Popen(['python3',str(pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR',str(ROOT.parent/'shell')))/'bridge/launch.py'),'--protocol','0.4'],env=environment,pass_fds=(read,),stdout=log,stderr=subprocess.STDOUT);os.close(read);children.append(shell)
  def childpid():
   if shell.poll() is not None:raise AssertionError('M2 shell exited; see shell.log')
   return next((int(p) for p in pathlib.Path(f'/proc/{shell.pid}/task/{shell.pid}/children').read_text().split() if pathlib.Path(f'/proc/{p}/comm').read_text().strip()=='qs'),None)
@@ -123,7 +123,7 @@ def acceptance(client,children,args,shell_token,socketpath):
   try:return json.loads(ui('status'))
   except (subprocess.CalledProcessError,json.JSONDecodeError):return {}
  wait(lambda:status().get('lease'))
- keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status().get('director'));ui('tab',2);time.sleep(.3);shot('m2-director.png')
+ keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status().get('director'));ui('tabNamed','surfaces');time.sleep(.3);shot('m2-director.png')
  # Click the actual Recall button through the nested seat on the leased output.
  current=list(map(float,s.ctl('cursorpos').split(',')));output=next(m for m in json.loads(s.ctl('monitors','-j')) if m['name']=='HEADLESS-1')
  # Locate the visible label (the Director layout changes between shell releases).
@@ -191,7 +191,7 @@ def record(client,state,ui):
   # Smooth views inspect original alpha cards, wet paving, practical emission and reflections.
   for i in range(140):
    t=i/139;x=1.2*math.sin(t*math.tau);pose(client,[x,2.4+.4*math.sin(t*math.pi),1.2-2.6*t],-x*.13,-.06);pause(.09)
-  keys('-P','Tab','-s','1100','-p','Tab');pause(1);ui('tab',2);pause(2);ui('close');pause(.5)
+  keys('-P','Tab','-s','1100','-p','Tab');pause(1);ui('tabNamed','surfaces');pause(2);ui('close');pause(.5)
   client.call('surfaces.recall',{});pose(client,[0,1.7,3.5]);pause(2)
   client.call('surface.place',{'surfaceId':surface['id'],'anchorId':'sun-court-slot-01-operator-desk-01'});pose(client,[0,2.5,3],0,-.1);pause(3)
  finally:

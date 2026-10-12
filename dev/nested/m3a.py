@@ -28,7 +28,7 @@ def acceptance(client,children,args,shell_token,socketpath):
  from ctl import verified
  read,write=os.pipe();os.write(write,(shell_token+'\n').encode());os.close(write)
  _,environment=verified();environment.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_PROTOCOL='0.5',HYPRUNE_SOCKET=str(socketpath),HYPRUNE_OUTPUT_SCREEN='HEADLESS-1',HYPRUNE_DEV_AUTOMATION='1')
- log=open(s.STATE/'shell.log','w');shell=subprocess.Popen(['python3',str(ROOT.parent/'shell/bridge/launch.py'),'--protocol','0.5'],env=environment,pass_fds=(read,),stdout=log,stderr=subprocess.STDOUT);os.close(read);children.append(shell)
+ log=open(s.STATE/'shell.log','w');shell=subprocess.Popen(['python3',str(pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR',str(ROOT.parent/'shell')))/'bridge/launch.py'),'--protocol','0.5'],env=environment,pass_fds=(read,),stdout=log,stderr=subprocess.STDOUT);os.close(read);children.append(shell)
  def childpid():
   if shell.poll() is not None:raise AssertionError('M3A shell exited; see shell.log')
   return next((int(p) for p in pathlib.Path(f'/proc/{shell.pid}/task/{shell.pid}/children').read_text().split() if pathlib.Path(f'/proc/{p}/comm').read_text().strip()=='qs'),None)
@@ -162,7 +162,7 @@ def acceptance(client,children,args,shell_token,socketpath):
  pointer('button',275);wait(lambda:state()['interaction']['mode']=='typing');pointer('button',275);wait(lambda:state()['interaction']['mode']=='movement');check('typing_button',state()['interaction']['mode']=='movement')
  check('shell_mode_tools',status().get('mode')=='movement' and status().get('tool')==1,status())
  hold=json.loads((ROOT/'config/input.default.json').read_text())['longHoldMs']+200  # a long Tab hold opens the Director
- keys('-P','Tab','-s',str(hold),'-p','Tab');wait(lambda:status().get('director'));ui('tab',3);time.sleep(.5);shot('director-workspace-apps.png');check('director_apps',status().get('apps',0)>=2,status());ui('close');wait(lambda:not status().get('director'))
+ keys('-P','Tab','-s',str(hold),'-p','Tab');wait(lambda:status().get('director'));ui('tabNamed','workspaces');time.sleep(.5);shot('director-workspace-apps.png');check('director_apps',status().get('apps',0)>=2,status());ui('close');wait(lambda:not status().get('director'))
  client.call('runtime.exit',{});time.sleep(.25);d=diag();check('cursor_exit_restore',not d['active'] and d['cursor']=='desktop' and d['nativeCursorVisible']==(not d['savedCursorHidden']),d['cursor'])
  if args.record:
   s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")');wait(lambda:state()['runtime']['active']);time.sleep(.3)

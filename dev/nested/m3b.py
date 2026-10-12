@@ -163,7 +163,7 @@ def acceptance(client,children,args,shell_token,socketpath):
  start=pending[0]['startedAtMs'];time.sleep(.12)
  check('hold_start_stable',state()['keymap']['holds'][0]['startedAtMs']==start)
  hold.wait(timeout=5);wait(lambda:not state()['keymap']['holds']);check('hold_cancel_published',not status().get('director'))
- keys('-P','Tab','-s','450','-p','Tab');check('Tab_short_hold_does_not_open',not status().get('director'));keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status().get('director'));check('Tab_hold_Map',not state()['keymap']['holds'],status());unrelatedIn('menu');ui('tab',6);time.sleep(.4);shot('settings.png')
+ keys('-P','Tab','-s','450','-p','Tab');check('Tab_short_hold_does_not_open',not status().get('director'));keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status().get('director'));check('Tab_hold_Map',not state()['keymap']['holds'],status());unrelatedIn('menu');ui('tabNamed','settings');time.sleep(.4);shot('settings.png')
  # Verified Director capture uses the shell actor, not the acceptance actor.
  # QML dev action passes published intent methods through its own IPC connection.
  # Settings has sections now; open Input bindings and start the slot through the shell's own dev intent (shell actor).

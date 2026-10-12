@@ -79,7 +79,7 @@ def first_session(client,children,args,shell_token,socketpath):
     token_r,token_w=os.pipe();os.write(token_w,(shell_token+'\n').encode());os.close(token_w)
     _,environment=verified();environment.update(HYPRUNE_TOKEN_FD=str(token_r),HYPRUNE_PROTOCOL='0.3',HYPRUNE_SOCKET=str(socketpath),HYPRUNE_OUTPUT_SCREEN=world_output,HYPRUNE_DEV_AUTOMATION='1')
     log=open(STATE/'shell.log','w')
-    shell=subprocess.Popen(['python3',str(ROOT.parent/'shell/bridge/launch.py'),'--protocol','0.3'],env=environment,pass_fds=(token_r,),stdout=log,stderr=subprocess.STDOUT)
+    shell=subprocess.Popen(['python3',str(pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR',str(ROOT.parent/'shell')))/'bridge/launch.py'),'--protocol','0.3'],env=environment,pass_fds=(token_r,),stdout=log,stderr=subprocess.STDOUT)
     os.close(token_r);children.append(shell)
     def shell_pid():
         if shell.poll() is not None:raise AssertionError('shell exited; see shell.log')
@@ -210,12 +210,12 @@ def showcase(client,state,ui,status,pos):
             glide([btop[0],2.25,btop[2]+4.1] if btop else [workpos[0],2.25,workpos[2]+4.1],[browser[0],2.25,browser[2]+4.1],1.8);pause(1.5)
         # Core-owned hold opens the real shell. Set the waypoint from its Map.
         pose([-4,1.7,4.5]);keys('-P','Tab','-s','1150','-p','Tab');wait_for(lambda:status().get('director'))
-        ui('tab',0);pause(2);map_click_research();wait_for(lambda:state()['location']['waypoint'] and state()['location']['waypoint']['id']=='research');pause(2.5);shot('showcase-map.png')
+        ui('tabNamed','map');pause(2);map_click_research();wait_for(lambda:state()['location']['waypoint'] and state()['location']['waypoint']['id']=='research');pause(2.5);shot('showcase-map.png')
         ui('travel',research);wait_for(lambda:status().get('warp'));pause(3);shot('showcase-travel.png')
         wait_for(lambda:state()['location']['transition']['phase']=='arrived',10);pause(2)
         # Workspace location change, then the genuine compositor switch home.
         keys('-P','Tab','-s','1150','-p','Tab');wait_for(lambda:status().get('director'))
-        ui('tab',3);pause(2.5);ui('workspace',11)
+        ui('tabNamed','workspaces');pause(2.5);ui('workspace',11)
         wait_for(lambda:state()['world']['id']=='org.hyprune.quiet',20);pause(2.5)
         glide([0,1.7,4],[0,1.7,4],2,0,.32);pause(1)
         ctl('dispatch','hl.dsp.focus({ workspace = "10" })')
