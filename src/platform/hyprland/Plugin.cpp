@@ -303,7 +303,7 @@ struct Runtime {
     std::vector<PocketObject> pocketObjects;
     uint64_t pocketSerial = 0;
     bool objectsDirty = true;
-    uint64_t builtObjects = ~0ull, instanceRevision = 0; // collision follows instanceRevision
+    uint64_t builtObjects = ~0ull, instanceRevision = 0, instanceSignature = 0; // collision follows instanceRevision
     struct ObjectGhost {
         bool active = false, valid = false, surface = false;
         std::string ref, rule, message;
@@ -312,6 +312,18 @@ struct Runtime {
         float distance = -1;
     } objectGhost;
     std::chrono::steady_clock::time_point protectedNotice{};
+    // A committed object's probe light (64 rays) runs on a worker; its visibility regions
+    // are set in the tick. Results apply to the instance with that id and model.
+    struct RelightJob {
+        const world::World *world = nullptr;
+        std::string id;
+        Mat4 model;
+        std::future<world::ProbeLight> light;
+    };
+    std::vector<RelightJob> relights;
+    void relight(size_t instance);
+    void relightTick();
+    void joinRelights(); // before anything changes what a probe reads
     void catalogInit();
     void catalogTick();
     void catalogWatchDirs();
@@ -736,6 +748,7 @@ bool ownsInput() {
            !runtime->handover.phase;
 }
 void motion(void *self, const Vector2D &delta) {
+    auto section = runtime ? runtime->timed("input.motion") : Runtime::Timed{nullptr, "", 0};
     if (runtime) // input activity for focus credit (a timestamp only)
         runtime->markers.input(std::chrono::duration_cast<std::chrono::milliseconds>(
                                    std::chrono::steady_clock::now().time_since_epoch()).count());
@@ -748,7 +761,6 @@ void motion(void *self, const Vector2D &delta) {
         runtime->deferInput([] { runtime->acceptCapture("MouseMove", runtime->modifiers, true); });
     if (runtime && runtime->active) {
         auto now =
-    auto section = runtime ? runtime->timed("input.motion") : Runtime::Timed{nullptr, "", 0};
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
                 .count();
         runtime->inputEvent(runtime->inputMode(), "MouseMove", runtime->modifiers, true, now, float(delta.x));
@@ -3331,24 +3343,49 @@ std::optional<std::pair<std::string, interaction::WorldHit>> Runtime::objectAim(
 std::optional<std::pair<std::string, interaction::WorldHit>> Runtime::meshAim() {
     if (!world)
         return {};
+    auto o = pointerCamera().position, d = pointerRay();
     std::optional<std::pair<std::string, interaction::WorldHit>> result;
+    auto name = [&](unsigned node) {
+        std::string id = "node-" + std::to_string(node);
+        for (auto &[n, root] : world->objectNodes)
+            if (belongs(*world, node, root))
+                return n;
+        return id;
+    };
+    // Without a live preview, the visual triangles are the meshes at their committed
+    // transforms: walk the ray through their index (every tick in tool 4).
+    if (renderer.transforms == objectModels && !world->visualTriangles.empty() &&
+        world->visualIndex.size() == world->visualTriangles.size()) {
+        if (world->visualSource.size() != world->visualTriangles.size()) {
+            world->visualSource.clear();
+            for (unsigned m = 0; m < world->meshes.size(); ++m)
+                for (unsigned i = 0; i + 2 < world->meshes[m].vertices.size(); i += 3)
+                    world->visualSource.push_back({m, i});
+        }
+        if (world->visualSource.size() == world->visualTriangles.size()) {
+            std::optional<unsigned> nearest;
+            std::optional<interaction::WorldHit> hit;
+            for (auto id : world->visualIndex.ray(o, d)) {
+                auto h = interaction::raycast(o, d, std::span<const Triangle>(&world->visualTriangles[id], 1));
+                if (h && (!hit || h->distance < hit->distance))
+                    hit = h, nearest = id;
+            }
+            if (hit)
+                result = {{name(world->meshes[world->visualSource[*nearest].first].node), *hit}};
+            return result;
+        }
+    }
     float nearest = 100000;
     for (auto &m : world->meshes) {
         auto model = renderer.transforms.contains(m.node) ? renderer.transforms.at(m.node) : Mat4::identity();
         for (size_t i = 0; i + 2 < m.vertices.size(); i += 3) {
             Triangle t{model.point(m.vertices[i].position), model.point(m.vertices[i + 1].position),
                        model.point(m.vertices[i + 2].position)};
-            auto h = interaction::raycast(pointerCamera().position, pointerRay(), std::span<const Triangle>(&t, 1));
+            auto h = interaction::raycast(o, d, std::span<const Triangle>(&t, 1));
             if (!h || h->distance >= nearest)
                 continue;
             nearest = h->distance;
-            std::string id = "node-" + std::to_string(m.node);
-            for (auto &[name, root] : world->objectNodes)
-                if (belongs(*world, m.node, root)) {
-                    id = name;
-                    break;
-                }
-            result = {{id, *h}};
+            result = {{name(m.node), *h}};
         }
     }
     return result;
@@ -3862,6 +3899,7 @@ void Runtime::toolsTick() {
     auto instances = applyInstanceModels();
     if (committed != objectModels || instances != instanceOverrides || builtObjects != instanceRevision) {
         builtObjects = instanceRevision;
+        auto rebuild = timed("tools.rebuild");
         std::set<size_t> relight;
         for (auto &[k, m] : instances)
             if (!instanceOverrides.contains(k) || !(instanceOverrides.at(k) == m))
@@ -3869,6 +3907,9 @@ void Runtime::toolsTick() {
         for (auto &[k, m] : instanceOverrides)
             if (!instances.contains(k))
                 relight.insert(k);
+        // Visual triangles are the scene meshes at their committed node transforms: only a
+        // node commit changes them (instance moves change collision and lighting only).
+        bool nodesChanged = committed != objectModels || world->visualTriangles.empty();
         objectModels = committed;
         instanceOverrides = instances;
         // Scene collision (moved with committed node transforms), then every drawn
@@ -3897,22 +3938,34 @@ void Runtime::toolsTick() {
         }
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         layout.invalidateCollision();
-        world->collisionIndex.rebuild(world->collision);
-        world->visualTriangles.clear();
-        auto rebuild = timed("tools.rebuild");
-        for (const auto &mesh : world->meshes) {
-            auto it = committed.find(mesh.node);
-            auto matrix = it == committed.end() ? Mat4::identity() : it->second;
-            for (size_t i = 0; i + 2 < mesh.vertices.size(); i += 3)
-                world->visualTriangles.push_back({matrix.point(mesh.vertices[i].position),
-                                                  matrix.point(mesh.vertices[i + 1].position),
-                                                  matrix.point(mesh.vertices[i + 2].position)});
+        {
+            auto section = timed("tools.index");
+            world->collisionIndex.rebuild(world->collision);
         }
-        world->visualIndex.rebuild(world->visualTriangles);
+        if (nodesChanged) {
+            joinRelights();
+            auto visual = timed("tools.visual");
+            world->visualTriangles.clear();
+            for (const auto &mesh : world->meshes) {
+                auto it = committed.find(mesh.node);
+                auto matrix = it == committed.end() ? Mat4::identity() : it->second;
+                for (size_t i = 0; i + 2 < mesh.vertices.size(); i += 3)
+                    world->visualTriangles.push_back({matrix.point(mesh.vertices[i].position),
+                                                      matrix.point(mesh.vertices[i + 1].position),
+                                                      matrix.point(mesh.vertices[i + 2].position)});
+            }
+            world->visualIndex.rebuild(world->visualTriangles);
+        }
         // A moved object takes the visibility and probe light of its new place.
-        for (auto k : relight)
-            world::lightObjects(*world, k);
-        renderer.collisionChanged();
+        {
+            auto section = timed("tools.relight");
+            for (auto k : relight)
+                this->relight(k);
+        }
+        {
+            auto section = timed("tools.wireframe");
+            renderer.collisionChanged();
+        }
         ++objectRevision;
     }
     renderer.transforms = committed;
@@ -3978,6 +4031,9 @@ void Runtime::toolsTick() {
     gizmoDraw();
 }
 std::optional<Json> Runtime::method(const std::string &method, const Json &wire) {
+    auto section = timed("method " + method);
+    if (frameLog.file && !method.starts_with("_"))
+        frameLog.marks.push_back(method);
     Json params = wire;
     recentIPC.push_back({{"method", method},
                          {"timeMs", std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -4031,9 +4087,6 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (renderPass.active())
             throw ipc::Error(-32004, "graphics update during render");
         if (method == "graphics.set") {
-    auto section = timed("method " + method);
-    if (frameLog.file && !method.starts_with("_"))
-        frameLog.marks.push_back(method);
             if (params.size() != 1 || !params.contains("patch") || !params["patch"].is_object())
                 throw ipc::Error(-32602, "graphics patch required");
             if (!ipc::protocol::atLeast(protocol, "0.10"))
@@ -4615,6 +4668,26 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
 void Runtime::tick() {
     if (renderPass.active())
         throw std::runtime_error("deferred work inside compositor render pass");
+    // Frame log: this tick's sections, written when it ends (every return path).
+    struct TickLog {
+        Runtime *r;
+        double start = FrameLog::now();
+        ~TickLog() {
+            if (!r->frameLog.file)
+                return;
+            Json sections = Json::object();
+            for (auto &[name, ms] : r->frameLog.sections)
+                if (ms >= .05)
+                    sections[name] = std::round(ms * 100) / 100;
+            Json j{{"kind", "tick"}, {"t", start}, {"ms", FrameLog::now() - start}, {"sections", sections}};
+            if (!r->frameLog.marks.empty())
+                j["marks"] = r->frameLog.marks;
+            r->frameLog.line(j);
+            r->frameLog.sections.clear();
+            r->frameLog.marks.clear();
+            r->frameLog.flush();
+        }
+    } tickLog{this};
     // Input that arrived since the last tick takes effect in this frame: its idle callback can
     // come after this tick, a frame late, where a replay applies it on time.
     runInput(inputQueue.last());
@@ -4643,6 +4716,10 @@ void Runtime::tick() {
     if (!session.playing) if (auto next = inputFile.poll())
         applyInput(*next);
     renderer.debug = debug;
+    if (debug && renderer.collisionWireDirty) {
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        renderer.collisionChanged();
+    }
     replayBeforeTick();
     {
         auto section = timed("actions");
@@ -4680,26 +4757,6 @@ void Runtime::tick() {
         objectsTick();
     }
     if (locked() && active)
-    // Frame log: this tick's sections, written when it ends (every return path).
-    struct TickLog {
-        Runtime *r;
-        double start = FrameLog::now();
-        ~TickLog() {
-            if (!r->frameLog.file)
-                return;
-            Json sections = Json::object();
-            for (auto &[name, ms] : r->frameLog.sections)
-                if (ms >= .05)
-                    sections[name] = std::round(ms * 100) / 100;
-            Json j{{"kind", "tick"}, {"t", start}, {"ms", FrameLog::now() - start}, {"sections", sections}};
-            if (!r->frameLog.marks.empty())
-                j["marks"] = r->frameLog.marks;
-            r->frameLog.line(j);
-            r->frameLog.sections.clear();
-            r->frameLog.marks.clear();
-            r->frameLog.flush();
-        }
-    } tickLog{this};
         exit();
     if (auto m = monitor.lock(); m && presentedMonitor != monitor) {
         presentedListener = m->m_events.presented.listen([](Time::steady_tp) {
@@ -4749,6 +4806,7 @@ void Runtime::tick() {
         sim::Intent walking;
         walking.stepHeight = config["player"]["step_height"];
         walking.jumpSpeed = config["player"]["jump_speed"];
+        auto section = timed("control");
         control.tick(dt, camera, world.get(), movement == &walk && !noclip ? &walk : nullptr, walking);
     }
     if (control.uiVisible()) {
@@ -4806,7 +4864,6 @@ void Runtime::tick() {
         smoothIntent.forward += (intent.forward - smoothIntent.forward) * mb;
         smoothIntent.right += (intent.right - smoothIntent.right) * mb;
         smoothIntent.up += (intent.up - smoothIntent.up) * mb;
-        auto section = timed("control");
         intent.forward = climbing.active() ? intent.forward : smoothIntent.forward;
         intent.right = climbing.active() ? intent.right : smoothIntent.right;
         intent.up = smoothIntent.up;
@@ -4815,6 +4872,7 @@ void Runtime::tick() {
             climbing.reset(camera);
         // Recording and replay keep exact fixed steps; live motion moves by the frame's dt
         // (the walker and flight sub-step at 2 ms themselves).
+        auto movementSection = timed("movement");
         const bool fixedSteps = session.recording || session.playing;
         accumulator = fixedSteps ? std::min(accumulator + double(dt), 4.0 / 60.0) : std::min(double(dt), 4.0 / 60.0);
         while (fixedSteps ? accumulator >= 1.0 / 60.0 : accumulator > 1e-6) {
@@ -4840,6 +4898,7 @@ void Runtime::tick() {
         }
         if (!fixedSteps)
             accumulator = 0;
+        { auto done = std::move(movementSection); }
         const bool outside = noclip && !world->playable.contains(camera.position);
         if (outside && !outsidePlayable)
             ipc->notify("runtime.notice", {{"level", "warning"},
@@ -4893,7 +4952,6 @@ void Runtime::tick() {
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - captureStarted).count();
         if (fullscreen.phase == 1 || fullscreen.phase == 3)
             transitionTick(0);
-        auto movementSection = timed("movement");
         for (auto &entry : capture.entries)
             if (typing && entry.visible && !entry.parentKeyboard && !entry.parentId.empty() &&
                 entry.parentId == focused && Desktop::focusState()->window() == entry.window) {
@@ -4919,7 +4977,6 @@ void Runtime::tick() {
         renderer.pointerX = layerCursor ? -1.f : (typing || editor.activeHandle >= 0) ? pointerX : .5f;
         renderer.pointerY = layerCursor ? -1.f : (typing || editor.activeHandle >= 0) ? pointerY : .5f;
         {
-        { auto done = std::move(movementSection); }
             auto &r = renderer.reticle;
             auto &player = config["player"];
             static const std::map<std::string, int> states{
@@ -4995,6 +5052,7 @@ void Runtime::tick() {
     auto ipcStarted = std::chrono::steady_clock::now();
     if (ipcStarted >= nextPublish || !control.events.empty() || !layout.events.empty()) {
         nextPublish = ipcStarted + std::chrono::milliseconds(33);
+        auto section = timed("publish");
         publish();
     }
     {
@@ -5058,7 +5116,6 @@ struct FrameHash {
         requires std::is_arithmetic_v<T>
     FrameHash &operator()(T v) {
         bytes(&v, sizeof v);
-        auto section = timed("publish");
         return *this;
     }
     FrameHash &operator()(Vec3 v) { return (*this)(v.x)(v.y)(v.z); }
@@ -5072,6 +5129,8 @@ struct FrameHash {
 void Runtime::framePresented() {
     // Called from the backend's presentation feedback: never tick here, defer it.
     lastPresented = std::chrono::steady_clock::now();
+    if (frameLog.file)
+        frameLog.line({{"kind", "present"}, {"t", FrameLog::now()}});
     if (!tickDeferred)
         tickDeferred = g_pEventLoopManager->doLater([] {
             if (!runtime)
@@ -5129,8 +5188,6 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     for (auto &f : capture.workspaces)
         h(f.key);
     h(typing && !layerCursor)(r.debug)(r.showAreaMarkers)(r.showInteractionHints)(r.useDistance)(r.renderScale);
-    if (frameLog.file)
-        frameLog.line({{"kind", "present"}, {"t", FrameLog::now()}});
     h(r.logicalScale)(r.pointerX)(r.pointerY)(r.scopeVignette)(r.materialDetails)(r.effects)(r.worldOnly)(r.font);
     h(r.waypoint)(r.route)(r.toolPrompt)(r.overlayStyle)(r.graphics)(r.profile);
     h(markers.frameHash(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -5180,8 +5237,12 @@ class Pass final : public IPassElement {
             r.externalWorldFbo = runtime->control.photoHeld() ? 0 : runtime->offload.fbo();
             auto view = r.externalWorldFbo ? runtime->offload.camera() : runtime->camera;
             auto frames = r.frames;
+            double drawStart = runtime->frameLog.file ? Runtime::FrameLog::now() : 0;
             r.draw(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y, view,
                    surfaces, runtime->typing && !runtime->layerCursor);
+            if (runtime->frameLog.file) // buffered only; written by the next tick
+                runtime->frameLog.line({{"kind", "draw"}, {"t", drawStart}, {"ms", Runtime::FrameLog::now() - drawStart},
+                                        {"new", r.frames != frames}});
             if (r.frames != frames) {
                 runtime->renderedKey = key;
                 if (runtime->session.recording) { auto state=runtime->sessionState(); state["camera"]=replay::pose(view); runtime->session.view(state,r.frames); }
@@ -5237,12 +5298,8 @@ Json luaValue(lua_State *L, int index, int depth = 0) {
                 if (i < 1 || i > 5)
                     throw std::runtime_error("array index out of range");
                 result[i - 1] = v;
-            double drawStart = runtime->frameLog.file ? Runtime::FrameLog::now() : 0;
             } else {
                 if (lua_type(L, -2) != LUA_TSTRING)
-            if (runtime->frameLog.file) // buffered only; written by the next tick
-                runtime->frameLog.line({{"kind", "draw"}, {"t", drawStart}, {"ms", Runtime::FrameLog::now() - drawStart},
-                                        {"new", r.frames != frames}});
                     throw std::runtime_error("config key must be string");
                 result[lua_tostring(L, -2)] = v;
             }
@@ -5312,6 +5369,7 @@ int luaToggle(lua_State *state) {
 int luaCamera(lua_State *state) {
     if (!runtime)
         return 0;
+    auto section = runtime->timed("lua.camera"); // development diagnostics (nested harness)
     if (lua_gettop(state) >= 5) {
         runtime->climbing.reset(runtime->camera);
         runtime->camera.position = {float(luaL_checknumber(state, 1)), float(luaL_checknumber(state, 2)),
@@ -5369,7 +5427,6 @@ int luaCamera(lua_State *state) {
              float aspect = m ? float(m->m_pixelSize.x) / std::max(1.f, float(m->m_pixelSize.y)) : 16 / 9.f;
              return Json{{"state", runtime->npcState},
                          {"forcesFrames", runtime->animationFrames &&
-    auto section = runtime->timed("lua.camera"); // development diagnostics (nested harness)
                                               runtime->renderer.npcAnimationVisible(runtime->camera, aspect)},
                          {"drawn", runtime->renderer.npcsDrawn},
                          {"agents", agents}};
@@ -5544,6 +5601,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     // Gizmo 2.0 switches that need a contract change before they can be defaults
     // (RFC-0011 P1): world 0.8 objects as targets, the universal mode, keepClear volumes.
     runtime->gizmoObjects = getenv("HYPRUNE_GIZMO_OBJECTS") && std::string(getenv("HYPRUNE_GIZMO_OBJECTS")) == "1";
+    if (auto file = getenv("HYPRUNE_FRAME_LOG"))
+        runtime->frameLog.file = std::fopen(file, "w");
     runtime->editor.universal = getenv("HYPRUNE_GIZMO_UNIVERSAL") && std::string(getenv("HYPRUNE_GIZMO_UNIVERSAL")) == "1";
     if (auto file = getenv("HYPRUNE_GIZMO_KEEPCLEAR"))
         try {
@@ -5601,8 +5660,6 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     methods.insert({{"capture.annotate", "shell.control"},
                     {"workspace.bind", "world.control"},
                     {"workspace.focus", "surface.control"},
-    if (auto file = getenv("HYPRUNE_FRAME_LOG"))
-        runtime->frameLog.file = std::fopen(file, "w");
                     {"workspace.unfocus", "surface.control"},
                     {"surface.pull", "surface.control"},
                     {"surface.place", "surface.control"},
@@ -5757,6 +5814,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         safe([&] {
             if (stage == RENDER_PRE && runtime->renderPass.begin(g_pHyprRenderer->m_renderData.pMonitor.get()))
                 runtime->renderPassLeaked(); // the previous pass never got RENDER_POST
+            if (runtime->frameLog.file && stage == RENDER_PRE)
+                runtime->frameLog.renderStart = Runtime::FrameLog::now();
+            if (runtime->frameLog.file && stage == RENDER_POST && runtime->frameLog.renderStart > 0) // the compositor's whole frame
+                runtime->frameLog.line({{"kind", "render"}, {"t", runtime->frameLog.renderStart},
+                                        {"ms", Runtime::FrameLog::now() - runtime->frameLog.renderStart}});
             if (stage == RENDER_POST)
                 runtime->renderPass.end();
             if (stage == RENDER_POST_WINDOWS && runtime->active && !locked() &&
@@ -5814,11 +5876,6 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     runtime->inputNames.erase(it);
                 }
                 if (key.empty())
-            if (runtime->frameLog.file && stage == RENDER_PRE)
-                runtime->frameLog.renderStart = Runtime::FrameLog::now();
-            if (runtime->frameLog.file && stage == RENDER_POST && runtime->frameLog.renderStart > 0) // the compositor's whole frame
-                runtime->frameLog.line({{"kind", "render"}, {"t", runtime->frameLog.renderStart},
-                                        {"ms", Runtime::FrameLog::now() - runtime->frameLog.renderStart}});
                     return;
                 if (runtime->session.playing && key != "F12") { info.cancelled=true; return; }
                 unsigned bit = sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R       ? 64

@@ -414,14 +414,58 @@ std::optional<std::pair<std::string, interaction::WorldHit>> Runtime::instanceAi
         float along = dot(to, d);
         if (along < -inst.radius || length(to - d * along) > inst.radius)
             continue;
+        // In asset space: the ray through the inverse instance model (rotation, uniform
+        // scale), a slab test against the rest bounds, then the asset's triangles.
+        const auto &m = inst.model.v;
+        Vec3 c0{m[0], m[1], m[2]}, c1{m[4], m[5], m[6]}, c2{m[8], m[9], m[10]}, origin{m[12], m[13], m[14]};
+        float s2 = dot(c0, c0);
+        if (!(s2 > 1e-12f))
+            continue;
+        float scale = std::sqrt(s2);
+        auto local = [&](Vec3 v) { return Vec3{dot(v, c0), dot(v, c1), dot(v, c2)} / s2; };
+        Vec3 lo = local(o - origin), ld = local(d) * scale; // ld is unit: the asset-space distance is world / scale
+        float enter = 0, leave = 1e30f;
+        bool miss = false;
+        for (int a = 0; a < 3 && !miss; ++a) {
+            float oa = a == 0 ? lo.x : a == 1 ? lo.y : lo.z, da = a == 0 ? ld.x : a == 1 ? ld.y : ld.z;
+            float low = a == 0 ? asset.low.x : a == 1 ? asset.low.y : asset.low.z, high = a == 0 ? asset.high.x : a == 1 ? asset.high.y : asset.high.z;
+            if (std::abs(da) < 1e-9f) {
+                miss = oa < low || oa > high;
+                continue;
+            }
+            float t0 = (low - oa) / da, t1 = (high - oa) / da;
+            if (t0 > t1)
+                std::swap(t0, t1);
+            enter = std::max(enter, t0), leave = std::min(leave, t1);
+            miss = enter > leave;
+        }
+        if (miss)
+            continue;
+        float nearest = best ? best->second.distance / scale : 1e30f;
+        std::optional<std::pair<float, Vec3>> hit;
         for (auto &mesh : asset.meshes)
             for (size_t i = 0; i + 2 < mesh.vertices.size(); i += 3) {
-                Triangle t{inst.model.point(mesh.vertices[i].position), inst.model.point(mesh.vertices[i + 1].position),
-                           inst.model.point(mesh.vertices[i + 2].position)};
-                auto h = interaction::raycast(o, d, std::span<const Triangle>(&t, 1));
-                if (h && (!best || h->distance < best->second.distance))
-                    best = {{"object:" + inst.id, *h}};
+                auto &a = mesh.vertices[i].position, &b = mesh.vertices[i + 1].position, &c = mesh.vertices[i + 2].position;
+                auto e = b - a, f = c - a, p = cross(ld, f);
+                float det = dot(e, p);
+                if (std::abs(det) < 1e-12f)
+                    continue;
+                auto v = lo - a;
+                float u = dot(v, p) / det;
+                auto q = cross(v, e);
+                float w = dot(ld, q) / det, t = dot(f, q) / det;
+                if (u < 0 || w < 0 || u + w > 1 || t <= 0 || t >= nearest)
+                    continue;
+                nearest = t;
+                hit = std::pair{t, cross(e, f)};
             }
+        if (hit) {
+            float distance = hit->first * scale;
+            auto n = normalized(c0 * hit->second.x + c1 * hit->second.y + c2 * hit->second.z);
+            if (dot(n, d) > 0)
+                n = n * -1;
+            best = {{"object:" + inst.id, interaction::WorldHit{distance, o + d * distance, n}}};
+        }
     }
     return best;
 }

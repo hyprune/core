@@ -1388,6 +1388,13 @@ void Renderer::prepare(std::shared_ptr<const world::World> world) {
         std::this_thread::yield();
 }
 void Renderer::collisionChanged() {
+    // The wireframe is debug-only: rebuilding it (every collision edge) on each object
+    // commit cost several ms; it is built when the debug view shows it.
+    if (!debug) {
+        collisionWireDirty = true;
+        return;
+    }
+    collisionWireDirty = false;
     GLState state;
     std::vector<world::Vertex> wire;
     for (auto &triangle : world_->collision)

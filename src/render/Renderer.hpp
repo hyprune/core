@@ -31,6 +31,7 @@ class Renderer {
     void drawLoading(GLuint target, int width, int height);
     void drawHUD(GLuint target, int width, int height);
     void collisionChanged(); // Deferred owner tick after editor transforms.
+    bool collisionWireDirty = false; // the debug collision wireframe waits for the debug view
     // RFC-0011 user placements: object assets (and their images) appended to the current
     // world after it became current. Stage stages everything not uploaded yet; continue
     // from the owner tick (GL context current, never in the frame). Instances of an asset

@@ -76,17 +76,10 @@ void Runtime::catalogInit() {
 void Runtime::catalogWatchDirs() {
     if (catalogWatch < 0)
         return;
-    for (auto &[wd, path] : catalogWatches)
-        inotify_rm_watch(catalogWatch, wd);
-    catalogWatches.clear();
-    constexpr uint32_t mask = IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_CLOSE_WRITE | IN_ATTRIB |
-                              IN_DELETE_SELF | IN_MOVE_SELF | IN_ONLYDIR;
+    std::vector<fs::path> dirs;
     auto watch = [&](const fs::path &dir) {
-        if (catalogWatches.size() >= 1024)
-            return;
-        int wd = inotify_add_watch(catalogWatch, dir.c_str(), mask);
-        if (wd >= 0)
-            catalogWatches[wd] = dir;
+        if (dirs.size() < 1024)
+            dirs.push_back(dir);
     };
     for (auto &root : {catalogRoots.userObjects, catalogRoots.userLibraries}) {
         std::error_code ec;
@@ -104,19 +97,41 @@ void Runtime::catalogWatchDirs() {
                         watch(sub.path());
             }
     }
+    // Watches change only with the directories: removing one queues IN_IGNORED, which
+    // must not read as a change (a rescan after every scan, forever).
+    std::vector<fs::path> current;
+    for (auto &[wd, path] : catalogWatches)
+        current.push_back(path);
+    std::sort(dirs.begin(), dirs.end());
+    std::sort(current.begin(), current.end());
+    if (dirs == current)
+        return;
+    for (auto &[wd, path] : catalogWatches)
+        inotify_rm_watch(catalogWatch, wd);
+    catalogWatches.clear();
+    constexpr uint32_t mask = IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_CLOSE_WRITE | IN_ATTRIB |
+                              IN_DELETE_SELF | IN_MOVE_SELF | IN_ONLYDIR;
+    for (auto &dir : dirs)
+        if (int wd = inotify_add_watch(catalogWatch, dir.c_str(), mask); wd >= 0)
+            catalogWatches[wd] = dir;
 }
 void Runtime::catalogTick() {
+    auto section = timed("catalog");
     auto now = std::chrono::steady_clock::now();
     if (catalogWatch >= 0) {
         alignas(inotify_event) char buffer[4096];
         bool changed = false;
-        while (read(catalogWatch, buffer, sizeof buffer) > 0)
-            changed = true;
+        ssize_t n;
+        while ((n = read(catalogWatch, buffer, sizeof buffer)) > 0)
+            for (ssize_t at = 0; at + ssize_t(sizeof(inotify_event)) <= n;) {
+                auto *e = reinterpret_cast<const inotify_event *>(buffer + at);
+                changed = changed || !(e->mask & IN_IGNORED);
+                at += sizeof(inotify_event) + e->len;
+            }
         if (changed) {
             // Validation waits for a 1 s quiet period (an object being copied in).
             catalogDirty = true;
             catalogQuiet = now + std::chrono::seconds(1);
-    auto section = timed("catalog");
         }
     }
     if (catalogScan.valid() && catalogScan.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
@@ -307,6 +322,7 @@ void Runtime::objectRefused(const std::string &what, const interaction::Placemen
 // hidden and lock flags, user placements resolved against the catalog (missing, loading
 // or blocked when they can't be drawn). Collision and lighting follow in toolsTick.
 void Runtime::objectsSync() {
+    auto section = timed("objects.sync");
     objectsDirty = false;
     if (!world) {
         objectInfos.clear();
@@ -315,14 +331,16 @@ void Runtime::objectsSync() {
     // Each user instance keeps its committed proxy range until collision is rebuilt, so the
     // recheck below ignores the object's own proxy at its previous pose.
     std::map<std::string, std::pair<size_t, size_t>> ranges;
-    for (size_t k = authoredInstances; k < world->objectInstances.size(); ++k)
+    std::map<std::string, world::ObjectInstance> previous; // their lighting, when the pose is unchanged
+    for (size_t k = authoredInstances; k < world->objectInstances.size(); ++k) {
         ranges[world->objectInstances[k].id] = {world->objectInstances[k].collisionFirst, world->objectInstances[k].collisionCount};
+        previous[world->objectInstances[k].id] = world->objectInstances[k];
+    }
     world->objectInstances.resize(authoredInstances);
     std::vector<ObjectInfo> infos;
     for (size_t k = 0; k < authoredInstances; ++k) {
         auto &inst = world->objectInstances[k];
         ObjectInfo info;
-    auto section = timed("objects.sync");
         info.id = inst.id;
         info.source = "authored";
         info.ref = "package/" + world->objectAssets[inst.asset].id;
@@ -405,6 +423,10 @@ void Runtime::objectsSync() {
         info.index = int(world->objectInstances.size());
         if (auto range = ranges.find(info.id); range != ranges.end())
             inst.collisionFirst = range->second.first, inst.collisionCount = range->second.second;
+        if (auto old = previous.find(info.id); old != previous.end() && old->second.asset == inst.asset && old->second.model == inst.model) {
+            inst.ambientUp = old->second.ambientUp, inst.ambientDown = old->second.ambientDown;
+            inst.sun = old->second.sun, inst.sunVisibility = old->second.sunVisibility, inst.regions = old->second.regions;
+        }
         world->objectInstances.push_back(inst);
         // Rechecked against the current geometry once per pose: at load, after a package
         // update or a catalog change. Never relocated: a failing one is blocked.
@@ -427,6 +449,24 @@ void Runtime::objectsSync() {
         infos.push_back(info);
     }
     objectInfos = std::move(infos);
+    // Collision, visibility and frames follow only a real change (a catalog rescan that
+    // resolves the same objects changes nothing).
+    uint64_t signature = 1469598103934665603ull;
+    auto mix = [&](const void *data, size_t size) {
+        for (size_t i = 0; i < size; ++i)
+            signature = (signature ^ static_cast<const unsigned char *>(data)[i]) * 1099511628211ull;
+    };
+    for (auto &inst : world->objectInstances) {
+        mix(inst.id.data(), inst.id.size());
+        mix(&inst.asset, sizeof inst.asset);
+        mix(inst.model.v.data(), sizeof inst.model.v);
+        mix(&inst.hidden, sizeof inst.hidden);
+    }
+    for (auto &i : objectInfos)
+        mix(i.state.data(), i.state.size()), mix(&i.locked, sizeof i.locked);
+    if (signature == instanceSignature)
+        return;
+    instanceSignature = signature;
     ++instanceRevision;
     if (editor.kind == "object" && editor.selected.starts_with("object:")) {
         auto *i = selectedInfo();
@@ -450,6 +490,7 @@ void Runtime::objectsWorldLoaded() {
     originalCollisionNodes = world->collisionNodes;
     assetSlots.clear();
     objectVerified.clear();
+    instanceSignature = 0;
     pocketObjects.clear();
     objectGhost = {};
     // Authored instances were lit at load; user ones get their probe when collision is built.
@@ -461,7 +502,43 @@ void Runtime::objectsWorldLoaded() {
     objectsSync(); // before anything publishes: instances point into the package catalog
     builtObjects = ~0ull;
 }
+void Runtime::relight(size_t k) {
+    if (!world || k >= world->objectInstances.size())
+        return;
+    world::objectRegions(*world, k); // culling needs them now
+    auto &inst = world->objectInstances[k];
+    if (world->objectAssets[inst.asset].unlit)
+        return;
+    std::erase_if(relights, [&](auto &j) { return j.id == inst.id && !j.light.valid(); });
+    auto w = world;
+    auto copy = inst;
+    relights.push_back({world.get(), inst.id, inst.model,
+                        std::async(std::launch::async, [w, copy] { return world::probeLight(*w, copy); })});
+}
+void Runtime::relightTick() {
+    for (auto it = relights.begin(); it != relights.end();) {
+        if (it->light.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+            ++it;
+            continue;
+        }
+        auto light = it->light.get();
+        if (world && it->world == world.get())
+            for (auto &inst : world->objectInstances)
+                if (inst.id == it->id && inst.model == it->model) {
+                    world::applyProbeLight(inst, light);
+                    ++objectRevision; // a frame with the new light
+                }
+        it = relights.erase(it);
+    }
+}
+void Runtime::joinRelights() {
+    for (auto &j : relights)
+        if (j.light.valid())
+            j.light.wait();
+    relightTick();
+}
 void Runtime::objectsTick() {
+    relightTick();
     catalogTick();
     if (!world || loading)
         return;
@@ -475,7 +552,9 @@ void Runtime::objectsTick() {
     for (auto &[ref, slot] : assetSlots)
         if (slot.load.valid() && slot.load.wait_for(std::chrono::seconds(0)) == std::future_status::ready &&
             !renderer.objectAssetsPending()) {
+            joinRelights(); // merging appends materials and images a probe reads
             try {
+                auto section = timed("objects.merge");
                 auto scratch = slot.load.get();
                 slot.index = int(world::mergeObjectAsset(*world, *scratch));
             } catch (const std::exception &e) {
@@ -557,7 +636,6 @@ std::optional<std::string> Runtime::budgetRefusal(const world::CatalogEntry &e, 
 // player, upright; floor objects drop to the floor under the aim point. Surface
 // (Secondary): on the aimed surface, if the object may sit on that kind of surface.
 // Either way the bounds touch the surface (asset conventions put the origin there).
-                auto section = timed("objects.merge");
 std::optional<interaction::Transform> Runtime::placeAhead(const world::CatalogEntry &e, int asset, bool surface,
                                                           float *distance, std::string *why) {
     if (!world || asset < 0)
@@ -632,6 +710,7 @@ bool Runtime::pocketSelected() const {
 }
 // Ghost for the selected pocket object (tool 5), recomputed each tick from the aim.
 void Runtime::objectGhostTick() {
+    auto section = timed("tools.ghost");
     objectGhost = {};
     if (!world || editor.slot != 5 || freeCursor || !active || !pocketSelected())
         return;
@@ -710,7 +789,6 @@ void Runtime::objectGhostDraw(interaction::GizmoFrame &frame, const interaction:
                     auto kx = q(x), ky = q(y);
                     if (ky < kx)
                         std::swap(kx, ky), std::swap(x, y);
-    auto section = timed("tools.ghost");
                     std::array<int64_t, 6> k{kx[0], kx[1], kx[2], ky[0], ky[1], ky[2]};
                     normals[k].push_back(nn);
                     ends[k] = {x, y};

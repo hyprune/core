@@ -209,21 +209,34 @@ Vec3 decodeSrgb(Vec3 c) {
     return {f(c.x), f(c.y), f(c.z)};
 }
 } // namespace
-void lightObjects(World &w, std::optional<size_t> only) {
+void prepareLighting(World &w) {
+    if (w.meshBounds.size() != w.meshes.size()) {
+        w.meshBounds.assign(w.meshes.size(), {Vec3{1e30f, 1e30f, 1e30f}, Vec3{-1e30f, -1e30f, -1e30f}});
+        for (size_t m = 0; m < w.meshes.size(); ++m)
+            for (const auto &v : w.meshes[m].vertices) {
+                auto &[lo, hi] = w.meshBounds[m];
+                lo = {std::min(lo.x, v.position.x), std::min(lo.y, v.position.y), std::min(lo.z, v.position.z)};
+                hi = {std::max(hi.x, v.position.x), std::max(hi.y, v.position.y), std::max(hi.z, v.position.z)};
+            }
+    }
+    // Static triangle -> (mesh, first vertex) as visualTriangles was built.
+    if (w.visualSource.size() != w.visualTriangles.size()) {
+        w.visualSource.clear();
+        for (unsigned m = 0; m < w.meshes.size(); ++m)
+            for (unsigned i = 0; i + 2 < w.meshes[m].vertices.size(); i += 3)
+                w.visualSource.push_back({m, i});
+    }
+}
+void objectRegions(World &w, std::optional<size_t> only) {
     if (w.objectInstances.empty() || (only && *only >= w.objectInstances.size()))
         return;
+    prepareLighting(w);
     auto skip = [&](const ObjectInstance &o) { return only && &o != &w.objectInstances[*only]; };
     // An object shares the visibility of the static geometry around it: the areas
     // owning scene meshes its swept sphere overlaps. Bounds alone say nothing:
     // derived regions are camera cells that own no nodes and are visible from
     // nowhere, so an object placed by position in one was never drawn.
-    std::vector<std::pair<Vec3, Vec3>> bounds(w.meshes.size(), {Vec3{1e30f, 1e30f, 1e30f}, Vec3{-1e30f, -1e30f, -1e30f}});
-    for (size_t m = 0; m < w.meshes.size(); ++m)
-        for (const auto &v : w.meshes[m].vertices) {
-            auto &[lo, hi] = bounds[m];
-            lo = {std::min(lo.x, v.position.x), std::min(lo.y, v.position.y), std::min(lo.z, v.position.z)};
-            hi = {std::max(hi.x, v.position.x), std::max(hi.y, v.position.y), std::max(hi.z, v.position.z)};
-        }
+    const auto &bounds = w.meshBounds;
     for (auto &o : w.objectInstances) {
         if (skip(o))
             continue;
@@ -241,11 +254,9 @@ void lightObjects(World &w, std::optional<size_t> only) {
         }
         o.regions.assign(owners.begin(), owners.end());
     }
-    // Static triangle -> (mesh, first vertex) as visualTriangles was built.
-    std::vector<std::pair<unsigned, unsigned>> source;
-    for (unsigned m = 0; m < w.meshes.size(); ++m)
-        for (unsigned i = 0; i + 2 < w.meshes[m].vertices.size(); i += 3)
-            source.push_back({m, i});
+}
+ProbeLight probeLight(const World &w, const ObjectInstance &o) {
+    const auto &source = w.visualSource; // prepareLighting built it
     const bool mapped = source.size() == w.visualTriangles.size();
     auto profile = w.atmosphere.is_object() ? w.atmosphere : defaultAtmosphere();
     auto colour = [](const Json &c) { return Vec3{c[0].get<float>(), c[1].get<float>(), c[2].get<float>()}; };
@@ -280,77 +291,86 @@ void lightObjects(World &w, std::optional<size_t> only) {
         return (m.lightmapSrgb ? decodeSrgb(e) : e) * m.intensity;
     };
     constexpr int rays = 64;
-    for (auto &o : w.objectInstances) {
-        if (skip(o) || w.objectAssets[o.asset].unlit)
-            continue;
-        Vec3 up{}, down{};
-        float upWeight = 0, downWeight = 0;
-        // Sun calibration from baked surfaces the probe sees: sunlit E ≈ A + D·cos, shaded E ≈ A.
-        float litSum = 0, litCos = 0, shadeSum = 0;
-        int lit = 0, shade = 0;
-        for (int i = 0; i < rays; ++i) {
-            // Fibonacci sphere: even directions, deterministic.
-            float y = 1 - 2 * (i + .5f) / rays, r = std::sqrt(std::max(0.f, 1 - y * y)), phi = 2.39996323f * i;
-            Vec3 d{r * std::cos(phi), y, r * std::sin(phi)};
-            Vec3 radiance;
-            auto hit = mapped ? cast(w, o.center, d, 100) : std::nullopt;
-            if (!hit)
-                radiance = y >= 0 ? horizon + (zenith - horizon) * y : horizon + (ground - horizon) * -y;
-            else {
-                auto [m, first] = source[hit->triangle];
-                const auto &mesh = w.meshes[m];
-                const auto &mat = w.materials[mesh.material];
-                Vec3 albedo = mat.color;
-                if (mat.slots[0].texture >= 0)
-                    albedo = mul(albedo, average(mat.slots[0].texture));
-                const auto &tri = w.visualTriangles[hit->triangle];
-                Vec3 n = normalized(cross(tri.b - tri.a, tri.c - tri.a));
-                if (dot(n, d) > 0)
-                    n = n * -1;
-                if (mat.unlit)
-                    radiance = albedo;
-                else if (auto e = baked(*hit, mat, mesh, first)) {
-                    radiance = mul(albedo, *e);
-                    // Is this baked texel in sunlight? (shadow ray toward the sun)
-                    float c = dot(n, sun);
-                    Vec3 point = o.center + d * hit->distance + n * .02f;
-                    bool open = c > 0 && !cast(w, point, sun, 200);
-                    if (open && c > .3f)
-                        litSum += luminance(*e), litCos += c, ++lit;
-                    else if (!open)
-                        shadeSum += luminance(*e), ++shade;
-                } else
-                    radiance = albedo * (.24f + .76f * std::max(dot(n, sun), 0.f)); // world shader, unbaked
-                radiance += mat.emissive;
-            }
-            if (y > 0)
-                up += radiance * y, upWeight += y;
-            else
-                down += radiance * -y, downWeight += -y;
+    Vec3 up{}, down{};
+    float upWeight = 0, downWeight = 0;
+    // Sun calibration from baked surfaces the probe sees: sunlit E ≈ A + D·cos, shaded E ≈ A.
+    float litSum = 0, litCos = 0, shadeSum = 0;
+    int lit = 0, shade = 0;
+    for (int i = 0; i < rays; ++i) {
+        // Fibonacci sphere: even directions, deterministic.
+        float y = 1 - 2 * (i + .5f) / rays, r = std::sqrt(std::max(0.f, 1 - y * y)), phi = 2.39996323f * i;
+        Vec3 d{r * std::cos(phi), y, r * std::sin(phi)};
+        Vec3 radiance;
+        auto hit = mapped ? cast(w, o.center, d, 100) : std::nullopt;
+        if (!hit)
+            radiance = y >= 0 ? horizon + (zenith - horizon) * y : horizon + (ground - horizon) * -y;
+        else {
+            auto [m, first] = source[hit->triangle];
+            const auto &mesh = w.meshes[m];
+            const auto &mat = w.materials[mesh.material];
+            Vec3 albedo = mat.color;
+            if (mat.slots[0].texture >= 0)
+                albedo = mul(albedo, average(mat.slots[0].texture));
+            const auto &tri = w.visualTriangles[hit->triangle];
+            Vec3 n = normalized(cross(tri.b - tri.a, tri.c - tri.a));
+            if (dot(n, d) > 0)
+                n = n * -1;
+            if (mat.unlit)
+                radiance = albedo;
+            else if (auto e = baked(*hit, mat, mesh, first)) {
+                radiance = mul(albedo, *e);
+                // Is this baked texel in sunlight? (shadow ray toward the sun)
+                float c = dot(n, sun);
+                Vec3 point = o.center + d * hit->distance + n * .02f;
+                bool open = c > 0 && !cast(w, point, sun, 200);
+                if (open && c > .3f)
+                    litSum += luminance(*e), litCos += c, ++lit;
+                else if (!open)
+                    shadeSum += luminance(*e), ++shade;
+            } else
+                radiance = albedo * (.24f + .76f * std::max(dot(n, sun), 0.f)); // world shader, unbaked
+            radiance += mat.emissive;
         }
-        if (!o.authoredAmbient) {
-            o.ambientUp = upWeight > 0 ? up / upWeight : Vec3{.24f, .24f, .24f};
-            o.ambientDown = downWeight > 0 ? down / downWeight : o.ambientUp;
-        }
-        // Direct sun: visibility from a few points of the instance's bounds,
-        // strength calibrated to the baked sunlight nearby (else the unbaked
-        // world shader's 0.76).
-        // A bake whose shaded texels are as bright as its sunlit ones carries no
-        // usable sun signal: then assume the unbaked convention (76% direct).
-        float strength = .76f;
-        if (lit >= 4 && shade >= 4 && litSum / lit - shadeSum / shade > .05f * litSum / lit)
-            strength = (litSum / lit - shadeSum / shade) / (litCos / lit);
-        else if (lit >= 4)
-            strength = .76f * (litSum / lit) / (litCos / lit);
-        strength = std::clamp(strength, 0.f, 16.f);
-        int open = 0;
-        float spread = std::min(o.radius * .5f, 1.f);
-        const Vec3 offsets[5]{{0, 0, 0}, {spread, 0, 0}, {-spread, 0, 0}, {0, 0, spread}, {0, 0, -spread}};
-        for (auto offset : offsets)
-            open += mapped ? !cast(w, o.center + offset, sun, 200) : 1;
-        o.sunVisibility = open / 5.f;
-        o.sun = strength * o.sunVisibility;
+        if (y > 0)
+            up += radiance * y, upWeight += y;
+        else
+            down += radiance * -y, downWeight += -y;
     }
+    ProbeLight result;
+    result.ambientUp = upWeight > 0 ? up / upWeight : Vec3{.24f, .24f, .24f};
+    result.ambientDown = downWeight > 0 ? down / downWeight : result.ambientUp;
+    // Direct sun: visibility from a few points of the instance's bounds,
+    // strength calibrated to the baked sunlight nearby (else the unbaked
+    // world shader's 0.76).
+    // A bake whose shaded texels are as bright as its sunlit ones carries no
+    // usable sun signal: then assume the unbaked convention (76% direct).
+    float strength = .76f;
+    if (lit >= 4 && shade >= 4 && litSum / lit - shadeSum / shade > .05f * litSum / lit)
+        strength = (litSum / lit - shadeSum / shade) / (litCos / lit);
+    else if (lit >= 4)
+        strength = .76f * (litSum / lit) / (litCos / lit);
+    strength = std::clamp(strength, 0.f, 16.f);
+    int open = 0;
+    float spread = std::min(o.radius * .5f, 1.f);
+    const Vec3 offsets[5]{{0, 0, 0}, {spread, 0, 0}, {-spread, 0, 0}, {0, 0, spread}, {0, 0, -spread}};
+    for (auto offset : offsets)
+        open += mapped ? !cast(w, o.center + offset, sun, 200) : 1;
+    result.sunVisibility = open / 5.f;
+    result.sun = strength * result.sunVisibility;
+    return result;
+}
+void applyProbeLight(ObjectInstance &o, const ProbeLight &l) {
+    if (!o.authoredAmbient)
+        o.ambientUp = l.ambientUp, o.ambientDown = l.ambientDown;
+    o.sun = l.sun, o.sunVisibility = l.sunVisibility;
+}
+void lightObjects(World &w, std::optional<size_t> only) {
+    if (w.objectInstances.empty() || (only && *only >= w.objectInstances.size()))
+        return;
+    objectRegions(w, only);
+    for (size_t k = 0; k < w.objectInstances.size(); ++k)
+        if ((!only || k == *only) && !w.objectAssets[w.objectInstances[k].asset].unlit)
+            applyProbeLight(w.objectInstances[k], probeLight(w, w.objectInstances[k]));
 }
 std::shared_ptr<World> loadObjectAsset(const std::filesystem::path &dir, const Json &manifest, LoadOptions options) {
     auto w = std::make_shared<World>();

@@ -12,6 +12,18 @@ void loadObjects(World &, const std::filesystem::path &root, const std::string &
 // ambient. Needs visibility, visualTriangles and visualIndex. `only`: one instance
 // (after an editor overlay moved it).
 void lightObjects(World &, std::optional<size_t> only = {});
+// lightObjects in parts, so the probe can run off the compositor thread: the caches
+// (per-mesh bounds, triangle sources), the visibility regions (cheap, in the tick), and
+// the probe light of one instance, which only reads the world (no concurrent change to
+// its visual triangles, materials or images while it runs).
+struct ProbeLight {
+    Vec3 ambientUp{.24f, .24f, .24f}, ambientDown{.24f, .24f, .24f};
+    float sun = .76f, sunVisibility = 1;
+};
+void prepareLighting(World &);
+void objectRegions(World &, std::optional<size_t> only = {});
+ProbeLight probeLight(const World &, const ObjectInstance &);
+void applyProbeLight(ObjectInstance &, const ProbeLight &);
 // One object asset (a glTF in asset space) loaded into w's shared materials and images.
 ObjectAsset buildObjectAsset(World &w, const std::filesystem::path &root, const std::string &id, const std::string &scene,
                              const std::string &formatVersion, LoadOptions, const Json &animations,

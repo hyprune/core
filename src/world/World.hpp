@@ -137,6 +137,10 @@ struct World {
     // are drawn instanced. Render-only apart from their static collision proxies.
     std::vector<ObjectAsset> objectAssets;
     std::vector<ObjectInstance> objectInstances;
+    // lightObjects caches (scene meshes are static after load): per-mesh rest bounds and
+    // each visual triangle's (mesh, first vertex).
+    std::vector<std::pair<Vec3, Vec3>> meshBounds;
+    std::vector<std::pair<unsigned, unsigned>> visualSource;
     std::map<std::string, unsigned> objectNodes;
     Json manifest, map = nullptr, places = Json::array();
     Json walkingNodes = Json::array(), walkingEdges = Json::array();
