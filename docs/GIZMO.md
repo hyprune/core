@@ -6,10 +6,13 @@ placement rules applied to edits and what is still outside the IPC contract.
 
 ## Handles
 
-Handles are real 3D geometry projected every frame at a constant screen size (160
+Handles are real 3D geometry projected every frame at a constant screen size (184
 logical pixels per axis, scaled by the output scale) and drawn by core at native output
-resolution after tone mapping: anti-aliased strokes and shaded fills in painter's order
-(`src/interaction/Gizmo.*`, drawn by `Renderer::drawGizmo`). Axis colours follow the
+resolution after tone mapping: anti-aliased strokes (3 to 4 logical pixels) and shaded
+fills in painter's order (`src/interaction/Gizmo.*`, drawn by `Renderer::drawGizmo`).
+Every stroke and opaque fill sits on a dark ink halo (1.75 logical pixels each side),
+drawn in a first pass so a halo never covers another handle's colour; handles stay
+readable over busy, bright or same-hued surfaces. Axis colours follow the
 HUD palette: coral X, mint Y, sky Z; neutral for screen-space handles, gold for hover
 readouts.
 
@@ -63,7 +66,9 @@ the pivot is excluded, so the object being edited never hides its handles.
 | End, Shift+End | drop the selected object onto the surface below it; align it to the aimed surface |
 
 The keys in the last four rows are handled by core while tool 4 is active in world
-mode; a key that an action binds with the same modifiers keeps its binding.
+mode; a key that an action binds with the same modifiers keeps its binding. In tool 4
+a Ctrl press's own actions (crouch, fly down) wait up to 180 ms: an undo/redo chord in
+that window consumes Ctrl entirely; Ctrl held longer acts as usual.
 
 ## Targets
 
@@ -103,7 +108,9 @@ BLOCKED readout and the invalid reticle; the object itself shows its start pose 
 or its last valid pose (carry), which is what release commits. A refused commit sends
 `runtime.notice` `placement.blocked`. Rules 3 to 5 are waived for a selection whose
 start pose already breaks them, so authored objects inside an approach can still be
-edited; walls, the playable volume and the player always apply. Support is advisory:
+edited; walls, the playable volume and the player always apply (`brokenSoftRules`).
+The waiver is per edit: it is computed from the pose at the start of each drag, carry
+or command, so an edit that clears the zone makes the rule apply to later edits. Support is advisory:
 the readout says when an edit leaves a previously supported object floating.
 
 ## Development switches
@@ -120,11 +127,14 @@ the readout says when an edit leaves a previously supported object floating.
   end-on axes, edge-on rings and the centre, flips and hysteresis, every drag type,
   snapping, numeric entry, modes, drawing, anchors, every placement rule, rule waivers
   and undo/redo.
-- `dev/nested/run.sh --gizmo` (Lumen Reach, a placed window and the Sun Court object):
+- `dev/nested/run.sh --gizmo` (Lumen Reach 0.10 or later, `HYPRUNE_GIZMO_WORLD` or the
+  worlds checkout's dist package; it stops at once when the package has no
+  `sun-court-armillary` object; a placed window and that object):
   every mode, hover, snapping with ticks, plane and screen moves, undo/redo, numeric
   entry, Escape, the refused pose into the pedestal, all rules probed on world data,
   edge-on and end-on handles, local axes, the base pivot, drop to floor, uniform scale,
-  universal mode, window move/scale/undo. Evidence: `docs/evidence/gizmo/`.
+  universal mode, window move/scale/undo, and that Ctrl+Z / Ctrl+Y never fly the camera
+  down while Ctrl alone still does. Evidence: `docs/evidence/gizmo/`.
 - `dev/nested/run.sh --m3b` aims at the new handles through their anchors and checks the
   player rule on the laboratory's collision-owning cube.
 - Hardware cursor transitions are on the supervised checklist in

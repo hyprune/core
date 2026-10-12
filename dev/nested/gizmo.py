@@ -26,6 +26,12 @@ def prepare(installed):
     keep.write_text(json.dumps([{'id': 'test-passage', 'min': [3.6, 3.0, -11.0], 'max': [4.4, 6.0, -9.0]}]))
     os.environ['HYPRUNE_GIZMO_KEEPCLEAR'] = str(keep)
     source = os.environ.get('HYPRUNE_GIZMO_WORLD', str(s.ROOT.parent / 'worlds/dist' / WORLD))
+    # Fail fast: the suite edits the Sun Court world object (Lumen Reach 0.10 and later).
+    manifest = json.loads((pathlib.Path(source) / 'world.json').read_text())
+    if not any(o.get('id') == OBJECT.split(':', 1)[1] for o in manifest.get('objects', [])):
+        raise SystemExit(f"--gizmo needs Lumen Reach with the world object '{OBJECT.split(':', 1)[1]}' (world format 0.8, "
+                         f"Lumen Reach 0.10+); {source} is version {manifest.get('version')}. "
+                         "Set HYPRUNE_GIZMO_WORLD to a newer package.")
     shutil.rmtree(installed / WORLD, ignore_errors=True)
     shutil.copytree(source, installed / WORLD)
     (s.STATE / 'editor.json').unlink(missing_ok=True)
@@ -175,8 +181,29 @@ def acceptance(client, children, args, shell_token, socketpath):
                 pointer('scroll', -1); time.sleep(.2)
             for name, at in angles.items():
                 # The reticle rests below-left of the handles: no hover in the comparison.
-                look(at, [w[0] - .95, w[1] - .7, w[2]]); time.sleep(.4)
+                look(at, [w[0] - 1.35, w[1] - .95, w[2]]); time.sleep(.4)
                 shot(f'sheet-{build}-window-{m}-{name}.png')
+        # The world object, same three cameras around its pivot.
+        if 'gizmo' in diag():
+            for _ in range(5):
+                if diag()['gizmo']['mode'] == 'move':
+                    break
+                pointer('scroll', -1); time.sleep(.2)
+            look([-7.0, 4.6, -6.2], [-7.0, 4.18, -10.0]); time.sleep(.3)
+            pointer('button', 272); time.sleep(.2); pointer('button', 272, 0)
+            wait(lambda: editor()['selectedId'] == OBJECT, 5)
+            c = gizmo()['pivotPoint']
+            views = {'front': [c[0], c[1] + .9, c[2] + 5.2], 'three-quarter': [c[0] + 3.4, c[1] + 2.6, c[2] + 3.6],
+                     'edge-on': [c[0], c[1], c[2] + 5.2]}
+            for m in ['move', 'rotate', 'scale', 'universal']:
+                for _ in range(5):
+                    if diag()['gizmo']['mode'] == m:
+                        break
+                    pointer('scroll', -1); time.sleep(.2)
+                for name, at in views.items():
+                    # Reticle off the handles (below-left), as for the window.
+                    look(at, [c[0] - 2.4, c[1] - 1.7, c[2]]); time.sleep(.4)
+                    shot(f'sheet-{build}-object-{m}-{name}.png')
         print('PASS gizmo: sheet stills', build, flush=True)
 
     def demo(window):
@@ -422,6 +449,17 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('Ctrl+Z undoes the last transform', undone != before_undo and abs(undone['position'][1] - p0[1]) < 1e-3, {'before': before_undo['position'], 'after': undone['position']})
     keys('-M', 'ctrl', '-P', 'Control_L', '-M', 'shift', '-P', 'Shift_L', '-k', 'z', '-p', 'Shift_L', '-m', 'shift', '-p', 'Control_L', '-m', 'ctrl'); time.sleep(.4)
     check('Ctrl+Shift+Z redoes it', record()['position'] == before_undo['position'], record()['position'])
+    # The chord owns Ctrl: no fly-down (crouch in walk) on undo/redo; Ctrl alone still descends.
+    y0 = diag()['position'][1]
+    undo(); time.sleep(.3)
+    keys('-M', 'ctrl', '-P', 'Control_L', '-k', 'y', '-p', 'Control_L', '-m', 'ctrl'); time.sleep(.4)
+    y1 = diag()['position'][1]
+    hold = s.envrun('wtype', '-M', 'ctrl', '-P', 'Control_L', '-s', '800', '-p', 'Control_L', '-m', 'ctrl'); children.append(hold)
+    hold.wait(timeout=5); time.sleep(.3)
+    y2 = diag()['position'][1]
+    check('Ctrl+Z / Ctrl+Y consume Ctrl (no fly-down); Ctrl alone still flies down', abs(y1 - y0) < 1e-3 and y2 < y1 - .1
+          and record()['position'] == before_undo['position'], {'before': y0, 'afterChords': y1, 'afterCtrlHeld': y2})
+    look(three, c)
     # 6. Numeric entry: start a drag, type, release, Enter.
     look(three, c); aim('move-y'); p0 = pos()
     pointer('button', 272, 1); time.sleep(.15)

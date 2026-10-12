@@ -45,7 +45,7 @@ void layoutAndPicking() {
     auto &l = g.geometry();
     // Constant screen size: the axis is options.pixels long on screen.
     auto tip = at(v, l.centre + l.axes[0] * l.size * l.sign[0]);
-    assert(near(std::abs(tip.x - l.centrePx.x), 160, 1));
+    assert(near(std::abs(tip.x - l.centrePx.x), 184, 1));
     // Twice as far: twice the world size, same pixels.
     Gizmo far;
     far.layout(view({0, 1.7f, 8}, 0), {0, 1.7f, 0}, {0, 0, 0, 1});
@@ -64,7 +64,7 @@ void layoutAndPicking() {
     Gizmo h;
     h.layout(hi, {0, 1.7f, 0}, {0, 0, 0, 1});
     auto hiTip = at(hi, h.geometry().centre + h.geometry().axes[0] * h.geometry().size * h.geometry().sign[0]);
-    assert(near(std::abs(hiTip.x - h.geometry().centrePx.x), 320, 1));
+    assert(near(std::abs(hiTip.x - h.geometry().centrePx.x), 368, 1));
     // Behind the camera: nothing drawn or picked.
     Gizmo behind;
     behind.layout(v, {0, 1.7f, 6}, {0, 0, 0, 1});
@@ -205,7 +205,7 @@ void moveAndScale() {
     sc.end();
     assert(sc.pick(sl.centrePx.x, sl.centrePx.y) == Part::ScaleUniform);
     assert(sc.begin(Part::ScaleUniform, sl.centrePx.x, sl.centrePx.y, start, v));
-    auto u = sc.drag(sl.centrePx.x + 160, sl.centrePx.y, false, v);
+    auto u = sc.drag(sl.centrePx.x + 184, sl.centrePx.y, false, v);
     assert(near(u.factor.x, 1.5f) && u.factor.x == u.factor.y && u.factor.y == u.factor.z);
     sc.end();
     // Objects scale uniformly only; windows have no depth axis.
@@ -269,6 +269,7 @@ void modes() {
     // Drawing: depth slack and primitives; hover thickens; active dims the others.
     auto frame = u.draw(Part::None, false, v);
     assert(!frame.empty() && frame.occlusionSlack > 0);
+    assert(std::all_of(frame.strokes.begin(), frame.strokes.end(), [](auto &s) { return s.halo && s.width >= 1.5f; }));
     float plain = 0, hovered = 0;
     for (auto &s : frame.strokes)
         plain = std::max(plain, s.width);

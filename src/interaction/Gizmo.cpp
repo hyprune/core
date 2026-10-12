@@ -758,7 +758,7 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
         for (int n = 0; n < 8; ++n)
             if (auto p = view.project(q + l.axes[0] * (n & 1 ? h : -h) + l.axes[1] * (n & 2 ? h : -h) + l.axes[2] * (n & 4 ? h : -h)))
                 silhouette.push_back(*p);
-        outline(silhouette, scaled(color, .8f), 1.1f);
+        outline(silhouette, scaled(color, .8f), 1.5f);
     };
     auto cone = [&](Vec3 base, Vec3 dir, float length, float radius, Rgba color) {
         auto [u, w] = basis(dir);
@@ -787,7 +787,7 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
             float shade = .55f + .45f * std::max(0.f, dot(normal, light));
             fill({apex, base + r0 * radius, base + r1 * radius}, {color.r * shade, color.g * shade, color.b * shade, color.a});
         }
-        outline(silhouette, scaled(color, .85f), 1.1f);
+        outline(silhouette, scaled(color, .85f), 1.5f);
     };
     auto circlePx = [&](GizmoPoint centre, float radius, Rgba color, float width, bool filled, Rgba fillColor) {
         constexpr int n = 40;
@@ -813,7 +813,7 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
     auto guide = [&](int axis, Rgba color) {
         auto start = drag_.layout.centre;
         auto dir = drag_.layout.axes[axis];
-        stroke(start - dir * 1000.f, start + dir * 1000.f, withAlpha(color, .55f), 1.3f, false, false);
+        stroke(start - dir * 1000.f, start + dir * 1000.f, withAlpha(color, .6f), 2.f, false, false);
     };
     auto ticks = [&](int axis, float step, Rgba color) {
         auto start = drag_.layout.centre;
@@ -825,7 +825,7 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
         for (int k = -40; k <= 40; ++k) {
             auto at = start + dir * (k * step);
             float len = (k % 5 == 0 ? .05f : .025f) * l.size * (k == 0 ? 1.6f : 1);
-            stroke(at - side * len, at + side * len, withAlpha(color, .8f), k % 5 == 0 ? 1.6f : 1.1f, false, false);
+            stroke(at - side * len, at + side * len, withAlpha(color, .8f), k % 5 == 0 ? 2.4f : 1.6f, false, false);
         }
         (void)w;
     };
@@ -851,7 +851,7 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
             auto d0 = u * std::cos(t0) + w * std::sin(t0), d1 = u * std::cos(t1) + w * std::sin(t1);
             bool front = faceOn || dot(d0 + d1, l.toCamera) >= -.04f || part == active;
             size_t before = f.strokes.size();
-            stroke(c + d0 * r, c + d1 * r, front ? color : withAlpha(color, .3f), front ? widthOf(part, 3.f) : 1.4f, !front);
+            stroke(c + d0 * r, c + d1 * r, front ? color : withAlpha(color, .3f), front ? widthOf(part, 3.6f) : 2.f, !front);
             if (f.strokes.size() > before) {
                 auto &s = f.strokes.back();
                 s.along = along;
@@ -867,7 +867,7 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
         for (int n = 0; n < count; ++n) {
             float t0 = n * 2 * pi / count, t1 = (n + 1) * 2 * pi / count;
             stroke(c + (u * std::cos(t0) + w * std::sin(t0)) * r, c + (u * std::cos(t1) + w * std::sin(t1)) * r,
-                   withAlpha(color, color.a * .85f), widthOf(Part::RotateView, 2.f), false, false);
+                   withAlpha(color, color.a * .85f), widthOf(Part::RotateView, 3.f), false, false);
         }
     }
     // Active rotation: swept wedge, start/current spokes and 15-degree ticks.
@@ -887,13 +887,13 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
             float a0 = angle * n / steps, a1 = angle * (n + 1) / steps;
             fill({cc, cc + rotate(axisAngle(axis, a0), g) * r, cc + rotate(axisAngle(axis, a1), g) * r}, withAlpha(color, .22f), false);
         }
-        stroke(cc, cc + g * r, withAlpha(palette::neutral, .7f), 1.4f, false, false);
-        stroke(cc, cc + rotate(axisAngle(axis, angle), g) * r, withAlpha(palette::neutral, .95f), 1.8f, false, false);
+        stroke(cc, cc + g * r, withAlpha(palette::neutral, .7f), 2.f, false, false);
+        stroke(cc, cc + rotate(axisAngle(axis, angle), g) * r, withAlpha(palette::neutral, .95f), 2.6f, false, false);
         if (snap)
             for (int n = 0; n < 24; ++n) {
                 auto dir = rotate(axisAngle(axis, n * snapRadians), g);
                 float in = n % 6 == 0 ? .86f : .92f;
-                stroke(cc + dir * (r * in), cc + dir * (r * 1.06f), withAlpha(palette::neutral, .85f), n % 6 == 0 ? 1.8f : 1.2f, false, false);
+                stroke(cc + dir * (r * in), cc + dir * (r * 1.06f), withAlpha(palette::neutral, .85f), n % 6 == 0 ? 2.6f : 1.8f, false, false);
             }
     }
     // Plane handles.
@@ -908,7 +908,7 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
             bool lit = part == hover || part == active;
             fill(q, withAlpha(color, color.a * (lit ? .55f : .3f)));
             for (int k = 0; k < 4; ++k)
-                stroke(q[k], q[(k + 1) % 4], color, widthOf(part, 1.6f));
+                stroke(q[k], q[(k + 1) % 4], color, widthOf(part, 2.4f));
         }
     // Axes: arrows (move) and line-and-box (scale), farthest first.
     std::array<int, 3> order{0, 1, 2};
@@ -920,7 +920,7 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
         auto move = Part(int(Part::MoveX) + i), scale = Part(int(Part::ScaleX) + i);
         if (alpha(move) > 0) {
             auto color = look(move, palette::axis(i));
-            stroke(c + dir * (l.size * shaftStart), c + dir * (l.size * coneBase), color, widthOf(move, 3.4f));
+            stroke(c + dir * (l.size * shaftStart), c + dir * (l.size * coneBase), color, widthOf(move, 4.f));
             cone(c + dir * (l.size * coneBase), dir, l.size * (1 - coneBase), l.size * coneRadius * (move == hover ? 1.15f : 1), color);
         }
         if (alpha(scale) > 0) {
@@ -929,7 +929,7 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
             // While scaling, the box rides on the cursor's distance along the axis.
             float reach = scale == active ? std::max(half * 2, std::abs(drag_.t0) * component(last_.factor, i)) : l.size * end;
             if (!universal || scale == active)
-                stroke(c + dir * (l.size * shaftStart), c + dir * (reach - half), color, widthOf(scale, 3.4f));
+                stroke(c + dir * (l.size * shaftStart), c + dir * (reach - half), color, widthOf(scale, 4.f));
             box(c + dir * reach, half * (scale == hover ? 1.15f : 1), color);
         }
     }
@@ -941,14 +941,14 @@ GizmoFrame Gizmo::draw(Part hover, bool snap, const GizmoView &view) const {
             float r = l.size * uniformRingRadius * l.unitPx;
             if (active == Part::ScaleUniform && drag_.t0 > 0)
                 r = drag_.t0 * last_.factor.x;
-            circlePx(l.centrePx, r, withAlpha(color, color.a * .9f), widthOf(Part::ScaleUniform, 2.4f), false, {});
+            circlePx(l.centrePx, r, withAlpha(color, color.a * .9f), widthOf(Part::ScaleUniform, 3.f), false, {});
         }
         box(c, uniformHalf * l.size * (uniformRing() ? 1.3f : 1) * (hover == Part::ScaleUniform ? 1.15f : 1), color);
     }
     if (alpha(Part::MoveView) > 0) {
         auto color = look(Part::MoveView, palette::neutral);
         bool lit = hover == Part::MoveView || active == Part::MoveView;
-        circlePx(l.centrePx, centreDiscPx * dpi, color, lit ? 2.6f : 2.f, true, withAlpha(color, color.a * (lit ? .45f : .2f)));
+        circlePx(l.centrePx, centreDiscPx * dpi, color, lit ? 3.6f : 3.f, true, withAlpha(color, color.a * (lit ? .45f : .2f)));
     }
     // Guides and snap ticks for the active handle.
     if (active != Part::None && !isRotate(active)) {

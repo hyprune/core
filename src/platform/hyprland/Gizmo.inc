@@ -590,6 +590,8 @@ bool Runtime::gizmoKey(const std::string &key, unsigned mods, bool down, uint32_
             effect = [] {}; // swallow tool switches and stray keys mid-entry
     } else if ((mods & 4) && (key == "z" || key == "y")) {
         bool redo = key == "y" || (mods & 1);
+        if (pendingCtrl && !pendingCtrl->fired)
+            pendingCtrl->consumed = true; // the chord owns Ctrl: no crouch, no fly down
         effect = [redo] { runtime->applyUndo(redo); };
     } else if (key == "End" && !bound("End", mods & 1))
         effect = [shift = bool(mods & 1)] { runtime->dropSelection(shift); };
@@ -696,7 +698,7 @@ void Runtime::gizmoDraw() {
                 if (!(i & bit)) {
                     auto a = view.project(p[i]), c = view.project(p[i | bit]);
                     if (a && c)
-                        frame.strokes.push_back({*a, *c, edge, 1.6f * view.dpi, false, false, 0, sequence++});
+                        frame.strokes.push_back({*a, *c, edge, 2.2f * view.dpi, false, false, true, 0, sequence++});
                 }
     };
     // A valid preview is the object itself; only a refused pose gets the red ghost.
@@ -708,7 +710,7 @@ void Runtime::gizmoDraw() {
         for (auto &[a, b] : ghostLines) {
             auto pa = view.project(m.point(a)), pb = view.project(m.point(b));
             if (pa && pb)
-                frame.strokes.push_back({*pa, *pb, edge, 1.4f * view.dpi, false, false, 0, sequence++});
+                frame.strokes.push_back({*pa, *pb, edge, 2.f * view.dpi, false, false, true, 0, sequence++});
         }
         addBox(selectionBox(preview.candidate), interaction::palette::invalid, .22f);
     } else if (preview.active && editor.kind == "object" && (gizmo.dragging() || objectCarry))
@@ -797,4 +799,32 @@ void Runtime::cancelGizmo() {
     preview = {};
     editor.activeHandle = -1;
     windowBlocked.reset();
+}
+bool Runtime::deferCtrl(const std::string &key, bool down, uint32_t code, const std::vector<interaction::Action> &actions) {
+    if (!down) {
+        if (!pendingCtrl || pendingCtrl->code != code)
+            return false;
+        bool fired = pendingCtrl->fired;
+        pendingCtrl.reset();
+        return !fired; // never ran: drop the release too (fired: normal release dispatch)
+    }
+    if (key != "Control_L" && key != "Control_R")
+        return false;
+    if (actions.empty() || !active || editor.slot != 4 || typing || layerCursor || freeCursor || control.uiVisible() ||
+        inputMode() != "world")
+        return false;
+    pendingCtrl = PendingCtrl{code, actions, std::chrono::steady_clock::now()};
+    return true;
+}
+// Ctrl held alone past the chord window: its actions run, late by at most 180 ms.
+void Runtime::ctrlTick() {
+    if (!pendingCtrl || pendingCtrl->fired || pendingCtrl->consumed)
+        return;
+    if (std::chrono::steady_clock::now() - pendingCtrl->since < std::chrono::milliseconds(180))
+        return;
+    pendingCtrl->fired = true;
+    deferInput([actions = pendingCtrl->actions] {
+        for (auto a : actions)
+            runtime->action(a);
+    });
 }

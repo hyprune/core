@@ -21,6 +21,7 @@ struct GizmoStroke {
     float width = 2;     // output pixels
     bool dashed = false; // always dashed (back halves); occluded parts dash anyway
     bool occlude = true; // dim and dash where world geometry is in front
+    bool halo = true;    // dark outline underneath (contrast on busy surfaces)
     float along = 0;     // dash phase at a, pixels (continuous along rings)
     unsigned sequence = 0; // painter's order across strokes and fills
 };
@@ -86,7 +87,7 @@ struct GizmoOptions {
     bool yawOnly = false;                   // upright objects: the world Y ring only
     bool uniformScaleOnly = false;          // world objects: the centre cube only
     std::array<bool, 3> scaleAxes{true, true, true}; // windows have no depth to scale
-    float pixels = 160;                     // axis length, logical pixels
+    float pixels = 184;                     // axis length, logical pixels
 };
 // Snap steps (Shift or the snapping toggle): M3B values.
 inline constexpr float snapMetres = .1f, snapRadians = .2617993878f, snapFactor = .1f;

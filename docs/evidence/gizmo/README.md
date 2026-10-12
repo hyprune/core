@@ -7,3 +7,6 @@
   Stills: `GIZMO_STAGE=sheet [HYPRUNE_NESTED_PLUGIN=<other build>] dev/nested/run.sh --gizmo`.
 - `refused.png`: a drag into the pedestal: the object keeps its start pose, the red ghost
   and the BLOCKED readout show the refused pose (from `GIZMO_STAGE=demo`).
+- `polish-before-after.png`: halo, stroke width and size polish, before (main 51c98c3)
+  and after on the Sun Court object and a window from the same three cameras, with a
+  1:1 detail.

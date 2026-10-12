@@ -199,6 +199,17 @@ struct Runtime {
     void gizmoRelease(bool cancel);
     void cancelGizmo();
     bool gizmoKey(const std::string &key, unsigned mods, bool down, uint32_t code);
+    // A Ctrl press held back in tool 4 (Gizmo.inc): its actions run after a short delay
+    // unless an undo/redo chord consumes it; its release is dropped if they never ran.
+    struct PendingCtrl {
+        uint32_t code = 0;
+        std::vector<interaction::Action> actions;
+        std::chrono::steady_clock::time_point since;
+        bool fired = false, consumed = false;
+    };
+    std::optional<PendingCtrl> pendingCtrl;
+    bool deferCtrl(const std::string &key, bool down, uint32_t code, const std::vector<interaction::Action> &actions);
+    void ctrlTick();
     void ghostEdges();
     void gizmoDraw();
     Json gizmoDiagnostics();
@@ -3500,6 +3511,7 @@ void Runtime::toolClick(const std::string &action) {
     }
 }
 void Runtime::toolsTick() {
+    ctrlTick();
     if (!world)
         return;
     if (originalCollision.empty())
@@ -5528,6 +5540,14 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                                        (runtime->editor.activeHandle >= 0 && runtime->superHeld);
                 auto actions =
                     runtime->inputEvent(runtime->inputMode(), key, runtime->modifiers, down, now, 0, gestureMovement);
+                // Tool 4: Ctrl's own actions (crouch / fly down) wait briefly, so Ctrl+Z / Ctrl+Y
+                // consume the whole chord instead of dipping the camera first.
+                if (runtime->deferCtrl(key, down, event.keycode, actions)) {
+                    info.cancelled = true;
+                    if (down)
+                        runtime->swallowedKeys.insert(event.keycode);
+                    return;
+                }
                 if (!actions.empty()) {
                     info.cancelled = true;
                     if (down)

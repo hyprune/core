@@ -2382,6 +2382,23 @@ void Renderer::drawGizmo(int w, int h) {
             for (auto &p : {f.points[0], f.points[i], f.points[i + 1]})
                 vertex(p.x, p.y, p.depth, f.color, 0, 0, -1, flags);
     };
+    // Pass 1, halos: a dark ink outline under every stroke and opaque fill edge, all
+    // before any colour, so a halo never covers a neighbouring handle's colour.
+    const interaction::Rgba ink{.03f, .067f, .094f, 1};
+    const float halo = 1.75f * std::max(1.f, logicalScale);
+    auto haloOf = [&](interaction::GizmoPoint a, interaction::GizmoPoint b, float width, float alpha, bool dashed, bool occlude, float along) {
+        interaction::GizmoStroke h{a, b, {ink.r, ink.g, ink.b, std::min(1.f, alpha) * .9f}, width + 2 * halo, dashed, occlude};
+        h.along = along;
+        strokeAt(h);
+    };
+    for (auto &st : gizmo.strokes)
+        if (st.halo && st.color.a > .05f)
+            haloOf(st.a, st.b, st.width, st.color.a, st.dashed, st.occlude, st.along);
+    for (auto &f : gizmo.fills)
+        if (f.color.a >= .9f)
+            for (size_t i = 0; i < f.points.size(); ++i)
+                haloOf(f.points[i], f.points[(i + 1) % f.points.size()], 1.f, f.color.a, false, f.occlude, -1);
+    // Pass 2, colour in painter's order.
     size_t si = 0, fi = 0;
     auto strokes = gizmo.strokes;
     auto fills = gizmo.fills;
