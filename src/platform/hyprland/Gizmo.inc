@@ -337,20 +337,29 @@ void Runtime::applyUndo(bool redo) {
         return;
     }
     auto &value = redo ? edit->after : edit->before;
-    if (edit->kind == "object" && (!world || edit->worldId != world->id)) {
-        ipc->notify("runtime.notice", {{"level", "info"}, {"code", redo ? "editor.redo" : "editor.undo"},
-                                       {"message", "Skipped an object edit in another world"}});
+    if ((edit->kind == "object" || edit->kind == "path") && (!world || edit->worldId != world->id)) {
+        ipc->notify("runtime.notice", {{"level", "info"},
+                                       {"code", redo ? "editor.redo" : "editor.undo"},
+                                       {"message", "Skipped an edit in another world"}});
         return;
     }
     if (edit->kind == "object")
         writeObjectRecord(edit->worldId, edit->id, value);
-    else if (auto e = capture.find(edit->id))
+    else if (edit->kind == "path") {
+        pathDrag.reset();
+        pathHover.reset();
+        editor.setPath(edit->id, value);
+    } else if (auto e = capture.find(edit->id))
         applyWindowPose(*e, value);
     if (editor.kind == "object" && editor.selected == edit->id && world)
         selectedTransform = objectPose(editor.selected);
     saveEditor();
-    ipc->notify("runtime.notice", {{"level", "info"}, {"code", redo ? "editor.redo" : "editor.undo"},
-                                   {"message", std::string(redo ? "Redid " : "Undid ") + (edit->kind == "object" ? "object" : "window") + " transform"}});
+    ipc->notify("runtime.notice", {{"level", "info"},
+                                   {"code", redo ? "editor.redo" : "editor.undo"},
+                                   {"message", std::string(redo ? "Redid " : "Undid ") +
+                                                   (edit->kind == "path"     ? "path edit"
+                                                    : edit->kind == "object" ? "object transform"
+                                                                             : "window transform")}});
 }
 // End: drop the selected object onto the floor below it. Shift+End: align it to the
 // aimed surface (base on the surface, up along its normal).
@@ -646,7 +655,8 @@ void Runtime::gizmoRelease(bool cancel) {
 bool Runtime::gizmoKey(const std::string &key, unsigned mods, bool down, uint32_t code) {
     if (!down)
         return gizmoKeys.erase(code) > 0;
-    if (!active || editor.slot != 4 || typing || layerCursor || freeCursor || control.uiVisible() || !world)
+    if (!active || (editor.slot != 4 && editor.slot != 3) || typing || layerCursor || freeCursor ||
+        control.uiVisible() || !world)
         return false;
     auto bound = [&](const std::string &k, unsigned m) {
         for (auto &[name, list] : input.config["modes"]["world"].items())
@@ -660,7 +670,25 @@ bool Runtime::gizmoKey(const std::string &key, unsigned mods, bool down, uint32_
         return false;
     };
     std::function<void()> effect;
-    if (gizmo.dragging()) {
+    if (editor.slot == 3) {
+        // Tool 3: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y undo and redo path edits, Escape cancels a
+        // point drag, period shows every path outside path mode too.
+        if ((mods & 4) && (key == "z" || key == "y")) {
+            bool redo = key == "y" || (mods & 1);
+            if (pendingCtrl && !pendingCtrl->fired)
+                pendingCtrl->consumed = true;
+            effect = [redo] { runtime->applyUndo(redo); };
+        } else if (key == "Escape" && pathDrag)
+            effect = [] { runtime->pathRelease(true); };
+        else if (key == "period" && !mods && !bound("period", 0))
+            effect = [] {
+                runtime->showAllPaths = !runtime->showAllPaths;
+                runtime->ipc->notify("runtime.notice", {{"level", "info"},
+                                                        {"code", "path.visibility"},
+                                                        {"message", runtime->showAllPaths ? "Paths: always shown"
+                                                                                          : "Paths: path mode only"}});
+            };
+    } else if (gizmo.dragging()) {
         char ch = 0;
         if (key.size() == 1 && key[0] >= '0' && key[0] <= '9')
             ch = key[0];
@@ -919,8 +947,8 @@ bool Runtime::deferCtrl(const std::string &key, bool down, uint32_t code, const 
     }
     if (key != "Control_L" && key != "Control_R")
         return false;
-    if (actions.empty() || !active || editor.slot != 4 || typing || layerCursor || freeCursor || control.uiVisible() ||
-        inputMode() != "world")
+    if (actions.empty() || !active || (editor.slot != 4 && editor.slot != 3) || typing || layerCursor || freeCursor ||
+        control.uiVisible() || inputMode() != "world")
         return false;
     pendingCtrl = PendingCtrl{code, actions, std::chrono::steady_clock::now()};
     return true;

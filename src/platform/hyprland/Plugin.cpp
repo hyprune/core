@@ -214,6 +214,24 @@ struct Runtime {
     void gizmoRelease(bool cancel);
     void cancelGizmo();
     bool gizmoKey(const std::string &key, unsigned mods, bool down, uint32_t code);
+    // Tool 3 (Paths.inc): the point or segment under the reticle, a point being dragged.
+    struct PathDrag {
+        std::string path;
+        int point;
+        Json before;
+    };
+    std::optional<interaction::PathPick> pathHover;
+    std::optional<PathDrag> pathDrag;
+    bool showAllPaths = false;
+    bool pathsVisible() const;
+    std::optional<Vec3> pathTarget();
+    void pathTick();
+    void pathEdit(const std::string &id, const Json &before);
+    void pathPress();
+    void pathRelease(bool cancel);
+    void pathRemove();
+    void pathDraw();
+    Json pathDiagnostics() const;
     // A Ctrl press held back in tool 4 (Gizmo.inc): its actions run after a short delay
     // unless an undo/redo chord consumes it; its release is dropped if they never ran.
     struct PendingCtrl {
@@ -3372,6 +3390,7 @@ Vec3 objectOrigin(const world::World &w, const std::string &id) {
 } // namespace
 #include "Gizmo.inc"
 #include "Objects.inc"
+#include "Paths.inc"
 void Runtime::saveEditor() {
     if (session.playing) return;
     auto value = editor.saved();
@@ -3652,6 +3671,11 @@ void Runtime::toolInput(const std::string &slot, interaction::Action event) {
                    false);
         return;
     }
+    if (action == "path.add" && !event.pressed) {
+        pathRelease(false);
+        publish();
+        return;
+    }
     if (action == "gizmo.drag" && !event.pressed) {
         // Typed values keep the drag open until Enter or Escape.
         if (!gizmo.numeric())
@@ -3702,8 +3726,7 @@ void Runtime::toolInput(const std::string &slot, interaction::Action event) {
                 saveEditor();
             }
     } else if (action == "path.remove") {
-        editor.removePoint();
-        saveEditor();
+        pathRemove();
     } else if (action == "path.closed") {
         editor.toggleClosed();
         saveEditor();
@@ -3806,13 +3829,8 @@ void Runtime::toolClick(const std::string &action) {
         return;
     }
     if (action == "path.add") {
-        if (auto h = worldHit(); h && !tooFar(h->distance, "reach_placement", "path")) {
-            auto b =
-                layout.binding(monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
-            editor.point(world->id, b ? b->at("areaId").get<std::string>() : "", h->point + h->normal * .03f);
-            saveEditor();
-            publish();
-        }
+        pathPress();
+        publish();
         return;
     }
     if (action != "gizmo.drag")
@@ -3875,6 +3893,7 @@ void Runtime::toolsTick() {
     }
     if (gizmo.dragging())
         gizmoUpdate();
+    pathTick();
     // Windows follow the gizmo live; a swept pose that would enter collision stops
     // the window and shows where it was refused.
     if (gizmo.dragging() && editor.kind == "window") {
@@ -4054,11 +4073,7 @@ void Runtime::toolsTick() {
                 renderer.lines.push_back({corner[k], corner[(k + 1) % 4], glow, .012f});
             }
         }
-    for (auto &path : editor.paths)
-        if (path["worldId"] == world->id) {
-            auto lines = interaction::pathLines(path);
-            renderer.lines.insert(renderer.lines.end(), lines.begin(), lines.end());
-        }
+    pathDraw();
     for (auto &e : capture.entries)
         if (editor.locked(world->id, e.instance) && e.visible) {
             auto &s = e.surface;
@@ -5464,6 +5479,7 @@ int luaCamera(lua_State *state) {
         {"activeHandle", runtime->editor.activeHandle},
         {"positionMode", runtime->editor.positionMode},
         {"gizmo", runtime->gizmoDiagnostics()},
+        {"path", runtime->pathDiagnostics()},
         {"selectedScale",
          {runtime->selectedTransform.scale.x, runtime->selectedTransform.scale.y, runtime->selectedTransform.scale.z}},
         {"superHeld", runtime->superHeld},
@@ -5484,7 +5500,8 @@ int luaCamera(lua_State *state) {
           {"reach", runtime->reticle.reach},
           {"spread", runtime->renderer.reticle.spread},
           {"hint", runtime->renderer.reticle.hint},
-          {"color", {runtime->renderer.reticle.color.x, runtime->renderer.reticle.color.y, runtime->renderer.reticle.color.z}}}},
+          {"color",
+           {runtime->renderer.reticle.color.x, runtime->renderer.reticle.color.y, runtime->renderer.reticle.color.z}}}},
         {"viewBob", {runtime->camera.viewBob.x, runtime->camera.viewBob.y, runtime->camera.viewBob.z}},
         {"npcs",
          [] {

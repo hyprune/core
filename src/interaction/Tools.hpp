@@ -5,6 +5,7 @@ using Json = world::Json;
 struct Line {
     Vec3 a, b, color;
     float width = .018f;
+    int segment = -1; // path lines: the index of the point that ends this segment
 };
 struct Handle {
     int axis;
@@ -20,6 +21,17 @@ struct Transform {
 std::vector<Handle> gizmo(Vec3 center, const std::string &mode, float size = 1);
 std::optional<int> pickHandle(std::span<const Handle>, Vec3 origin, Vec3 ray, float tolerance = .12f);
 std::vector<Line> pathLines(const Json &path);
+// Tool 3: the path point (or segment) under a ray, nearest first; points win over segments.
+// Tolerances grow with distance (about a constant screen size); nothing beyond maxDistance
+// (the aimed surface) is picked.
+struct PathPick {
+    std::string path;
+    int point = -1, segment = -1; // segment: insert before this point index
+    Vec3 at{};
+    float distance = 0;
+};
+std::optional<PathPick> pickPath(const Json &paths, const std::string &worldId, Vec3 origin, Vec3 ray,
+                                 float maxDistance);
 class Tools {
   public:
     std::optional<uint64_t> deterministicId;
@@ -58,6 +70,13 @@ class Tools {
     std::string slotAction(const std::string &) const;
     void removePoint();
     void toggleClosed();
+    // Point edits of any path in the overlay (tool 3). Each returns the path record before
+    // the edit (null when the path did not exist) for the undo history.
+    Json path(const std::string &id) const;           // null when absent
+    void setPath(const std::string &id, Json record); // null removes
+    void movePoint(const std::string &id, int index, Vec3 position);
+    void insertPoint(const std::string &id, int index, Vec3 position);
+    void removePointAt(const std::string &id, int index);
     std::vector<Handle> handles(Vec3 center, const std::array<float, 4> &rotation) const;
     std::string submode() const;
     void wheel(int);

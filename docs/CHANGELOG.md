@@ -190,6 +190,21 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Path tool editing (no wire change)
+
+RFC-0006 tool table, Path row:
+
+- Paths draw only in the path tool (tool 3), with their points and curve handles; the
+  point under the reticle highlights. Period in tool 3 keeps all paths shown in the other
+  tools; the debug view shows them too. Paths are still saved in `editor.json` and listed
+  in `state.editor.paths` unchanged.
+- Primary pressed on a point and dragged moves it along the aimed surface (Shift snaps to
+  0.1 m; a point on a floor stays on it); release commits. Primary on a segment inserts a
+  point there; elsewhere it adds a point to the active path as before.
+- Secondary removes the aimed point, else the active path's last point.
+- Path edits (add, insert, move, remove) are undo steps: Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y in
+  tools 3 and 4. Escape cancels a point drag. The Primary hint reads "Add / drag point".
+
 ## Window placement behaviour (no wire change)
 
 RFC-0005 "Amendment: reachable spawns, home windows and world switches":

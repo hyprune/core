@@ -389,6 +389,40 @@ int main() {
         tools.finishPath();
         tools.wheel(1);
     }
+    {
+        // Tool 3 editing: pick a point or a segment under the reticle, move, insert, delete,
+        // undo and redo through the editor history.
+        Tools edit;
+        edit.slot = 3;
+        for (float x : {0.f, 2.f, 4.f})
+            edit.point("org.test.world", "home", {x, .03f, -5});
+        auto id = edit.activePath;
+        Vec3 eye{2, 1.7f, 0};
+        auto ray = [&](Vec3 at) { return normalized(at - eye); };
+        auto hit = pickPath(edit.paths, "org.test.world", eye, ray({2, .03f, -5}), 20);
+        assert(hit && hit->path == id && hit->point == 1 && hit->segment < 0);
+        assert(!pickPath(edit.paths, "org.other.world", eye, ray({2, .03f, -5}), 20));
+        assert(!pickPath(edit.paths, "org.test.world", eye, ray({2, .03f, -5}), 2)); // behind the aimed wall
+        auto seg = pickPath(edit.paths, "org.test.world", eye, ray({3, .03f, -5}), 20);
+        assert(seg && seg->point < 0 && seg->segment == 2 && std::abs(seg->at.x - 3) < .05f);
+        assert(!pickPath(edit.paths, "org.test.world", eye, ray({3, .6f, -5}), 20)); // well off the line
+        auto before = edit.path(id);
+        edit.movePoint(id, 1, {2, .03f, -6});
+        edit.recordEdit("path", "org.test.world", id, before, edit.path(id));
+        assert(edit.path(id)["points"][1]["position"][2] == -6);
+        auto undone = edit.undo();
+        assert(undone && undone->kind == "path");
+        edit.setPath(id, undone->before);
+        assert(edit.path(id)["points"][1]["position"][2] == -5);
+        edit.setPath(id, edit.redo()->after);
+        assert(edit.path(id)["points"][1]["position"][2] == -6);
+        edit.insertPoint(id, 2, {3, .03f, -5});
+        assert(edit.path(id)["points"].size() == 4 && edit.path(id)["points"][2]["position"][0] == 3);
+        edit.removePointAt(id, 1);
+        assert(edit.path(id)["points"].size() == 3 && edit.path(id)["points"][1]["position"][0] == 3);
+        edit.setPath(id, nullptr); // undoing a new path's first point removes the path
+        assert(edit.path(id).is_null() && edit.activePath.empty());
+    }
     surfaces::Instance instance;
     instance.id = "window";
     instance.appClass = "kitty";

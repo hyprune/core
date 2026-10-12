@@ -87,11 +87,50 @@ std::vector<Line> pathLines(const Json &p) {
             }
             if (type == "arc")
                 next += normalized(cross(b - a, {0, 1, 0})) * std::sin(t * 3.141593f) * length(b - a) * .3f;
-            out.push_back({prev, next, {.85f, .65f, .18f}, .025f});
+            out.push_back({prev, next, {.85f, .65f, .18f}, .025f, int(i % points.size())});
             prev = next;
         }
     }
     return out;
+}
+std::optional<PathPick> pickPath(const Json &paths, const std::string &worldId, Vec3 origin, Vec3 ray,
+                                 float maxDistance) {
+    std::optional<PathPick> best;
+    auto along = [&](Vec3 p) { return dot(p - origin, ray); };
+    auto off = [&](Vec3 p) { return length(p - (origin + ray * along(p))); };
+    for (auto &p : paths) {
+        if (p.value("worldId", "") != worldId)
+            continue;
+        auto &points = p.at("points");
+        for (size_t i = 0; i < points.size(); ++i) {
+            auto &v = points[i]["position"];
+            Vec3 q{v[0], v[1], v[2]};
+            float t = along(q);
+            if (t < .1f || t > maxDistance + .25f || off(q) > std::max(.07f, .014f * t))
+                continue;
+            if (!best || best->point < 0 || t < best->distance)
+                best = PathPick{p.at("id"), int(i), -1, q, t};
+        }
+    }
+    if (best)
+        return best;
+    for (auto &p : paths) {
+        if (p.value("worldId", "") != worldId)
+            continue;
+        for (auto &line : pathLines(p)) {
+            // Closest points of the ray and the sampled segment.
+            Vec3 d = line.b - line.a, w = origin - line.a;
+            float a = dot(d, d), b = dot(d, ray), e = dot(d, w), c = dot(ray, w), den = a - b * b;
+            float s = den > 1e-9f ? std::clamp((b * c - e) / den, 0.f, 1.f) : 0.f;
+            Vec3 q = line.a + d * s;
+            float t = along(q);
+            if (t < .1f || t > maxDistance + .25f || off(q) > std::max(.05f, .01f * t))
+                continue;
+            if (!best || t < best->distance)
+                best = PathPick{p.at("id"), -1, line.segment, q, t};
+        }
+    }
+    return best;
 }
 Json Tools::definitions() const {
     auto binding = [](const char *action, const char *label) { return Json{{"action", action}, {"label", label}}; };
@@ -107,7 +146,7 @@ Json Tools::definitions() const {
          def(2, "Window",
              binding(windowMode ? "window.lock" : "window.mount", windowMode ? "Lock / unlock" : "Tag / mount"),
              binding("window.lock", "Lock / unlock"), nullptr, binding("tool.cycle", "Place / lock mode")),
-         def(3, "Path", binding("path.add", "Add point"), binding("path.remove", "Remove point"),
+         def(3, "Path", binding("path.add", "Add / drag point"), binding("path.remove", "Remove point"),
              binding("path.closed", pathMode >= 3 ? "Open path" : "Close path"), binding("tool.cycle", "Segment type")),
          def(4, "Position", binding("gizmo.drag", "Select / drag"),
              binding("gizmo.space", localAxes ? "Use world axes" : "Use local axes"),
@@ -130,6 +169,44 @@ void Tools::removePoint() {
             path["points"].erase(path["points"].end() - 1);
             break;
         }
+}
+Json Tools::path(const std::string &id) const {
+    for (auto &p : paths)
+        if (p["id"] == id)
+            return p;
+    return nullptr;
+}
+void Tools::setPath(const std::string &id, Json record) {
+    auto it = std::find_if(paths.begin(), paths.end(), [&](auto &p) { return p["id"] == id; });
+    if (record.is_null()) {
+        if (it != paths.end())
+            paths.erase(it);
+        if (activePath == id)
+            activePath.clear();
+    } else if (it != paths.end())
+        *it = std::move(record);
+    else
+        paths.push_back(std::move(record));
+}
+void Tools::movePoint(const std::string &id, int index, Vec3 v) {
+    for (auto &p : paths)
+        if (p["id"] == id && index >= 0 && index < int(p["points"].size()))
+            p["points"][index]["position"] = {v.x, v.y, v.z};
+}
+void Tools::insertPoint(const std::string &id, int index, Vec3 v) {
+    for (auto &p : paths)
+        if (p["id"] == id && index >= 0 && index <= int(p["points"].size())) {
+            if (p["points"].size() >= 256)
+                throw std::runtime_error("path point budget");
+            // The new point keeps the segment's shape on both halves.
+            std::string type = index < int(p["points"].size()) ? p["points"][index]["type"].get<std::string>() : "line";
+            p["points"].insert(p["points"].begin() + index, Json{{"position", {v.x, v.y, v.z}}, {"type", type}});
+        }
+}
+void Tools::removePointAt(const std::string &id, int index) {
+    for (auto &p : paths)
+        if (p["id"] == id && index >= 0 && index < int(p["points"].size()))
+            p["points"].erase(p["points"].begin() + index);
 }
 void Tools::toggleClosed() {
     pathMode = (pathMode + 3) % 6;

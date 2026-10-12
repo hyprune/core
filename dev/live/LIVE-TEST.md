@@ -325,3 +325,20 @@ could run first. Nested has a software cursor, so check on the real session:
   window, the cursor transition is clean.
 - [ ] Hold W, tap D, release both: movement starts and stops on the frame you expect (no
   lag or extra step), and LMB/RMB tool actions respond on the press.
+
+## Path tool: point drag, hover, visibility (tool 3)
+
+Paths now draw only in tool 3 (period keeps them shown elsewhere). In tool 3 the aimed
+point highlights; LMB pressed on it and dragged moves it with the reticle (no cursor is
+shown or hidden; the drag is the reticle), release commits; Ctrl+Z / Ctrl+Shift+Z undo
+and redo. Nested has a software cursor, so check on the real session:
+
+- [ ] Tool 1: no paths drawn. Tool 3: every path with points; aim at a point: it grows
+  and turns white.
+- [ ] LMB on a point, drag across the floor and onto a step, release: the point follows,
+  sits on the floor, the hardware cursor never appears; Shift while dragging snaps.
+- [ ] Ctrl+Z while in tool 3 undoes the move without crouching or flying down; Ctrl+Shift+Z
+  redoes it. Escape mid-drag puts the point back.
+- [ ] RMB on a middle point removes that point; LMB on a segment inserts one there.
+- [ ] Switch tools (1, 4, 5) in the middle of a drag: the drag cancels cleanly, no stuck
+  button, no crash.
