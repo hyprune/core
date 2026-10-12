@@ -1,4 +1,5 @@
 #include "Characters.hpp"
+#include "Machines.hpp"
 #include "Objects.hpp"
 #include "Sandbox.hpp"
 #include "VkContext.hpp"
@@ -283,6 +284,7 @@ int main(int argc, char **argv) {
         // thread and upload between frames, like the in-process renderer.
         offload::ObjectReceiver objects;
         objects.start(*scene);
+        offload::MachineReceiver machines;
         const unsigned formats = render::Renderer::compressedFormats();
         offload::ObjectReceiver::Loader loadAsset = [formats](const std::filesystem::path &dir, const Json &manifest) {
             return world::loadObjectAsset(dir, manifest, {formats});
@@ -320,6 +322,8 @@ int main(int argc, char **argv) {
                     reply["gpuEffectsMs"] = timing["gpuEffectsMs"];
                     reply["objectDraw"] = timing["objects"];
                     reply["objectsLoading"] = objects.loading() || renderer.objectAssetsPending();
+                    reply["machines"] = machines.diagnostics();
+                    reply["machines"]["labelsDrawn"] = renderer.worldLabelsDrawn;
                     if (b.acquire < 0)
                         b.acquire = fence(gl.display);
                     send(sock, reply, {b.acquire});
@@ -375,6 +379,12 @@ int main(int argc, char **argv) {
                 renderer.transforms = objects.transforms;
             }
             objects.materialize(*scene);
+            // Machines: the plugin runtime's draw state, on this world's instances.
+            if (p.contains("machines") && !p["machines"].is_null())
+                machines.apply(p["machines"], *scene);
+            machines.materialize(*scene, renderer);
+            p.erase("machines");
+            p["machinesRevision"] = machines.revision();
             // Characters: posed here from the plugin's pose inputs, uploaded before drawing.
             offload::applyCharacters(p.value("characters", Json::array()), *scene, renderer);
             renderer.prepareCharacters();

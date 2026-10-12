@@ -15,6 +15,9 @@ re-reads it), each running dev/machines/scripts/gauge-sim.py. Checks:
    machines.json averageWindowS (re-read on change) sets its window.
 4. Frames: once the scripts hold their last value and the average has caught up, nothing
    moves and no frames are forced.
+5. Offload parity (HYPRUNE_GAUGES_OFFLOAD != 0): the offload worker draws the gauges like the
+   in-process renderer, before and after a change made while it renders (a machines.json
+   rebind to this test's own source, then a published value); power-capped and short.
 Stills (close and 3 m) and, with HYPRUNE_GAUGES_RECORD=1, a 1080p clip in the state
 dir. Evidence: docs/evidence/gauges.json.
 """
@@ -285,7 +288,64 @@ def checks(client, children, source):
         p = next(i for i in user() if i['id'] == ids[g])['pose']['position']
         look([p[0], 1.15, p[2] + 1.3], [p[0], .7, p[2]]); time.sleep(.8)
         stills.append(shot(f'{g}-close.png'))
+    if os.environ.get('HYPRUNE_GAUGES_OFFLOAD', '1') != '0':
+        offload_parity(client, check, ids, p0, look, inst, out, stills)
     check('no render pass leaked', s.camera().get('renderPassesLeaked', 0) == 0, s.camera().get('renderPassesLeaked'))
     (s.ROOT / 'docs/evidence/gauges.json').write_text(json.dumps({'nestedOnly': True, 'world': WORLD, 'library': f'{LIBRARY}@{version}',
                                                                   'stills': stills, 'checks': results}, indent=2) + '\n')
     print('PASS gauges:', len(results), 'checks', flush=True)
+
+
+def offload_parity(client, check, ids, p0, look, inst, out, stills):
+    """In-process and offload stills of the held gauges agree; a change while offloaded
+    (rebind through machines.json, publish) reaches the worker and agrees again."""
+    import numpy as np
+    from PIL import Image
+    perf = lambda: client.call('graphics.get', {})['performance']
+
+    def renderer(mode):
+        client.call('graphics.set', {'patch': {'offload': mode, 'render_scale': 1, 'dynamic_resolution': False,
+                                               'offload_power_cap_w': 20}})
+        want = 'offload' if mode == 'on' else 'in-process'
+        return wait(lambda: perf()['activeRenderer'] == want, 40)
+
+    def shot(name):
+        path = out / f'gauges-offload-{name}.png'
+        subprocess.run([str(s.HERE / 'ctl.py'), 'shot', str(path)], check=True)
+        stills.append(path.name)
+        return path
+
+    def region(path):
+        img = np.asarray(Image.open(path).convert('RGB'), dtype=np.int16)
+        h, w = img.shape[:2]
+        return img[int(h * .4):int(h * .82), int(w * .1):int(w * .9)]  # the three gauges, not the world's animation
+
+    def compare(a, b):
+        d = np.abs(region(a) - region(b)).max(axis=2)
+        return {'meanLevels': round(float(d.mean()), 3), 'differing': round(float((d > 6).mean()), 5)}
+    look([p0[0], 1.45, p0[2] + 3.2], [p0[0], .75, p0[2]]); time.sleep(.6)
+    before = {}
+    for mode in ('off', 'on'):
+        renderer(mode); time.sleep(1.5)
+        before[mode] = shot('held-' + mode)
+    worker = (s.camera()['timings'].get('offload') or {}).get('worker') or {}
+    held = compare(before['off'], before['on'])
+    check('offload: no local fallback with gauges placed, the worker draws their state and labels',
+          perf()['activeRenderer'] == 'offload' and (worker.get('machines') or {}).get('states') == 3 and
+          (worker.get('machines') or {}).get('labelsDrawn', 0) >= 6, {'worker': worker.get('machines'), 'renderer': perf()['activeRenderer']})
+    check('offload draws the held gauges like the in-process renderer', held['differing'] < .01, held)
+    # A change while the worker renders: the tube reads this test's source (machines.json, re-read).
+    tube = ids['gauge-tube']
+    bindings = json.loads((s.STATE / 'machines.json').read_text())
+    bindings['instances'][tube]['source'] = 'org.hyprune.nested.gauge'
+    (s.STATE / 'machines.json').write_text(json.dumps(bindings, indent=1) + '\n')
+    values = {'value': 90, 'display': '90%', 'label': 'GPU', 'level': 'fail', 'average': 90}
+    client.call('data.publish', {'sourceId': 'org.hyprune.nested.gauge', 'sequence': int(time.time() * 1000), 'values': values, 'ttlMs': 60000})
+    wait(lambda: (lambda t: t if t['labels']['display'] == '90%' and not t['moving'] else None)(inst(tube)), 15)
+    time.sleep(.6)
+    after = {'on': shot('changed-on')}
+    renderer('off'); time.sleep(1.5)
+    after['off'] = shot('changed-off')
+    changed, moved = compare(after['off'], after['on']), compare(before['on'], after['on'])
+    check('a change made while offloaded reaches the worker and matches the in-process draw',
+          changed['differing'] < .01 and moved['differing'] > .002, {'parity': changed, 'changedVsHeld': moved})

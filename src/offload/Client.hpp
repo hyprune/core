@@ -198,6 +198,7 @@ class Client {
                         if (sendPacket(fd_, b.request)) {
                             b.phase = 1;
                             b.request.erase("objects"); // the reply carries objectsRevision instead
+                            b.request.erase("machines"); // and machinesRevision
                             if (posted)
                                 posted();
                             auto period = 1000. / std::clamp(fps, 1, 60);

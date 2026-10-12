@@ -64,6 +64,7 @@ extern "C" {
 #include "ipc/Text.hpp"
 #include "offload/Client.hpp"
 #include "offload/Characters.hpp"
+#include "offload/Machines.hpp"
 #include "offload/Objects.hpp"
 #include "offload/Supervisor.hpp"
 #include "sim/Npc.hpp"
@@ -91,6 +92,7 @@ struct Runtime {
     // World objects in the offload worker: what it has (sender mirror), the package's
     // asset count and where each later merged asset came from (catalog objects).
     offload::ObjectSender offloadObjects;
+    offload::MachineSender offloadMachines; // machine draw state (offload/Machines.hpp)
     std::vector<offload::AssetSource> mergedAssets;
     size_t packageAssets = 0;
     uint64_t worldLoads = 0; // a reload of the same world merges catalog assets anew: new worker
@@ -1394,10 +1396,9 @@ static const std::string &compositorPci() {
                                                                                          : g_pCompositor->m_drm.fd);
     return pci;
 }
-// Draw state only the in-process renderer has: development prototypes (env-gated).
+// Draw state only the in-process renderer has (none at the moment: machines travel in
+// each pose since offload/Machines.hpp).
 std::string Runtime::offloadLocalReason() const {
-    if (machines.active())
-        return "machines prototype uses local renderer";
     return "";
 }
 void Runtime::offloadTick() {
@@ -1468,10 +1469,11 @@ void Runtime::offloadPump() {
             return Json{{"clock", renderer.animationSeconds()}, {"logicalScale", renderer.logicalScale},
                         {"objects", world ? offloadObjects.delta(*world, renderer.transforms, mergedAssets, packageAssets)
                                           : Json(nullptr)},
-                        {"characters", offloadCharacters()}};
+                        {"characters", offloadCharacters()},
+                        {"machines", offloadMachines.delta(renderer)}};
         };
         offload.tick(view, renderer.graphics, renderer.profile, offloadPolicy.value("targetFPS", 30), objects,
-                     [&] { offloadObjects.commit(); });
+                     [&] { offloadObjects.commit(), offloadMachines.commit(); });
         if (!offload.connected()) {
             auto errors = offloadChanges.value("errors", Json::array());
             errors.push_back({{"generation", offloadGeneration}, {"error", offload.error}});
@@ -4257,6 +4259,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         else {
             offload.attach(params.at("fd"), offloadRequest.at("width"), offloadRequest.at("height"), offloadGeneration);
             offloadObjects.reset(packageAssets);
+            offloadMachines.reset();
         }
         return Json::object();
     }

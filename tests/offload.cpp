@@ -1,4 +1,5 @@
 #include "interaction/Config.hpp"
+#include "offload/Machines.hpp"
 #include "offload/Objects.hpp"
 #include "offload/Packet.hpp"
 #include "offload/Policy.hpp"
@@ -142,6 +143,107 @@ static void objectSync() {
     }
     assert(threw);
 }
+// Machine draw state in the worker (Machines.hpp): states, extras and labels arrive
+// change-only, relative extras rebuild bit-identical models from the worker's instances,
+// and a budget defers owners to the next pose without losing them.
+static void machineSync() {
+    using namespace offload;
+    world::World w;
+    w.objectAssets.resize(2);
+    for (float x : {1.f, 2.f, 3.f})
+        w.objectInstances.push_back({}), w.objectInstances.back().model = world::instanceModel({x, .25f, -2}, {0, .3826834f, 0, .9238795f}, 1.25f);
+    render::Renderer live, worker;
+    live.objectStates.assign(3, {});
+    auto &s = live.objectStates[1];
+    s.bound = true, s.turns = {.25, .5}, s.saturation = .3f, s.brightness = .85f;
+    s.meshes.assign(5, {});
+    s.meshes[2].painted = true, s.meshes[2].colour = {1, .55f, .08f}, s.meshes[2].emission = .45f;
+    s.meshes[3].hidden = true;
+    s.meshes[4].offset = {0, .37f, 0};
+    static const std::vector<unsigned> painted{2};
+    auto copy = [&](size_t owner, Vec3 t) {
+        world::ObjectExtra e;
+        e.asset = 1, e.node = 3, e.owner = owner, e.relative = true, e.paintMeshes = &painted, e.paint = s.meshes[2];
+        e.local.v[12] = t.x, e.local.v[13] = t.y, e.local.v[14] = t.z;
+        e.model = w.objectInstances[owner].model * e.local;
+        return e;
+    };
+    for (int i = 0; i < 100; ++i)
+        live.objectExtras.push_back(copy(1, {-.05f * (i % 10), .07f * (i / 10), 0}));
+    world::ObjectExtra fill = copy(2, {});
+    fill.local.v[5] = .61803f, fill.local.v[13] = .14f; // a scaled fill: a full matrix
+    fill.model = w.objectInstances[2].model * fill.local;
+    live.objectExtras.push_back(fill);
+    world::ObjectExtra piece; // world space (an effect piece)
+    piece.asset = 1, piece.owner = 0, piece.model = world::instanceModel({5, 6, 7}, {0, 0, 0, 1}, .5f), piece.scale = .5f;
+    live.objectExtras.push_back(piece);
+    world::WorldLabel label;
+    label.owner = 1, label.centre = {1, 2, 3}, label.right = {.2f, 0, 0}, label.up = {0, .05f, 0}, label.text = "71 GB \xe2\x97\xb7";
+    live.worldLabels.push_back(label);
+    MachineSender sender;
+    MachineReceiver receiver;
+    sender.reset();
+    auto send = [&](size_t budget = 64 * 1024) {
+        auto d = sender.delta(live, budget);
+        if (!d.is_null()) {
+            auto wire = Json::parse(Json{{"machines", d}}.dump());
+            receiver.apply(wire["machines"], w);
+            sender.commit();
+        }
+        receiver.materialize(w, worker);
+        return d;
+    };
+    auto same = [&] {
+        assert(worker.objectStates.size() == 3 && worker.objectStates[1].bound && !worker.objectStates[0].bound);
+        auto &a = live.objectStates[1], &b = worker.objectStates[1];
+        assert(a.turns == b.turns && a.saturation == b.saturation && a.brightness == b.brightness && a.meshes.size() == b.meshes.size());
+        for (size_t m = 0; m < a.meshes.size(); ++m)
+            assert(machines::paintJson(a.meshes[m]) == machines::paintJson(b.meshes[m]));
+        assert(worker.objectExtras.size() == live.objectExtras.size());
+        for (auto &e : live.objectExtras) { // owners are sent in order; draws keep their order per owner
+            auto it = std::find_if(worker.objectExtras.begin(), worker.objectExtras.end(), [&](auto &x) {
+                return x.owner == e.owner && x.model == e.model;
+            });
+            assert(it != worker.objectExtras.end() && it->asset == e.asset && it->node == e.node && it->scale == e.scale);
+            assert(machines::paintJson(it->paint) == machines::paintJson(e.paint));
+            assert((it->paintMeshes == nullptr) == (e.paintMeshes == nullptr) && (!e.paintMeshes || *it->paintMeshes == *e.paintMeshes));
+        }
+        assert(worker.worldLabels.size() == 1 && worker.worldLabels[0].text == live.worldLabels[0].text && worker.worldLabels[0].centre.z == 3);
+    };
+    auto d = send();
+    assert(!d.is_null() && d["states"]["set"].size() == 1 && d["extras"]["set"].size() == 3 && d.contains("labels"));
+    same();
+    assert(send().is_null()); // nothing changed: nothing sent
+    // A sloshing fill: only its owner travels.
+    live.objectExtras[100].local.v[5] = .6f;
+    live.objectExtras[100].model = w.objectInstances[2].model * live.objectExtras[100].local;
+    d = send();
+    assert(d["extras"]["set"].size() == 1 && d["extras"]["set"][0][0] == 2 && !d.contains("states") && !d.contains("labels"));
+    same();
+    // Backpressure: a delta not committed is sent again.
+    live.worldLabels[0].text = "72 GB";
+    d = sender.delta(live);
+    assert(!d.is_null() && d.contains("labels"));
+    d = send();
+    assert(d.contains("labels"));
+    same();
+    // A small budget defers owners; they follow in the next pose.
+    live.objectStates[1].meshes[2].emission = .5f;
+    for (auto &e : live.objectExtras)
+        if (e.owner == 1)
+            e.paint.emission = .5f;
+    live.objectExtras[101].scale = .4f;
+    d = send(64);
+    assert(d.contains("states") || d.contains("extras"));
+    for (int i = 0; i < 4 && !send(64).is_null(); ++i)
+        ;
+    same();
+    // Machines gone: everything erased.
+    live.objectStates.assign(3, {}), live.objectExtras.clear(), live.worldLabels.clear();
+    d = send();
+    assert(d["states"]["erase"].size() == 1 && d["extras"]["erase"].size() == 3 && d["labels"].empty());
+    assert(worker.objectExtras.empty() && worker.worldLabels.empty() && !worker.objectStates[1].bound);
+}
 int main(int argc, char **argv) {
     if (argc == 8 && std::string(argv[3]) == "/dev/null") {
         offload::Watchdog watchdog(std::stoi(argv[7]));
@@ -282,6 +384,7 @@ int main(int argc, char **argv) {
     std::filesystem::remove_all(directory.string() + "-objects");
     std::filesystem::remove_all(directory.string() + "-other");
     objectSync();
+    machineSync();
     int pair[2];
     assert(!socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, pair));
     int fd = open("/dev/null", O_RDONLY | O_CLOEXEC);

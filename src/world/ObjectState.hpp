@@ -31,6 +31,10 @@ struct ObjectExtra {
     int node = -1;               // asset node whose subtree is drawn; -1: the whole asset
     size_t owner = 0;            // world object instance
     Mat4 model = Mat4::identity();
+    // relative: model = owner instance model x local, exactly (the offload worker rebuilds
+    // the model from its own copy of the instance); otherwise model is world space.
+    Mat4 local = Mat4::identity();
+    bool relative = false;
     MeshPaint paint;             // applied to the meshes in paintMeshes (null: every mesh drawn)
     const std::vector<unsigned> *paintMeshes = nullptr; // asset mesh indices; owned by the machines runtime
     float scale = 1;             // uniform scale inside model, for the bounds

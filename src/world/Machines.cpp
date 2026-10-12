@@ -1386,7 +1386,8 @@ void Machines::tick(double dt, const Json &sources, int64_t nowMs, bool still) {
                 }
                 ObjectExtra e;
                 e.asset = d.asset, e.node = int(stack.node), e.owner = in.object;
-                e.model = o.model * translation({cell[0] * stack.spacing.x, cell[1] * stack.spacing.y, cell[2] * stack.spacing.z});
+                e.local = translation({cell[0] * stack.spacing.x, cell[1] * stack.spacing.y, cell[2] * stack.spacing.z});
+                e.model = o.model * e.local, e.relative = true;
                 e.scale = o.scale;
                 e.paint = paint;
                 e.paintMeshes = stack.painted.empty() ? nullptr : &stack.painted;
@@ -1411,7 +1412,8 @@ void Machines::tick(double dt, const Json &sources, int64_t nowMs, bool still) {
                 continue;
             ObjectExtra e;
             e.asset = d.asset, e.node = int(slot.node), e.owner = in.object, e.scale = o.scale;
-            e.model = o.model * translation(slot.origin) * axisScale(slot.axis, f) * translation(slot.origin * -1.f);
+            e.local = translation(slot.origin) * axisScale(slot.axis, f) * translation(slot.origin * -1.f);
+            e.model = o.model * e.local, e.relative = true;
             e.paint = paintOf(slot.painted);
             e.paintMeshes = slot.painted.empty() ? nullptr : &slot.painted;
             e.saturation = state.saturation, e.brightness = state.brightness;
@@ -1424,8 +1426,8 @@ void Machines::tick(double dt, const Json &sources, int64_t nowMs, bool still) {
             Vec3 top = slot.surfaceOrigin + slot.axis * ((f - 1) * slot.length);
             ObjectExtra surface = e;
             surface.node = slot.surface;
-            surface.model = o.model * translation(top) * animation::rotation(normalized(side), in.tilt[l]) *
-                            translation(slot.surfaceOrigin * -1.f);
+            surface.local = translation(top) * animation::rotation(normalized(side), in.tilt[l]) * translation(slot.surfaceOrigin * -1.f);
+            surface.model = o.model * surface.local;
             surface.paint = paintOf(slot.surfacePainted);
             surface.paintMeshes = slot.surfacePainted.empty() ? nullptr : &slot.surfacePainted;
             extras.push_back(surface);
@@ -1440,7 +1442,8 @@ void Machines::tick(double dt, const Json &sources, int64_t nowMs, bool still) {
                 Vec3 p = track.track.at(item.s, &tangent);
                 ObjectExtra e;
                 e.asset = d.spawns[s].asset, e.owner = in.object, e.paint = paint;
-                e.model = o.model * translation(p) * heading(tangent);
+                e.local = translation(p) * heading(tangent);
+                e.model = o.model * e.local, e.relative = true;
                 e.scale = o.scale;
                 e.saturation = state.saturation, e.brightness = state.brightness;
                 extras.push_back(e);
