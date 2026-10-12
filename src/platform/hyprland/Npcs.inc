@@ -748,7 +748,8 @@ void Runtime::npcPrompts() {
         if (auto *n = npcRun(npcInteraction->objectId)) {
             auto line = npcInteraction->lines[npcInteraction->line].get<std::string>();
             bool more = npcInteraction->line + 1 < int(npcInteraction->lines.size());
-            renderer.toolPrompt = {{"position", vecJson(above(*n))}, {"text", line + (more ? "   [E]" : "")}};
+            renderer.toolPrompt = {
+                {"position", vecJson(above(*n))}, {"text", line + (more ? "   [E]" : "")}, {"wrap", true}};
         }
         return;
     }

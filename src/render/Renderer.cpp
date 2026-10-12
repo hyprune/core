@@ -4,6 +4,7 @@
 #include "PNG.hpp"
 #include "ProgramCache.hpp"
 #include "Fsr.hpp"
+#include "TextWrap.hpp"
 #include "world/Environment.hpp"
 #include "world/Mounts.hpp"
 #include "world/Objects.hpp"
@@ -2471,6 +2472,19 @@ void Renderer::present(GLuint target, int w, int h, bool typing) {
 void Renderer::drawLabels(const std::vector<Label> &list, int w, int h) {
     for (auto &label : list) {
         float scale = std::clamp(w / 1920.f, 1.f, 2.f);
+        if (!label.lines.empty()) { // a wrapped caption: one panel, its last line at the anchor
+            float width = 0, step = 26 * scale;
+            for (auto &line : label.lines)
+                width = std::max(width, labelWidth(line, scale));
+            int n = int(label.lines.size());
+            float x = std::clamp(label.x * w, 16.f, std::max(16.f, w - width - 16));
+            float y = std::clamp(label.y * h, 16.f + (n - 1) * step, std::max(16.f + (n - 1) * step, h - 30 * scale));
+            float top = y - (n - 1) * step;
+            panel(x - 6 * scale, top - 3 * scale, width + 12 * scale, (n - 1) * step + 24 * scale);
+            for (int k = 0; k < n; ++k)
+                text(x, top + k * step, label.lines[k], label.color, w, h, scale);
+            continue;
+        }
         auto caption = label.text;
         float limit = std::min(440.f * scale, w - 32.f);
         auto measure = [&] {
@@ -2491,6 +2505,12 @@ void Renderer::drawLabels(const std::vector<Label> &list, int w, int h) {
         panel(x - 6 * scale, y - 3 * scale, width + 12 * scale, 24 * scale);
         text(x, y, caption, label.color, w, h, scale);
     }
+}
+float Renderer::labelWidth(const std::string &caption, float scale) const {
+    float n = 0;
+    for (unsigned char c : caption)
+        n += glyphs_[c >= 32 && c < 127 ? c : '?'].advance * scale;
+    return n;
 }
 void Renderer::drawGizmo(int w, int h) {
     if (!gizmoProgram_ || gizmo.empty())
@@ -3079,12 +3099,22 @@ void Renderer::worldOverlays(const sim::Camera &camera, std::span<const surfaces
         return Vec3{c[0], c[1], c[2]};
     };
     auto position = [](const world::Json &p) { return Vec3{p[0], p[1], p[2]}; };
-    auto marker = [&](Vec3 point, const std::string &label, bool waypointMarker, bool prompt) {
+    auto marker = [&](Vec3 point, const std::string &label, bool waypointMarker, bool prompt, bool wrap = false) {
         auto projected = camera.project(point, aspect);
         if (!projected.visible)
             return;
         auto labelColor = color(prompt ? "promptColor" : "labelColor");
-        labels.push_back({projected.x + 14.f / w, projected.y, label.substr(0, 128), labelColor});
+        if (wrap) { // a caption up to 160 characters (the schema's most): up to four lines over the anchor,
+                    // in a bubble wider than a label (about 46 characters a line)
+            float scale = std::clamp(w / 1920.f, 1.f, 2.f), limit = std::min(520.f * scale, w - 32.f) - 12 * scale;
+            Label l{projected.x + 14.f / w, projected.y, label.substr(0, 1024), labelColor};
+            bool cut = false;
+            l.lines =
+                wrapText(l.text, limit, [&](const std::string &s) { return labelWidth(s, scale); }, captionLines, &cut);
+            captionTruncated = cut;
+            labels.push_back(std::move(l));
+        } else
+            labels.push_back({projected.x + 14.f / w, projected.y, label.substr(0, 128), labelColor});
         if (iconTexture_ && (waypointMarker || prompt))
             icons_.push_back({projected.x, projected.y,
                               overlayStyle["iconAtlas"][prompt ? "promptIndex" : "waypointIndex"],
@@ -3137,10 +3167,14 @@ void Renderer::worldOverlays(const sim::Camera &camera, std::span<const surfaces
             marker(selected->center + selected->up() * (selected->height / 2 + .12f), "E USE / F FOCUS", false, true);
     }
     if (showInteractionHints && !toolPrompt.is_null())
-        marker(position(toolPrompt["position"]), toolPrompt["text"], false, true);
+        marker(position(toolPrompt["position"]), toolPrompt["text"], false, true, toolPrompt.value("wrap", false));
     world::Json projected = world::Json::array();
-    for (auto &label : labels)
-        projected.push_back({{"x", label.x}, {"y", label.y}, {"text", label.text}});
+    for (auto &label : labels) {
+        world::Json l{{"x", label.x}, {"y", label.y}, {"text", label.text}};
+        if (!label.lines.empty())
+            l["lines"] = label.lines, l["truncated"] = captionTruncated;
+        projected.push_back(std::move(l));
+    }
     overlayDiagnostics = {{"frame", frames + 1},   {"heading", camera.yaw},
                           {"pitch", camera.pitch}, {"areaMarkers", showAreaMarkers},
                           {"interactionHints", showInteractionHints},

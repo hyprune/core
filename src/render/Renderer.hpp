@@ -78,6 +78,9 @@ class Renderer {
         float x, y;
         std::string text;
         Vec3 color{1, 1, 1};
+        // Wrapped captions (a `say` line): drawn as these lines in one panel growing upward
+        // from (x, y); empty for the usual single-line label.
+        std::vector<std::string> lines;
     };
     std::vector<Label> labels;
     world::Json overlayStyle = overlayDefaults(), waypoint = nullptr, route = world::Json::array(),
@@ -315,6 +318,9 @@ class Renderer {
     void drawReticle(int w, int h, bool typing);
     void drawGizmo(int w, int h);
     void drawLabels(const std::vector<Label> &, int w, int h);
+    float labelWidth(const std::string &, float scale) const; // in pixels, the label font
+    static constexpr int captionLines = 4;                    // a wrapped caption's most lines
+    bool captionTruncated = false;
     GLuint gizmoProgram_ = 0, gizmoVao_ = 0, gizmoVbo_ = 0;
     void panel(float x, float y, float width, float height);
     void present(GLuint, int, int, bool);
