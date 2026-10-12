@@ -290,8 +290,8 @@ std::string Runtime::newPlacementId() const {
 void Runtime::objectNotice(const std::string &code, const std::string &message, const std::string &once) {
     if (!once.empty() && !objectNotices.insert(once).second)
         return;
-    ipc->notify("runtime.notice", {{"level", code == "object.blocked" || code == "object.missing" || code.starts_with("library.") ||
-                                                     code == "catalog.invalid"
+    ipc->notify("runtime.notice", {{"level", code == "object.blocked" || code == "object.missing" || code == "library.conflict" ||
+                                                     code == "library.invalid" || code == "catalog.invalid"
                                                  ? "warning"
                                                  : "info"},
                                    {"code", code},
@@ -554,7 +554,11 @@ std::optional<interaction::Transform> Runtime::placeAhead(const world::CatalogEn
     if (!world || asset < 0)
         return std::nullopt;
     auto &a = world->objectAssets[asset];
-    auto hit = worldHit();
+    // Objects rest on collision: the indexed collision ray (every tick while tool 5 aims),
+    // the rendered meshes only in worlds without collision.
+    auto hit = world->collision.empty()
+                   ? worldHit()
+                   : interaction::raycast(pointerCamera().position, pointerRay(), world->collision, &world->collisionIndex);
     if (!hit) {
         *why = "Aim at a surface";
         return std::nullopt;

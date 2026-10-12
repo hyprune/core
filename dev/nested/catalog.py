@@ -51,6 +51,29 @@ def prepare(installed):
 
 
 def acceptance(client, children, args, shell_token, socketpath):
+    if os.environ.get('CATALOG_STAGE') == 'probe':  # development: where does an object fit?
+        client.call('world.load', {'worldId': WORLD})
+        archive = s.STATE / ARCHIVE.name
+        client.call('libraries.install', {'archive': str(archive), 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()})
+        ref = os.environ.get('CATALOG_PROBE_REF', 'library/com.hyprune.starter@0.1.0/armillary')
+        lift = float(os.environ.get('CATALOG_PROBE_LIFT', '2.055'))
+        for z in range(-24, 16, 2):
+            row = ''
+            for x in range(-34, 26, 2):
+                try:
+                    r = client.call('objects.place', {'ref': ref, 'pose': {'position': [x, lift, z], 'rotation': [0, 0, 0, 1]}})
+                    client.call('objects.remove', {'id': r['id']}); row += 'O'
+                except RuntimeError as e:
+                    row += (e.args[0].get('data') or {}).get('rule', '?')[0]
+            print(f'probe z={z:4d}', row, flush=True)
+        return
+    if os.environ.get('CATALOG_STAGE') == 'demo':
+        s.ctl('eval', 'hl.dispatch(hl.dsp.focus({ monitor = "HEADLESS-1" }))')
+        client.call('world.load', {'worldId': WORLD})
+        s.ctl('eval', 'hl.plugin.hyprune.toggle("HEADLESS-1")')
+        wait(lambda: s.camera()['active'])
+        from catalog_demo import run
+        return run(client, children, shell_token, socketpath, s.STATE / ARCHIVE.name, WORLD)
     results = []
     out = s.STATE / 'catalog'
     shutil.rmtree(out, ignore_errors=True)
