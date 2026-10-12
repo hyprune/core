@@ -1228,5 +1228,301 @@ class HelperRenewalAndReload(unittest.TestCase):
             self.assertEqual(removed, [f"com.hyprune.sources.{n}" for n in "abc"])
 
 
+def control(path, request, timeout=20):
+    """One request on the helper's control socket; the reply (or None when it closed)."""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(timeout)
+        client.connect(str(path))
+        client.sendall(request if isinstance(request, bytes) else json.dumps(request).encode() + b"\n")
+        data = b""
+        while not data.endswith(b"\n"):
+            chunk = client.recv(65536)
+            if not chunk:
+                break
+            data += chunk
+    return json.loads(data) if data else None
+
+
+SCRIPT_JSON = "import json, sys; print(json.dumps({'a': 1, 'b': 'x', 'obj': {}})); sys.stderr.write('note\\n')"
+
+
+class HelperControl(unittest.TestCase):
+    """The control channel (README "Control channel") against a fake core."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = pathlib.Path(self.tmp.name)
+        self.process = self.core = None
+
+    def tearDown(self):
+        if self.process is not None and self.process.poll() is None:
+            self.process.kill()
+            self.process.communicate()
+        if self.core is not None:
+            self.core.close()
+        self.tmp.cleanup()
+
+    def start(self, config, token, *extra, write=True, **popen):
+        self.config = self.dir / "sources.json"
+        if write:
+            write_atomic(self.config, config)
+        self.core = FakeCore(str(self.dir / "control.sock"), token)
+        if not any(a in extra for a in ("--token-fd",)):
+            (self.dir / "token").write_text(token if isinstance(token, str) else "")
+            extra = ("--token-file", str(self.dir / "token")) + extra
+        self.process = subprocess.Popen([PY, str(HERE / "source-helper.py"), "--config", str(self.config),
+                                         "--socket", str(self.dir / "control.sock"), "-v", *extra],
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, **popen)
+        return self.process
+
+    def stop(self):
+        self.process.send_signal(signal.SIGTERM)
+        _, err = self.process.communicate(timeout=10)
+        self.assertEqual(self.process.returncode, 0, err)
+        return err
+
+    def published(self, slug, key=None):
+        return [r["params"]["values"] for r in self.core.methods("data.publish")
+                if r["params"]["sourceId"] == f"com.hyprune.sources.{slug}"
+                and (key is None or key in r["params"]["values"])]
+
+    def test_status_shape_and_test_publishes_nothing(self):
+        self.start({"sources": [
+            {"id": "cmd", "kind": "command", "argv": [PY, "-c", SCRIPT_JSON], "intervalS": 5, "timeoutS": 4},
+            {"id": "tick", "kind": "timer", "timer": "pulse", "everyS": 1},
+            {"id": "off", "kind": "command", "argv": ["true"], "intervalS": 30, "enabled": False}]}, "a1" * 32)
+        sock = self.dir / "sources.sock"
+        self.assertTrue(wait_for(lambda: sock.is_socket() and self.published("cmd") and self.published("tick")))
+        self.assertEqual(sock.stat().st_mode & 0o777, 0o600)
+        before = int(time.time() * 1000)
+        status = control(sock, {"op": "status"})
+        self.assertEqual(set(status), {"ok", "config", "connected", "configError", "sources", "limits"})
+        self.assertEqual((status["ok"], status["config"], status["connected"], status["configError"]),
+                         (True, str(self.config), True, None))
+        self.assertEqual(status["limits"]["command"], {"intervalS": [5, 86400], "devIntervalS": 1, "timeoutS": [1, 60]})
+        self.assertFalse(status["limits"]["dev"])
+        self.assertEqual(list(status["sources"]), ["cmd", "tick", "off"])
+        cmd = status["sources"]["cmd"]
+        self.assertEqual({k: cmd[k] for k in ("kind", "argv", "intervalS", "enabled", "resets")},
+                         {"kind": "command", "argv": [PY, "-c", SCRIPT_JSON], "intervalS": 5, "enabled": True,
+                          "resets": 0})
+        self.assertIsInstance(cmd["running"], bool)
+        run = cmd["lastRun"]
+        self.assertEqual(set(run), {"at", "ok", "values", "error", "exitCode", "durationMs"})
+        self.assertEqual((run["ok"], run["error"], run["exitCode"]), (True, None, 0))
+        self.assertEqual(run["values"], {"a": 1, "b": "x", "_status": "ok", "_exitCode": 0})
+        self.assertTrue(before - 10000 < run["at"] <= before and run["durationMs"] >= 0)
+        self.assertGreater(cmd["nextRunAt"], before)
+        self.assertEqual(status["sources"]["tick"]["kind"], "timer")
+        self.assertEqual(status["sources"]["off"], {"kind": "command", "argv": ["true"], "intervalS": 30,
+                                                     "enabled": False, "running": False, "lastRun": None,
+                                                     "nextRunAt": None, "resets": 0})
+
+        count = len(self.core.methods("data.publish"))
+        reply = control(sock, {"op": "test", "source": {"kind": "command", "argv": [PY, "-c", SCRIPT_JSON]}})
+        self.assertEqual(set(reply), {"ok", "values", "stdout", "stderr", "error", "exitCode", "durationMs"})
+        self.assertEqual((reply["ok"], reply["values"], reply["error"], reply["exitCode"]),
+                         (True, {"a": 1, "b": "x"}, None, 0))
+        self.assertEqual((reply["stdout"], reply["stderr"]), ('{"a": 1, "b": "x", "obj": {}}\n', "note\n"))
+        failing = control(sock, {"op": "test", "source": {"kind": "command", "output": "number", "argv": [
+            PY, "-c", "import sys; print('x' * 5000); sys.stderr.write('y' * 5000 + 'END'); sys.exit(3)"]}})
+        self.assertEqual((failing["ok"], failing["exitCode"], failing["values"]), (True, 3, {}))
+        self.assertTrue(failing["error"].startswith("exit code 3"))
+        self.assertEqual((len(failing["stdout"]), len(failing["stderr"])), (4096, 4096))
+        self.assertTrue(failing["stderr"].endswith("END"))
+        slow = control(sock, {"op": "test", "source": {"kind": "command", "timeoutS": 1, "argv": [
+            PY, "-c", "import time; print('partial', flush=True); time.sleep(30)"]}})
+        self.assertIn("timed out", slow["error"])
+        self.assertEqual((slow["stdout"], slow["exitCode"]), ("partial\n", -9))
+        self.assertLess(slow["durationMs"], 5000)
+        number = control(sock, {"op": "test", "source": {"kind": "command", "output": "number", "key": "n",
+                                                          "argv": [PY, "-c", "print(42)"]}})
+        self.assertEqual(number["values"], {"n": 42})
+        for bad in ({"kind": "command", "argv": "true"}, {"kind": "command", "argv": []},
+                    {"kind": "command", "argv": ["true", 1]}, {"kind": "timer", "timer": "pulse"},
+                    {"kind": "command", "argv": ["true"], "intervalS": 1}, "x"):
+            reply = control(sock, {"op": "test", "source": bad})
+            self.assertFalse(reply["ok"], bad)
+            self.assertIsInstance(reply["error"], str)
+        self.assertEqual([p["params"]["sourceId"] for p in self.core.methods("data.publish")[count:]
+                          if p["params"]["sourceId"].endswith(".test")], [])
+        for request, message in ((b"not json\n", "not JSON"), (b'{"op": "fly"}\n', "unknown op"),
+                                 (b"[1]\n", "needs an op"), (b"x" * (64 * 1024 + 10), "64 KiB"),
+                                 (b'{"op": "restart", "id": "nope"}\n', "no source"),
+                                 (b'{"op": "restart", "id": "off"}\n', "disabled")):
+            reply = control(sock, request)
+            self.assertEqual(reply["ok"], False)
+            self.assertIn(message, reply["error"])
+        self.stop()
+        self.assertFalse(sock.exists())  # removed on exit
+
+    def test_restart_kills_reruns_and_resets_the_average(self):
+        marker = self.dir / "runs"
+        script = ("import json, os, sys, time\n"
+                  f"path = {str(marker)!r}\n"
+                  "open(path, 'a').write(f'{os.getpid()}\\n')\n"
+                  "n = len(open(path).read().split())\n"
+                  "if n == 1: time.sleep(30)\n"
+                  "print(json.dumps({'run': n}))\n")
+        self.start({"sources": [{"id": "slow", "kind": "command", "argv": [PY, "-c", script],
+                                 "intervalS": 60, "timeoutS": 60}]}, "b2" * 32)
+        sock = self.dir / "sources.sock"
+        self.assertTrue(wait_for(lambda: marker.exists() and sock.is_socket()))
+        self.assertTrue(control(sock, {"op": "status"})["sources"]["slow"]["running"])
+        first = int(marker.read_text().split()[0])
+        started = time.monotonic()
+        self.assertEqual(control(sock, {"op": "restart", "id": "slow", "resetAverage": True}), {"ok": True})
+        self.assertTrue(wait_for(lambda: self.published("slow"), 10))
+        self.assertLess(time.monotonic() - started, 5)  # not the 30 s sleep, not the 60 s interval
+        state = pathlib.Path(f"/proc/{first}/stat")
+        self.assertTrue(not state.exists() or state.read_text().split()[2] == "Z")
+        self.assertEqual(self.published("slow")[0], {"run": 2, "_status": "ok", "_exitCode": 0, "_reset": 1})
+        status = control(sock, {"op": "status"})["sources"]["slow"]
+        self.assertEqual((status["resets"], status["lastRun"]["values"]["run"]), (1, 2))
+        count = len(self.published("slow"))
+        self.assertEqual(control(sock, {"op": "restart", "id": "com.hyprune.sources.slow"}), {"ok": True})
+        self.assertTrue(wait_for(lambda: len(self.published("slow")) > count, 10))
+        self.assertEqual(self.published("slow")[-1], {"run": 3, "_status": "ok", "_exitCode": 0, "_reset": 1})
+        self.assertEqual(control(sock, {"op": "restart", "id": "slow", "resetAverage": True}), {"ok": True})
+        self.assertTrue(wait_for(lambda: self.published("slow")[-1].get("_reset") == 2, 10))
+        values = self.published("slow")
+        self.assertTrue(all(v["_status"] == "ok" and "_reset" in v for v in values), values)  # the kill never published
+        self.assertEqual(control(sock, {"op": "restart", "id": "slow", "resetAverage": "yes"})["ok"], False)
+        self.stop()
+
+    def test_restart_all_reconnects_with_a_renewed_token(self):
+        first, second = "c3" * 32, "d4" * 32
+        supervisor, child = socket.socketpair()
+        supervisor.sendall(first.encode() + b"\n")
+        try:
+            self.start({"sources": [{"id": "tick", "kind": "timer", "timer": "pulse", "everyS": 1}]}, first,
+                       "--token-fd", str(child.fileno()), "--token-refresh", pass_fds=(child.fileno(),))
+            child.close()
+            sock = self.dir / "sources.sock"
+            self.assertTrue(wait_for(lambda: self.published("tick") and sock.is_socket()))
+            write_atomic(self.config, {"sources": [{"id": "tick", "kind": "timer", "timer": "pulse", "everyS": 1},
+                                                   {"id": "new", "kind": "timer", "timer": "pulse", "everyS": 1}]})
+            self.core.grant(second)
+            supervisor.sendall(second.encode() + b"\n")  # answers the renew the helper is about to ask for
+            self.assertEqual(control(sock, {"op": "restart-all"}), {"ok": True})
+            supervisor.settimeout(10)
+            self.assertEqual(supervisor.recv(16), b"renew\n")
+            hello = lambda: len(self.core.methods("session.hello")) >= 2
+            self.assertTrue(wait_for(lambda: hello() and self.published("new")))
+            requests = self.core.requests
+            removed = [i for i, r in enumerate(requests) if r["method"] == "data.remove"]
+            second_hello = [i for i, r in enumerate(requests) if r["method"] == "session.hello"][1]
+            self.assertEqual([requests[i]["params"]["sourceId"] for i in removed], ["com.hyprune.sources.tick"])
+            self.assertLess(removed[0], second_hello)
+            self.assertTrue(any(r["method"] == "data.publish" and r["params"]["sourceId"].endswith(".tick")
+                                for r in requests[second_hello:]))
+            self.assertTrue(control(self.dir / "sources.sock", {"op": "status"})["connected"])
+            err = self.stop()
+        finally:
+            supervisor.close()
+        self.assertEqual([h["params"].get("token") for h in self.core.methods("session.hello")], [first, second])
+        self.assertNotIn(first, err)
+        self.assertNotIn(second, err)
+
+    def test_reload_applies_an_edit_immediately(self):
+        def config(key):
+            return {"sources": [{"id": "a", "kind": "timer", "timer": "pulse", "everyS": 1, "key": key}]}
+        self.start(config("aaaa"), "e5" * 32)
+        sock = self.dir / "sources.sock"
+        self.assertTrue(wait_for(lambda: self.published("a", "aaaa") and sock.is_socket()))
+        # Same inode, size and mtime: the once-a-second check cannot see this edit.
+        info = self.config.stat()
+        text = self.config.read_text()
+        self.config.write_text(text.replace("aaaa", "bbbb"))
+        os.utime(self.config, ns=(info.st_atime_ns, info.st_mtime_ns))
+        time.sleep(1.5)
+        self.assertEqual(self.published("a", "bbbb"), [])
+        started = time.monotonic()
+        self.assertEqual(control(sock, {"op": "reload"}), {"ok": True, "added": [], "changed": ["a"], "removed": []})
+        self.assertTrue(wait_for(lambda: self.published("a", "bbbb"), 5))
+        self.assertLess(time.monotonic() - started, 1.0)
+        self.config.write_text("{")
+        reply = control(sock, {"op": "reload"})
+        self.assertFalse(reply["ok"])
+        self.assertIsNotNone(control(sock, {"op": "status"})["configError"])
+        count = len(self.published("a", "bbbb"))
+        self.assertTrue(wait_for(lambda: len(self.published("a", "bbbb")) > count, 5))  # still running
+        write_atomic(self.config, config("cccc"))
+        self.assertEqual(control(sock, {"op": "reload"})["changed"], ["a"])
+        self.assertIsNone(control(sock, {"op": "status"})["configError"])
+        self.stop()
+
+    def test_idles_without_a_config_and_starts_it_when_it_appears(self):
+        sock = self.dir / "elsewhere.sock"
+        self.start(None, "f6" * 32, "--control", str(sock), write=False)
+        self.assertTrue(wait_for(lambda: sock.is_socket() and self.core.methods("session.hello")))
+        self.assertFalse((self.dir / "sources.sock").exists())
+        status = control(sock, {"op": "status"})
+        self.assertEqual((status["sources"], status["connected"], status["configError"]), ({}, True, None))
+        self.config.write_text("")  # empty: no sources, not an error
+        time.sleep(1.5)
+        self.assertIsNone(control(sock, {"op": "status"})["configError"])
+        self.config.write_text("{not json")
+        self.assertTrue(wait_for(lambda: control(sock, {"op": "status"})["configError"], 5))
+        write_atomic(self.config, {"sources": [{"id": "late", "kind": "timer", "timer": "pulse", "everyS": 1}]})
+        self.assertTrue(wait_for(lambda: self.published("late"), 5))
+        status = control(sock, {"op": "status"})
+        self.assertEqual((list(status["sources"]), status["configError"]), (["late"], None))
+        self.assertEqual(len(self.core.methods("session.hello")), 1)  # the same connection
+        self.stop()
+
+    def test_no_control(self):
+        self.start({"sources": [{"id": "tick", "kind": "timer", "timer": "pulse", "everyS": 1}]}, "a7" * 32,
+                   "--no-control")
+        self.assertTrue(wait_for(lambda: self.published("tick")))
+        self.assertFalse((self.dir / "sources.sock").exists())
+        self.stop()
+
+
+class ControlSocket(unittest.TestCase):
+    """The control socket's own rules, in process."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = pathlib.Path(self.tmp.name) / "sources.sock"
+        self.runner = helper.Runner([], helper.DryRunPublisher(open(os.devnull, "w")), None)
+
+    def tearDown(self):
+        self.runner.publisher.stream.close()
+        self.tmp.cleanup()
+
+    def test_other_users_are_refused(self):
+        server = helper.ControlServer(str(self.path), self.runner, "/x/sources.json", uid=os.getuid() + 1)
+        self.assertTrue(server.open())
+        try:
+            self.assertEqual(control(self.path, {"op": "status"}), {"ok": False, "error": "permission denied"})
+        finally:
+            server.close()
+        server = helper.ControlServer(str(self.path), self.runner, "/x/sources.json")
+        self.assertTrue(server.open())
+        try:
+            self.assertTrue(control(self.path, {"op": "status"})["ok"])
+        finally:
+            server.close()
+
+    def test_stale_socket_is_replaced_and_other_files_are_kept(self):
+        stale = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        stale.bind(str(self.path))
+        stale.close()  # left behind, nobody listening
+        server = helper.ControlServer(str(self.path), self.runner, "/x/sources.json")
+        self.assertTrue(server.open())
+        try:
+            self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+            other = helper.ControlServer(str(self.path), self.runner, "/x/sources.json")
+            self.assertFalse(other.open())  # a live socket is never taken over
+            self.assertTrue(control(self.path, {"op": "status"})["ok"])
+        finally:
+            server.close()
+        self.assertFalse(self.path.exists())
+        self.path.write_text("not a socket")
+        self.assertFalse(helper.ControlServer(str(self.path), self.runner, "/x/sources.json").open())
+        self.assertEqual(self.path.read_text(), "not a socket")
+
+
 if __name__ == "__main__":
     unittest.main()

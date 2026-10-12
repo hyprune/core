@@ -3,7 +3,8 @@
 
 A development tool for the live-objects (machines) prototype. It runs out of process,
 connects to core's IPC socket as `com.hyprune.sources` with only the `data.publish`
-grant, and publishes one source per configured fetch. See README.md in this directory.
+grant, and publishes one source per configured fetch. A local control socket (same user
+only) reports status and tests, restarts and reloads sources. See README.md in this directory.
 Python 3 standard library only.
 """
 import argparse
@@ -21,6 +22,7 @@ import select
 import selectors
 import signal
 import socket
+import stat
 import struct
 import subprocess
 import sys
@@ -51,6 +53,7 @@ HTTP_TIMEOUT_RANGE_S, HTTP_DEFAULT_TIMEOUT_S = (1.0, 30.0), 10.0
 HTTP_JITTER = 0.10
 DEV_MIN_INTERVAL_S = 1.0  # devFastIntervals / --dev: prototype simulators only
 TIMER_MIN_INTERVAL_S, TIMER_DEFAULT_INTERVAL_S = 1.0, 1.0
+MAX_INTERVAL_S = 86400.0
 STDOUT_CAP, STDERR_KEEP, HTTP_BODY_CAP = 64 * 1024, 4 * 1024, 1024 * 1024
 BACKOFF_CAP_S = 600.0
 CONCURRENCY = 4
@@ -60,10 +63,19 @@ OUTPUTS = {"json", "number", "text", "lines"}
 TOKEN_RE = re.compile(r"[a-f0-9]{64}")
 TOKEN_READ_TIMEOUT_S = 10.0
 CONFIG_CHECK_S = 1.0  # how often the config file's mtime is checked
+META_KEYS = 4  # _status, _error, _exitCode or _httpStatus, _reset
+CONTROL_REQUEST_CAP = 64 * 1024
+CONTROL_OUTPUT_CAP = 4 * 1024
+CONTROL_CONNECTIONS, CONTROL_TESTS = 16, 2
+CONTROL_REPLY_TIMEOUT_S = 30.0
 
 
 class ConfigError(Exception):
     pass
+
+
+class ConfigMissing(ConfigError):
+    """The config file does not exist: the helper idles until it appears."""
 
 
 class PollError(Exception):
@@ -73,6 +85,7 @@ class PollError(Exception):
         super().__init__(message)
         self.meta = meta or {}
         self.retry_after = retry_after
+        self.stdout, self.stderr = b"", ""  # what a command printed before it failed
 
 
 class FieldError(Exception):
@@ -360,12 +373,28 @@ def _check_fields(fields, label):
             raise ConfigError(f"{label}: field {name!r} default must be a scalar")
 
 
+def empty_config(dev=False):
+    """No sources: what the helper runs with until a config file appears."""
+    return {"client": {"id": DEFAULT_CLIENT_ID, "name": DEFAULT_CLIENT_NAME}, "protocol": DEFAULT_PROTOCOL,
+            "dev": dev, "sources": [], "disabled": []}
+
+
 def load_config(path, dev=False):
+    """The parsed config. An empty file, or one without a sources list, has no sources.
+    Raises ConfigMissing when the file does not exist, ConfigError when it is invalid."""
     path = pathlib.Path(path)
     try:
-        config = json.loads(path.read_text())
+        text = path.read_text()
+    except FileNotFoundError:
+        raise ConfigMissing(f"{path}: no such file") from None
     except (OSError, ValueError) as error:
         raise ConfigError(f"{path}: {error}") from None
+    try:
+        config = json.loads(text) if text.strip() else {}
+    except ValueError as error:
+        raise ConfigError(f"{path}: {error}") from None
+    if isinstance(config, dict) and "sources" not in config:
+        config = {**config, "sources": []}
     if not isinstance(config, dict) or not isinstance(config.get("sources"), list):
         raise ConfigError(f"{path}: expected an object with a sources list")
     client = config.get("client", {})
@@ -374,7 +403,7 @@ def load_config(path, dev=False):
         raise ConfigError(f"client id {client_id!r} is not a dotted lower-case id")
     dev = dev or config.get("devFastIntervals") is True
     base = path.resolve().parent
-    sources, seen = [], set()
+    sources, disabled, seen = [], [], set()
     for spec in config["sources"]:
         if not isinstance(spec, dict):
             raise ConfigError("each source must be an object")
@@ -386,12 +415,14 @@ def load_config(path, dev=False):
             raise ConfigError(f"{label}: duplicate id")
         seen.add(slug)
         if spec.get("enabled", True) is False:
+            disabled.append(spec)
             continue
         sources.append(SourceSpec(spec, client_id, base, dev))
     if len(sources) > MAX_SOURCES:
         raise ConfigError(f"at most {MAX_SOURCES} sources")
     return {"client": {"id": client_id, "name": client.get("name", DEFAULT_CLIENT_NAME)},
-            "protocol": str(config.get("protocol", DEFAULT_PROTOCOL)), "dev": dev, "sources": sources}
+            "protocol": str(config.get("protocol", DEFAULT_PROTOCOL)), "dev": dev, "sources": sources,
+            "disabled": disabled}
 
 
 class SourceSpec:
@@ -490,6 +521,8 @@ class SourceSpec:
         if self.interval < floor:
             hint = "" if dev else " (devFastIntervals allows 1 s for prototype simulators)"
             raise ConfigError(f"{label}: intervalS must be at least {floor:g}{hint}")
+        if self.interval > MAX_INTERVAL_S:
+            raise ConfigError(f"{label}: intervalS must be at most {MAX_INTERVAL_S:g}")
         if self.kind != "timer" and not lo <= self.timeout <= hi:
             raise ConfigError(f"{label}: timeoutS must be within {lo:g}-{hi:g}")
         ttl = spec.get("ttlMs", int(min(TTL_MAX_MS, max(TTL_MIN_MS, self.interval * 10000))))
@@ -544,10 +577,35 @@ def _killpg(pid):
         pass
 
 
-def run_command(argv, cwd, env, timeout, stdout_cap=STDOUT_CAP, stderr_keep=STDERR_KEEP, processes=PROCESSES):
+class ProcessSlot:
+    """The process group a source's command is running in, so a restart can kill it."""
+
+    def __init__(self):
+        self.lock, self.process = threading.Lock(), None
+
+    def started(self, process):
+        with self.lock:
+            self.process = process
+
+    def finished(self):
+        with self.lock:
+            self.process = None
+
+    def kill(self):
+        """Kill the running group. True when there was one."""
+        with self.lock:
+            if self.process is None or self.process.returncode is not None:
+                return False
+            _killpg(self.process.pid)
+            return True
+
+
+def run_command(argv, cwd, env, timeout, stdout_cap=STDOUT_CAP, stderr_keep=STDERR_KEEP, processes=PROCESSES,
+                slot=None):
     """Run without a shell in a new process group. Returns (code, stdout, stderr_tail).
 
-    Raises PollError on a timeout (the group is killed) or stdout over the cap."""
+    Raises PollError on a timeout (the group is killed) or stdout over the cap; the error
+    carries what was read (`stdout`, `stderr`)."""
     environment = dict(os.environ)
     environment.update(env)
     try:
@@ -556,6 +614,8 @@ def run_command(argv, cwd, env, timeout, stdout_cap=STDOUT_CAP, stderr_keep=STDE
     except OSError as error:
         raise PollError(f"cannot run {pathlib.Path(argv[0]).name}: {error.strerror or error}") from None
     processes.add(process.pid)
+    if slot is not None:
+        slot.started(process)
     out, err = bytearray(), bytearray()
     deadline = time.monotonic() + timeout
     problem = None
@@ -588,8 +648,12 @@ def run_command(argv, cwd, env, timeout, stdout_cap=STDOUT_CAP, stderr_keep=STDE
         if problem is not None:
             _killpg(process.pid)
             process.wait()
-            raise PollError(problem, {"_exitCode": process.returncode})
+            error = PollError(problem, {"_exitCode": process.returncode})
+            error.stdout, error.stderr = bytes(out[:stdout_cap]), bytes(err).decode("utf-8", "replace")
+            raise error
     finally:
+        if slot is not None:
+            slot.finished()
         processes.discard(process.pid)
         process.stdout.close()
         process.stderr.close()
@@ -599,8 +663,13 @@ def run_command(argv, cwd, env, timeout, stdout_cap=STDOUT_CAP, stderr_keep=STDE
     return process.returncode, bytes(out), bytes(err).decode("utf-8", "replace")
 
 
-def command_values(spec):
-    code, out, err = run_command(spec.argv, spec.cwd, spec.env, spec.timeout)
+def command_values(spec, slot=None):
+    code, out, err = run_command(spec.argv, spec.cwd, spec.env, spec.timeout, slot=slot)
+    return interpret_command(spec, code, out, err)
+
+
+def interpret_command(spec, code, out, err):
+    """A finished command's (values, field errors, metadata). Raises PollError."""
     if err.strip():
         log.debug("%s stderr: %s", spec.label, err.strip()[-500:])
     meta = {"_exitCode": code}
@@ -731,10 +800,10 @@ def timer_values(spec, now=None):
     return {spec.key: max(0, math.ceil(until - now))}, [], {}
 
 
-def poll(spec):
+def poll(spec, slot=None):
     """One fetch: (values, field errors, metadata). Raises PollError."""
     if spec.kind == "command":
-        return command_values(spec)
+        return command_values(spec, slot)
     if spec.kind == "http":
         return http_values(spec)
     return timer_values(spec)
@@ -754,6 +823,11 @@ class Source:
         self.published = None        # last values published on the current connection
         self.published_at = None     # monotonic time of that publication
         self.retry_at = 0.0          # earliest publish attempt after a refusal
+        self.slot = ProcessSlot()    # the running command, for a restart
+        self.discard = False         # a restart killed the running fetch: ignore its result
+        self.rerun = False           # a restart came while an uninterruptible fetch ran
+        self.resets = 0              # resetAverage requests, published as _reset when > 0
+        self.last_run = None         # the last finished fetch, for the control channel's status
 
     def interval(self, rnd=random):
         jitter = HTTP_JITTER if self.spec.kind == "http" else 0.0
@@ -761,7 +835,7 @@ class Source:
 
     def succeeded(self, values, errors, meta, rnd=random):
         label = self.spec.label
-        limit = MAX_KEYS - 3
+        limit = MAX_KEYS - META_KEYS
         clean = clean_values(values, limit, label)
         for name, value in clean.items():
             if any(f.get("name") == name and f.get("type") == "counter" for f in self.spec.fields or []):
@@ -797,7 +871,17 @@ class Source:
         log.warning("%s: %s (attempt %d, next in %.1f s)", self.spec.label, message, self.failures, delay)
 
     def publication(self):
-        return {**self.values, **self.meta}
+        values = {**self.values, **self.meta}
+        if self.resets:
+            values["_reset"] = self.resets
+        return values
+
+    def record_run(self, duration_ms):
+        meta = self.meta
+        self.last_run = {"at": int(time.time() * 1000), "ok": meta.get("_status") == "ok",
+                         "values": self.publication(),
+                         "error": meta.get("_error"), "exitCode": meta.get("_exitCode"),
+                         "durationMs": int(round(duration_ms))}
 
     def due_publication(self, now):
         """The values to publish now, or None: on change, or as a keep-alive at ttl/2."""
@@ -988,6 +1072,9 @@ class Publisher:
         self.connection, self.reconnects = connection, 0
         return True
 
+    def reset_backoff(self):
+        self.reconnect_at, self.reconnects = 0.0, 0
+
     def drop(self, now, reason):
         if self.connection:
             log.warning("connection lost: %s", reason)
@@ -1071,6 +1158,9 @@ class DryRunPublisher:
     def connect(self, now):
         return False
 
+    def reset_backoff(self):
+        pass
+
     def publish(self, source, values, now):
         sequence = source.sequence.next()
         self.stream.write(json.dumps({"sourceId": source.spec.source_id, "sequence": sequence,
@@ -1107,11 +1197,25 @@ def _file_signature(path):
 class ConfigWatcher:
     """Re-reads the config file when it changes (checked about once a second)."""
 
-    def __init__(self, path, config, dev=False, clock=time.monotonic):
+    def __init__(self, path, config, dev=False, clock=time.monotonic, error=None):
         self.path, self.dev, self.clock = path, dev, clock
         self.client, self.protocol = config["client"], config["protocol"]
         self.signature = _file_signature(path)
         self.check_at = clock() + CONFIG_CHECK_S
+        self.error = error  # why the current file is not in use (invalid), or None
+
+    def _load(self, warn=True):
+        try:
+            config = load_config(self.path, self.dev)
+        except ConfigMissing:
+            raise
+        except ConfigError as error:
+            self.error = str(error)
+            raise
+        self.error = None
+        if warn and (config["client"]["id"] != self.client["id"] or config["protocol"] != self.protocol):
+            log.warning("client id and protocol changes apply after a restart (or restart-all)")
+        return config
 
     def changed(self, now):
         """A newly loaded config when the file changed and is valid, else None."""
@@ -1123,31 +1227,79 @@ class ConfigWatcher:
             return None  # a missing file (mid-save, or removed) keeps the running sources
         self.signature = signature
         try:
-            config = load_config(self.path, self.dev)
+            return self._load()
+        except ConfigMissing:
+            return None
         except ConfigError as error:
             log.error("config not reloaded, keeping the running sources: %s", error)
             return None
-        if config["client"]["id"] != self.client["id"] or config["protocol"] != self.protocol:
-            log.warning("client id and protocol changes apply after a restart")
-        return config
+
+    def load_now(self, warn=True):
+        """Re-read the file now (the control channel's reload and restart-all). Raises ConfigError."""
+        self.signature = _file_signature(self.path)
+        self.check_at = self.clock() + CONFIG_CHECK_S
+        return self._load(warn)
+
+    def adopt(self, config):
+        """restart-all reconnected with this config's client id and protocol."""
+        self.client, self.protocol = config["client"], config["protocol"]
+
+
+def _plain(number):
+    """A whole float as an int, for JSON replies."""
+    return int(number) if isinstance(number, float) and number.is_integer() else number
+
+
+def limits(dev):
+    """The interval and timeout bounds the helper enforces (the control channel's status)."""
+    return {"dev": dev,
+            "command": {"intervalS": [_plain(DEV_MIN_INTERVAL_S if dev else COMMAND_MIN_INTERVAL_S),
+                                      _plain(MAX_INTERVAL_S)],
+                        "devIntervalS": _plain(DEV_MIN_INTERVAL_S),
+                        "timeoutS": [_plain(v) for v in COMMAND_TIMEOUT_RANGE_S]},
+            "http": {"intervalS": [_plain(DEV_MIN_INTERVAL_S if dev else HTTP_MIN_INTERVAL_S), _plain(MAX_INTERVAL_S)],
+                     "loopbackIntervalS": _plain(DEV_MIN_INTERVAL_S if dev else HTTP_LOOPBACK_MIN_INTERVAL_S),
+                     "timeoutS": [_plain(v) for v in HTTP_TIMEOUT_RANGE_S]},
+            "timer": {"intervalS": [_plain(TIMER_MIN_INTERVAL_S), _plain(MAX_INTERVAL_S)]}}
+
+
+def tail_utf8(text, limit):
+    """The last `limit` bytes of a text, on a character boundary."""
+    data = text.encode("utf-8")
+    return text if len(data) <= limit else data[-limit:].decode("utf-8", "ignore")
+
+
+DEFAULT_INTERVALS = {"command": COMMAND_DEFAULT_INTERVAL_S, "http": HTTP_DEFAULT_INTERVAL_S,
+                     "timer": TIMER_DEFAULT_INTERVAL_S}
+
+
+def _failure(message):
+    return {"ok": False, "error": message}
 
 
 class Runner:
-    def __init__(self, sources, publisher, watcher=None):
+    def __init__(self, sources, publisher, watcher=None, disabled=(), dev=False, protocol=None):
         self.sources = sources
         self.publisher = publisher
         self.watcher = watcher
-        self.results = queue.Queue()
+        self.disabled = list(disabled)   # disabled entries (raw), listed by status
+        self.dev = dev
+        self.protocol = protocol         # --protocol: overrides the config's on restart-all
+        self.results = queue.Queue()     # fetch results and control requests, in order
         self.jobs = queue.Queue()
         self.stopping = threading.Event()
         self.was_connected = False
         self.retired = []  # removed sources still to be withdrawn with data.remove
+        self.tests = threading.BoundedSemaphore(CONTROL_TESTS)
         for _ in range(CONCURRENCY if watcher else min(CONCURRENCY, max(1, len(sources)))):
             threading.Thread(target=self._worker, daemon=True).start()
 
-    def apply(self, specs):
+    def apply(self, specs, disabled=None):
         """Switch to a new list of source specs: added sources start, removed ones are
-        withdrawn (data.remove), changed ones restart. Unchanged sources keep running."""
+        withdrawn (data.remove), changed ones restart. Unchanged sources keep running.
+        Returns the slugs added, changed and removed."""
+        if disabled is not None:
+            self.disabled = list(disabled)
         current = {source.spec.source_id: source for source in self.sources}
         wanted = {spec.source_id for spec in specs}
         sources, added, changed = [], [], []
@@ -1160,6 +1312,7 @@ class Runner:
             if old is not None:
                 source.sequence.floor(old.sequence.last)
                 source.published, source.published_at = old.published, old.published_at
+                source.resets = old.resets
                 changed.append(spec.slug)
             else:
                 added.append(spec.slug)
@@ -1174,6 +1327,11 @@ class Runner:
                 "removed " + ", ".join(s.spec.slug for s in removed) if removed else "") if part))
         else:
             log.info("config reloaded: no source changes")
+        return {"added": added, "changed": changed, "removed": [s.spec.slug for s in removed]}
+
+    def apply_config(self, config):
+        self.dev = config["dev"]
+        return self.apply(config["sources"], config.get("disabled", []))
 
     def _withdraw(self):
         if not self.retired:
@@ -1194,37 +1352,52 @@ class Runner:
             source = self.jobs.get()
             if source is None:
                 return
+            start = time.monotonic()
             try:
-                result = ("ok", poll(source.spec))
+                result = ("ok", poll(source.spec, source.slot))
             except PollError as error:
                 result = ("error", error)
             except Exception as error:  # a bug in a fetcher must not stop the helper
                 log.exception("%s: unexpected failure", source.spec.label)
                 result = ("error", PollError(f"internal error: {type(error).__name__}"))
-            self.results.put((source, result))
+            self.results.put((source, result, (time.monotonic() - start) * 1000))
 
     def stop(self):
         # Safe from a signal handler: only an Event (the loop wakes at least every 0.25 s).
         self.stopping.set()
 
     def _handle(self, item):
-        source, (status, payload) = item
+        source, result, duration_ms = item
+        if source is None:
+            self._control(result)
+            return
         source.running = False
+        if source.discard:  # killed by a restart: run again now, the result does not count
+            source.discard = False
+            source.next_due = source.clock()
+            return
+        status, payload = result
         if status == "ok":
             source.succeeded(*payload)
         else:
             source.failed(payload)
+        source.record_run(duration_ms)
+        if source.rerun:
+            source.rerun = False
+            source.next_due = source.clock()
 
     def step(self, now):
         """Dispatch due fetches and publications; returns the next wake time."""
         if self.watcher:
             config = self.watcher.changed(now)
             if config is not None:
-                self.apply(config["sources"])
+                self.apply_config(config)
         for source in self.sources:
             if not source.running and now >= source.next_due:
                 if source.spec.kind == "timer":  # no I/O: computed inline
+                    start = time.monotonic()
                     source.succeeded(*poll(source.spec))
+                    source.record_run((time.monotonic() - start) * 1000)
                 else:
                     source.running = True
                     self.jobs.put(source)
@@ -1271,6 +1444,334 @@ class Runner:
                     break
         PROCESSES.kill_all()
         self.publisher.remove_all(self.retired + self.sources)
+        while True:  # answer control requests that arrived while stopping
+            try:
+                source, job, _ = self.results.get_nowait()
+            except queue.Empty:
+                break
+            if source is None:
+                job["reply"] = _failure("the helper is stopping")
+                job["done"].set()
+
+    # --- control channel (README "Control channel") ------------------------------------
+
+    def submit(self, request):
+        """From a control connection: run a request on the loop thread and wait for its reply."""
+        if self.stopping.is_set():
+            return _failure("the helper is stopping")
+        job = {"request": request, "done": threading.Event(), "reply": None}
+        self.results.put((None, job, 0))
+        if not job["done"].wait(CONTROL_REPLY_TIMEOUT_S):
+            return _failure("the helper is busy; try again")
+        return job["reply"]
+
+    def _control(self, job):
+        request = job["request"]
+        operations = {"restart": self._restart, "restart-all": self._restart_all, "reload": self._reload}
+        try:
+            reply = operations[request["op"]](request)
+        except Exception as error:
+            log.exception("control %s failed", request.get("op"))
+            reply = _failure(f"internal error: {type(error).__name__}")
+        job["reply"] = reply
+        job["done"].set()
+
+    def _restart(self, request):
+        ident, reset = request.get("id"), request.get("resetAverage", False)
+        if not isinstance(ident, str) or not ident:
+            return _failure("restart needs an id")
+        if not isinstance(reset, bool):
+            return _failure("resetAverage must be true or false")
+        source = next((s for s in self.sources if ident in (s.spec.slug, s.spec.source_id)), None)
+        if source is None:
+            if any(entry.get("id") == ident for entry in self.disabled):
+                return _failure(f"source {ident!r} is disabled")
+            return _failure(f"no source {ident!r}")
+        if reset:
+            source.resets += 1
+        source.failures = 0
+        if source.running:
+            if source.slot.kill():
+                source.discard = True  # its result is dropped; it runs again when it ends
+            else:
+                source.rerun = True    # an HTTP fetch: let it finish, then run again
+        else:
+            source.next_due = source.clock()
+        log.info("%s: restarted%s", source.spec.label, " (average reset)" if reset else "")
+        return {"ok": True}
+
+    def _reload(self, request):
+        if self.watcher is None:
+            return _failure("no config file")
+        try:
+            config = self.watcher.load_now()
+        except ConfigError as error:
+            log.error("config not reloaded, keeping the running sources: %s", error)
+            return _failure(str(error))
+        return {"ok": True, **self.apply_config(config)}
+
+    def _restart_all(self, request):
+        config, problem = None, None
+        if self.watcher is not None:
+            try:
+                config = self.watcher.load_now(warn=False)
+            except ConfigError as error:
+                problem = str(error)
+                log.error("restart-all: config not read, restarting the running sources: %s", error)
+        for source in self.sources:
+            if source.running and source.slot.kill():
+                source.discard = True
+        self.publisher.remove_all(self.retired + self.sources)  # data.remove each, then close
+        self.retired = []
+        previous = {source.spec.source_id: source for source in self.sources}
+        if config is not None:
+            self.dev, self.disabled = config["dev"], list(config["disabled"])
+            if isinstance(self.publisher, Publisher):
+                self.publisher.client = config["client"]
+                self.publisher.protocol = self.protocol or config["protocol"]
+            self.watcher.adopt(config)
+            specs = config["sources"]
+        else:
+            specs = [source.spec for source in self.sources]
+        sources = []
+        for spec in specs:
+            source, old = Source(spec), previous.get(spec.source_id)
+            if old is not None:
+                source.sequence.floor(old.sequence.last)
+                source.resets = old.resets
+            sources.append(source)
+        self.sources = sources
+        self.publisher.reset_backoff()
+        self.was_connected = False
+        log.info("restart-all: %d source(s); reconnecting", len(sources))
+        return {"ok": True, **({"configError": problem} if problem else {})}
+
+    def status(self, config_path):
+        """Read from a control connection's thread: every field is replaced, never mutated."""
+        wall, mono = time.time(), time.monotonic()
+        entries = {}
+        for source in list(self.sources):
+            spec, running = source.spec, source.running
+            entry = {"kind": spec.kind}
+            if spec.kind == "command":
+                entry["argv"] = list(spec.argv)
+            elif spec.kind == "http":
+                entry["url"] = spec.url
+            entry.update({"intervalS": _plain(spec.interval), "enabled": True, "running": running,
+                          "lastRun": source.last_run,
+                          "nextRunAt": None if running else int((wall + max(0.0, source.next_due - mono)) * 1000),
+                          "resets": source.resets})
+            entries[spec.slug] = entry
+        for raw in list(self.disabled):
+            kind = raw.get("kind")
+            entry = {"kind": kind}
+            for key in ("argv", "url"):
+                if key in raw:
+                    entry[key] = raw[key]
+            entry.update({"intervalS": raw.get("intervalS", _plain(DEFAULT_INTERVALS.get(kind, 0)) or None),
+                          "enabled": False, "running": False, "lastRun": None, "nextRunAt": None, "resets": 0})
+            entries[raw["id"]] = entry
+        return {"ok": True, "config": config_path, "connected": self.publisher.connected(),
+                "configError": self.watcher.error if self.watcher else None,
+                "sources": entries, "limits": limits(self.dev)}
+
+    def test(self, source, config_path):
+        """Run a source definition once with the helper's rules; publish nothing."""
+        if not isinstance(source, dict):
+            return _failure("test needs a source object")
+        kind = source.get("kind")
+        if kind not in ("command", "http"):
+            return _failure("test runs command and http sources only")
+        if kind == "command":
+            argv = source.get("argv")
+            if not isinstance(argv, list) or not argv or not all(isinstance(a, str) and a for a in argv):
+                return _failure("argv must be a non-empty list of strings")
+        definition = {key: value for key, value in source.items() if key not in ("id", "enabled")}
+        client = self.watcher.client["id"] if self.watcher else DEFAULT_CLIENT_ID
+        try:
+            spec = SourceSpec({**definition, "id": "test"}, client, pathlib.Path(config_path).resolve().parent,
+                              self.dev)
+        except ConfigError as error:
+            return _failure(str(error).removeprefix("source 'test': "))
+        if not self.tests.acquire(blocking=False):
+            return _failure("another test is running")
+        stdout, stderr, code, values, error = b"", "", None, {}, None
+        start = time.monotonic()
+        try:
+            if kind == "command":
+                code, stdout, stderr = run_command(spec.argv, spec.cwd, spec.env, spec.timeout)
+                values, errors, _ = interpret_command(spec, code, stdout, stderr)
+            else:
+                values, errors, _ = http_values(spec)
+            values = clean_values(values, MAX_KEYS - META_KEYS, "test")
+            if errors:
+                error = sanitize_error("; ".join(errors), spec.secrets)
+        except PollError as failure:
+            error = sanitize_error(str(failure), spec.secrets)
+            code = failure.meta.get("_exitCode", code)
+            stdout, stderr = stdout or failure.stdout, stderr or failure.stderr
+        finally:
+            self.tests.release()
+        return {"ok": True, "values": values,
+                "stdout": truncate_utf8(stdout.decode("utf-8", "replace"), CONTROL_OUTPUT_CAP),
+                "stderr": tail_utf8(stderr, CONTROL_OUTPUT_CAP), "error": error, "exitCode": code,
+                "durationMs": int(round((time.monotonic() - start) * 1000))}
+
+
+class ControlServer:
+    """The local control channel: newline-delimited JSON over a Unix socket (mode 0600,
+    same-uid peers only). One request line, one reply line. See README "Control channel"."""
+
+    def __init__(self, path, runner, config_path, uid=None):
+        self.path, self.runner, self.config_path = path, runner, config_path
+        self.uid = os.getuid() if uid is None else uid
+        self.listener, self.inode = None, None
+        self.lock, self.clients = threading.Lock(), set()
+
+    def open(self):
+        """Bind the socket. False (logged; the helper runs without it) when that is not possible."""
+        path = self.path
+        try:
+            info = os.lstat(path)
+        except FileNotFoundError:
+            info = None
+        except OSError as error:
+            log.error("control socket %s: %s; control channel off", path, error.strerror)
+            return False
+        if info is not None:
+            if not stat.S_ISSOCK(info.st_mode):
+                log.error("control socket %s: something that is not a socket is in the way; control channel off", path)
+                return False
+            probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            probe.settimeout(1.0)
+            try:
+                probe.connect(path)
+                alive = True
+            except OSError:
+                alive = False
+            finally:
+                probe.close()
+            if alive:
+                log.error("control socket %s is served by another process; control channel off", path)
+                return False
+            try:
+                os.unlink(path)  # a stale socket left by a helper that did not exit cleanly
+            except FileNotFoundError:
+                pass
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        mask = os.umask(0o177)
+        try:
+            listener.bind(path)
+            os.chmod(path, 0o600)
+            listener.listen(8)
+            self.inode = os.stat(path).st_ino
+        except OSError as error:
+            listener.close()
+            log.error("control socket %s: %s; control channel off", path, error.strerror or error)
+            return False
+        finally:
+            os.umask(mask)
+        self.listener = listener
+        threading.Thread(target=self._accept, daemon=True).start()
+        log.info("control channel at %s", path)
+        return True
+
+    def _accept(self):
+        while True:
+            try:
+                connection, _ = self.listener.accept()
+            except OSError:
+                return
+            threading.Thread(target=self._serve, args=(connection,), daemon=True).start()
+
+    def _peer_ok(self, connection):
+        try:
+            credentials = connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
+        except OSError:
+            return False
+        _pid, uid, _gid = struct.unpack("3i", credentials)
+        return uid == self.uid
+
+    @staticmethod
+    def _send(connection, reply):
+        connection.sendall(json.dumps(reply, separators=(",", ":")).encode() + b"\n")
+
+    def _serve(self, connection):
+        with self.lock:
+            full = len(self.clients) >= CONTROL_CONNECTIONS
+            if not full:
+                self.clients.add(connection)
+        try:
+            if full:
+                self._send(connection, _failure("too many control connections"))
+                return
+            if not self._peer_ok(connection):
+                log.warning("control: refused a connection from another user")
+                self._send(connection, _failure("permission denied"))
+                return
+            buffer = b""
+            while True:
+                data = connection.recv(65536)
+                if not data:
+                    return
+                buffer += data
+                while b"\n" in buffer:
+                    line, buffer = buffer.split(b"\n", 1)
+                    if len(line) > CONTROL_REQUEST_CAP:
+                        self._send(connection, _failure("request over 64 KiB"))
+                        return
+                    if line.strip():
+                        self._send(connection, self.handle(line))
+                if len(buffer) > CONTROL_REQUEST_CAP:
+                    self._send(connection, _failure("request over 64 KiB"))
+                    return
+        except OSError:
+            pass
+        finally:
+            with self.lock:
+                self.clients.discard(connection)
+            connection.close()
+
+    def handle(self, line):
+        try:
+            request = json.loads(line)
+        except (ValueError, UnicodeDecodeError):
+            return _failure("request is not JSON")
+        if not isinstance(request, dict) or not isinstance(request.get("op"), str):
+            return _failure("request needs an op")
+        op = request["op"]
+        try:
+            if op == "status":
+                return self.runner.status(self.config_path)
+            if op == "test":
+                return self.runner.test(request.get("source"), self.config_path)
+            if op in ("restart", "restart-all", "reload"):
+                return self.runner.submit(request)
+        except Exception as error:
+            log.exception("control %s failed", op)
+            return _failure(f"internal error: {type(error).__name__}")
+        return _failure(f"unknown op {op!r}")
+
+    def close(self):
+        if self.listener is None:
+            return
+        try:
+            self.listener.shutdown(socket.SHUT_RDWR)  # wakes the accepting thread
+        except OSError:
+            pass
+        self.listener.close()
+        with self.lock:
+            for connection in list(self.clients):
+                try:
+                    connection.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+        try:
+            if os.stat(self.path).st_ino == self.inode:  # never remove a successor's socket
+                os.unlink(self.path)
+        except OSError:
+            pass
+        self.listener = None
 
 
 def run_once(sources, stream=sys.stdout):
@@ -1307,6 +1808,10 @@ def main(argv=None):
                         default=os.environ.get("HYPRUNE_TOKEN_REFRESH") == "1",
                         help="with --token-fd: write 'renew' to the descriptor for each reconnection's token "
                              "(default from HYPRUNE_TOKEN_REFRESH=1)")
+    control = parser.add_mutually_exclusive_group()
+    control.add_argument("--control", metavar="PATH",
+                         help="control socket (default: sources.sock in the directory of --socket)")
+    control.add_argument("--no-control", action="store_true", help="no control socket")
     parser.add_argument("--protocol", help=f"IPC protocol to offer (default: config, else {DEFAULT_PROTOCOL})")
     parser.add_argument("--dev", action="store_true",
                         help="prototype only: allow 1 s intervals (same as devFastIntervals)")
@@ -1319,11 +1824,21 @@ def main(argv=None):
     args.config = args.config or default_config_path()
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG if args.verbose else logging.INFO,
                         format="source-helper: %(levelname)s %(message)s")
+    config_error = None
     try:
         config = load_config(args.config, args.dev)
+    except ConfigMissing as error:
+        if args.once:
+            log.error("%s", error)
+            return 2
+        log.info("%s; idle until it appears", error)
+        config = empty_config(args.dev)
     except ConfigError as error:
-        log.error("%s", error)
-        return 2
+        if args.once:
+            log.error("%s", error)
+            return 2
+        log.error("%s; idle until the file is valid", error)
+        config, config_error = empty_config(args.dev), str(error)
     if config["dev"]:
         log.info("devFastIntervals: 1 s intervals allowed (prototype simulators only)")
     if args.once:
@@ -1345,8 +1860,17 @@ def main(argv=None):
             log.warning("no launch token: core will not grant data.publish")
         publisher = Publisher(args.socket, TokenSource(args.token_file, token, args.token_fd, args.token_refresh),
                               config["client"], args.protocol or config["protocol"])
-    watcher = ConfigWatcher(args.config, config, args.dev)
-    runner = Runner([Source(spec) for spec in config["sources"]], publisher, watcher)
+    watcher = ConfigWatcher(args.config, config, args.dev, error=config_error)
+    runner = Runner([Source(spec) for spec in config["sources"]], publisher, watcher,
+                    disabled=config["disabled"], dev=config["dev"], protocol=args.protocol)
+    control_path = args.control
+    if control_path is None and not args.no_control and args.socket and not args.dry_run:
+        control_path = os.path.join(os.path.dirname(os.path.abspath(args.socket)), "sources.sock")
+    server = None
+    if control_path and not args.no_control:
+        server = ControlServer(control_path, runner, os.path.abspath(args.config))
+        if not server.open():
+            server = None
     for number in (signal.SIGTERM, signal.SIGINT):
         signal.signal(number, lambda *_: runner.stop())
     try:
@@ -1354,6 +1878,9 @@ def main(argv=None):
     except BrokenPipeError:  # --dry-run piped into a reader that went away
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         return 1
+    finally:
+        if server is not None:
+            server.close()
     return 0
 
 
