@@ -123,8 +123,10 @@ def acceptance(client,children,args,shell_token,socketpath):
  stage(surface['id']);use();marker2=s.STATE/'typed.txt';marker2.unlink(missing_ok=True);keys(f"printf 'virtual cursor input\\n' > {marker2}");keys('-k','Return');wait(lambda:marker2.exists() and marker2.read_text()=='virtual cursor input\n');check('virtual_cursor_typing',marker2.read_text()=='virtual cursor input\n')
  nav();[client.call('surface.return',{'surfaceId':v['id']}) for v in state()['surfaces'] if v['kind']=='window'];pose(client,[0,3,-7]);keys('-k','f');wait(lambda:state()['mounts']['desktopWorkspaceId']==10);check('focus_wall',state()['interaction']['mode']=='workspace')
  exit_use();wait(lambda:state()['mounts']['desktopWorkspaceId'] is None and diag()['handover']==0);check('focus_back',state()['interaction']['mode']=='movement')
- # Native wall extraction uses the real compositor rectangle at the ray hit.
- client.call('surface.return',{'surfaceId':surface['id']});client.call('surface.return',{'surfaceId':popup['id']});pose(client,[0,3,-7]);time.sleep(.3)
+ # Native wall extraction uses the real compositor rectangle at the ray hit. Every lab
+ # window goes back first: one left floating before the wall (the X11 lab) takes the grab.
+ [client.call('surface.return',{'surfaceId':v['id']}) for v in state()['surfaces'] if v['kind']=='window'];pose(client,[0,3,-7]);time.sleep(.3)
+ wait(lambda:all(c.get('wall')=='workspace-10' or c.get('parentId') for c in diag()['captures']),timeout=8)
  mod=s.envrun('wtype','-P','Super_L','-s','800','-p','Super_L');children.append(mod);time.sleep(.1);pointer('button',272,1);time.sleep(.25);check('drag_off_wall',diag()['gesture']==1,diag());pulled_title=captured(diag()['gestureId'])['title'];pointer('button',272,0);mod.wait(timeout=5);time.sleep(.25)
  tiled=next(w for w in json.loads(s.ctl('clients','-j')) if w['title']==pulled_title);check('drop_to_tile',not any(v['status']=='carried' for v in state()['mounts']['instances']) and not tiled['floating'] and tiled['workspace']['id']==10,{'title':pulled_title,'floating':tiled['floating'],'workspaceId':tiled['workspace']['id']})
  stage(surface['id']);keys('-k','2');pointer();time.sleep(.15);check('mount_tag',state()['interaction']['taggedSurfaceId']==surface['id'])
