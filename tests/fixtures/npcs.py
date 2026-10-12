@@ -87,17 +87,26 @@ world = {
         {'id': 'loop', 'name': 'Court loop', 'use': 'route', 'closed': True,
          'points': [pt(-5, 5), pt(5, 5), pt(5, -5), pt(-5, -5)],
          'stops': [{'point': 1, 'seconds': 2, 'clip': 'wave'}, {'point': 2, 'seconds': 4, 'seat': 'bench-1/left'},
-                   {'point': 3, 'seconds': 2, 'face': {'position': [0, 1, 0]}}]},
+                   {'point': 3, 'seconds': 2, 'face': {'position': [0, 1, 0]}},
+                   # Faces an anchor: anchors load after objects and paths (core 0.5.0 refused this).
+                   {'point': 0, 'seconds': 2, 'face': {'anchor': 'notice-board'}}]},
         {'id': 'line', 'use': 'route', 'points': [pt(-10, -9), pt(-2, -9, 0, 'curve'), pt(4, -11, 0, 'arc')]},
         {'id': 'to-step', 'use': 'route', 'points': [pt(3, 2), pt(10, 2)]},
         {'id': 'view', 'points': [pt(-12, 12), pt(12, 12)]}],
     'seats': [{'id': 'ledge-seat', 'pose': {'position': [-8.2, 0, 6], 'rotation': [0, -.7071068, 0, .7071068]}, 'height': .3}],
     'keepClear': [{'id': 'door', 'min': [-1, 0, 13], 'max': [1, 2.5, 15]}],
+    # A typed anchor (the world keeps only mounted ones): the court's wall, which a stop faces.
+    'anchors': [{'id': 'notice-board', 'size': [3.2, 1.8], 'screenType': 'com.hyprune.window',
+                 'pose': {'position': [-12, 1.8, 0], 'rotation': [0, .7071068, 0, .7071068]},
+                 'mount': {'type': 'facade-wall', 'role': 'mounted-workspace', 'interaction': 'focus-in'}}],
+    'areas': [{'id': 'court-home', 'workspaceSlot': '01', 'primaryAnchor': 'notice-board', 'toolAnchors': [], 'dataAnchors': [],
+               'theme': 'Court', 'spawnId': 'start'}],
     'objects': [
         {'id': 'walker-1', 'asset': 'mannequin', 'path': 'loop', 'phase': 0, 'accent': [.2, .5, .9],
          'interactions': [{'id': 'talk', 'label': 'Talk', 'action': {'type': 'say', 'lines': ['The court loop is 40 m.', 'Mind the block.']}},
                           {'id': 'where', 'label': 'Mark the step', 'action': {'type': 'waypoint', 'target': {'position': [9, 0, 0]}}},
-                          {'id': 'show', 'label': 'Show me the step', 'prompt': 'Follow me', 'action': {'type': 'guide', 'path': 'to-step'}}]},
+                          {'id': 'show', 'label': 'Show me the step', 'prompt': 'Follow me', 'action': {'type': 'guide', 'path': 'to-step'}},
+                          {'id': 'board', 'label': 'Mark the board', 'action': {'type': 'waypoint', 'target': {'anchor': 'notice-board'}}}]},
         {'id': 'walker-2', 'asset': 'mannequin', 'path': 'line', 'phase': .5, 'reverse': True, 'speed': 1.2},
         {'id': 'sitter', 'asset': 'mannequin', 'pose': {'position': [-7.5, 0, 6], 'rotation': [0, -.7071068, 0, .7071068]}, 'seat': 'ledge-seat'},
         {'id': 'bench-1', 'asset': 'bench', 'pose': {'position': [6.2, 0, -5], 'rotation': [0, -.7071068, 0, .7071068]}}]}

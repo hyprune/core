@@ -4,6 +4,7 @@
 #include "world/Character.hpp"
 #include "world/Objects.hpp"
 #include "world/Paths.hpp"
+#include <algorithm>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -99,6 +100,28 @@ int main(int argc, char **argv) {
         rejects("reverse without a path", [](auto &j) { j["objects"][2]["reverse"] = true; });
         rejects("a seat on a route-bound character", [](auto &j) { j["objects"][0]["seat"] = "ledge-seat"; });
         rejects("an unknown seat", [](auto &j) { j["objects"][2]["seat"] = "sofa"; });
+        // Anchor references (a stop facing an anchor, a waypoint to one) are checked after the
+        // anchors load, which is after the objects and their paths: they load, and an unknown
+        // anchor is still refused with the stop or interaction named.
+        check(w->paths[0]["stops"].size() == 4 && w->paths[0]["stops"][3]["face"]["anchor"] == "notice-board" &&
+                  std::any_of(w->anchors.begin(), w->anchors.end(), [](auto &a) { return a["id"] == "notice-board"; }),
+              "a stop facing an anchor loads (the anchor exists after objects and paths)");
+        rejects("a stop facing an unknown anchor",
+                [](auto &j) { j["paths"][0]["stops"][3]["face"]["anchor"] = "nowhere"; });
+        try {
+            auto j = base;
+            j["paths"][0]["stops"][3]["face"]["anchor"] = "nowhere";
+            std::ofstream(copy / "world.json") << j.dump();
+            world::load(copy);
+        } catch (const std::exception &e) {
+            check(std::string(e.what()).find("paths loop stop at point 0: unknown anchor nowhere") != std::string::npos,
+                  std::string("unknown stop anchor named: ") + e.what());
+        }
+        accepts("anchors listed after the objects", [](auto &j) {
+            auto anchors = j["anchors"];
+            j.erase("anchors");
+            j["anchors"] = anchors;
+        });
         rejects("a seat stop at a missing anchor", [](auto &j) { j["paths"][0]["stops"][1]["seat"] = "bench-1/middle"; });
         rejects("a scaled character", [](auto &j) { j["objects"][2]["scale"] = 2; });
         rejects("a travel interaction (reserved)", [](auto &j) {

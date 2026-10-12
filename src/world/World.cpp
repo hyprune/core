@@ -1,15 +1,16 @@
 #include "World.hpp"
-#include "Format.hpp"
-#include <meshoptimizer/meshoptimizer.h>
-#include <basisu/transcoder/basisu_transcoder.h>
-#include <mutex>
-#include "Visibility.hpp"
-#include "Gltf.hpp"
-#include "Objects.hpp"
 #include "Environment.hpp"
+#include "Format.hpp"
+#include "Gltf.hpp"
 #include "Mounts.hpp"
+#include "Objects.hpp"
+#include "Paths.hpp"
 #include "Schema.hpp"
 #include "Spatial.hpp"
+#include "Visibility.hpp"
+#include <basisu/transcoder/basisu_transcoder.h>
+#include <meshoptimizer/meshoptimizer.h>
+#include <mutex>
 #define CGLTF_IMPLEMENTATION
 #include <cgltf.h>
 #define STB_IMAGE_IMPLEMENTATION
@@ -661,6 +662,9 @@ std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions optio
     loadSpatial(*result, root);
     result->nodeParents = scene.parents;
     loadMounts(*result, scene.parents.size());
+    // Paths and interactions load with the objects, before the mounts: their anchor
+    // references are checked now that the anchors exist.
+    checkAnchorReferences(*result);
     result->atmosphere = j.value("atmosphere", defaultAtmosphere());
     validateAtmosphere(result->atmosphere);
     loadVisibility(*result);

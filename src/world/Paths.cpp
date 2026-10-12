@@ -111,7 +111,7 @@ std::vector<std::string> pathProblems(const Json &path, size_t pointLimit) {
     }
     return out;
 }
-std::vector<std::string> interactionProblems(const World &w, const Json &list) {
+std::vector<std::string> interactionProblems(const World &w, const Json &list, bool checkAnchors) {
     std::vector<std::string> out;
     auto fail = [&](std::string why) {
         if (out.size() < 8)
@@ -146,7 +146,7 @@ std::vector<std::string> interactionProblems(const World &w, const Json &list) {
             auto &t = a.at("target");
             if (t.contains("zoneId") && !has(w.manifest.value("zones", Json::array()), "id", t["zoneId"]))
                 fail("interactions " + id + ": unknown zone " + t["zoneId"].get<std::string>());
-            if (t.contains("anchor") && !has(w.anchors, "id", t["anchor"]))
+            if (checkAnchors && t.contains("anchor") && !has(w.anchors, "id", t["anchor"]))
                 fail("interactions " + id + ": unknown anchor " + t["anchor"].get<std::string>());
             if (t.contains("object") && !has(w.manifest.value("objects", Json::array()), "id", t["object"]))
                 fail("interactions " + id + ": unknown object " + t["object"].get<std::string>());
@@ -234,19 +234,11 @@ void loadPaths(World &w, const std::string &formatVersion) {
             require(found, where + ": " + object + " has no seat anchor " + ref.substr(slash + 1));
         }
     };
-    auto anchorKnown = [&](const std::string &id) {
-        for (auto &a : w.anchors)
-            if (a.value("id", std::string()) == id)
-                return true;
-        return false;
-    };
     for (auto &p : w.paths)
         for (auto &s : p.value("stops", Json::array())) {
             auto where = "paths " + p["id"].get<std::string>() + " stop at point " + std::to_string(s["point"].get<int>());
             if (s.contains("seat"))
                 seatRef(s["seat"], where);
-            if (s.contains("face") && s["face"].contains("anchor"))
-                require(anchorKnown(s["face"]["anchor"]), where + ": unknown anchor " + s["face"]["anchor"].get<std::string>());
             if (s.contains("face") && s["face"].contains("object"))
                 require(objects.contains(s["face"]["object"]), where + ": unknown object " + s["face"]["object"].get<std::string>());
         }
@@ -285,9 +277,34 @@ void loadPaths(World &w, const std::string &formatVersion) {
             require(o.value("scale", 1.f) == 1.f, label + ": characters are not scaled");
         }
         if (o.contains("interactions")) {
-            auto problems = interactionProblems(w, o["interactions"]);
+            auto problems = interactionProblems(w, o["interactions"], false); // anchors: checkAnchorReferences
             require(problems.empty(), label + ": " + (problems.empty() ? "" : problems[0]));
         }
     }
+}
+void checkAnchorReferences(const World &w) {
+    auto require = [](bool ok, const std::string &why) {
+        if (!ok)
+            throw std::runtime_error(why);
+    };
+    auto anchorKnown = [&](const Json &id) {
+        for (auto &a : w.anchors)
+            if (Json(a.value("id", std::string())) == id)
+                return true;
+        return false;
+    };
+    for (auto &p : w.paths)
+        for (auto &s : p.value("stops", Json::array()))
+            if (s.contains("face") && s["face"].contains("anchor"))
+                require(anchorKnown(s["face"]["anchor"]), "paths " + p["id"].get<std::string>() + " stop at point " +
+                                                              std::to_string(s["point"].get<int>()) +
+                                                              ": unknown anchor " +
+                                                              s["face"]["anchor"].get<std::string>());
+    for (auto &o : w.manifest.value("objects", Json::array()))
+        if (o.contains("interactions")) {
+            auto problems = interactionProblems(w, o["interactions"]);
+            require(problems.empty(),
+                    "objects " + o["id"].get<std::string>() + ": " + (problems.empty() ? "" : problems[0]));
+        }
 }
 } // namespace hyprune::world

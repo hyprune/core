@@ -22,7 +22,12 @@ void loadPaths(World &, const std::string &formatVersion);
 // chords); empty when valid. Used for user paths too (paths.set, tool 3).
 std::vector<std::string> pathProblems(const Json &path, size_t pointLimit = 256);
 // Interactions of an instance (world 0.9): ids, labels, actions and their references.
-std::vector<std::string> interactionProblems(const World &, const Json &interactions);
+// checkAnchors false skips anchor targets (loadPaths runs before the anchors are loaded).
+std::vector<std::string> interactionProblems(const World &, const Json &interactions, bool checkAnchors = true);
+// Anchor references of paths (stop faces) and instance interactions (waypoint targets).
+// loadObjects (and with it loadPaths) runs before loadMounts fills the world's anchors, so
+// these are checked once the anchors exist. Throws on the first unknown anchor.
+void checkAnchorReferences(const World &);
 // The arc length of each authored point of a path record.
 std::vector<float> pointDistances(const Json &path);
 } // namespace hyprune::world
