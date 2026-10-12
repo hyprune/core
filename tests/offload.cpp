@@ -238,6 +238,15 @@ static void machineSync() {
     for (int i = 0; i < 4 && !send(64).is_null(); ++i)
         ;
     same();
+    // An extra of an asset the worker is still decoding: kept, drawn once the asset merges.
+    world::ObjectExtra later = copy(2, {.1f, .2f, .3f});
+    later.asset = 2;
+    live.objectExtras.push_back(later);
+    send();
+    assert(std::none_of(worker.objectExtras.begin(), worker.objectExtras.end(), [](auto &e) { return e.asset == 2; }));
+    w.objectAssets.resize(3);
+    receiver.materialize(w, worker);
+    assert(std::count_if(worker.objectExtras.begin(), worker.objectExtras.end(), [](auto &e) { return e.asset == 2; }) == 1);
     // Machines gone: everything erased.
     live.objectStates.assign(3, {}), live.objectExtras.clear(), live.worldLabels.clear();
     d = send();

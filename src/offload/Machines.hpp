@@ -201,7 +201,7 @@ class MachineReceiver {
   public:
     uint64_t revision() const { return revision_; }
     void start() { *this = {}; }
-    void apply(const nlohmann::json &d, const world::World &w) {
+    void apply(const nlohmann::json &d, const world::World &) {
         if (d.at("base").get<uint64_t>() != revision_ || d.at("revision").get<uint64_t>() != revision_ + 1)
             throw std::runtime_error("machine state revision");
         if (d.contains("states")) {
@@ -242,9 +242,7 @@ class MachineReceiver {
                     long list = x.at(5);
                     extra.paintMeshes = list < 0 ? nullptr : o.lists.at(size_t(list)).get();
                     extra.scale = x.at(6), extra.saturation = x.at(7), extra.brightness = x.at(8);
-                    if (extra.asset >= w.objectAssets.size())
-                        continue;
-                    o.extras.push_back(extra);
+                    o.extras.push_back(extra); // kept while its asset still decodes here (drawn once merged)
                 }
                 owners_[e.at(0).get<size_t>()] = std::move(o);
             }
@@ -268,6 +266,8 @@ class MachineReceiver {
             if (owner >= w.objectInstances.size())
                 continue;
             for (auto e : o.extras) {
+                if (e.asset >= w.objectAssets.size())
+                    continue;
                 if (e.relative)
                     e.model = w.objectInstances[owner].model * e.local;
                 r.objectExtras.push_back(e);

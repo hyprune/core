@@ -156,16 +156,30 @@ def checks(client, children, source):
 
     # 1. Placement: the tube from the pocket with tool 5, the others beside it.
     client.events.clear()
-    client.call('objects.pocket', {'ref': refs['gauge-tube']})
-    floor = [((-8, 1.7, 8), 0, -.35), ((-4.5, 1.7, 8), 0, -.35), ((-11, 1.7, 8), 0, -.35), ((-6, 1.7, 6), -.3, -.4)]
+    spot = os.environ.get('HYPRUNE_GAUGES_SPOT')  # development: "x,z" places the tube there instead
+    if spot:
+        x, z = map(float, spot.split(','))
+        tube_id = None
+        for dz in (0, -1, 1, -2, 2):
+            try:
+                tube_id = client.call('objects.place', {'ref': refs['gauge-tube'], 'pose': {'position': [x, 0, z + dz], 'rotation': [0, 0, 0, 1]}})['id']
+                break
+            except RuntimeError:
+                continue
+        assert tube_id, ('no spot for the tube near', spot)
+    else:
+        client.call('objects.pocket', {'ref': refs['gauge-tube']})
+    floor = [] if spot else [((-8, 1.7, 8), 0, -.35), ((-4.5, 1.7, 8), 0, -.35), ((-11, 1.7, 8), 0, -.35), ((-6, 1.7, 6), -.3, -.4)]
+    g = None
     for pos, yaw, pitch in floor:
         camera(pos, yaw, pitch)
         g = wait(lambda: s.camera()['objects']['ghost'] if s.camera()['objects']['ghost']['asset'] >= 0 else None, 20); time.sleep(.3)
         g = s.camera()['objects']['ghost']
         if g['valid']:
             break
-    assert g['valid'], g
-    click()
+    if not spot:
+        assert g['valid'], g
+        click()
     tube = wait(lambda: user() or None, 10)[0]
     ids = {'gauge-tube': tube['id']}
     p0 = tube['pose']['position']
@@ -201,6 +215,9 @@ def checks(client, children, source):
     check('unfed gauges: labels show a dash and, once placed, nothing moves', all(b['labels']['display'] == '—' and not b['moving'] for b in bound.values()),
           {g: {'labels': b['labels'], 'moving': b['moving'], 'stacks': b['stacksShown']} for g, b in bound.items()})
 
+    if os.environ.get('HYPRUNE_GAUGES_LOOK'):  # development: fixed values, stills, nothing else
+        look_stills(client, ids, user, look, shot, os.environ['HYPRUNE_GAUGES_LOOK'])
+        return
     if os.environ.get('HYPRUNE_GAUGES_OFFLOAD_FIRST') == '1':  # development: the offload stage on unfed gauges
         offload_parity(client, check, ids, p0, look, inst, out, [])
         return
@@ -308,7 +325,7 @@ def offload_parity(client, check, ids, p0, look, inst, out, stills):
 
     def renderer(mode):
         client.call('graphics.set', {'patch': {'offload': mode, 'render_scale': 1, 'dynamic_resolution': False,
-                                               'offload_power_cap_w': 20}})
+                                               'offload_power_cap_w': None}})
         want = 'offload' if mode == 'on' else 'in-process'
         try:
             return wait(lambda: perf()['activeRenderer'] == want, 40)
@@ -358,3 +375,40 @@ def offload_parity(client, check, ids, p0, look, inst, out, stills):
     changed, moved = compare(after['off'], after['on']), compare(before['on'], after['on'])
     check('a change made while offloaded reaches the worker and matches the in-process draw',
           changed['differing'] < .01 and moved['differing'] > .002, {'parity': changed, 'changedVsHeld': moved})
+
+
+def look_stills(client, ids, user, look, shot, name):
+    """Fixed values on every gauge (bound to this test's own source through machines.json),
+    then a 3 m still and a close still of each: for colour and readability reviews."""
+    (s.STATE / 'machines.json').write_text(json.dumps({'instances': {i: {'source': 'org.hyprune.nested.look'} for i in ids.values()}}) + '\n')
+    import threading
+    client.call('movement.set', {'modeId': 'com.hyprune.fly'})  # the camera stays where it is put
+    current = {'value': float(os.environ.get('HYPRUNE_GAUGES_LOOK_VALUE', '64')), 'display': '64%', 'label': 'LOOK',
+               'level': os.environ.get('HYPRUNE_GAUGES_LOOK_LEVEL', 'ok'), 'average': 50}
+    lock, running = threading.Lock(), threading.Event()
+    running.set()
+    def keepalive():  # fresh data the whole time (staleMs is 8 s)
+        while running.is_set():
+            with lock:
+                client.call('data.publish', {'sourceId': 'org.hyprune.nested.look', 'sequence': int(time.time() * 1000),
+                                             'values': dict(current), 'ttlMs': 60000})
+            time.sleep(1)
+    threading.Thread(target=keepalive, daemon=True).start()
+    time.sleep(5)
+    def views(suffix):
+        with lock:
+            placed = {x['id']: x['pose']['position'] for x in user()}
+        p0 = placed[ids['gauge-tube']]
+        look([p0[0], 1.45, p0[2] + 3.2], [p0[0], .75, p0[2]]); time.sleep(1)
+        shot(f'look-{name}-3m{suffix}.png')
+        for g, i in ids.items():
+            p = placed[i]
+            look([p[0], 1.25, p[2] + 2.0], [p[0], .75, p[2]]); time.sleep(1)
+            shot(f'look-{name}-{g}{suffix}.png')
+    views('')
+    # The same views empty: pixels that change are the fill (a mask for colour measurements).
+    with lock:
+        current.update(value=0, average=0)
+    time.sleep(5)
+    views('-empty')
+    running.clear()
