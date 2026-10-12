@@ -156,6 +156,17 @@ their frozen state projections and enums. Unknown or unadvertised methods return
 
 These are wire-compatible behavior changes that integrators may notice:
 
+- **0.24** Live machine state (RFC-0013 amendment). No new grant. `objects.catalog`
+  entries gain `machine`: `null`, or the object's declared machine inputs as authored
+  `{primary, inputs: [{id, type, label, explain, default?, values?, min?, max?, maxLength?,
+  repeat?, states?}]}`. New required state key `live` (`state.read`, published with the
+  data, never per frame): per bound machine instance (at most 64) `{id, asset, ref, source,
+  status, error, stale, inputs}`, each input `{source, key, value, raw, condition,
+  publishedAt}` (`condition` fresh, stale, missing or error; `publishedAt` Unix ms of the
+  publication core holds, or null). Older sessions see neither. Source metadata `_reset`
+  (draft): a change restarts the running averages fed by that source. The source helper's
+  control channel (`sources.sock` beside core's socket: status, test, restart, restart-all,
+  reload; same user only) is local and not part of IPC.
 - **0.22** Object catalog and user placements (RFC-0011 P1). New grant
   `objects.control` (requestable from 0.22). New required state key `objects
   {catalogRevision,instances[<=512],pocket[<=16],usage,limits}`: this world's authored

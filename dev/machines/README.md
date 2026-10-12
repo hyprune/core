@@ -29,7 +29,7 @@ installs of core use the same layout under their prefix:
 | `bin/hyprune-system-gauges` | a link to the gauge script, for `argv` in `sources.json` |
 
 Both are standard-library Python and need nothing else from the checkout. A session
-launcher always starts the helper (see "Gauges: wire a script", step 5); it runs the helper with its Python as `python3 <prefix>/libexec/hyprune/source-helper`
+launcher always starts the helper (see "Gauges: wire a script"); it runs the helper with its Python as `python3 <prefix>/libexec/hyprune/source-helper`
 and puts `<prefix>/bin` first on the helper's `PATH`, so `sources.json` can name the
 gauge script as `hyprune-system-gauges` on any install. The release archive's live
 launcher (`live/dev/live/live.py`) finds the helper at `../libexec/hyprune/source-helper`;
@@ -458,40 +458,56 @@ Every placed gauge (any machine object) reads its inputs from the source
 running average). So a script only has to print those keys, and a `sources.json` entry
 whose `id` is the instance id publishes them to that gauge.
 
+In the Director (IPC 0.24 cores and shells):
+
 1. Place a gauge: Director → Objects → Catalog, Add a gauge (category Machines), then
    place it with tool 5 (Placement).
-2. Read its instance id: Director → Objects → Placed, select the gauge; the configure
-   panel shows `ID  u-3f9a1c` and `Data source id: u-3f9a1c`.
-3. Write a script that prints one JSON object with those keys and exits 0, for example
-   `{"value": 71, "display": "71%", "label": "RAM", "level": "ok"}`. Make it executable.
-   `scripts/system-gauges.py` (below) is a ready one for CPU, RAM, GPU and VRAM.
-4. Add an entry to `$XDG_CONFIG_HOME/hyprune/sources.json` (usually
-   `~/.config/hyprune/sources.json`) with the instance id as `id` and an absolute path to
-   the script:
+2. Director → Objects → Placed, select the gauge. Its **Data source** section lists the
+   gauge's inputs (id, type, range, what each shows) with the values core holds, their
+   condition and age, the source it reads (`com.hyprune.sources.<instance id>`), that
+   source's status and error, and the helper's last run.
+3. Set **Command** (Choose… browses folders inside the Director) and optional
+   **Arguments** (one per line), and the interval (**Every**, within the helper's limits:
+   5 s to 24 h). The panel shows the exact argv that will run (`Runs: …`).
+4. **Test** runs that argv once through the helper (its command rules, nothing published)
+   and shows the JSON it printed, checked against the inputs (missing keys, unknown keys,
+   type and range mismatches).
+5. **Save** writes the entry whose `id` is the instance id into
+   `$XDG_CONFIG_HOME/hyprune/sources.json` (atomically; other entries, keys and their
+   order are kept) and asks the helper to reload: values arrive within one interval. No
+   world reload and no restart. **Remove** deletes the entry and withdraws the source.
+6. **Restart** kills a running command of this source and runs it now; with **Reset
+   average** the gauge's running average starts again from that run (`_reset`).
+   **Restart helper** stops every source, re-reads the file, reconnects with a renewed
+   grant and starts everything.
 
-   ```json
-   {"sources": [
-     {"id": "u-3f9a1c", "kind": "command", "argv": ["/path/to/system-gauges.py", "ram"],
-      "intervalS": 5, "timeoutS": 4}
-   ]}
-   ```
+Saving or testing a command from the panel is the user's confirmation to run it; the
+helper never runs anything that is not in `sources.json` or a Test request. The launcher
+(`dev/live/up`, also in the release archive) and the starter session (`hyprune-session`,
+in the hyprune/hyprune repository) always start the helper with its own renewable
+`data.publish` grant, even before `sources.json` exists (it idles until the file
+appears); the live launcher logs it to `source-helper.log` and `down` stops it.
 
-   On an installed system use the gauge script by name,
-   `"argv": ["hyprune-system-gauges", "ram"]` (see "Installed paths"); from a checkout,
-   use the absolute path of `dev/machines/scripts/system-gauges.py`.
-   Command intervals are at least 5 s. Relative paths resolve against the directory of
-   `sources.json`. `sources.gauges.example.json` shows four system gauges (its ids,
-   `u-000001` to `u-000004`, are placeholders: use your gauges' ids).
-5. Start Hyprune with the live launcher (`dev/live/up`, also in the release archive).
-   The launcher always grants `data.publish` to `com.hyprune.sources` and starts this
-   helper with `--config $XDG_CONFIG_HOME/hyprune/sources.json` (passed even while the
-   file does not exist: the helper idles until it appears) and a grant renewed over a
-   private descriptor; it logs to `source-helper.log` in the live state directory, and
-   `down` stops it. The starter session (`hyprune-session`, in the hyprune/hyprune
-   repository) does the same from the installed path. Edits to `sources.json`, and a new
-   `sources.json`, apply while it runs: no restart.
+A ready script: `scripts/system-gauges.py` (below) for CPU, RAM, GPU and VRAM; on an
+installed system use it by name, `hyprune-system-gauges ram` (see "Installed paths").
 
-Optional: `$XDG_CONFIG_HOME/hyprune/machines.json` binds a gauge to another source or
+### Advanced: editing the files
+
+The panel edits `sources.json`; it can also be written by hand (re-read on change). The
+entry for a gauge has the instance id as `id`:
+
+```json
+{"sources": [
+  {"id": "u-3f9a1c", "kind": "command", "argv": ["/path/to/system-gauges.py", "ram"],
+   "intervalS": 5, "timeoutS": 4}
+]}
+```
+
+Command intervals are at least 5 s. Relative paths resolve against the directory of
+`sources.json`. `sources.gauges.example.json` shows four system gauges (its ids,
+`u-000001` to `u-000004`, are placeholders: use your gauges' ids).
+
+`$XDG_CONFIG_HOME/hyprune/machines.json` binds a gauge to another source or
 other keys (for example one script publishing several values, or a longer averaging
 window), and is re-read on change:
 

@@ -15,14 +15,14 @@
     {
       "name": "objects move between two stills while visible",
       "evidence": {
-        "changedFraction": 0.04736
+        "changedFraction": 0.04724
       }
     },
     {
       "name": "frames keep coming while an animated object is in view",
       "evidence": {
-        "perSecond": 59.6,
-        "frames": 121,
+        "perSecond": 60.2,
+        "frames": 122,
         "seconds": 2.03,
         "animationFrames": true,
         "objects": {

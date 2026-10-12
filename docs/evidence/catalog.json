@@ -2,7 +2,7 @@
   "nestedOnly": true,
   "world": "com.hyprune.lumen-reach",
   "protocol": "0.22",
-  "library": "com.hyprune.starter-0.1.0.tar.zst",
+  "library": "main-0.2.0.tar.zst",
   "stills": [
     "tool5-ghost.png",
     "rack-placed.png",
@@ -70,26 +70,26 @@
       "evidence": {
         "install": {
           "id": "com.hyprune.starter",
-          "revision": 11,
-          "version": "0.1.0"
+          "revision": 12,
+          "version": "0.2.0"
         },
         "library": {
-          "digest": "721a1e37a8a8a83e880d63f4b3f5f600b2981968fe29800b2c9be4d07b7c30a7",
+          "digest": "8e548d48b24f5f5d688a2dff4a96d223a66f3dd13e97f83be37af6f80fd274c7",
           "errors": [],
           "formatVersion": "0.10",
           "id": "com.hyprune.starter",
           "name": "Hyprune starter kit",
-          "objects": 11,
+          "objects": 14,
           "root": "user",
           "state": "ready",
-          "version": "0.1.0"
+          "version": "0.2.0"
         }
       }
     },
     {
       "name": "catalog: library objects with placeability, characters and movers refused with a reason",
       "evidence": {
-        "entries": 12,
+        "entries": 15,
         "reasons": {
           "job-token": "mover: tracks and items need world format 0.10 (RFC-0011 P3)"
         }
@@ -138,7 +138,7 @@
           {
             "itemId": "pocket-1",
             "name": "Server rack",
-            "ref": "library/com.hyprune.starter@0.1.0/server-rack"
+            "ref": "library/com.hyprune.starter@0.2.0/server-rack"
           }
         ],
         "preview": true,
@@ -184,7 +184,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-497441",
+        "id": "u-ea6de6",
         "locked": false,
         "movable": true,
         "name": "Server rack",
@@ -202,7 +202,7 @@
             1.0
           ]
         },
-        "ref": "library/com.hyprune.starter@0.1.0/server-rack",
+        "ref": "library/com.hyprune.starter@0.2.0/server-rack",
         "rule": null,
         "scale": 1.0,
         "seat": null,
@@ -224,7 +224,7 @@
           24
         ],
         "hidden": false,
-        "id": "u-497441",
+        "id": "u-ea6de6",
         "radius": 1.3823989629745483
       }
     },
@@ -273,7 +273,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-696e75",
+        "id": "u-2a649a",
         "locked": false,
         "movable": true,
         "name": "Floor lamp",
@@ -301,7 +301,7 @@
     },
     {
       "name": "tool 4 selects the user object",
-      "evidence": "object:u-497441"
+      "evidence": "object:u-ea6de6"
     },
     {
       "name": "a move-handle drag moves the rack along x; the overlay records it",
@@ -352,14 +352,14 @@
     },
     {
       "name": "objects.remove deletes a user placement and its record",
-      "evidence": "u-6802f7"
+      "evidence": "u-b800bc"
     },
     {
       "name": "undo restores the removed object",
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-6802f7",
+        "id": "u-b800bc",
         "locked": false,
         "movable": true,
         "name": "Floor lamp",
@@ -498,7 +498,7 @@
     {
       "name": "a world reload keeps every placement and pose; the pocket is dropped",
       "evidence": {
-        "u-497441": {
+        "u-ea6de6": {
           "position": [
             -8.75777530670166,
             0.005222201347351074,
@@ -511,7 +511,7 @@
             1.0
           ]
         },
-        "u-6802f7": {
+        "u-b800bc": {
           "position": [
             -8.0,
             0.005222141742706299,
@@ -531,7 +531,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-497441",
+        "id": "u-ea6de6",
         "locked": false,
         "movable": false,
         "name": "server-rack",
@@ -549,7 +549,7 @@
             1.0
           ]
         },
-        "ref": "library/com.hyprune.starter@0.1.0/server-rack",
+        "ref": "library/com.hyprune.starter@0.2.0/server-rack",
         "rule": null,
         "scale": 1.0,
         "seat": null,
@@ -562,7 +562,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-497441",
+        "id": "u-ea6de6",
         "locked": false,
         "movable": true,
         "name": "Server rack",
@@ -580,7 +580,7 @@
             1.0
           ]
         },
-        "ref": "library/com.hyprune.starter@0.1.0/server-rack",
+        "ref": "library/com.hyprune.starter@0.2.0/server-rack",
         "rule": null,
         "scale": 1.0,
         "seat": null,
