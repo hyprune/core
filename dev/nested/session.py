@@ -51,6 +51,16 @@ class Client:
                         if 'movement' in p.get('changes',{}):stream.write('  camera '+str([round(v,2) for v in p['changes']['movement']['position']])+'\n')
         finally:self.socket.settimeout(5)
     def close(self):self.socket.close()
+def library_of(archive,fallback):
+    """'<id>@<version>' from a library .tar.zst's library.json (fallback if the archive is missing)."""
+    import tarfile
+    if not pathlib.Path(archive).is_file():return fallback
+    with tarfile.open(archive,'r:zst') as t:
+        for m in t.getmembers():
+            if m.name.count('/')==1 and m.name.endswith('/library.json'):
+                j=json.load(t.extractfile(m));return f"{j['id']}@{j['version']}"
+    return fallback
+
 def ctl(*args):
     return subprocess.check_output([str(HERE/'ctl.py'),'hyprctl',*args],text=True).strip()
 def envrun(*args,**kwargs):

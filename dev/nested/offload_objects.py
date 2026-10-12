@@ -28,8 +28,8 @@ import catalog
 from m2 import wait, keys
 
 WORLD = 'com.hyprune.lumen-reach'
-RACK = 'library/com.hyprune.starter@0.1.0/server-rack'
-ARMILLARY = 'library/com.hyprune.starter@0.1.0/armillary'
+RACK = f'library/{catalog.LIBRARY}/server-rack'
+ARMILLARY = f'library/{catalog.LIBRARY}/armillary'
 AUTHORED = 'sun-court-armillary'
 TIMES = [0.0, 2.75, 7.4]
 # A difference of more than this many 8-bit levels in any channel counts as a differing pixel.

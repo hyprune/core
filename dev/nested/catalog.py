@@ -28,7 +28,9 @@ from m2 import wait, keys
 
 WORLD = 'com.hyprune.lumen-reach'
 ARCHIVE = pathlib.Path(os.environ.get('HYPRUNE_CATALOG_LIBRARY', str(pathlib.Path.home() / 'objects-p1/library-dry-run/com.hyprune.starter-0.1.0.tar.zst')))
-RACK = 'library/com.hyprune.starter@0.1.0/server-rack'
+LIBRARY = s.library_of(ARCHIVE, 'com.hyprune.starter@0.1.0')  # the archive's own id@version
+VERSION = LIBRARY.split('@')[1]
+RACK = f'library/{LIBRARY}/server-rack'
 ARMILLARY = 'sun-court-armillary'
 
 
@@ -55,7 +57,7 @@ def acceptance(client, children, args, shell_token, socketpath):
         client.call('world.load', {'worldId': WORLD})
         archive = s.STATE / ARCHIVE.name
         client.call('libraries.install', {'archive': str(archive), 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()})
-        ref = os.environ.get('CATALOG_PROBE_REF', 'library/com.hyprune.starter@0.1.0/armillary')
+        ref = os.environ.get('CATALOG_PROBE_REF', f'library/{LIBRARY}/armillary')
         lift = float(os.environ.get('CATALOG_PROBE_LIFT', '2.055'))
         for z in range(-24, 16, 2):
             row = ''
@@ -186,9 +188,9 @@ def acceptance(client, children, args, shell_token, socketpath):
     again = client.call('libraries.install', {'archive': str(archive), 'sha256': sha})
     libs = client.call('libraries.list', {})['libraries']
     check('the starter library installs (and again, idempotently) and lists ready',
-          installed['id'] == 'com.hyprune.starter' and installed['version'] == '0.1.0' and again['id'] == installed['id'] and
+          installed['id'] == 'com.hyprune.starter' and installed['version'] == VERSION and again['id'] == installed['id'] and
           libs and libs[0]['state'] == 'ready' and libs[0]['objects'] == 11 and libs[0]['root'] == 'user' and
-          (s.STATE / 'datahome/hyprune/libraries/com.hyprune.starter@0.1.0/library.json').is_file() and
+          (s.STATE / f'datahome/hyprune/libraries/{LIBRARY}/library.json').is_file() and
           any('already installed' in n['message'] for n in notices('library.installed')),
           {'install': installed, 'library': libs[0]})
     catalog = client.call('objects.catalog', {})
@@ -198,9 +200,9 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('catalog: library objects with placeability, characters and movers refused with a reason',
           catalog['revision'] == state()['objects']['catalogRevision'] and rack['placeable'] and rack['state'] == 'ready' and
           rack['traits'] == ['collidable', 'decorative', 'machine', 'movable'] and rack['thumbnail'].endswith('server-rack/thumbnail.png') and
-          entries['library/com.hyprune.starter@0.1.0/resident-blue']['placeable'] and 'resident-blue' not in reasons and
+          entries[f'library/{LIBRARY}/resident-blue']['placeable'] and 'resident-blue' not in reasons and
           reasons['job-token'].startswith('mover:') and
-          entries['package/armillary']['placeable'] and entries['library/com.hyprune.starter@0.1.0/armillary']['placeable'],
+          entries['package/armillary']['placeable'] and entries[f'library/{LIBRARY}/armillary']['placeable'],
           {'entries': len(entries), 'reasons': reasons})
     check('catalog estimates are the SDK\'s: server rack triangles, GPU bytes, proxy triangles',
           rack['triangles'] == 2818 and rack['gpuBytes'] == 448238 and rack['collisionTriangles'] == 24 and
@@ -356,7 +358,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     client.call('objects.configure', {'id': rack_id, 'patch': {'locked': False}})
 
     # 10. Protection and budgets.
-    char = error('objects.pocket', {'ref': 'library/com.hyprune.starter@0.1.0/resident-blue'})
+    char = error('objects.pocket', {'ref': f'library/{LIBRARY}/resident-blue'})
     check('characters are never pocketed or placed (spawned with npcs.spawn from IPC 0.23): -32005',
           char and char['code'] == -32005 and 'npcs.spawn' in char['message'], char)
     for _ in range(16 - len(objects()['pocket'])):
@@ -379,10 +381,10 @@ def acceptance(client, children, args, shell_token, socketpath):
     reload_shot = shot('after-reload.png')
 
     # 12. Library removal and reinstall.
-    client.call('libraries.remove', {'id': 'com.hyprune.starter', 'version': '0.1.0'})
+    client.call('libraries.remove', {'id': 'com.hyprune.starter', 'version': VERSION})
     wait(lambda: instance(rack_id)['state'] == 'missing', 15)
     check('removing the library makes its placements missing (record kept)',
-          not (s.STATE / 'datahome/hyprune/libraries/com.hyprune.starter@0.1.0').exists() and
+          not (s.STATE / f'datahome/hyprune/libraries/{LIBRARY}').exists() and
           any(r['id'] == rack_id for r in overlay()['placements']) and notices('object.missing'), instance(rack_id))
     client.call('libraries.install', {'archive': str(archive), 'sha256': sha})
     wait(lambda: instance(rack_id)['state'] == 'active', 20)

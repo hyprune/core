@@ -13,8 +13,9 @@ import session as s
 from ctl import verified
 from m2 import wait, keys
 
-RACK = 'library/com.hyprune.starter@0.1.0/server-rack'
-ARMILLARY = 'library/com.hyprune.starter@0.1.0/armillary'
+LIBRARY = s.library_of(os.environ.get('HYPRUNE_CATALOG_LIBRARY', ''), 'com.hyprune.starter@0.1.0')
+RACK = f'library/{LIBRARY}/server-rack'
+ARMILLARY = f'library/{LIBRARY}/armillary'
 
 
 def run(client, children, shell_token, socketpath, archive, world):

@@ -33,8 +33,8 @@ import session as s
 from m2 import wait, keys, pose
 
 WORLD = 'org.hyprune.npc-yard'
-LIBRARY = 'com.hyprune.starter@0.1.0'
 ARCHIVE = pathlib.Path(os.environ.get('HYPRUNE_NPCS_LIBRARY', str(pathlib.Path.home() / 'npc-p2/dl/starter/com.hyprune.starter-0.1.0.tar.zst')))
+LIBRARY = s.library_of(ARCHIVE, 'com.hyprune.starter@0.1.0')  # the archive's own id@version
 EMBER = f'library/{LIBRARY}/resident-ember'
 LOOP = [[-12, 9.5], [2, 9.5], [2, 3], [-12, 3]]       # clear Switchyard floor (dev: the walkability grid)
 NORTH = [[-12, -12.5], [12, -12.5]]
