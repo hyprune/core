@@ -34,12 +34,14 @@ dev/machines/source-helper.py --config dev/machines/sources.example.json \
 
 | Option | Meaning |
 | --- | --- |
-| `--config FILE` | Sources configuration (below). Relative paths in it resolve against its directory. Default `$XDG_CONFIG_HOME/hyprune/sources.json` (`~/.config/hyprune/sources.json`). Re-read when it changes (below). |
+| `--config FILE` | Sources configuration (below). Relative paths in it resolve against its directory. Default `$XDG_CONFIG_HOME/hyprune/sources.json` (`~/.config/hyprune/sources.json`). Re-read when it changes (below); it need not exist yet. |
 | `--socket PATH` | Core's IPC socket, `$XDG_RUNTIME_DIR/hyprune/<instance>/control.sock`. Default `$HYPRUNE_SOCKET`. There is deliberately no other default, so the helper never attaches to a session by accident. |
 | `--token-file FILE` | File holding the launch token. Re-read on every connection attempt. |
 | `--token-fd N` | Read token lines from an inherited descriptor: one line per connection. |
 | `--token-refresh` | With `--token-fd`: renew the grant for each reconnection (below). Default on when `HYPRUNE_TOKEN_REFRESH=1`. |
 | (neither) | `$HYPRUNE_SOURCES_TOKEN` (or `$HYPRUNE_MACHINES_TOKEN`). |
+| `--control PATH` | Control socket (below). Default `sources.sock` in the directory of `--socket` (beside core's `control.sock`). |
+| `--no-control` | No control socket. |
 | `--protocol V` | Protocol to offer in `session.hello` (default: config `protocol`, else `0.2`, the first with `data.publish`). |
 | `--dev` | Same as `"devFastIntervals": true` (below). |
 | `--once` | Fetch each source once, print `{"sourceId", "values"}` lines, exit (1 if any failed). |
@@ -68,9 +70,16 @@ Tokens are never logged.
 The helper checks the configuration file about once a second and re-reads it when it
 changes (any edit, or an atomic replace). Added sources start, removed or disabled ones
 are withdrawn with `data.remove`, and changed ones restart; unchanged sources keep running.
-An invalid file is logged (`config not reloaded`) and the running sources stay as they
-were; a missing file (for example mid-save) is ignored. Changes to `client` or `protocol`
-need a restart.
+An invalid file is logged (`config not reloaded`), reported as `configError` in the control
+channel's `status`, and the running sources stay as they were; a file that disappears (for
+example mid-save) is ignored. Changes to `client` or `protocol` need a restart of the helper
+or a `restart-all`.
+
+Without a configuration the helper idles: when the file does not exist, is empty, or has
+no `sources`, it still runs, connects to core (when it has a token) and serves the control
+channel, and starts the sources as soon as a valid file appears. A file that is invalid at
+start is treated the same way (idle, `configError` set) until it is fixed. Only `--once`
+exits (status 2) on a missing or invalid file.
 
 ### Against a nested session
 
@@ -85,7 +94,109 @@ dev/machines/source-helper.py --config dev/machines/sources.example.json \
 ```
 
 On `SIGTERM` or `SIGINT` the helper kills running commands, calls `data.remove` for each
-source it published and exits 0. Core also drops a connection's sources when it closes.
+source it published, removes its control socket and exits 0. Core also drops a
+connection's sources when it closes.
+
+## Control channel
+
+A local channel for the shell (Director → Objects → Placed) to show, test and restart
+sources without hand-editing or restarting anything. It is not core IPC.
+
+- **Socket:** `sources.sock` in the directory of `--socket` (core's per-instance runtime
+  directory), or `--control PATH`; `--no-control` disables it. No socket without
+  `--socket` or `--control` (`--dry-run` and `--once` have none by default).
+- **Security:** mode `0600`; every connection's peer uid is checked (`SO_PEERCRED`) and
+  another user's connection gets `{"ok":false,"error":"permission denied"}`. The helper
+  never runs anything that is not in its config file or in a `test` request. A stale
+  socket left by a helper that died is replaced at start (only if it is a socket and
+  nothing answers on it); a live one or any other file in the way leaves the channel off
+  (logged). The socket is removed at exit.
+- **Framing:** newline-delimited JSON, one request line → one reply line, several requests
+  per connection allowed. A request is at most 64 KiB. At most 16 connections at a time.
+- **Errors:** `{"ok": false, "error": "..."}` (invalid JSON, no `op`, unknown op, bad
+  arguments, unknown source).
+
+Requests are answered without blocking the publishing loop: `status` and `test` run on the
+connection's own thread; `restart`, `restart-all` and `reload` are queued to the loop,
+which wakes at once, and answered when applied (fetches already running are not waited for).
+
+### `{"op": "status"}`
+
+```json
+{"ok": true, "config": "/home/u/.config/hyprune/sources.json", "connected": true, "configError": null,
+ "sources": {
+   "u-3f9a1c": {"kind": "command", "argv": ["/path/to/system-gauges.py", "ram"], "intervalS": 5,
+                "enabled": true, "running": false,
+                "lastRun": {"at": 1791800000000, "ok": true,
+                            "values": {"value": 71, "display": "12.4 GB", "label": "RAM", "level": "ok",
+                                       "_status": "ok", "_exitCode": 0},
+                            "error": null, "exitCode": 0, "durationMs": 23},
+                "nextRunAt": 1791800005000, "resets": 0},
+   "weather": {"kind": "http", "url": "https://...", "intervalS": 60, "enabled": false, "running": false,
+               "lastRun": null, "nextRunAt": null, "resets": 0}},
+ "limits": {"dev": false,
+            "command": {"intervalS": [5, 86400], "devIntervalS": 1, "timeoutS": [1, 60]},
+            "http": {"intervalS": [10, 86400], "loopbackIntervalS": 2, "timeoutS": [1, 30]},
+            "timer": {"intervalS": [1, 86400]}}}
+```
+
+- `config` is the absolute config path (write there, then `reload`). `configError` is why
+  the current file is not in use (invalid), else `null`. `connected`: a core connection
+  with the `data.publish` grant is open.
+- `sources` is keyed by the config `id`, enabled sources first, then disabled ones (those
+  show their `kind`, `argv`/`url` and `intervalS` as written).
+- `argv` is the vector that runs (a relative program path resolved). `lastRun` is the last
+  finished fetch: `at` wall-clock Unix ms, `ok` (`_status` was `ok`), `values` exactly as
+  published (with reserved keys; on an error the last good values), `error`, `exitCode`
+  (commands; `null` otherwise), `durationMs`. `null` before the first run. `nextRunAt`
+  is wall-clock Unix ms (back-off included), `null` while running. `resets` counts
+  `resetAverage` restarts.
+- `limits` are the bounds the helper enforces now: with `devFastIntervals` or `--dev`
+  (`"dev": true`) the command and HTTP floors are 1 s.
+
+### `{"op": "test", "source": {...}}`
+
+```json
+{"op": "test", "source": {"kind": "command", "argv": ["/path/to/script", "ram"], "timeoutS": 4, "output": "json"}}
+→ {"ok": true, "values": {"value": 71, "display": "12.4 GB"}, "stdout": "{\"value\": 71, ...}\n",
+   "stderr": "", "error": null, "exitCode": 0, "durationMs": 31}
+```
+
+Runs a source definition once with the same rules as a configured source (no shell, a new
+process group, `timeoutS`, the 64 KiB stdout cap, `output`/`key`/`fields`/`env`/`cwd`;
+relative paths resolve against the config file's directory) and publishes nothing. The
+definition is validated like a config entry (`argv` must be a non-empty list of strings;
+an `intervalS`, if given, must respect the floors); an invalid one is an `ok: false` error.
+A source that fails still answers `ok: true`, with `error` set (exit code, timeout, invalid
+output, field errors) and `values` empty (or the fields that resolved). `stdout` is the
+first 4 KiB, `stderr` the last 4 KiB (also on a timeout). `exitCode` is negative when the
+command was killed (a timeout: `-9`). `kind: "http"` is also accepted (`exitCode` and
+`stdout` stay empty). One or two tests run at a time; more get `another test is running`.
+
+### `{"op": "restart", "id": "<id>", "resetAverage": false}`
+
+→ `{"ok": true}`. `id` is the config id (or the full source id). Kills the source's running
+command (its whole process group; the killed run is not published or counted as a
+failure), clears the back-off and runs it now; the result is published as usual (at most
+10 publications a second per source). An HTTP fetch in flight finishes and the source runs
+again right after. `resetAverage: true` increments the source's reset counter, published
+as the reserved key `_reset` (an integer) in every publication of that source from then on:
+core restarts the running averages bound to the source when `_reset` changes, so each
+request resets them exactly once. A disabled or unknown id is an error.
+
+### `{"op": "restart-all"}`
+
+→ `{"ok": true}` (plus `"configError"` when the file could not be read: the running
+definitions are restarted instead). Withdraws every source (`data.remove`), closes the core
+connection, re-reads the config (including `client` and `protocol`), reconnects at once
+with a fresh token (`--token-fd --token-refresh`: a `renew` request; `--token-file`: the
+file is read again) and starts every source now. Reset counters are kept.
+
+### `{"op": "reload"}`
+
+→ `{"ok": true, "added": [...], "changed": [...], "removed": [...]}` (config ids). Re-reads
+the config now, with the same rules as the once-a-second check (unchanged sources keep
+running). An invalid or missing file is an error and the running sources stay.
 
 ## Configuration
 
@@ -114,7 +225,7 @@ Each source publishes source ID `<client id>.<id>` (`id` is a slug, `[a-z][a-z0-
 | `id` | all | Slug; unique. |
 | `kind` | all | `command`, `http` or `timer`. |
 | `enabled` | all | `false` skips the source. |
-| `intervalS` | all | Seconds between fetches. Command: ≥ 5, default 60. HTTP: ≥ 10 (≥ 2 for a loopback host), default 60, ±10% jitter. Timer: ≥ 1, default 1. |
+| `intervalS` | all | Seconds between fetches, at most 86400. Command: ≥ 5, default 60. HTTP: ≥ 10 (≥ 2 for a loopback host), default 60, ±10% jitter. Timer: ≥ 1, default 1. |
 | `timeoutS` | command, http | Command 1–60, HTTP 1–30; default 10 (or the interval if shorter). |
 | `ttlMs` | all | `data.publish` TTL, 100–60000; default 10 × the interval, at most 60000. |
 | `fields` | command (`json`), http | Picked values (below). Without `fields`, every top-level scalar is published. |
@@ -172,7 +283,7 @@ value; the source reports `_status: "error"` with the field errors in `_error`.
 - `output: "json"`: stdout is **one JSON object**, or **JSON lines** (one object per line,
   merged in order, later keys win). Without `fields`, top-level scalars (bool, finite
   number, string) are published; other values are dropped with a warning. Strings are cut
-  to 256 bytes; keys starting with `_` are reserved and dropped; at most 29 keys are kept
+  to 256 bytes; keys starting with `_` are reserved and dropped; at most 28 keys are kept
   (32 minus the metadata keys).
 - stdout over **64 KiB** is an error (not truncated). The last **4 KiB** of stderr is kept
   for the log and the error message.
@@ -183,8 +294,9 @@ value; the source reports `_status: "error"` with the field errors in `_error`.
 
 Every publication carries reserved keys: `_status` (`ok` or `error`), `_error` on an error
 (≤ 256 characters, without URL query strings, fragments or secret values), and
-`_exitCode` (command) or `_httpStatus` (HTTP). On an error the last good values stay in the
-publication, so a machine dims rather than resets.
+`_exitCode` (command) or `_httpStatus` (HTTP), and `_reset` (an integer) once the control
+channel's `restart` with `resetAverage` was used for the source. On an error the last good
+values stay in the publication, so a machine dims rather than resets.
 
 A failed fetch retries after interval × 2ⁿ (±20% jitter, n = consecutive failures), at most
 10 minutes; a success resets it. HTTP `429`/`503` with `Retry-After` waits at least that
@@ -402,7 +514,10 @@ python3 -m unittest dev/machines/test_machines.py
 They cover output parsing and caps, timeouts (process group killed), back-off, JSON
 pointers and fields, sequencing, publish-on-change and keep-alive, HTTP behaviour against a
 local server, the gauge scripts (a fake `/proc` and `/sys`: a suspended GPU is never
-queried), token renewal over a descriptor, reloading the configuration, 30-minute timelines
+queried), token renewal over a descriptor, reloading the configuration, the control channel
+(status shape, test runs that publish nothing, restart killing a running command and
+`_reset`, restart-all reconnecting with a renewed token, reload, idling until a config
+appears, the peer uid check, stale sockets), 30-minute timelines
 of every simulator (exact keys, value domains, monotonic
 counters, failures, outages, bursts), and the helper against a fake core socket (hello,
 `data.publish` parameters, a rate refusal, reconnecting with a fresh token, `data.remove`
