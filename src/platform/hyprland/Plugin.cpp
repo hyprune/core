@@ -5366,9 +5366,11 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     // animating one out of view doesn't change the image, and in view frames are forced).
     h(r.npcs.size());
     // Occlusion changes once per crossing: the frame after a character goes fully behind a
-    // wall draws it gone, instead of leaving its last frame at the wall's edge.
-    for (auto &npc : r.npcs)
-        h(npc.occluded);
+    // wall draws it gone, instead of leaving its last frame at the wall's edge. Only drawn
+    // ones count: an off-screen resident walking behind walls changes nothing on screen.
+    if (auto m = monitor.lock(); m && !r.npcs.empty())
+        for (bool drawn : r.npcsInSight(camera, float(m->m_pixelSize.x) / std::max(1.f, float(m->m_pixelSize.y))))
+            h(drawn);
     if (npcState != "animating")
         for (auto &npc : r.npcs) {
             h.bytes(npc.model.v.data(), sizeof npc.model.v);

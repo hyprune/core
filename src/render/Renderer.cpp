@@ -722,6 +722,17 @@ bool Renderer::objectInView(size_t instance, const sim::Camera &camera, float as
     auto areas = world::visibleAreas(*world_, camera.position);
     return instanceVisible(world_->objectInstances[instance], planes, areas, graphics.value("visibility_culling", true));
 }
+std::vector<bool> Renderer::npcsInSight(const sim::Camera &camera, float aspect) const {
+    std::vector<bool> drawn(npcs.size());
+    if (pending_ || npcs.empty())
+        return drawn;
+    auto planes = frustumPlanes(camera.projection(aspect) * camera.view());
+    auto areas = world_ ? world::visibleAreas(*world_, camera.position) : std::vector<bool>{};
+    bool regions = graphics.value("visibility_culling", true);
+    for (size_t i = 0; i < npcs.size(); ++i)
+        drawn[i] = npcs[i].character && npcVisible(npcs[i], planes, areas, regions);
+    return drawn;
+}
 void Renderer::init() {
     if (quadVao_)
         return;

@@ -169,6 +169,8 @@ class Renderer {
     std::vector<world::WorldLabel> worldLabels;
     // An instance's swept bounds in the frustum and not region-culled (frame scheduling).
     bool objectInView(size_t instance, const sim::Camera &, float aspect) const;
+    // Which NPCs a frame would draw (in the frustum, not region-culled, not occluded).
+    std::vector<bool> npcsInSight(const sim::Camera &, float aspect) const;
     size_t worldLabelsDrawn = 0;
     bool materialDetails = true; // Also permits like-for-like benchmark comparisons.
     static constexpr int lightmapMipLevels = 2; // Deepest lightmap mip sampled (4 px bake gutters).

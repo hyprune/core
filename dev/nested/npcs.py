@@ -293,10 +293,14 @@ def acceptance(client, children, args, shell_token, socketpath):
     facing('crimson-walker', -5., height=2.2)
     look_fps = fps(); followed = agent('crimson-walker')
     camera([0, 1.7, -14.3], 0, 0)  # at the north wall, facing it: every character behind
+    time.sleep(.5)  # the jump's own frames
     causes0 = s.camera()['frameCauses']; away = fps(); causes1 = s.camera()['frameCauses']
-    print('frame causes out of view:', {k: v - causes0.get(k, 0) for k, v in causes1.items() if v != causes0.get(k, 0)}, flush=True)
-    check('animating characters in view render frames; out of view, none', look_fps > 20 and away < 2,
-          {'inView': look_fps, 'occluded': followed['occluded'], 'outOfView': away, 'forcesFrames': s.camera()['npcs']['forcesFrames']})
+    causes = {k: v - causes0.get(k, 0) for k, v in causes1.items() if v != causes0.get(k, 0)}
+    print('frame causes out of view:', causes, flush=True)
+    # Residents walking behind walls off screen change nothing drawn: no 'npcs' key changes.
+    check('animating characters in view render frames; out of view, none', look_fps > 20 and away < 2 and not causes.get('npcs'),
+          {'inView': look_fps, 'occluded': followed['occluded'], 'outOfView': away, 'causes': causes,
+           'forcesFrames': s.camera()['npcs']['forcesFrames']})
     motion('still'); facing('crimson-walker', -5., height=2.2); still_fps = fps()
     check('still characters cost no frames', still_fps < 2 and state()['npcs']['state'] == 'still', {'fps': still_fps})
     client.call('graphics.set', {'patch': {'npc_motion': 'always', 'reduced_motion': True}}); time.sleep(.3)
