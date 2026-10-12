@@ -437,6 +437,30 @@ void validateObjectGltf(const Json &value, const std::string &version, const Jso
     }
     for (auto &s : arrayOr(slots, "stacks"))
         node(s.at("node").get<std::string>(), "slots.stacks " + s.at("id").get<std::string>());
+    std::map<std::string, std::string> levelNodes;
+    for (auto &l : arrayOr(slots, "levels")) {
+        auto where = "slots.levels " + l.at("id").get<std::string>();
+        std::vector<std::string> names{l.at("node").get<std::string>()};
+        if (l.contains("surface"))
+            names.push_back(l["surface"].get<std::string>());
+        for (auto &name : names) {
+            if (collidable && (*collidable)["node"] == name) {
+                fail(where + ": the collision proxy can't be moved");
+                continue;
+            }
+            if (levelNodes.contains(name))
+                fail(where + ": node \"" + name + "\" is also moved by levels slot " + levelNodes[name]);
+            else
+                levelNodes[name] = l["id"].get<std::string>();
+        }
+        auto i = node(names[0], where);
+        auto j = names.size() > 1 ? node(names[1], where) : std::nullopt;
+        if (i && j) {
+            auto inside = subtree(*i);
+            if (std::find(inside.begin(), inside.end(), *j) != inside.end())
+                fail(where + ": surface \"" + names[1] + "\" must not be inside the fill node's subtree");
+        }
+    }
     for (auto &t : arrayOr(slots, "toggles"))
         for (auto &name : arrayOr(t, "nodes")) {
             if (collidable && name == (*collidable)["node"])
@@ -632,6 +656,36 @@ void validateMachine(const Json &value, const Fail &fail) {
             o.kind = "unknown";
         return o;
     };
+    auto numeric = [](const Json *input) { return input && ((*input)["type"] == "int" || (*input)["type"] == "number"); };
+    // The form applies to the running average (or the override's value): an int input's
+    // average is fractional, and an override widens a direct range.
+    auto averaged = [&](const Json &map, const Json &input) {
+        if (!map.is_object() || !map.contains("average"))
+            return outputs(map, input);
+        Json form = map;
+        form.erase("average");
+        auto o = outputs(form, input);
+        if (!form.empty())
+            return o;
+        const Json *over = nullptr;
+        if (map["average"].contains("override")) {
+            auto ref = map["average"]["override"].get<std::string>();
+            auto id = ref.substr(0, ref.find('.'));
+            if (inputs.contains(id))
+                over = &inputs[id];
+        }
+        if (o.range && numeric(over))
+            o.range = std::array<double, 2>{std::min((*o.range)[0], (*over)["min"].get<double>()),
+                                            std::max((*o.range)[1], (*over)["max"].get<double>())};
+        else if (over && !numeric(over)) {
+            Output k;
+            k.kind = (*over).value("type", "");
+            return k;
+        }
+        if (o.range)
+            o.integer = false;
+        return o;
+    };
     std::set<std::string> animated, positions;
     if (has(value["traits"], "decorative"))
         for (auto &a : arrayOr(value["traits"]["decorative"], "animations"))
@@ -678,6 +732,7 @@ void validateMachine(const Json &value, const Fail &fail) {
                      : kind == "count"   ? slotIds("stacks").contains(name)
                      : kind == "spawn"   ? slotIds("spawns").contains(name)
                      : kind == "effect"  ? slotIds("effects").contains(name)
+                     : kind == "level"   ? slotIds("levels").contains(name)
                                          : false;
         if (!known) {
             fail(where + ": unknown " + kind + " target \"" + name + "\"");
@@ -686,7 +741,21 @@ void validateMachine(const Json &value, const Fail &fail) {
         if (!input)
             continue;
         const Json map = drive.value("map", Json());
-        auto o = outputs(map, *input);
+        if (map.is_object() && map.contains("average")) {
+            if (!numeric(input)) {
+                fail(where + ": average needs an int or number input");
+                continue;
+            }
+            if (map["average"].contains("override")) {
+                auto ref = map["average"]["override"].get<std::string>();
+                auto *over = resolve(ref, where + " average override");
+                if (ref == inputRef)
+                    fail(where + ": average override must name another input");
+                else if (over && ((*over)["type"] == "event" || (*over)["type"] == "items"))
+                    fail(where + ": average override " + ref + " must be a value input, not " + (*over)["type"].get<std::string>());
+            }
+        }
+        auto o = averaged(map, *input);
         bool event = o.kind == "event" || ((*input)["type"] == "event" && map.is_null());
         if (kind == "state") {
             if (!o.values)
@@ -699,7 +768,7 @@ void validateMachine(const Json &value, const Fail &fail) {
             within(o, 0, 10, where);
         else if (kind == "emission")
             within(o, 0, 16, where);
-        else if (kind == "position")
+        else if (kind == "position" || kind == "level")
             within(o, 0, 1, where);
         else if (kind == "count") {
             within(o, 0, INFINITY, where);
@@ -733,6 +802,12 @@ void validateMachine(const Json &value, const Fail &fail) {
         if (recipe.contains("maps"))
             for (auto &[ref, map] : recipe["maps"].items()) {
                 auto *input = resolve(ref, where);
+                if (map.is_object() && map.contains("average")) {
+                    if (input && !numeric(input))
+                        fail(where + ": " + ref + " average needs an int or number input");
+                    if (map["average"].is_object() && map["average"].contains("override"))
+                        fail(where + ": " + ref + " average override is for drives only");
+                }
                 if (input && (*input)["type"] == "enum") {
                     auto o = outputs(map, Json{{"type", "text"}});
                     if (o.values)
@@ -879,6 +954,12 @@ void validateObjectManifest(const Json &value, const std::string &version, const
                     }
                 }
         }
+    for (auto &l : arrayOr(slots, "levels"))
+        if (l.contains("axis")) {
+            double x = l["axis"][0], y = l["axis"][1], z = l["axis"][2];
+            if (std::abs(std::sqrt(x * x + y * y + z * z) - 1) > .001)
+                fail("slots.levels " + l["id"].get<std::string>() + ": axis must be a unit vector");
+        }
     for (auto &s : arrayOr(slots, "stacks")) {
         auto &grid = s["layout"]["grid"];
         double cells = 1;
@@ -887,8 +968,8 @@ void validateObjectManifest(const Json &value, const std::string &version, const
         if (s["cap"].get<double>() > cells)
             fail("slots.stacks " + s["id"].get<std::string>() + ": cap exceeds the layout grid");
         for (size_t j = 0; j < grid.size(); ++j)
-            if (grid[j].get<double>() > 1 && !(s["layout"]["spacing"][j].get<double>() > 0))
-                fail("slots.stacks " + s["id"].get<std::string>() + ": spacing " + axis(int(j)) + " must be positive for " +
+            if (grid[j].get<double>() > 1 && !(std::isfinite(s["layout"]["spacing"][j].get<double>()) && s["layout"]["spacing"][j].get<double>() != 0))
+                fail("slots.stacks " + s["id"].get<std::string>() + ": spacing " + axis(int(j)) + " must be non-zero for " +
                      num(grid[j]) + " cells");
     }
     if (has(traits, "machine"))

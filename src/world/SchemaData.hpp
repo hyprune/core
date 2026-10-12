@@ -12468,7 +12468,7 @@ inline constexpr const char *objectSchema010 = R"schema({
                   "target": {
                     "type": "string",
                     "maxLength": 160,
-                    "pattern": "^(animation|state|emission|label|visible|count|spawn|effect|position):[^:\\s]{1,128}$"
+                    "pattern": "^(animation|state|emission|label|visible|count|spawn|effect|position|level):[^:\\s]{1,128}$"
                   },
                   "map": {
                     "$ref": "#/$defs/mapping"
@@ -13053,7 +13053,7 @@ inline constexpr const char *objectSchema010 = R"schema({
               "cap": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 64
+                "maximum": 100
               },
               "layout": {
                 "type": "object",
@@ -13073,10 +13073,11 @@ inline constexpr const char *objectSchema010 = R"schema({
                     "items": {
                       "type": "number",
                       "maximum": 10,
-                      "minimum": 0
+                      "minimum": -10
                     },
                     "minItems": 3,
-                    "maxItems": 3
+                    "maxItems": 3,
+                    "description": "Metres between copies per axis; a negative component fills from the node towards -axis. Non-zero where that axis's grid is above 1."
                   },
                   "fill": {
                     "enum": [
@@ -13095,6 +13096,12 @@ inline constexpr const char *objectSchema010 = R"schema({
                   "fill"
                 ],
                 "additionalProperties": false
+              },
+              "rate": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "description": "Copies per second the shown count moves toward the target; 0 or absent: at once."
               }
             },
             "required": [
@@ -13133,6 +13140,78 @@ inline constexpr const char *objectSchema010 = R"schema({
               "nodes"
             ],
             "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "../v0.8/common.schema.json#/$defs/slug"
+              },
+              "node": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "mode": {
+                "enum": [
+                  "fill",
+                  "slide"
+                ]
+              },
+              "axis": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "length": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 10
+              },
+              "surface": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "settle": {
+                "enum": [
+                  "ease",
+                  "spring"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "node",
+              "mode",
+              "length"
+            ],
+            "additionalProperties": false,
+            "not": {
+              "properties": {
+                "mode": {
+                  "const": "slide"
+                },
+                "surface": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "mode",
+                "surface"
+              ]
+            },
+            "description": "A subtree scaled (fill) or moved (slide) by level:<id>, 0-1. axis: asset-space unit vector, default [0, 1, 0]; surface: fill only; settle default ease."
           },
           "minItems": 1,
           "maxItems": 8
@@ -13596,10 +13675,58 @@ inline constexpr const char *objectSchema010 = R"schema({
             }
           },
           "additionalProperties": false
+        },
+        "average": {
+          "type": "object",
+          "properties": {
+            "windowS": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 3600
+            },
+            "override": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "pattern": "^[a-z][A-Za-z0-9]*(\\.[1-9][0-9]?)?$"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Running average modifier: the time-weighted mean of the value over the last windowS seconds (default 60) of fresh data; the mapping's form applies to it. override (drives only): another non-event input whose value, while present, replaces the average."
         }
       },
       "additionalProperties": false,
-      "description": "RFC-0013 mapping language: direct ({}), cases, thresholds, scale, becomes, counter or format."
+      "description": "RFC-0013 mapping language: direct ({}), cases, thresholds, scale, becomes, counter or format; average modifies the value forms (not becomes or counter).",
+      "not": {
+        "anyOf": [
+          {
+            "properties": {
+              "average": {
+                "type": "object"
+              },
+              "becomes": {}
+            },
+            "required": [
+              "average",
+              "becomes"
+            ]
+          },
+          {
+            "properties": {
+              "average": {
+                "type": "object"
+              },
+              "counter": {
+                "const": true
+              }
+            },
+            "required": [
+              "average",
+              "counter"
+            ]
+          }
+        ]
+      }
     },
     "input": {
       "type": "object",
