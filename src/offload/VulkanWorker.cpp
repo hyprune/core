@@ -1,3 +1,4 @@
+#include "Characters.hpp"
 #include "Objects.hpp"
 #include "Sandbox.hpp"
 #include "VkContext.hpp"
@@ -269,7 +270,11 @@ int main(int argc, char **argv) {
                   {"offset", b.dest.layout.offset}},
                  {b.dest.fd});
         }
-        auto scene = world::load(argv[2], {render::Renderer::compressedFormats()});
+        // World 0.9 library references resolve in the object roots the plugin passed.
+        world::LoadOptions loadOptions{render::Renderer::compressedFormats()};
+        for (int k = 8; k < argc; ++k)
+            loadOptions.libraryRoots.push_back(argv[k]);
+        auto scene = world::load(argv[2], loadOptions);
         render::Renderer renderer;
         renderer.applyGraphics(render::graphicsDefaults());
         renderer.worldOnly = true;
@@ -370,6 +375,10 @@ int main(int argc, char **argv) {
                 renderer.transforms = objects.transforms;
             }
             objects.materialize(*scene);
+            // Characters: posed here from the plugin's pose inputs, uploaded before drawing.
+            offload::applyCharacters(p.value("characters", Json::array()), *scene, renderer);
+            renderer.prepareCharacters();
+            p.erase("characters");
             if (p.contains("clock") && p["clock"].is_number())
                 renderer.animationClock = p["clock"].get<double>();
             if (p.contains("logicalScale") && p["logicalScale"].is_number())
