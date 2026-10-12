@@ -29,6 +29,9 @@ struct Image {
 enum CompressedFormat : unsigned { BC7 = 1, BC1BC3 = 2, ASTC4x4 = 4 };
 struct LoadOptions {
     unsigned compressedFormats = 0; // 0: transcode KTX2 to RGBA (no GL context, e.g. world-check)
+    // World 0.9 library references resolve against these installed library roots, in order
+    // (each holds <id>@<version>/ directories; RFC-0011 "Libraries").
+    std::vector<std::filesystem::path> libraryRoots;
 };
 // Texture indices refer to images and samplers together; color space belongs to a slot.
 struct Sampler {
@@ -67,10 +70,19 @@ struct CubeLevel {
     int size;
     std::array<std::vector<float>, 6> faces;
 };
+struct Character;
 // A world 0.8 object asset: a package glTF in asset space (node transforms
 // applied), drawn once per instance with the instance and animation models.
+// World 0.9 (RFC-0011): an asset may come from a package object directory or an
+// installed library (manifest, directory), carry traits, and be a skinned character
+// (character set, meshes empty: characters are posed and drawn by the NPC runtime).
 struct ObjectAsset {
     std::string id;
+    Json traits = Json::object();       // object.json traits (inline assets: their traits)
+    Json manifest = nullptr;            // object.json of dir/library assets
+    std::filesystem::path directory;    // where a dir/library asset was read from
+    std::string ref;                    // its catalog ref (package/<id> or library/<lib>@<v>/<obj>)
+    std::shared_ptr<const Character> character;
     bool unlit = false;                // lighting.mode "unlit": every material drawn unlit
     std::vector<Mesh> meshes;          // rendered meshes; Mesh::node is the asset's node index
     std::vector<int> nodeParents;
@@ -112,6 +124,9 @@ struct ObjectInstance {
     // Visibility areas owning static scene geometry that the swept sphere overlaps:
     // the object is region-visible when any of them is. Empty: frustum only.
     std::vector<int> regions;
+    // A character (asset with the character trait): drawn skinned by the NPC runtime, never
+    // by the instanced object path; its model follows the agent. bound: on a route (no pose).
+    bool character = false, bound = false;
 };
 struct World {
     PlayableBounds playable;
@@ -142,6 +157,9 @@ struct World {
     std::vector<std::pair<Vec3, Vec3>> meshBounds;
     std::vector<std::pair<unsigned, unsigned>> visualSource;
     std::map<std::string, unsigned> objectNodes;
+    // World 0.9 (RFC-0011): authored paths, world seat anchors and keepClear boxes, as
+    // validated manifest records (paths keep the editor's {points:[{position,type}]} shape).
+    Json paths = Json::array(), seats = Json::array(), keepClear = Json::array();
     Json manifest, map = nullptr, places = Json::array();
     Json walkingNodes = Json::array(), walkingEdges = Json::array();
     Json areas = Json::array(), anchors = Json::array(), objects = Json::array(), placementZones = Json::array(),

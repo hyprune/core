@@ -1,4 +1,8 @@
 #include "Objects.hpp"
+#include "Catalog.hpp"
+#include "Character.hpp"
+#include "Paths.hpp"
+#include "ipc/Protocol.hpp"
 #include "Format.hpp"
 #include "Gltf.hpp"
 #include "Mounts.hpp"
@@ -115,12 +119,84 @@ ObjectAsset buildObjectAsset(World &w, const std::filesystem::path &root, const 
     }
     return a;
 }
+namespace {
+// A skinned character asset (RFC-0010 spec, checked as hyprune-npc-check does): no static
+// meshes; bounds are the rest pose's, the swept sphere that grown by 0.6 m.
+ObjectAsset characterAsset(const std::filesystem::path &glb, const std::string &id, const Json &traits, size_t &memory) {
+    const std::string label = "objectAssets " + id;
+    ObjectAsset a;
+    a.id = id;
+    a.traits = traits;
+    std::shared_ptr<Character> c;
+    try {
+        c = std::make_shared<Character>(loadCharacter(glb));
+    } catch (const std::exception &e) {
+        throw std::runtime_error(label + ": " + e.what());
+    }
+    for (auto &p : checkCharacter(*c))
+        require(p.level != CharacterProblem::Error, label + ": " + p.message);
+    for (auto &image : c->images)
+        memory += image.rgba.size() * 4 / 3;
+    for (auto &prim : c->primitives)
+        memory += prim.vertices.size() * sizeof(Character::Vertex) + prim.indices.size() * 4;
+    a.low = c->lo, a.high = c->hi;
+    Vec3 grown{.6f, .6f, .6f};
+    a.center = (c->lo + c->hi) * .5f;
+    a.radius = length((c->hi + grown) - (c->lo - grown)) * .5f;
+    a.character = std::move(c);
+    return a;
+}
+// A validated object directory (object.json + scene) as an asset of w: package dirs,
+// installed library objects and catalog objects share it.
+ObjectAsset manifestAsset(World &w, const std::filesystem::path &dir, const std::string &id, const Json &manifest,
+                          LoadOptions options, size_t &memory) {
+    const auto traits = manifest.value("traits", Json::object());
+    if (traits.contains("character")) {
+        auto a = characterAsset(safePath(dir, manifest.at("scene").get<std::string>()), id, traits, memory);
+        a.manifest = manifest;
+        a.directory = dir;
+        return a;
+    }
+    const Json animations = traits.contains("decorative") ? traits["decorative"].value("animations", Json::array()) : Json::array();
+    std::string proxy = traits.contains("collidable") ? traits["collidable"].value("node", std::string()) : "";
+    bool unlit = manifest.value("lighting", Json::object()).value("mode", "probe") == "unlit";
+    // Object formats (0.9 on) take the glTF extension rules of the newest world format
+    // they extend: world 0.8's (KTX2, meshopt and quantisation included).
+    auto asset = buildObjectAsset(w, dir, id, manifest.at("scene").get<std::string>(), "0.8", options, animations, proxy, unlit,
+                                  memory);
+    // RFC-0011: core recomputes the rest bounds; more than 1 cm off on any face rejects the object.
+    if (manifest.contains("bounds")) {
+        auto &b = manifest["bounds"];
+        Vec3 lo = vec(b.at("min")), hi = vec(b.at("max"));
+        float off = std::max({std::abs(lo.x - asset.low.x), std::abs(lo.y - asset.low.y), std::abs(lo.z - asset.low.z),
+                              std::abs(hi.x - asset.high.x), std::abs(hi.y - asset.high.y), std::abs(hi.z - asset.high.z)});
+        require(off <= .0105f, "bounds: the decoded scene differs from object.json bounds by " + std::to_string(off) + " m");
+    }
+    asset.traits = traits;
+    asset.manifest = manifest;
+    asset.directory = dir;
+    return asset;
+}
+// Installed library object directory for "<id>@<version>" / object, else empty.
+std::filesystem::path libraryObject(const LoadOptions &options, const std::string &library, const std::string &object) {
+    for (auto &root : options.libraryRoots) {
+        auto dir = root / library / "objects" / object;
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(dir / "object.json", ec))
+            return dir;
+    }
+    return {};
+}
+} // namespace
 void loadObjects(World &w, const std::filesystem::path &root, const std::string &formatVersion, LoadOptions options,
                  size_t &memory) {
     const auto &j = w.manifest;
     const auto assets = j.value("objectAssets", Json::array()), objects = j.value("objects", Json::array());
-    if (assets.empty() && objects.empty())
+    bool v09 = format::atLeast(formatVersion, "0.9");
+    if (assets.empty() && objects.empty()) {
+        loadPaths(w, formatVersion);
         return;
+    }
     require(format::atLeast(formatVersion, "0.8"), "world objects need world format 0.8");
     require(assets.size() <= 32 && objects.size() <= 256, "at most 32 object assets and 256 objects");
     std::map<std::string, unsigned> ids;
@@ -128,14 +204,70 @@ void loadObjects(World &w, const std::filesystem::path &root, const std::string 
         auto id = entry.at("id").get<std::string>();
         const std::string label = "objectAssets " + id;
         require(ids.emplace(id, unsigned(w.objectAssets.size())).second, "duplicate object asset id " + id);
-        // Reserved for shared object libraries (a later world format).
-        require(!entry.contains("library"), label + ": library references are reserved for a later world format");
+        if (entry.contains("library") || entry.contains("dir")) {
+            // World 0.9: a package object directory or an installed library object, validated
+            // with the shared object rules (as the catalog does).
+            require(v09, label + (entry.contains("library") ? ": library references need world format 0.9"
+                                                            : ": object directories need world format 0.9"));
+            std::filesystem::path dir;
+            std::string ref, source;
+            if (entry.contains("dir")) {
+                dir = safePath(root, entry["dir"].get<std::string>() + "/object.json").parent_path();
+                ref = "package/" + id, source = "package";
+            } else {
+                auto library = entry.at("library").get<std::string>(), object = entry.at("object").get<std::string>();
+                dir = libraryObject(options, library, object);
+                if (dir.empty())
+                    throw std::runtime_error("world.library.missing: " + library + " (" + object + ") is not installed");
+                ref = "library/" + library + "/" + object, source = "library";
+            }
+            auto e = scanObject(dir, ref, source);
+            require(e.state == "ready", label + ": " + (e.errors.empty() ? std::string("invalid object") : e.errors[0]));
+            auto objectFormat = e.manifest.value("formatVersion", std::string());
+            require(ipc::protocol::atLeast(formatVersion, objectFormat),
+                    label + ": object format " + objectFormat + " is newer than the world's " + formatVersion);
+            auto asset = manifestAsset(w, dir, id, e.manifest, options, memory);
+            asset.ref = ref;
+            w.objectAssets.push_back(std::move(asset));
+            continue;
+        }
         require(entry.contains("scene"), label + ": scene required");
-        std::string proxy = entry.contains("collision") ? entry["collision"].at("node").get<std::string>() : "";
-        w.objectAssets.push_back(buildObjectAsset(w, root, id, entry.at("scene").get<std::string>(), formatVersion, options,
-                                                  entry.value("animations", Json::array()), proxy,
-                                                  entry.value("lighting", Json::object()).value("mode", "probe") == "unlit", memory));
+        // Inline assets: the 0.8 shorthand (animations, collision) or 0.9 traits, not both.
+        auto traits = entry.value("traits", Json::object());
+        require(v09 || !entry.contains("traits"), label + ": traits need world format 0.9");
+        require(!(entry.contains("animations") && traits.contains("decorative")),
+                label + ": animations and traits.decorative are two forms of one thing; give one");
+        require(!(entry.contains("collision") && traits.contains("collidable")),
+                label + ": collision and traits.collidable are two forms of one thing; give one");
+        for (auto &[name, value] : traits.items())
+            require(name == "decorative" || name == "collidable" || name == "movable" || name == "character" || name == "seat",
+                    label + ": trait " + name + " is not part of world format " + formatVersion);
+        require(!traits.contains("character") || traits.size() == 1, label + ": a character combines with no other trait");
+        auto scenePath = entry.at("scene").get<std::string>();
+        if (traits.contains("character")) {
+            auto asset = characterAsset(safePath(root, scenePath), id, traits, memory);
+            asset.ref = "package/" + id;
+            w.objectAssets.push_back(std::move(asset));
+            continue;
+        }
+        Json animations = entry.contains("animations") ? entry["animations"]
+                          : traits.contains("decorative") ? traits["decorative"].value("animations", Json::array())
+                                                          : Json::array();
+        std::string proxy = entry.contains("collision") ? entry["collision"].at("node").get<std::string>()
+                            : traits.contains("collidable") ? traits["collidable"].value("node", std::string())
+                                                            : "";
+        auto asset = buildObjectAsset(w, root, id, scenePath, formatVersion, options, animations, proxy,
+                                      entry.value("lighting", Json::object()).value("mode", "probe") == "unlit", memory);
+        if (entry.contains("animations"))
+            traits["decorative"] = {{"animations", entry["animations"]}};
+        if (entry.contains("collision"))
+            traits["collidable"] = entry["collision"];
+        asset.traits = traits;
+        asset.ref = "package/" + id;
+        w.objectAssets.push_back(std::move(asset));
     }
+    // World 0.9 paths, seats and keepClear, and the instance fields that refer to them.
+    loadPaths(w, formatVersion);
     std::set<std::string> objectIds;
     for (const auto &entry : objects) {
         ObjectInstance o;
@@ -144,23 +276,40 @@ void loadObjects(World &w, const std::filesystem::path &root, const std::string 
         auto asset = ids.find(entry.at("asset").get<std::string>());
         require(asset != ids.end(), "objects " + o.id + ": unknown asset " + entry.at("asset").get<std::string>());
         o.asset = asset->second;
-        auto position = vec(entry.at("pose").at("position"));
-        auto q = entry.at("pose").at("rotation").get<std::array<float, 4>>();
-        require(std::isfinite(q[0] + q[1] + q[2] + q[3]) &&
-                    std::abs(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3] - 1) < .002f,
-                "objects " + o.id + ": rotation must be normalized");
+        const auto &a = w.objectAssets[o.asset];
+        o.character = a.character != nullptr;
         o.scale = entry.value("scale", 1.f);
         o.speed = entry.value("speed", 1.f);
         o.phase = entry.value("phase", 0.f);
         require(o.scale >= .01f && o.scale <= 100 && o.speed >= 0 && o.speed <= 10 && o.phase >= 0 && o.phase < 1,
                 "objects " + o.id + ": scale, speed or phase out of range");
+        Vec3 position{};
+        std::array<float, 4> q{0, 0, 0, 1};
+        if (entry.contains("path")) {
+            // Bound: starts at phase along its route, facing along it.
+            o.bound = true;
+            for (auto &p : w.paths)
+                if (p["id"] == entry["path"]) {
+                    auto route = routeOf(p);
+                    float s = route.wrap(o.phase * route.length());
+                    position = route.at(s);
+                    Vec3 t = route.tangent(s) * (entry.value("reverse", false) ? -1.f : 1.f);
+                    float yaw = std::atan2(t.x, t.z);
+                    q = {0, std::sin(yaw * .5f), 0, std::cos(yaw * .5f)};
+                }
+        } else {
+            position = vec(entry.at("pose").at("position"));
+            q = entry.at("pose").at("rotation").get<std::array<float, 4>>();
+        }
+        require(std::isfinite(q[0] + q[1] + q[2] + q[3]) &&
+                    std::abs(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3] - 1) < .002f,
+                "objects " + o.id + ": rotation must be normalized");
         if (entry.contains("ambient")) {
             o.ambientUp = o.ambientDown = vec(entry["ambient"]);
             o.authoredAmbient = true;
         }
         o.position = position, o.rotation = q, o.authoredScale = o.scale;
         o.model = instanceModel(position, q, o.scale);
-        const auto &a = w.objectAssets[o.asset];
         o.center = o.model.point(a.center);
         o.radius = a.radius * o.scale;
         // The static collision proxy at the instance pose (only an editor overlay moves it).
@@ -375,23 +524,7 @@ void lightObjects(World &w, std::optional<size_t> only) {
 std::shared_ptr<World> loadObjectAsset(const std::filesystem::path &dir, const Json &manifest, LoadOptions options) {
     auto w = std::make_shared<World>();
     size_t memory = 0;
-    const auto traits = manifest.value("traits", Json::object());
-    const Json animations = traits.contains("decorative") ? traits["decorative"].value("animations", Json::array()) : Json::array();
-    std::string proxy = traits.contains("collidable") ? traits["collidable"].value("node", std::string()) : "";
-    bool unlit = manifest.value("lighting", Json::object()).value("mode", "probe") == "unlit";
-    // Object formats (0.9 on) take the glTF extension rules of the newest world format
-    // they extend: world 0.8's (KTX2, meshopt and quantisation included).
-    auto asset = buildObjectAsset(*w, dir, manifest.at("id").get<std::string>(), manifest.at("scene").get<std::string>(), "0.8",
-                                  options, animations, proxy, unlit, memory);
-    // RFC-0011: core recomputes the rest bounds; more than 1 cm off on any face rejects the object.
-    if (!traits.contains("character") && manifest.contains("bounds")) {
-        auto &b = manifest["bounds"];
-        Vec3 lo = vec(b.at("min")), hi = vec(b.at("max"));
-        float off = std::max({std::abs(lo.x - asset.low.x), std::abs(lo.y - asset.low.y), std::abs(lo.z - asset.low.z),
-                              std::abs(hi.x - asset.high.x), std::abs(hi.y - asset.high.y), std::abs(hi.z - asset.high.z)});
-        require(off <= .0105f, "bounds: the decoded scene differs from object.json bounds by " + std::to_string(off) + " m");
-    }
-    w->objectAssets.push_back(std::move(asset));
+    w->objectAssets.push_back(manifestAsset(*w, dir, manifest.at("id").get<std::string>(), manifest, options, memory));
     return w;
 }
 unsigned mergeObjectAsset(World &into, World &scratch) {

@@ -30,7 +30,7 @@ set_source_files_properties(${MESHOPTIMIZER_SOURCES} PROPERTIES COMPILE_OPTIONS 
 # zstd decoder (BSD) for KHR_texture_basisu / KTX2; see third_party/README.md.
 set(BASISU_SOURCES third_party/basisu/transcoder/basisu_transcoder.cpp third_party/basisu/zstd/zstddeclib.c)
 set_source_files_properties(${BASISU_SOURCES} PROPERTIES COMPILE_OPTIONS "-w;-fno-strict-aliasing")
-add_library(hyprune_runtime STATIC ${MESHOPTIMIZER_SOURCES} ${BASISU_SOURCES} src/interaction/Tools.cpp src/interaction/Gizmo.cpp src/interaction/Placement.cpp src/interaction/InputFile.cpp src/interaction/CaptureNotes.cpp src/interaction/Input.cpp src/interaction/Hands.cpp src/interaction/Config.cpp src/world/Environment.cpp src/world/Mounts.cpp src/surfaces/Layout.cpp src/world/Spatial.cpp src/control/Control.cpp src/world/World.cpp src/world/Objects.cpp src/world/Machines.cpp src/world/Character.cpp src/world/Playable.cpp src/world/Schema.cpp src/world/ObjectCheck.cpp src/world/Catalog.cpp src/render/PNG.cpp src/render/Watermark.cpp src/sim/Camera.cpp src/sim/Climbing.cpp src/surfaces/Surface.cpp src/ipc/Server.cpp src/ipc/WireAudit.cpp src/ipc/Bridge.cpp
+add_library(hyprune_runtime STATIC ${MESHOPTIMIZER_SOURCES} ${BASISU_SOURCES} src/interaction/Tools.cpp src/interaction/Gizmo.cpp src/interaction/Placement.cpp src/interaction/InputFile.cpp src/interaction/CaptureNotes.cpp src/interaction/Input.cpp src/interaction/Hands.cpp src/interaction/Config.cpp src/world/Environment.cpp src/world/Mounts.cpp src/surfaces/Layout.cpp src/world/Spatial.cpp src/control/Control.cpp src/world/World.cpp src/world/Objects.cpp src/world/Paths.cpp src/interaction/Walkability.cpp src/world/Machines.cpp src/world/Character.cpp src/world/Playable.cpp src/world/Schema.cpp src/world/ObjectCheck.cpp src/world/Catalog.cpp src/render/PNG.cpp src/render/Watermark.cpp src/sim/Camera.cpp src/sim/Climbing.cpp src/surfaces/Surface.cpp src/ipc/Server.cpp src/ipc/WireAudit.cpp src/ipc/Bridge.cpp
   src/quests/Files.cpp src/quests/Guidance.cpp src/quests/Quests.cpp src/quests/Focus.cpp src/quests/Engine.cpp src/quests/Markers.cpp)
 target_link_libraries(hyprune_runtime PUBLIC PkgConfig::SPATIAL PkgConfig::PLATFORM PkgConfig::OVERLAY)
 target_include_directories(hyprune_runtime PUBLIC src ${CMAKE_CURRENT_BINARY_DIR}/generated)
@@ -103,6 +103,12 @@ if(BUILD_TESTING)
   add_executable(player-tests tests/player.cpp)
   target_link_libraries(player-tests PRIVATE hyprune_runtime)
   add_test(NAME player COMMAND player-tests)
+  add_executable(npc-world-tests tests/npc-world.cpp)
+  target_link_libraries(npc-world-tests PRIVATE hyprune_runtime)
+  add_test(NAME npc-world-fixture COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/npcs.py)
+  add_test(NAME npc-world COMMAND npc-world-tests ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/npcs)
+  set_tests_properties(npc-world-fixture PROPERTIES FIXTURES_SETUP npc-world-fixture)
+  set_tests_properties(npc-world PROPERTIES FIXTURES_REQUIRED npc-world-fixture)
   add_executable(npc-agent-tests tests/npc-agent.cpp)
   target_link_libraries(npc-agent-tests PRIVATE hyprune_runtime)
   add_test(NAME npc-agent COMMAND npc-agent-tests)
