@@ -124,6 +124,7 @@ if(BUILD_TESTING)
   add_test(NAME npc-world COMMAND npc-world-tests ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/npcs)
   set_tests_properties(npc-world-fixture PROPERTIES FIXTURES_SETUP npc-world-fixture)
   set_tests_properties(npc-world PROPERTIES FIXTURES_REQUIRED npc-world-fixture)
+  set_tests_properties(render PROPERTIES FIXTURES_REQUIRED npc-world-fixture) # the textured character
   add_executable(quests-tests tests/quests.cpp)
   target_link_libraries(quests-tests PRIVATE hyprune_runtime)
   add_test(NAME quests COMMAND quests-tests)

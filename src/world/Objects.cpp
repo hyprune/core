@@ -122,21 +122,25 @@ ObjectAsset buildObjectAsset(World &w, const std::filesystem::path &root, const 
 namespace {
 // A skinned character asset (RFC-0010 spec, checked as hyprune-npc-check does): no static
 // meshes; bounds are the rest pose's, the swept sphere that grown by 0.6 m.
-ObjectAsset characterAsset(const std::filesystem::path &glb, const std::string &id, const Json &traits, size_t &memory) {
+ObjectAsset characterAsset(const std::filesystem::path &glb, const std::string &id, const Json &traits, unsigned formats,
+                           size_t &memory) {
     const std::string label = "objectAssets " + id;
     ObjectAsset a;
     a.id = id;
     a.traits = traits;
     std::shared_ptr<Character> c;
     try {
-        c = std::make_shared<Character>(loadCharacter(glb));
+        c = std::make_shared<Character>(loadCharacter(glb, formats));
     } catch (const std::exception &e) {
         throw std::runtime_error(label + ": " + e.what());
     }
     for (auto &p : checkCharacter(*c))
         require(p.level != CharacterProblem::Error, label + ": " + p.message);
-    for (auto &image : c->images)
-        memory += image.rgba.size() * 4 / 3;
+    for (auto &image : c->images) {
+        memory += image.rgba.size() * 4 / 3; // RGBA: runtime mips
+        for (auto &level : image.levels)
+            memory += level.size();
+    }
     for (auto &prim : c->primitives)
         memory += prim.vertices.size() * sizeof(Character::Vertex) + prim.indices.size() * 4;
     a.low = c->lo, a.high = c->hi;
@@ -152,7 +156,8 @@ ObjectAsset manifestAsset(World &w, const std::filesystem::path &dir, const std:
                           LoadOptions options, size_t &memory) {
     const auto traits = manifest.value("traits", Json::object());
     if (traits.contains("character")) {
-        auto a = characterAsset(safePath(dir, manifest.at("scene").get<std::string>()), id, traits, memory);
+        auto a = characterAsset(safePath(dir, manifest.at("scene").get<std::string>()), id, traits,
+                                options.compressedFormats, memory);
         a.manifest = manifest;
         a.directory = dir;
         return a;
@@ -245,7 +250,7 @@ void loadObjects(World &w, const std::filesystem::path &root, const std::string 
         require(!traits.contains("character") || traits.size() == 1, label + ": a character combines with no other trait");
         auto scenePath = entry.at("scene").get<std::string>();
         if (traits.contains("character")) {
-            auto asset = characterAsset(safePath(root, scenePath), id, traits, memory);
+            auto asset = characterAsset(safePath(root, scenePath), id, traits, options.compressedFormats, memory);
             asset.ref = "package/" + id;
             w.objectAssets.push_back(std::move(asset));
             continue;

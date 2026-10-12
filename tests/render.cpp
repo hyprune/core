@@ -1,10 +1,12 @@
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include "render/GLState.hpp"
 #include "render/PNG.hpp"
 #include "render/Renderer.hpp"
 #include "render/SurfaceSampler.hpp"
+#include "world/Character.hpp"
 #include "world/Mounts.hpp"
 #include "world/Visibility.hpp"
 #include <EGL/egl.h>
@@ -932,6 +934,42 @@ int main(int argc, char **argv) {
                     check(std::abs(a[c] - b[c]) <= 6, "compressed KTX2 texture drew differently");
                 check(b[3] < a[3], "compressed texture GPU bytes not smaller");
                 check(glGetError() == GL_NO_ERROR, "compressed upload GL error");
+                // Characters: the same KTX2 as a character's base colour, kept compressed (sRGB
+                // twin, the package mips), must draw like its RGBA transcode; the character's PNG
+                // normal and metallic-roughness maps stay RGBA (linear, runtime mips).
+                auto glb = std::filesystem::path(argv[1]).parent_path() / "npcs/characters/textured/object.glb";
+                auto character = [&](std::shared_ptr<const world::Character> c) {
+                    renderer.npcs.clear();
+                    if (c) {
+                        render::Renderer::Npc npc;
+                        npc.character = c;
+                        npc.model.v[13] = 1.2f, npc.model.v[14] = 1.5f;
+                        c->evaluate({nullptr, c->clip("idle")}, npc.skin);
+                        renderer.npcs.push_back(std::move(npc));
+                        renderer.prepareCharacters();
+                    }
+                    renderer.draw(fbo, 320, 180, camera, {}, false);
+                    glFinish();
+                    std::vector<unsigned char> image(320 * 180 * 4);
+                    glReadPixels(0, 0, 320, 180, GL_RGBA, GL_UNSIGNED_BYTE, image.data());
+                    return image;
+                };
+                renderer.prepare(compressed);
+                auto none = character(nullptr);
+                auto rgba = character(std::make_shared<world::Character>(world::loadCharacter(glb)));
+                auto blocks = std::make_shared<world::Character>(world::loadCharacter(glb, formats));
+                check(!blocks->images[0].levels.empty(), "character KTX2 image not kept compressed");
+                auto kept = character(blocks);
+                int covered = 0, worst = 0;
+                for (size_t k = 0; k < none.size(); ++k) {
+                    covered += k % 4 == 0 && none[k] != rgba[k];
+                    worst = std::max(worst, std::abs(int(rgba[k]) - kept[k]));
+                }
+                check(covered > 500, "textured character not drawn");
+                check(worst <= 6, std::format("compressed character texture drew differently (max channel delta {})", worst).c_str());
+                check(glGetError() == GL_NO_ERROR, "compressed character upload GL error");
+                renderer.npcs.clear();
+                renderer.releaseCharacters();
             }
             // Edited objects: the CPU normal matrix must shade a rotated node like
             // the same mesh rotated in the package (pre-transformed vertices).

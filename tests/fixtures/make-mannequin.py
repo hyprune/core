@@ -8,9 +8,9 @@ turn_left/turn_right/look_around/wave/nod. Flags make spec violations for valida
 
 usage: make-mannequin.py OUT.glb [--root-motion] [--centimetres] [--no-idle] [--extra-bones N]
        [--three-materials] [--baked] [--rotate-x] [--five-weights] [--accent RGB] [--mixamo] [--no-root]
-       [--fingers] [--one-node]
+       [--fingers] [--one-node] [--ktx2 BASE.ktx2]
 """
-import argparse, json, math, struct
+import argparse, json, math, struct, zlib
 
 p = argparse.ArgumentParser()
 p.add_argument('out'); p.add_argument('--root-motion', action='store_true'); p.add_argument('--centimetres', action='store_true')
@@ -22,6 +22,7 @@ p.add_argument('--no-root', action='store_true', help='no root bone: the hips ar
 p.add_argument('--fingers', action='store_true', help='add 3 bones per finger (30 more)')
 p.add_argument('--one-node', action='store_true', help='a single mesh node, not body/head/visor')
 p.add_argument('--baked', action='store_true', help='one baked material, no accent or visor (valid)')
+p.add_argument('--ktx2', help='body textures: this KTX2 base colour (KHR_texture_basisu), PNG normal and metallic-roughness')
 a = p.parse_args()
 
 # Joints: name, parent, local bind translation (metres). +X is the character's left.
@@ -57,7 +58,7 @@ for s in 'lr':
           (f'lowerleg_{s}', (0, -.21, 0), (.11, .42, .11), 0), (f'foot_{s}', (0, -.02, .05), (.1, .06, .22), 1)]
 N = 5  # face subdivision: 18 boxes x 6 faces x 2N^2 = 5400 triangles
 scale = 100 if a.centimetres else 1
-prims = {}  # (mesh node, material) -> (positions, normals, joints, indices)
+prims = {}  # (mesh node, material) -> (positions, normals, joints, indices, uvs)
 def node_of(joint, mat):
     if a.one_node:
         return 'body'
@@ -67,7 +68,7 @@ faces = [((1, 0, 0), (0, 1, 0), (0, 0, 1)), ((-1, 0, 0), (0, 1, 0), (0, 0, -1)),
 for bi, (joint, off, size, mat) in enumerate(B):
     if a.three_materials and bi == 0:
         mat = 3
-    pos, nrm, jnt, idx = prims.setdefault((node_of(joint, mat), mat), ([], [], [], []))
+    pos, nrm, jnt, idx, uvs = prims.setdefault((node_of(joint, mat), mat), ([], [], [], [], []))
     c = tuple(glob[index[joint]][k] + off[k] for k in range(3))
     for n, u, v in faces:
         start = len(pos) // 3
@@ -75,7 +76,7 @@ for bi, (joint, off, size, mat) in enumerate(B):
             for j in range(N + 1):
                 s_, t_ = i / N - .5, j / N - .5
                 pt = [c[k] + (n[k] * .5 + u[k] * s_ + v[k] * t_) * size[k] for k in range(3)]
-                pos += [x * scale for x in pt]; nrm += list(n); jnt.append(index[joint])
+                pos += [x * scale for x in pt]; nrm += list(n); jnt.append(index[joint]); uvs += [i / N, j / N]
         for i in range(N):
             for j in range(N):
                 q = start + i * (N + 1) + j
@@ -133,11 +134,11 @@ if a.baked:
 if a.three_materials:
     materials.append({'name': 'extra', 'pbrMetallicRoughness': {'baseColorFactor': [.2, .2, .2, 1]}})
 meshes, mesh_index = [], {}
-for (node, mat), (pos, nrm, jnt, idx) in sorted(prims.items()):
+for (node, mat), (pos, nrm, jnt, idx, uvs) in sorted(prims.items()):
     count = len(pos) // 3
     lo = [min(pos[k::3]) for k in range(3)]; hi = [max(pos[k::3]) for k in range(3)]
     attrs = {'POSITION': add(pos, 'f', count, 'VEC3', 5126, 34962, (lo, hi)), 'NORMAL': add(nrm, 'f', count, 'VEC3', 5126, 34962),
-             'TEXCOORD_0': add([0.0] * count * 2, 'f', count, 'VEC2', 5126, 34962),
+             'TEXCOORD_0': add(uvs if a.ktx2 else [0.0] * count * 2, 'f', count, 'VEC2', 5126, 34962),
              'JOINTS_0': add(sum(([j, 0, 0, 0] for j in jnt), []), 'B', count, 'VEC4', 5121, 34962),
              'WEIGHTS_0': add([1.0, 0, 0, 0] * count, 'f', count, 'VEC4', 5126, 34962)}
     if a.five_weights:
@@ -147,6 +148,22 @@ for (node, mat), (pos, nrm, jnt, idx) in sorted(prims.items()):
         mesh_index[node] = len(meshes); meshes.append({'name': node, 'primitives': []})
     meshes[mesh_index[node]]['primitives'].append({'attributes': attrs, 'indices': add(idx, 'H', len(idx), 'SCALAR', 5123, 34963),
                                                     'material': 0 if a.baked else mat})
+if a.ktx2:  # the body's maps: a KTX2 colour image (KHR_texture_basisu) and two 4x4 PNG data images
+    def png(rgb):
+        rows = b''.join(b'\0' + bytes(rgb) * 4 for _ in range(4))
+        chunk = lambda t, d: struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d))
+        return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 4, 4, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b'')
+    images = []
+    for data, mime in ((open(a.ktx2, 'rb').read(), 'image/ktx2'), (png((128, 128, 255)), 'image/png'), (png((0, 200, 0)), 'image/png')):
+        while len(blob) % 4: blob.append(0)
+        views.append({'buffer': 0, 'byteOffset': len(blob), 'byteLength': len(data)}); blob.extend(data)
+        images.append({'bufferView': len(views) - 1, 'mimeType': mime})
+    gltf['images'] = images
+    gltf['textures'] = [{'extensions': {'KHR_texture_basisu': {'source': 0}}}, {'source': 1}, {'source': 2}]
+    gltf['extensionsUsed'] = gltf['extensionsRequired'] = ['KHR_texture_basisu']
+    body = materials[0]['pbrMetallicRoughness']
+    body['baseColorFactor'] = [1, 1, 1, 1]; body['baseColorTexture'] = {'index': 0}; body['metallicRoughnessTexture'] = {'index': 2}
+    materials[0]['normalTexture'] = {'index': 1}
 gltf['materials'] = materials
 gltf['meshes'] = meshes
 ibm = []

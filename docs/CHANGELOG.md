@@ -263,6 +263,12 @@ RFC-0010 runtime rules ("region visibility follows its current position") and ch
   linear data; base colour and emissive stay sRGB). Before, only the base colour and
   emissive textures were loaded while the metallic factor (glTF default 1) stayed, so every
   character shaded as a mirror: black where its probe saw no sun (indoors, at night).
+- Character KTX2 textures (KHR_texture_basisu) stay GPU-compressed, as world and object
+  textures do: transcoded to the renderer's block format (BC7, else BC1/BC3, else ASTC 4x4)
+  with the file's own mip chain, sRGB for base colour and emissive, linear for data maps.
+  A 1024² map takes about a quarter of the memory of its RGBA8 copy. Before, character
+  KTX2 images were expanded to RGBA. PNG and JPEG character images are unchanged (RGBA8,
+  runtime mips). The offload renderer shares this path.
 
 ## Window placement behaviour (no wire change)
 

@@ -59,6 +59,10 @@ b.write(root / 'objects/bench.gltf', [seat, proxy], [pbr([.5, .35, .2, 1])])
 # The character: the generated mannequin as a package object directory.
 glb = root / 'characters/mannequin/object.glb'
 subprocess.run([sys.executable, str(here / 'make-mannequin.py'), str(glb)], check=True, stdout=subprocess.DEVNULL)
+# A textured variant (KTX2 base colour, PNG normal and metallic-roughness) for the texture path tests.
+(root / 'characters/textured').mkdir()
+subprocess.run([sys.executable, str(here / 'make-mannequin.py'), str(root / 'characters/textured/object.glb'),
+                '--ktx2', str(here / 'ktx2/gradient8.ktx2')], check=True, stdout=subprocess.DEVNULL)
 data = glb.read_bytes(); n = struct.unpack('<I', data[12:16])[0]; g = json.loads(data[20:20 + n])
 pos = [g['accessors'][p['attributes']['POSITION']] for m in g['meshes'] for p in m['primitives']]
 lo = [min(a['min'][i] for a in pos) for i in range(3)]; hi = [max(a['max'][i] for a in pos) for i in range(3)]

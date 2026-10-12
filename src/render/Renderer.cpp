@@ -3330,9 +3330,20 @@ Renderer::CharacterGPU &Renderer::characterGPU(const world::Character &c) {
         GLuint t;
         glGenTextures(1, &t);
         glBindTexture(GL_TEXTURE_2D, t);
-        glTexImage2D(GL_TEXTURE_2D, 0, linear ? GL_RGBA8 : GL_SRGB8_ALPHA8, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                     image.rgba.data());
-        glGenerateMipmap(GL_TEXTURE_2D);
+        if (!image.levels.empty()) {
+            // Transcoded KTX2, as world images: the block format (sRGB twin for colour) and the
+            // package's own mip chain.
+            GLenum format = linear ? image.compressedFormat : srgbVariant(image.compressedFormat);
+            glTexStorage2D(GL_TEXTURE_2D, GLsizei(image.levels.size()), format, image.width, image.height);
+            for (size_t level = 0; level < image.levels.size(); ++level)
+                glCompressedTexSubImage2D(GL_TEXTURE_2D, GLint(level), 0, 0, std::max(1, image.width >> level),
+                                          std::max(1, image.height >> level), format, GLsizei(image.levels[level].size()),
+                                          image.levels[level].data());
+        } else {
+            glTexImage2D(GL_TEXTURE_2D, 0, linear ? GL_RGBA8 : GL_SRGB8_ALPHA8, image.width, image.height, 0, GL_RGBA,
+                         GL_UNSIGNED_BYTE, image.rgba.data());
+            glGenerateMipmap(GL_TEXTURE_2D);
+        }
         gpu.textures.push_back(t);
     }
     for (auto &prim : c.primitives) {

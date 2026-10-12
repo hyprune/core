@@ -175,6 +175,34 @@ int main(int argc, char **argv) {
                 j["objects"].push_back(o);
             }
         });
+        {
+            // Character textures: KTX2 keeps a GPU block format with its mip chain, as world
+            // textures do; with no formats (no GL context) it is RGBA, and PNG stays RGBA.
+            auto glb = fixture / "characters/textured/object.glb";
+            auto raw = world::loadCharacter(glb);
+            check(raw.images.size() == 3 && raw.images[0].levels.empty() && raw.images[0].rgba.size() == 8 * 8 * 4,
+                  "a KTX2 character image without formats decodes to RGBA");
+            for (unsigned formats : {unsigned(world::BC7), unsigned(world::BC1BC3), unsigned(world::ASTC4x4)}) {
+                auto c = world::loadCharacter(glb, formats);
+                unsigned expected = formats == world::BC7 ? 0x8E8C : formats == world::BC1BC3 ? 0x83F0 : 0x93B0;
+                check(c.images[0].compressedFormat == expected && c.images[0].levels.size() == 4 && c.images[0].rgba.empty(),
+                      std::format("a KTX2 character image keeps compressed format {:#x} and its 4 levels", expected));
+                check(c.images[1].levels.empty() && c.images[1].rgba.size() == 4 * 4 * 4 && c.images[2].rgba.size() == 4 * 4 * 4,
+                      "PNG character images stay RGBA (runtime mips)");
+                check(!c.linearImages[0] && c.linearImages[1] && c.linearImages[2] && c.materials[0].slots[0].texture == 0 &&
+                          c.materials[0].slots[1].texture == 1 && c.materials[0].slots[2].texture == 2,
+                      "base colour sRGB; normal and metallic-roughness data");
+            }
+            auto copy = fs::temp_directory_path() / std::format("hyprune-npc-tex-{}", getpid());
+            fs::remove_all(copy);
+            fs::create_directories(copy);
+            fs::copy(fixture / "characters/mannequin/object.json", copy / "object.json");
+            fs::copy(glb, copy / "object.glb");
+            auto asset = world::loadObjectAsset(copy, read(copy / "object.json"), {world::BC7});
+            check(asset->objectAssets[0].character && asset->objectAssets[0].character->images[0].compressedFormat == 0x8E8C,
+                  "a catalog character asset keeps the renderer's compressed format");
+            fs::remove_all(copy);
+        }
         // Library references resolve against the installed library roots.
         auto libraries = copy / "libraries";
         fs::create_directories(libraries / "com.example.cast@1.0.0/objects");

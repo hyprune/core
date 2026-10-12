@@ -244,7 +244,7 @@ Character::SeatFit Character::measureSeat() const {
     fit.sink = feet ? std::max(0.f, drop / feet) : 0;
     return fit;
 }
-Character loadCharacter(const std::filesystem::path &path) {
+Character loadCharacter(const std::filesystem::path &path, unsigned compressedFormats) {
     cgltf_options opts{};
     cgltf_data *raw = nullptr;
     if (cgltf_parse_file(&opts, path.c_str(), &raw) != cgltf_result_success)
@@ -314,8 +314,8 @@ Character loadCharacter(const std::filesystem::path &path) {
         int w = 0, h = 0, n = 0;
         unsigned char *pixels = nullptr;
         bool ktx2 = img.mime_type && std::string_view(img.mime_type) == "image/ktx2";
-        if (ktx2 && img.buffer_view && cgltf_buffer_view_data(img.buffer_view)) { // KHR_texture_basisu: transcode to RGBA
-            auto decoded = decodeKtx2(cgltf_buffer_view_data(img.buffer_view), img.buffer_view->size, 0);
+        if (ktx2 && img.buffer_view && cgltf_buffer_view_data(img.buffer_view)) { // KHR_texture_basisu, as world textures
+            auto decoded = decodeKtx2(cgltf_buffer_view_data(img.buffer_view), img.buffer_view->size, compressedFormats);
             c.images.push_back(std::move(decoded));
             continue;
         }

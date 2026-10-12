@@ -84,7 +84,9 @@ struct CharacterProblem {
     std::string message;
 };
 // Throws on files core cannot load at all (not glTF, no skin); spec deviations are problems.
-Character loadCharacter(const std::filesystem::path &);
+// KTX2 images transcode to the best of compressedFormats (world::CompressedFormat bits) with
+// their mip chain, as world textures do; 0 (no GL context) or PNG/JPEG images give RGBA.
+Character loadCharacter(const std::filesystem::path &, unsigned compressedFormats = 0);
 // The NPC artist spec (RFC-0010): skeleton, weights, axes and units, budget, materials,
 // clips, no root motion; `reference` checks a variant shares the base skeleton.
 std::vector<CharacterProblem> checkCharacter(const Character &, const Character *reference = nullptr);
