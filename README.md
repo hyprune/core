@@ -26,6 +26,7 @@ download dependencies.
 ```sh
 python3 tests/fixtures/m2.py        # original CC0 atrium, materials and M2 fixtures
 python3 tests/fixtures/climbing.py  # original CC0 climbing fixture
+python3 tests/fixtures/catalog.py    # original CC0 object directories and a library (RFC-0011)
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build -j 3
 ctest --test-dir build --output-on-failure

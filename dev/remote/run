@@ -14,7 +14,7 @@ CORE = pathlib.Path(os.environ.get('HYPRUNE_REMOTE_CORE', str(HERE.parent.parent
 WORKSPACE = CORE.parent
 RUNS = pathlib.Path(os.environ.get('HYPRUNE_REMOTE_RUNS', str(pathlib.Path.home() / 'hyprune-remote-runs')))
 DEFAULT = ['ctest', 'workspace-homes', 'placement', 'playable', 'static-world', 'live-findings', 'ipc-warp']
-FIXTURES = ['generate', 'm2', 'm3a', 'm3b', 'climbing', 'visibility', 'materials']
+FIXTURES = ['generate', 'm2', 'm3a', 'm3b', 'climbing', 'visibility', 'materials', 'catalog']
 
 
 def log(*a):

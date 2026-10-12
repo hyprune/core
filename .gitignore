@@ -38,3 +38,5 @@ tests/fixtures/m3b/
 /dev/nested/.gizmo-state/
 /dev/nested/.quests-state/
 /dev/nested/.machines-state/
+/tests/fixtures/catalog/
+/dev/nested/.catalog-state/
