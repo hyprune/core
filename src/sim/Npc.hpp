@@ -264,10 +264,9 @@ struct NpcAgent {
     void cancelGuide() { guideCancelled = true; }
 
     // ---- per tick ----
-    void update(float dt, const NpcWorld &w) {
-        if (dt <= 0)
-            return;
-        dt = std::min(dt, .1f);
+    // Clip times, the crossfade and the glance; update() does this first. A driver that moves
+    // the agent itself (the companion's follow mode) calls it alone.
+    void advance(float dt, const NpcWorld &w) {
         pose.fade = std::min(1.f, pose.fade + dt / fadeSeconds);
         pose.previousTime += dt * previousRate;
         pose.clipTime += dt * clipRate;
@@ -275,6 +274,12 @@ struct NpcAgent {
             pose.clipTime = std::clamp(pose.clipTime, 0.f, duration(pose.clip));
         sinceFidget += dt;
         look(dt, w);
+    }
+    void update(float dt, const NpcWorld &w) {
+        if (dt <= 0)
+            return;
+        dt = std::min(dt, .1f);
+        advance(dt, w);
         switch (mode) {
         case Mode::Idle: standIdle(dt, w); break;
         case Mode::Walk: walk(dt, w); break;
@@ -290,6 +295,9 @@ struct NpcAgent {
         case Mode::Suspended: idle(); break;
         }
     }
+
+    // Turns towards a heading at most `rate` rad/s; true when within tolerance.
+    bool turnTowards(float target, float dt, float rate = turnRate, float tolerance = .05f) { return turn(target, dt, tolerance, rate); }
 
   private:
     float eye() const { return height * .93f; }
