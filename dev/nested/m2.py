@@ -84,7 +84,8 @@ def acceptance(client,children,args,shell_token,socketpath):
  client.call('surface.pull',{'surfaceId':other['id']});client.call('surface.place',{'surfaceId':other['id'],'anchorId':'array-hall-slot-02-banner-01'})
  client.call('workspace.activate',{'id':10});time.sleep(.8);pose(client,[5,2,-1.5]);time.sleep(.15)
  before=state()['movement']['position'];pointer();keys('-k','e')
- wait(lambda:state()['workspaces']['currentId']==11 and s.camera()['mode']=='typing')
+ # Placed on a tool it lives in the room: typing into it keeps the room workspace current.
+ wait(lambda:state()['workspaces']['currentId']==s.camera()['worldWorkspace'] and s.camera()['mode']=='typing')
  assert state()['movement']['position']==before,'tool click unexpectedly travelled away from its mount'
  other_marker=s.STATE/'m2-other-typed.txt';other_marker.unlink(missing_ok=True)
  keys(f"printf 'M2 other home input\\n' > {other_marker}");keys('-k','Return');wait(lambda:other_marker.exists())

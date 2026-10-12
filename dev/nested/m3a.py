@@ -22,6 +22,9 @@ def acceptance(client,children,args,shell_token,socketpath):
   xy=list(map(float,s.ctl('cursorpos').split(',')));pointer(2560-xy[0],540-xy[1]);time.sleep(.04)
  s.ctl('eval','hl.dispatch(hl.dsp.focus({ monitor = \"HEADLESS-1\" }))')
  client.call('world.load',{'worldId':'org.hyprune.m3a'});client.call('workspace.bind',{'id':10,'worldId':'org.hyprune.m3a','areaId':'sun-court'})
+ # Labs opened later belong to home 10 too; pulled windows leave for the room (20), so the
+ # focused workspace is no longer 10 when they open.
+ s.ctl('eval','hl.window_rule({name="m3a-labs",match={title="^M3A (subsurface|X11) laboratory$"},workspace="10 silent"})')
  sub=client.call('state.subscribe',{'topics':['state']})['subscriptionId']
  def state():return client.call('state.snapshot',{'subscriptionId':sub})['snapshot']['state']
  s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")');wait(lambda:state()['runtime']['active']);time.sleep(.5)
@@ -43,6 +46,7 @@ def acceptance(client,children,args,shell_token,socketpath):
  surface=wait(lambda:next((v for v in state()['surfaces'] if v['title']=='M3A terminal'),None))
  popup=wait(lambda:next((v for v in state()['surfaces'] if v['title']=='M3A popup laboratory'),None))
  def diag():return s.camera()
+ def diag_ws(id):return next((c['workspaceId'] for c in diag()['captures'] if c['id']==id),None)
  def captured(id):return next(v for v in diag()['captures'] if v['id']==id)
  # Use mode drives a window-local virtual cursor: relative motion moves it across the root
  # client's pixels (localCursor u, v), wherever the plane sits. Aim there, then click.
@@ -106,6 +110,9 @@ def acceptance(client,children,args,shell_token,socketpath):
   local_click(xapp['id'],u,v)
  wait(lambda:xmarker.exists() and xmarker.read_text()=='popup click landed\n');check('x11_menu_click',True)
  # Unbound keys and pointer events aimed away from world planes must not hit the hidden GTK app.
+ # Typing into it in the world (the room), then every window back on its hidden home.
+ [client.call('surface.return',{'surfaceId':v['id']}) for v in state()['surfaces'] if v['kind']=='window']
+ client.call('surface.pull',{'surfaceId':popup['id']});wait(lambda:diag_ws(popup['id'])==20)
  client.call('surface.focus',{'surfaceId':popup['id'],'intent':'keyboard'});nav();[client.call('surface.return',{'surfaceId':v['id']}) for v in state()['surfaces'] if v['kind']=='window'];pose(client,[0,2.3,4],0,1.2)
  before=(s.STATE/'popup.log').read_text();keys('-k','z');keys('-P','Super_L','-k','z','-p','Super_L');pointer();pointer('scroll',1);time.sleep(.3)
  check('input_swallowed',(s.STATE/'popup.log').read_text()==before and diag()['fullscreen']==0,diag())
@@ -127,6 +134,8 @@ def acceptance(client,children,args,shell_token,socketpath):
  # window goes back first: one left floating before the wall (the X11 lab) takes the grab.
  [client.call('surface.return',{'surfaceId':v['id']}) for v in state()['surfaces'] if v['kind']=='window'];pose(client,[0,3,-7]);time.sleep(.3)
  wait(lambda:all(c.get('wall')=='workspace-10' or c.get('parentId') for c in diag()['captures']),timeout=8)
+ # Returned windows tile, so aim at one window's own rectangle on the wall, not at a tile seam.
+ lab=next(c for c in diag()['captures'] if c['title']=='M3A popup laboratory');q=lab['position'];pose(client,[q[0],q[1],q[2]+7]);time.sleep(.3)
  mod=s.envrun('wtype','-P','Super_L','-s','800','-p','Super_L');children.append(mod);time.sleep(.1);pointer('button',272,1);time.sleep(.25);check('drag_off_wall',diag()['gesture']==1,diag());pulled_title=captured(diag()['gestureId'])['title'];pointer('button',272,0);mod.wait(timeout=5);time.sleep(.25)
  tiled=next(w for w in json.loads(s.ctl('clients','-j')) if w['title']==pulled_title);check('drop_to_tile',not any(v['status']=='carried' for v in state()['mounts']['instances']) and not tiled['floating'] and tiled['workspace']['id']==10,{'title':pulled_title,'floating':tiled['floating'],'workspaceId':tiled['workspace']['id']})
  stage(surface['id']);keys('-k','2');pointer();time.sleep(.15);check('mount_tag',state()['interaction']['taggedSurfaceId']==surface['id'])
@@ -149,6 +158,7 @@ def acceptance(client,children,args,shell_token,socketpath):
   if state()['mounts']['areas']:
    client.call('workspace.bind',{'id':10,'worldId':worldid,'areaId':state()['mounts']['areas'][0]['id']});time.sleep(.5)
    client.call('surface.pull',{'surfaceId':wait(lambda:next((v for v in state()['surfaces'] if v['title']=='M3A terminal'),None))['id']});time.sleep(.3);gesture(272,45,-10,True);check('hands_'+worldid,not any(v['collision'] for v in diag()['captures'] if v['visible']))
+   client.call('surface.return',{'surfaceId':next(v for v in state()['surfaces'] if v['title']=='M3A terminal')['id']});time.sleep(.5)
   else:
    # An area-less world binds no workspaces and adopts only room clients: bring the
    # terminal into the room (windows.world_workspace) for the carry, then take it back.

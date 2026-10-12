@@ -6,8 +6,8 @@ Tiled clients (kitty, Chromium, a GTK dialog) on the other output and on the Sun
 home (21) are brought into the world every way a player can: opened in the room, moved
 to the room from the other output, dragged across the outputs with the native Super+LMB
 drag, Director pull and recall, tool 5 pocket and place, carried off the home wall. On
-the home, the first arrival keeps the wall (tiled) and later ones take the area's tool
-anchors (floating, on the desks). Each
+the home every window is a tiled window of that workspace, on its wall; one taken into
+the world moves natively to the room workspace (20). Each
 must be floating (native relayouts no longer resize it), captured and visible, on the
 world output; then resized (Super+RMB corner, Super+Shift+Wheel) and carried it stays
 visible and floating. Returned to its wall it is tiled there again. Chromium also uses a
@@ -152,22 +152,12 @@ def acceptance(client, children, args, token, socket):
     client.call('movement.set', {'modeId': 'com.hyprune.fly'})
     check('the window on its home wall stays tiled there', not native('Home-Kitty-B')['floating'] and native('Home-Kitty-B')['workspace']['id'] == 21,
           report('Home-Kitty-B'))
-    manifest = json.loads((s.ROOT.parent / 'worlds/dist' / LUMEN / 'world.json').read_text())
-    anchors = {a['id']: a['pose']['position'] for a in manifest['anchors']}
-    frame = next(f for f in s.camera()['workspaceFrames'] if f['workspaceId'] == 21)
-    area = min(manifest['areas'], key=lambda a: math.dist(anchors[a['primaryAnchor']], frame['position']))
-    spots = {k: anchors[k] for k in area['toolAnchors']}
-
-    def desk(title):
-        cap = capture(title)
-        return cap and cap['visible'] and min(spots, key=lambda k: math.dist(spots[k], cap['position'])) \
-            if cap and min(math.dist(p, cap['position']) for p in spots.values()) < .25 else None
     for title in ('Home-Chromium', 'Home-Kitty-A'):
-        wait(lambda: desk(title), timeout=8)
-    taken = [desk(t) for t in ('Home-Chromium', 'Home-Kitty-A')]
-    check('later home arrivals take its tool anchors, floating and visible',
-          all(taken) and len(set(taken)) == 2 and all(native(t)['floating'] for t in ('Home-Chromium', 'Home-Kitty-A')),
-          {'anchors': taken, **{t: report(t) for t in ('Home-Chromium', 'Home-Kitty-A')}})
+        wait(lambda: (capture(title) or {}).get('wall') == 'workspace-21', timeout=8)
+    check('every home window stays tiled on its wall',
+          all(not native(t)['floating'] and native(t)['workspace']['id'] == 21 and capture(t).get('wall') == 'workspace-21'
+              for t in ('Home-Chromium', 'Home-Kitty-A', 'Home-Kitty-B')),
+          {t: report(t) for t in ('Home-Chromium', 'Home-Kitty-A', 'Home-Kitty-B')})
 
     # 1. Opened in the room.
     kitty('Room-Kitty'); wait(lambda: native('Room-Kitty'))
@@ -196,7 +186,7 @@ def acceptance(client, children, args, token, socket):
         resize_and_carry(title, workspace, distance)
     # 4. Director pull (the pulled window is carried in front of the player) ...
     client.call('surface.pull', {'surfaceId': capture('Home-Chromium')['id']})
-    in_world('Director pull: Chromium from its home desk', 'Home-Chromium', 21)
+    in_world('Director pull: Chromium off its home wall, into the room', 'Home-Chromium', 20)
     # 5. ... then tool 5: pocket it and place it again (placing sets it down).
     keys('-k', '5'); time.sleep(.3)
     wait(lambda: s.camera()['aim'] == capture('Home-Chromium')['id'], timeout=4); pointer('button', 274)
@@ -207,8 +197,8 @@ def acceptance(client, children, args, token, socket):
         pose(client, eye, yaw, 0); time.sleep(.3); pointer('button', 272); time.sleep(.6)
         if state()['editor']['unplaced']['count'] == 0:
             break
-    in_world('tool 5 place: floating and visible', 'Home-Chromium', 21)
-    keys('-k', '1'); resize_and_carry('Home-Chromium', 21, 3.5)
+    in_world('tool 5 place: floating and visible', 'Home-Chromium', 20)
+    keys('-k', '1'); resize_and_carry('Home-Chromium', 20, 3.5)
     # 6. Carried off the home wall: Super+LMB on the wall where the native client is.
     f = next(f for f in s.camera()['workspaceFrames'] if f['workspaceId'] == 21)
     normal = [f['right'][1] * f['up'][2] - f['right'][2] * f['up'][1], f['right'][2] * f['up'][0] - f['right'][0] * f['up'][2],
@@ -226,14 +216,14 @@ def acceptance(client, children, args, token, socket):
         pointer(-80, 0); time.sleep(.08)
     time.sleep(.3); pointer('button', 272, 0)
     h.wait(timeout=5); wait(lambda: s.camera()['gesture'] == 0); time.sleep(.5)
-    in_world('carried off the home wall: floating and visible', 'Home-Kitty-B', 21)
+    in_world('carried off the home wall: in the room, floating and visible', 'Home-Kitty-B', 20)
     face('Home-Kitty-B', 3); shot('3-kitty-carried-off-its-wall')
-    resize_and_carry('Home-Kitty-B', 21, 2.5)
+    resize_and_carry('Home-Kitty-B', 20, 2.5)
     # 7. Director pull of a desk window, then recall everything (recalled windows come to the player).
     client.call('surface.pull', {'surfaceId': capture('Home-Kitty-A')['id']})
-    in_world('Director pull: kitty from its home desk', 'Home-Kitty-A', 21)
+    in_world('Director pull: kitty off its home wall, into the room', 'Home-Kitty-A', 20)
     client.call('surfaces.recall', {})
-    for title, workspace in (('Home-Kitty-A', 21), ('Home-Chromium', 21), ('Room-Kitty', 20), ('Drag-Chromium', 20)):
+    for title, workspace in (('Home-Kitty-A', 20), ('Home-Chromium', 20), ('Room-Kitty', 20), ('Drag-Chromium', 20)):
         in_world(f'Director recall: {title} comes to the player, floating and visible', title, workspace)
     # Returned to its wall, a window is tiled there again.
     client.call('surface.return', {'surfaceId': capture('Home-Kitty-B')['id']})

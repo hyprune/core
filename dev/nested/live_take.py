@@ -8,9 +8,9 @@ a supervised take in Lumen Reach:
 2. Browsers shown on a home workspace wall keep presenting: Chromium (and an
    Electron app when available) launched without any backgrounding flags keep
    committing frames while their workspace is not visible on any output.
-3. Windows moved onto home workspaces take the area's primary wall first, then
-   its tool anchors in authored order, with no relocation notices and no
-   placeholder poses left for windows shown on a wall.
+3. Home workspace windows are tiled windows of that workspace on its wall, whether
+   moved there, opened in focus or moved there from the room. Pulled off a wall a window
+   moves to the room workspace and floats; returned, it tiles at home again.
 
 HYPRUNE_LIVE_TAKE_WORLD: unpacked Lumen Reach package (default ../worlds/dist).
 HYPRUNE_LIVE_TAKE_OBSERVE=1 records results without asserting (for "before" runs).
@@ -159,40 +159,70 @@ def acceptance(client, children, args, token, socket):
     record('spawned window is collision-free', not spawned['collision'])
     timings('spawned')
 
-    # 3. The staged windows on their homes.
-    time.sleep(2)
-    snapshot = state()
-    instances = {i['surfaceId']: i for i in snapshot['mounts']['instances']}
-    by_title = {c['title']: c for c in captures()}
-    homes = {}
-    for title in staged:
-        c = by_title.get(title)
-        homes[title] = {'capture': c and {k: c.get(k) for k in ('id', 'visible', 'position', 'workspaceId', 'wall')},
-                        'instance': c and instances.get(c['id'])}
-    tool = homes['Kiosk']['instance'] or {}
-    record('second arrival takes the area\'s first tool anchor',
-           tool.get('anchorId') == areas['sun-court']['toolAnchors'][0], homes)
-    record('first arrival stays on the area wall',
-           homes['Desk']['instance'] is None and (homes['Desk']['capture'] or {}).get('wall') == 'workspace-21')
-    record('a lone arrival keeps the wall', homes['Signal']['instance'] is None and
-           (homes['Signal']['capture'] or {}).get('wall') == 'workspace-24')
+    # 3. Home workspace windows are tiled windows of that workspace, shown on its wall.
+    def on_wall(titles, ws_of):
+        time.sleep(2)
+        instances = {i['surfaceId']: i for i in state()['mounts']['instances']}
+        native = {c['title']: c for c in clients()}
+        seen = {}
+        for title in titles:
+            c = capture(title) or {}
+            n = native.get(title, {})
+            seen[title] = {'wall': c.get('wall'), 'visible': c.get('visible'), 'instance': instances.get(c.get('id')),
+                           'workspace': n.get('workspace', {}).get('id'), 'floating': n.get('floating')}
+        ok = all(v['wall'] == f'workspace-{ws_of(t)}' and v['instance'] is None and v['workspace'] == ws_of(t) and
+                 v['floating'] is False for t, v in seen.items())
+        return ok, seen
+
+    ok, seen = on_wall(staged, staged.get)
+    record('staged home windows stay tiled on their walls', ok, seen)
     leftovers = [c['title'] for c in captures() if not c['visible'] and not c.get('wall') and not c.get('queued')]
     record('no invisible placeholder surfaces', not leftovers, leftovers)
-    floated = {c['title']: c['floating'] for c in clients() if c['title'] in staged}
-    record('wall windows stay tiled, tool windows float', floated.get('Desk') is False and floated.get('Kiosk') is True,
-           floated)
     timings('homes')
-    # Evidence: the Sun Court wall (first arrival) and its first tool desk (second arrival).
+    # Evidence: the Sun Court wall and the first tool desk (no automatic desk assignment).
     pose(client, [8, 1.7, -4], 0, .42); time.sleep(2); shot('sun-court-wall')
     pose(client, [-15, 1.7, 10.8], 0, -.18); time.sleep(2); shot('sun-court-desk')
-    # A free room window moved onto a home arrives there too.
+    # A free room window moved onto a home is a tiled window there too.
     move(next(c for c in clients() if c['title'] == 'Spawned'), 24)
-    time.sleep(2)
-    moved = capture('Spawned') or {}
-    moved_instance = next((i for i in state()['mounts']['instances'] if i['surfaceId'] == moved.get('id')), {})
-    record('room window moved onto a home takes its first tool anchor',
-           moved_instance.get('anchorId') == areas['signal-rise']['toolAnchors'][0],
-           {'capture': {k: moved.get(k) for k in ('position', 'workspaceId', 'wall', 'visible')}, 'instance': moved_instance})
+    ok, seen = on_wall(['Spawned'], lambda t: 24)
+    record('room window moved onto a home is tiled on its wall', ok, seen)
+
+    # Focus into a home wall and open terminals there (Super+Enter in focus): they are
+    # ordinary tiled windows of that workspace, on its wall after focus ends and again.
+    client.call('workspace.focus', {'id': 21}); wait(lambda: state()['mounts']['desktopWorkspaceId'] == 21)
+    focused = ['Focus-1', 'Focus-2', 'Focus-3']
+    for title in focused:
+        launch(['kitty', '--class', 'live-take', '--title', title], title)
+    time.sleep(1.5)
+    tiled = {c['title']: c['floating'] for c in clients() if c['title'] in focused}
+    record('terminals opened in focus tile there', tiled == {t: False for t in focused}, tiled)
+    client.call('workspace.unfocus', {}); wait(lambda: state()['mounts']['desktopWorkspaceId'] is None)
+    ok, seen = on_wall(focused, lambda t: 21)
+    record('after focus they stay tiled on the wall and in its capture', ok, seen)
+    client.call('workspace.focus', {'id': 21}); wait(lambda: state()['mounts']['desktopWorkspaceId'] == 21)
+    time.sleep(1)
+    tiled = {c['title']: c['floating'] for c in clients() if c['title'] in focused}
+    record('focusing again shows them tiled', tiled == {t: False for t in focused}, tiled)
+    client.call('workspace.unfocus', {}); wait(lambda: state()['mounts']['desktopWorkspaceId'] is None)
+    # Carried off the wall it goes to the room, floating; returned, it tiles at home again.
+    carried = capture('Focus-1')
+    client.call('surface.pull', {'surfaceId': carried['id']})
+    native = lambda: next(c for c in clients() if c['title'] == 'Focus-1')
+    room = s.camera().get('worldWorkspace', 20)
+    try:
+        moved = wait(lambda: (lambda n: n if n['workspace']['id'] == room and n['floating'] else None)(native()), timeout=10)
+    except AssertionError:
+        moved = None
+    record('a window pulled off its wall moves to the room, floating', bool(moved),
+           {'workspace': native()['workspace']['id'], 'floating': native()['floating']})
+    client.call('surface.place', {'surfaceId': carried['id']})
+    time.sleep(1.5)
+    placed = next((i for i in state()['mounts']['instances'] if i['surfaceId'] == carried['id']), {})
+    record('placed on a tool it stays in the room', placed.get('anchorId', '') != '' and native()['workspace']['id'] == room,
+           {'instance': placed, 'workspace': native()['workspace']['id']})
+    client.call('surface.return', {'surfaceId': carried['id']})
+    ok, seen = on_wall(['Focus-1'], lambda t: 21)
+    record('returned, it re-tiles on its home wall', ok, seen)
 
     # 2. Browsers on hidden home workspaces keep presenting frames.
     for label, window, ws in [('chromium (same output, moved before first paint)', browser, 22),

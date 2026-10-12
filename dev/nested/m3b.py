@@ -23,6 +23,9 @@ def acceptance(client,children,args,shell_token,socketpath):
   xy=list(map(float,s.ctl('cursorpos').split(',')));pointer(2560-xy[0],540-xy[1]);time.sleep(.04)
  s.ctl('eval','hl.dispatch(hl.dsp.focus({ monitor = "HEADLESS-1" }))')
  client.call('world.load',{'worldId':'org.hyprune.m3b'});client.call('workspace.bind',{'id':10,'worldId':'org.hyprune.m3b','areaId':'sun-court'})
+ # Probes opened later belong to home 10; pulled windows leave for the room (20), so the
+ # focused workspace is no longer 10 when they open.
+ s.ctl('eval','hl.window_rule({name="m3b-probes",match={title="^Round3 pointer [0-9]$"},workspace="10 silent"})')
  sub=client.call('state.subscribe',{'topics':['state']})['subscriptionId']
  def state():return client.call('state.snapshot',{'subscriptionId':sub})['snapshot']['state']
  def diag():return s.camera()
@@ -131,8 +134,14 @@ def acceptance(client,children,args,shell_token,socketpath):
  # With the world active, new windows map in the world room (workspace 20 since the room move): pin the popup to the bound wall.
  s.ctl('eval','hl.window_rule({name="m3b-popup",match={title="^M3B workspace popup$"},workspace="10 silent"})')
  popupmarker=s.STATE/'workspace-popup.txt';popupmarker.unlink(missing_ok=True);children.append(s.envrun('env','GDK_BACKEND=wayland',str(ROOT/'build/nested-parity-client'),str(popupmarker),'M3B workspace popup',stdout=subprocess.DEVNULL,stderr=open(s.STATE/'popup.log','w')))
- popup=wait(lambda:builtins.next((v for v in state()['surfaces'] if v['title']=='M3B workspace popup'),None));client.call('surface.return',{'surfaceId':popup['id']});pose(client,[0,3,-10]);time.sleep(.3);keys('-k','e');wait(lambda:state()['editor']['mode']=='interactive');pointer('button',273);child=wait(lambda:builtins.next((v for v in diag()['childSurfaces'] if v['parentId']==popup['id']),None));check('workspace_popup_composed',not child['visible'],child);shot('workspace-popup.png')
- nativewindow=builtins.next(w for w in json.loads(s.ctl('clients','-j')) if w['title']=='M3B workspace popup');u=(nativewindow['at'][0]-1600+child['offset'][0]+child['pixels'][0]*.5)/1920;v=(nativewindow['at'][1]+child['offset'][1]+child['pixels'][1]*.5)/1080;pointer((u-.5)*1280,(v-.5)*720);pointer();wait(popupmarker.exists);check('interactive_virtual_popup_click',popupmarker.read_text()=='popup click landed\n');pointer('scroll',1);wait(lambda:pathlib.Path(str(popupmarker)+'.scroll').exists());check('interactive_virtual_scroll',True);back()
+ popup=wait(lambda:builtins.next((v for v in state()['surfaces'] if v['title']=='M3B workspace popup'),None));client.call('surface.return',{'surfaceId':popup['id']});time.sleep(.5)
+ # Its tiled rectangle on the wall (the terminal shares the wall), not the wall's centre.
+ at=wait(lambda:(lambda c:c if c and c.get('wall')=='workspace-10' else None)(builtins.next((c for c in diag()['captures'] if c['id']==popup['id']),None)))['position']
+ pose(client,[at[0],at[1],-10]);time.sleep(.3);keys('-k','e');wait(lambda:state()['editor']['mode']=='interactive');pointer('button',273);child=wait(lambda:builtins.next((v for v in diag()['childSurfaces'] if v['parentId']==popup['id']),None));check('workspace_popup_composed',not child['visible'],child);shot('workspace-popup.png')
+ nativewindow=builtins.next(w for w in json.loads(s.ctl('clients','-j')) if w['title']=='M3B workspace popup');u=(nativewindow['at'][0]-1600+child['offset'][0]+child['pixels'][0]*.5)/1920;v=(nativewindow['at'][1]+child['offset'][1]+child['pixels'][1]*.5)/1080
+ # The virtual cursor starts where the reticle aimed: the centre of the popup's tile.
+ u0=(nativewindow['at'][0]-1600+nativewindow['size'][0]*.5)/1920;v0=(nativewindow['at'][1]+nativewindow['size'][1]*.5)/1080
+ pointer((u-u0)*1280,(v-v0)*720);pointer();wait(popupmarker.exists);check('interactive_virtual_popup_click',popupmarker.read_text()=='popup click landed\n');pointer('scroll',1);wait(lambda:pathlib.Path(str(popupmarker)+'.scroll').exists());check('interactive_virtual_scroll',True);back()
  zoom=s.envrun('wtype','-P','q','-s','900','-p','q');children.append(zoom);time.sleep(.2);first=state()['presentation']['fov'];pointer('scroll',-4);time.sleep(.2);check('Q_scope_wheel',state()['presentation']['fov']<first,(first,state()['presentation']['fov']));shot('scope.png');zoom.wait(timeout=5)
  keys('-k','F3');check('F3_debug',state()['editor']['debug']);keys('-k','y');check('Y_debug',not state()['editor']['debug'])
  keys('-k','u');captures=s.STATE/'statehome/hyprune/captures';wait(lambda:list(captures.glob('*.json')));captured=json.loads(sorted(captures.glob('*.json'))[-1].read_text());check('U_debug_capture',all(k in captured for k in ['camera','mode','tool','surfaces','placements','recentIPC','recentEvents','input']),str(captures))
