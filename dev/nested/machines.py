@@ -17,6 +17,9 @@ com.hyprune.sources grant). Checks:
 6. Reduced motion: states change, nothing spins or travels, no frames forced.
 7. The real helper publishes through its own grant and machine-b follows it; on
    SIGTERM it removes its sources.
+8. Offload parity (HYPRUNE_MACHINES_OFFLOAD=1; a host with a second GPU): with reduced
+   motion (nothing spins or travels) the offload worker draws the machines' palettes,
+   labels, stacked crates, toggles and lift like the in-process renderer.
 HYPRUNE_MACHINES_WORLD=<package dir> (with HYPRUNE_MACHINES_BINDINGS, default
 <package>/machines.bindings.json) loads another world instead and only runs the
 helper with every simulator (for demos: HYPRUNE_MACHINES_DEMO=<script.py> is run
@@ -238,7 +241,43 @@ def checks(client, source):
     source.send_signal(signal.SIGTERM); source.wait(timeout=10)
     b = wait(lambda: inst('machine-b') if inst('machine-b')['inputs']['status']['condition'] == 'missing' else None, timeout=5)
     check('on SIGTERM the helper removes its sources', b is not None and source.returncode == 0, {'exit': source.returncode})
+    if os.environ.get('HYPRUNE_MACHINES_OFFLOAD', '0') != '0':
+        offload_parity(client, check, call, publish, values, inst, front, shot)
     check('no render pass leaked', s.camera().get('renderPassesLeaked', 0) == 0, s.camera().get('renderPassesLeaked'))
     stills = [str(p.name) for p in (before, after, items, burst, fail, stale)]
     (s.ROOT / 'docs/evidence/machines.json').write_text(json.dumps({'nestedOnly': True, 'world': FIXTURE, 'stills': stills, 'checks': results}, indent=2) + '\n')
     print('PASS machines:', len(results), 'checks', flush=True)
+
+
+def offload_parity(client, check, call, publish, values, inst, front, shot):
+    """In-process and offload stills of machine-a in a set state agree pixel for pixel."""
+    import numpy as np
+    from PIL import Image
+    perf = lambda: call('graphics.get', {})['performance']
+    def renderer(mode):
+        call('graphics.set', {'patch': {'offload': mode, 'render_scale': 1, 'dynamic_resolution': False, 'offload_power_cap_w': 20}})
+        want = 'offload' if mode == 'on' else 'in-process'
+        try:
+            return wait(lambda: perf()['activeRenderer'] == want, 40)
+        except AssertionError:
+            raise AssertionError(('offload did not switch', want, perf().get('reason'), s.camera().get('offloadRequests')))
+    def region(path):
+        img = np.asarray(Image.open(s.STATE / path).convert('RGB'), dtype=np.int16)
+        h, w = img.shape[:2]
+        return img[int(h * .15):int(h * .9), int(w * .15):int(w * .85)]
+    call('graphics.set', {'patch': {'reduced_motion': True}})
+    values.update({'status': 'failed', 'stage.1': 'running', 'stage.2': 'success', 'depth': 55, 'progress': .6, 'lastJob': 'main #77'})
+    publish(values); time.sleep(1.2)
+    front(); time.sleep(.8)
+    shots = {}
+    for mode in ('off', 'on'):
+        renderer(mode); time.sleep(1.5)
+        shots[mode] = shot(f'machines-offload-{mode}.png')
+    worker = (s.camera()['timings'].get('offload') or {}).get('worker') or {}
+    d = np.abs(region(shots['off']) - region(shots['on'])).max(axis=2)
+    stats = {'meanLevels': round(float(d.mean()), 3), 'differing': round(float((d > 6).mean()), 5), 'worker': worker.get('machines')}
+    renderer('off')
+    call('graphics.set', {'patch': {'reduced_motion': False}})
+    check('offload draws the machines (palettes, labels, crates, toggles, lift) like the in-process renderer',
+          stats['differing'] < .01 and (worker.get('machines') or {}).get('states', 0) >= 2 and
+          (worker.get('machines') or {}).get('labelsDrawn', 0) >= 1, stats)

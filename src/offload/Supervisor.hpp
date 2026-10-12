@@ -2,6 +2,7 @@
 #include "Packet.hpp"
 #include "Policy.hpp"
 #include <chrono>
+#include <cstdio>
 #include <dlfcn.h>
 #include <filesystem>
 #include <fstream>
@@ -275,11 +276,19 @@ class Supervisor {
             auto done = waitpid(child_, &status, WNOHANG);
             if (done == child_) {
                 child_ = -1;
+                // The worker's own message (if any) is on the inherited stderr; how it ended goes
+                // beside it (a signal: a crash or the sandbox), unless it was our stop.
+                auto ended = WIFSIGNALED(status) ? "renderer killed by signal " + std::to_string(WTERMSIG(status))
+                             : WIFEXITED(status) ? "renderer exited with status " + std::to_string(WEXITSTATUS(status))
+                                                 : std::string("renderer exited");
+                bool stopped = WIFSIGNALED(status) && (WTERMSIG(status) == SIGTERM || WTERMSIG(status) == SIGKILL) && control_ < 0;
+                if (getenv("HYPRUNE_DEBUG_RENDERER") || (!stopped && !(WIFEXITED(status) && WEXITSTATUS(status) == 0)))
+                    std::fprintf(stderr, "hypruned: %s\n", ended.c_str());
                 if (control_ >= 0) {
                     close(control_);
                     control_ = -1;
                     failed_ = true;
-                    reason_ = "renderer exited";
+                    reason_ = ended;
                 }
             } else if (killAt_ && now >= killAt_) {
                 kill(child_, SIGKILL);
@@ -382,7 +391,8 @@ class Supervisor {
             std::error_code cacheError;
             if (!cacheRoot.empty()) std::filesystem::create_directories(cacheRoot/"hyprune/programs",cacheError);
             std::string cacheEnv = "XDG_CACHE_HOME=" + (cacheError ? std::string{} : cacheRoot.string());
-            char *env[] = {path, cache, cacheEnv.data(), nullptr};
+            std::string debugEnv = getenv("HYPRUNE_DEBUG_RENDERER") ? "HYPRUNE_DEBUG_RENDERER=1" : "";
+            char *env[] = {path, cache, cacheEnv.data(), debugEnv.empty() ? nullptr : debugEnv.data(), nullptr};
             int rc = posix_spawn(&child_, executable_.c_str(), &actions, &attr, av.data(), env);
             posix_spawnattr_destroy(&attr);
             posix_spawn_file_actions_destroy(&actions);

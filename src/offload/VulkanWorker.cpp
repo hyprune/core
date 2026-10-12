@@ -23,8 +23,15 @@ struct Image {
     gbm_bo *bo = nullptr;
 };
 int main(int argc, char **argv) {
+    // HYPRUNE_DEBUG_RENDERER (passed through by hypruned): progress on stderr.
+    const bool debug = getenv("HYPRUNE_DEBUG_RENDERER") != nullptr;
+    auto note = [&](const std::string &what) {
+        if (debug)
+            std::cerr << "Vulkan worker: " << what << '\n';
+    };
     try {
         check(argc >= 8, "usage: renderer FD WORLD DRM WIDTH HEIGHT FPS CONTROL [OBJECT_ROOT...]");
+        note(std::string("start on ") + argv[3]);
         prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
         // Catalog object roots (library and user objects) are readable like the package.
         sandbox(argv[2], {argv + 8, argv + argc});
@@ -290,6 +297,7 @@ int main(int argc, char **argv) {
             return world::loadObjectAsset(dir, manifest, {formats});
         };
         send(sock, {{"type", "ready"}});
+        note("ready");
         double nextRender = 0;
         Json lastGraphics, lastProfile;
         uint64_t sequence = 0;
@@ -356,6 +364,7 @@ int main(int argc, char **argv) {
             if (p["type"] == "stop")
                 break;
             check(p["version"] == 2 && p["type"] == "pose", "protocol");
+            note("pose " + std::to_string(p.value("sequence", uint64_t(0))) + " (" + std::to_string(p.dump().size()) + " bytes)");
             auto graphics =
                 interaction::configPatch(interaction::defaultConfig(), {{"graphics", p.at("graphics")}}).at("graphics");
             if (graphics != lastGraphics) {

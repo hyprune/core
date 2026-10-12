@@ -15,7 +15,7 @@ re-reads it), each running dev/machines/scripts/gauge-sim.py. Checks:
    machines.json averageWindowS (re-read on change) sets its window.
 4. Frames: once the scripts hold their last value and the average has caught up, nothing
    moves and no frames are forced.
-5. Offload parity (HYPRUNE_GAUGES_OFFLOAD != 0): the offload worker draws the gauges like the
+5. Offload parity (HYPRUNE_GAUGES_OFFLOAD=1; a host with a second GPU): the offload worker draws the gauges like the
    in-process renderer, before and after a change made while it renders (a machines.json
    rebind to this test's own source, then a published value); power-capped and short.
 Stills (close and 3 m) and, with HYPRUNE_GAUGES_RECORD=1, a 1080p clip in the state
@@ -201,6 +201,9 @@ def checks(client, children, source):
     check('unfed gauges: labels show a dash and, once placed, nothing moves', all(b['labels']['display'] == '—' and not b['moving'] for b in bound.values()),
           {g: {'labels': b['labels'], 'moving': b['moving'], 'stacks': b['stacksShown']} for g, b in bound.items()})
 
+    if os.environ.get('HYPRUNE_GAUGES_OFFLOAD_FIRST') == '1':  # development: the offload stage on unfed gauges
+        offload_parity(client, check, ids, p0, look, inst, out, [])
+        return
     # 2. Sources: the scripts start now; the helper picks the new entries up.
     epoch = int(time.time()) + 2
     (s.STATE / 'machines.json').write_text(json.dumps({'instances': {i: {'averageWindowS': WINDOW} for i in ids.values()}}, indent=1) + '\n')
@@ -288,7 +291,7 @@ def checks(client, children, source):
         p = next(i for i in user() if i['id'] == ids[g])['pose']['position']
         look([p[0], 1.15, p[2] + 1.3], [p[0], .7, p[2]]); time.sleep(.8)
         stills.append(shot(f'{g}-close.png'))
-    if os.environ.get('HYPRUNE_GAUGES_OFFLOAD', '1') != '0':
+    if os.environ.get('HYPRUNE_GAUGES_OFFLOAD', '0') != '0':
         offload_parity(client, check, ids, p0, look, inst, out, stills)
     check('no render pass leaked', s.camera().get('renderPassesLeaked', 0) == 0, s.camera().get('renderPassesLeaked'))
     (s.ROOT / 'docs/evidence/gauges.json').write_text(json.dumps({'nestedOnly': True, 'world': WORLD, 'library': f'{LIBRARY}@{version}',
@@ -341,8 +344,9 @@ def offload_parity(client, check, ids, p0, look, inst, out, stills):
     check('offload draws the held gauges like the in-process renderer', held['differing'] < .01, held)
     # A change while the worker renders: the tube reads this test's source (machines.json, re-read).
     tube = ids['gauge-tube']
-    bindings = json.loads((s.STATE / 'machines.json').read_text())
-    bindings['instances'][tube]['source'] = 'org.hyprune.nested.gauge'
+    path = s.STATE / 'machines.json'
+    bindings = json.loads(path.read_text()) if path.exists() else {'instances': {}}
+    bindings['instances'].setdefault(tube, {})['source'] = 'org.hyprune.nested.gauge'
     (s.STATE / 'machines.json').write_text(json.dumps(bindings, indent=1) + '\n')
     values = {'value': 90, 'display': '90%', 'label': 'GPU', 'level': 'fail', 'average': 90}
     client.call('data.publish', {'sourceId': 'org.hyprune.nested.gauge', 'sequence': int(time.time() * 1000), 'values': values, 'ttlMs': 60000})

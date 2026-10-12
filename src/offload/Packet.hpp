@@ -1,5 +1,6 @@
 #pragma once
 #include <cstring>
+#include <string>
 #include <json.hpp>
 #include <optional>
 #include <stdexcept>
@@ -80,8 +81,13 @@ inline std::optional<Packet> receivePacket(int fd) {
             for (size_t i = 0; i < (c->cmsg_len - CMSG_LEN(0)) / sizeof(int); ++i)
                 p.fds.push_back(f[i]);
         }
-    if (n <= 0 || n > 196608 || (m.msg_flags & (MSG_TRUNC | MSG_CTRUNC)))
-        throw std::runtime_error("renderer transport EOF/truncation");
+    if (n == 0)
+        throw std::runtime_error("renderer transport EOF");
+    if (n < 0)
+        throw std::runtime_error(std::string("renderer transport read: ") + std::strerror(errno));
+    if (n > 196608 || (m.msg_flags & (MSG_TRUNC | MSG_CTRUNC)))
+        throw std::runtime_error("renderer transport truncation (" + std::to_string(n) + " bytes" +
+                                 (m.msg_flags & MSG_CTRUNC ? ", descriptors" : "") + ")");
     p.body = Json::parse(bytes, bytes + n);
     return p;
 }
