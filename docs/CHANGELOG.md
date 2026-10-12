@@ -123,6 +123,37 @@ their frozen state projections and enums. Unknown or unadvertised methods return
 
 These are wire-compatible behavior changes that integrators may notice:
 
+- **0.22** Object catalog and user placements (RFC-0011 P1). New grant
+  `objects.control` (requestable from 0.22). New required state key `objects
+  {catalogRevision,instances[<=512],pocket[<=16],usage,limits}`: this world's authored
+  instances and user placements (`id`, `source` authored/user, `ref`, `name`, `areaId`,
+  `pose`, `scale`, `state` active/hidden/missing/blocked/loading, `movable`, `locked`,
+  the blocking `rule`; `path`, `activity` and `seat` stay null until P2), the object
+  pocket items, and user-object totals against their limits. Methods (`state.read`):
+  `objects.catalog` (`{revision: catalogRevision, entries[<=1024]}`: ref, source, id,
+  version, formatVersion, name, category, tags, traits, surfaces, scale range, bounds,
+  triangles, gpuBytes, collisionTriangles, thumbnail path, licence, library, other
+  versions, state, placeable, reason, errors) and `libraries.list`. Methods
+  (`objects.control`): `objects.pocket {ref}` (`{revision,itemId}`; tool 5 selected),
+  `objects.place {ref,pose?,scale?}` (`{revision,id}`), `objects.transform
+  {id,pose,scale?}`, `objects.remove {id}|{all}`, `objects.hide {id,hidden}`,
+  `objects.reset {id}|{all}`, `objects.configure {id,patch:{locked}}`,
+  `libraries.install {archive,sha256}` (a local `.tar.zst`; hashed before extraction;
+  completes when installed) and `libraries.remove {id,version}`. Errors: -32004
+  unknown id or ref, -32005 locked/protected/not movable, -32007 a placement rule
+  (`error.data {retryable:false, rule}`), -32008 a budget (rule `budget`).
+  `editor.selectedKind` gains `node` (scene nodes; world objects are `object` with
+  `object:<id>`), `editor.submode` gains `universal`, `editor.unplaced` gains `objects`
+  (`count` covers windows and objects) and `editor.gizmo {space,pivot,snap}` is new.
+  Older sessions see none of these: nodes read `object`, universal reads `move`, the
+  pocket lists windows only. `runtime.notice` codes: `object.placed`,
+  `object.removed`, `object.budget`, `object.blocked`, `object.missing`,
+  `object.substituted`, `object.locked`, `object.protected`, `library.installed`,
+  `library.conflict`, `library.invalid`, `catalog.invalid` (plus the gizmo's
+  `placement.blocked`, `editor.undo`/`redo`, `gizmo.drop`/`align`/`pivot`).
+  `editor.json` becomes version 2 (`placements`, `overrides`); version 1 files migrate
+  (a copy is kept as `editor.json.v1`). The movable trait now decides object targets;
+  `HYPRUNE_GIZMO_OBJECTS=1` only stands in for movable world 0.8 objects.
 - Client strings projected from outside core (titles, classes, icons, rules,
   workspace and output names, errors, notices) are clamped to the schema
   `maxLength` in code points and end with `…` when clamped.

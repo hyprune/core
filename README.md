@@ -311,6 +311,20 @@ timestamp, never titles) and the guidance settings, all in private local files.
 Nested check: `dev/nested/run.sh --quests` (Lumen Reach, focus clock scaled with
 `HYPRUNE_FOCUS_TIME_SCALE`).
 
+### Object catalog and user placements
+
+IPC 0.22 (RFC-0011 P1). Core lists the loaded world's object assets, installed
+libraries (`$XDG_DATA_HOME/hyprune/libraries/<id>@<version>/`, then
+`$HYPRUNE_LIBRARY_DIR`) and the user folder (`$XDG_DATA_HOME/hyprune/objects/<id>/`,
+watched), validated with the shared object rules (`hyprune-object-check <dir>` prints
+core's view). Movable objects go into the pocket (`objects.pocket`, the Director's
+Objects tab), tool 5 places them with a ghost under the placement rules and budgets,
+tool 4 and the Super gestures adjust them, and the per-world overlay in `editor.json`
+keeps user placements and overrides of authored objects. `libraries.install` takes a
+local archive and its sha256; core never downloads. Fixture:
+`tests/fixtures/catalog.py`; nested check: `dev/nested/run.sh --catalog` (Lumen Reach and
+the starter library archive, `HYPRUNE_CATALOG_LIBRARY`).
+
 Regression commands: `ctest --test-dir build --output-on-failure` and
 `dev/nested/run.sh --playable` (the runner acquires the nested lifetime flock).
 

@@ -75,12 +75,15 @@ that window consumes Ctrl entirely; Ctrl held longer acts as usual.
 - **Windows:** as in M3B, moved live with a swept collision test (a refused step stops
   the window and outlines the refused pose); scale resizes the client.
 - **Scene nodes** that own collision: the M3B per-world transform overlay.
-- **World 0.8 placed objects** (`HYPRUNE_GIZMO_OBJECTS=1`): picked by swept sphere then
-  the asset's rest-pose triangles at the instance pose, and edited through the same
-  overlay as `objectId: "object:<instance id>"` with uniform scale. A moved instance's
-  collision proxy, visibility regions and probe light follow its committed pose.
-  Without the variable, 0.8 objects stay render-only, as RFC-0004 specifies.
-- **Characters** are never targets: NPCs are neither scene nodes nor placed objects.
+- **World objects with the movable trait** (RFC-0011, IPC 0.22): user placements from
+  the catalog, and authored objects of movable assets. Picked by swept sphere then the
+  asset's rest-pose triangles at the instance pose (`object:<instance id>`, uniform
+  scale within `movable.scale`); edits go to the per-world overlay (a placement record
+  or an authored override). A moved instance's collision proxy, visibility regions and
+  probe light follow its committed pose. Locked instances keep their handles and refuse
+  edits. World 0.8 assets carry no traits, so their instances stay render-only;
+  `HYPRUNE_GIZMO_OBJECTS=1` treats them as movable for development.
+- **Characters** are never targets (the character trait is filtered at the pick).
 
 Object drags and carries are previews: meshes follow the pointer, collision does not.
 Release commits the pose (with an undo record) and only then rebuilds collision.
@@ -110,15 +113,17 @@ or its last valid pose (carry), which is what release commits. A refused commit 
 start pose already breaks them, so authored objects inside an approach can still be
 edited; walls, the playable volume and the player always apply (`brokenSoftRules`).
 The waiver is per edit: it is computed from the pose at the start of each drag, carry
-or command, so an edit that clears the zone makes the rule apply to later edits. Support is advisory:
-the readout says when an edit leaves a previously supported object floating.
+or command, so an edit that clears the zone makes the rule apply to later edits. Support (rule 3) follows
+the object's `movable.surfaces` and is never waived; for scene nodes and world 0.8
+objects it stays advisory: the readout says when an edit leaves a previously supported
+object floating.
 
 ## Development switches
 
 | Variable | Effect |
 | --- | --- |
-| `HYPRUNE_GIZMO_OBJECTS=1` | world 0.8 placed objects are tool 4 targets |
-| `HYPRUNE_GIZMO_UNIVERSAL=1` | the universal mode joins the wheel cycle (IPC reports it as `move`) |
+| `HYPRUNE_GIZMO_OBJECTS=1` | world 0.8 placed objects count as movable (`surfaces: [any]`) |
+| `HYPRUNE_GIZMO_UNIVERSAL=1` | the universal mode joins the wheel cycle (IPC 0.22 reports `universal`, older peers `move`) |
 | `HYPRUNE_GIZMO_KEEPCLEAR=<file>` | keep-clear boxes `[{id, min, max}]` for rule 5 |
 
 ## Verification
