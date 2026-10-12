@@ -126,7 +126,7 @@ void Runtime::catalogTick() {
                     objectNotice("catalog.invalid", "Object " + e.id + " is invalid: " + e.errors[0], "invalid:" + e.ref + e.digest + e.errors[0]);
             catalog = std::make_shared<const world::CatalogSnapshot>(std::move(snap));
             ++catalogRevision;
-            objectsDirty = true;
+            objectsSync(); // instances point into the snapshot: never publish across a swap
             catalogWatchDirs();
         } catch (const std::exception &e) {
             std::fprintf(stderr, "[hyprune] catalog scan failed: %s\n", e.what());
@@ -137,7 +137,7 @@ void Runtime::catalogTick() {
             auto job = libraryInstall.get();
             catalog = std::make_shared<const world::CatalogSnapshot>(std::move(job.snapshot));
             ++catalogRevision;
-            objectsDirty = true;
+            objectsSync();
             catalogWatchDirs();
             objectNotice("library.installed", "Library " + job.installed.id + " " + job.installed.version +
                                                   (job.installed.already ? " is already installed" : " installed"));
@@ -307,8 +307,10 @@ void Runtime::objectRefused(const std::string &what, const interaction::Placemen
 // or blocked when they can't be drawn). Collision and lighting follow in toolsTick.
 void Runtime::objectsSync() {
     objectsDirty = false;
-    if (!world)
+    if (!world) {
+        objectInfos.clear();
         return;
+    }
     // Each user instance keeps its committed proxy range until collision is rebuilt, so the
     // recheck below ignores the object's own proxy at its previous pose.
     std::map<std::string, std::pair<size_t, size_t>> ranges;
@@ -448,12 +450,13 @@ void Runtime::objectsWorldLoaded() {
     objectVerified.clear();
     pocketObjects.clear();
     objectGhost = {};
+    // Authored instances were lit at load; user ones get their probe when collision is built.
+    instanceOverrides.clear();
+    for (size_t k = 0; k < authoredInstances; ++k)
+        instanceOverrides[k] = world->objectInstances[k].model;
     packageCatalog = world::packageEntries(*world, installed / world->id, gizmoObjects);
     ++catalogRevision;
-    objectsDirty = true;
-    instanceOverrides.clear();
-    for (size_t k = 0; k < world->objectInstances.size(); ++k)
-        instanceOverrides[k] = world->objectInstances[k].model;
+    objectsSync(); // before anything publishes: instances point into the package catalog
     builtObjects = ~0ull;
 }
 void Runtime::objectsTick() {

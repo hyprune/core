@@ -188,7 +188,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-43ab30",
+        "id": "u-431283",
         "locked": false,
         "movable": true,
         "name": "Server rack",
@@ -228,7 +228,7 @@
           24
         ],
         "hidden": false,
-        "id": "u-43ab30",
+        "id": "u-431283",
         "radius": 1.3823989629745483
       }
     },
@@ -277,7 +277,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-b0a08e",
+        "id": "u-86e38a",
         "locked": false,
         "movable": true,
         "name": "Floor lamp",
@@ -305,7 +305,7 @@
     },
     {
       "name": "tool 4 selects the user object",
-      "evidence": "object:u-43ab30"
+      "evidence": "object:u-431283"
     },
     {
       "name": "a move-handle drag moves the rack along x; the overlay records it",
@@ -356,14 +356,14 @@
     },
     {
       "name": "objects.remove deletes a user placement and its record",
-      "evidence": "u-d425b2"
+      "evidence": "u-28d92b"
     },
     {
       "name": "undo restores the removed object",
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-d425b2",
+        "id": "u-28d92b",
         "locked": false,
         "movable": true,
         "name": "Floor lamp",
@@ -502,7 +502,7 @@
     {
       "name": "a world reload keeps every placement and pose; the pocket is dropped",
       "evidence": {
-        "u-43ab30": {
+        "u-431283": {
           "position": [
             -8.75777530670166,
             0.004999995231628418,
@@ -515,7 +515,7 @@
             1.0
           ]
         },
-        "u-d425b2": {
+        "u-28d92b": {
           "position": [
             -8.0,
             0.004999935626983643,
@@ -535,7 +535,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-43ab30",
+        "id": "u-431283",
         "locked": false,
         "movable": false,
         "name": "server-rack",
@@ -566,7 +566,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-43ab30",
+        "id": "u-431283",
         "locked": false,
         "movable": true,
         "name": "Server rack",
