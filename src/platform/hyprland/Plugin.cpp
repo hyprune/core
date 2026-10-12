@@ -93,6 +93,7 @@ struct Runtime {
     uint64_t worldLoads = 0; // a reload of the same world merges catalog assets anew: new worker
     std::string offloadLocalReason() const;
     Json offloadRequest, offloadPolicy = Json::object(), offloadChanges = Json::object();
+    Json offloadDraws = Json::object(); // frames drawn while connected: shown / stale / missing, by front age (10 ms bins)
     uint64_t offloadGeneration = 0;
     bool renderedOffload = false;
     sim::Camera displayedCamera;
@@ -5292,6 +5293,19 @@ class Pass final : public IPassElement {
             auto key = runtime->frameKey(surfaces);
             r.reuseFrame = !runtime->frameForced() && key == runtime->renderedKey;
             r.externalWorldFbo = runtime->control.photoHeld() ? 0 : runtime->offload.fbo();
+            if (runtime->offload.connected() && !runtime->control.photoHeld()) {
+                // Diagnostics: frames drawn from the worker vs. stale (local stand-in), by front age.
+                auto age = runtime->offload.frontAgeMs();
+                auto &d = runtime->offloadDraws;
+                std::string kind = r.externalWorldFbo ? "shown" : age < 0 ? "missing" : "stale";
+                d[kind] = d.value(kind, 0) + 1;
+                if (age >= 0) {
+                    if (!d.contains("ageMs"))
+                        d["ageMs"] = Json::object();
+                    auto bin = std::to_string(std::min(int(age / 10) * 10, 100));
+                    d["ageMs"][bin] = d["ageMs"].value(bin, 0) + 1;
+                }
+            }
             auto view = r.externalWorldFbo ? runtime->offload.camera() : runtime->camera;
             auto frames = r.frames;
             double drawStart = runtime->frameLog.file ? Runtime::FrameLog::now() : 0;
@@ -5444,6 +5458,7 @@ int luaCamera(lua_State *state) {
         {"animationFrames", runtime->animationFrames},
         {"offloadRequests", runtime->offloadChanges},
         {"offloadClient", runtime->offload.diagnostics()},
+        {"offloadDraws", runtime->offloadDraws},
         {"grabbed", runtime->grabbed},
         {"gesture", int(runtime->hands.gesture)},
         {"activeHandle", runtime->editor.activeHandle},

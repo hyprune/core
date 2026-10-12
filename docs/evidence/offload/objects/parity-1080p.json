@@ -1,0 +1,672 @@
+{
+ "checks": [
+  {
+   "name": "Lumen Reach has its animated authored armillary",
+   "ok": true,
+   "evidence": {
+    "world": null,
+    "armillary": {
+     "activity": null,
+     "areaId": "sun-court",
+     "id": "sun-court-armillary",
+     "locked": false,
+     "movable": true,
+     "name": "armillary",
+     "path": null,
+     "pose": {
+      "position": [
+       -7.0,
+       4.179999828338623,
+       -10.0
+      ],
+      "rotation": [
+       0.0,
+       0.0,
+       0.0,
+       1.0
+      ]
+     },
+     "ref": "package/armillary",
+     "rule": null,
+     "scale": 1.0,
+     "seat": null,
+     "source": "authored",
+     "state": "active"
+    }
+   }
+  },
+  {
+   "name": "a catalog rack and armillary placed",
+   "ok": true,
+   "evidence": {
+    "rack": {
+     "activity": null,
+     "areaId": "sun-court",
+     "id": "u-77084f",
+     "locked": false,
+     "movable": true,
+     "name": "Server rack",
+     "path": null,
+     "pose": {
+      "position": [
+       -8.0,
+       0.004999995231628418,
+       3.3428292274475098
+      ],
+      "rotation": [
+       0.0,
+       -0.0,
+       0.0,
+       1.0
+      ]
+     },
+     "ref": "library/com.hyprune.starter@0.1.0/server-rack",
+     "rule": null,
+     "scale": 1.0,
+     "seat": null,
+     "source": "user",
+     "state": "active"
+    },
+    "armillary": {
+     "activity": null,
+     "areaId": "sun-court",
+     "id": "u-b6f03e",
+     "locked": false,
+     "movable": true,
+     "name": "Armillary",
+     "path": null,
+     "pose": {
+      "position": [
+       2.008822441101074,
+       2.051614284515381,
+       12.0
+      ],
+      "rotation": [
+       0.0,
+       -0.7071068286895752,
+       0.0,
+       0.7071068286895752
+      ]
+     },
+     "ref": "library/com.hyprune.starter@0.1.0/armillary",
+     "rule": null,
+     "scale": 1.0,
+     "seat": null,
+     "source": "user",
+     "state": "active"
+    }
+   }
+  },
+  {
+   "name": "offload runs with world objects (no local-renderer reason)",
+   "ok": true,
+   "evidence": {
+    "reason": "ready",
+    "device": {
+     "drivesCompositor": false,
+     "enforcedLimitW": 390.0,
+     "name": "NVIDIA GeForce RTX 3090",
+     "node": "renderD129",
+     "pci": "0000:b3:00.0",
+     "selection": "auto"
+    },
+    "capW": 293.0,
+    "targetFPS": 60,
+    "status": "active"
+   }
+  },
+  {
+   "name": "the worker draws the objects (instances, draw calls) at the pinned clock",
+   "ok": true,
+   "evidence": {
+    "objectDraw": {
+     "animating": true,
+     "drawCalls": 38,
+     "instances": 3,
+     "instancesDrawn": 38,
+     "visible": 2
+    },
+    "clock": 7.4,
+    "objectsRevision": 1
+   }
+  },
+  {
+   "name": "pixel parity in-process vs offload at fixed animation times",
+   "ok": true,
+   "evidence": [
+    {
+     "view": "authored",
+     "time": 0.0,
+     "maxLevels": 0,
+     "differingFraction": 0.0,
+     "psnr": null
+    },
+    {
+     "view": "placed",
+     "time": 0.0,
+     "maxLevels": 0,
+     "differingFraction": 0.0,
+     "psnr": null
+    },
+    {
+     "view": "rack",
+     "time": 0.0,
+     "maxLevels": 0,
+     "differingFraction": 0.0,
+     "psnr": null
+    },
+    {
+     "view": "authored",
+     "time": 2.75,
+     "maxLevels": 0,
+     "differingFraction": 0.0,
+     "psnr": null
+    },
+    {
+     "view": "placed",
+     "time": 2.75,
+     "maxLevels": 0,
+     "differingFraction": 0.0,
+     "psnr": null
+    },
+    {
+     "view": "rack",
+     "time": 2.75,
+     "maxLevels": 0,
+     "differingFraction": 0.0,
+     "psnr": null
+    },
+    {
+     "view": "authored",
+     "time": 7.4,
+     "maxLevels": 0,
+     "differingFraction": 0.0,
+     "psnr": null
+    },
+    {
+     "view": "placed",
+     "time": 7.4,
+     "maxLevels": 0,
+     "differingFraction": 0.0,
+     "psnr": null
+    },
+    {
+     "view": "rack",
+     "time": 7.4,
+     "maxLevels": 0,
+     "differingFraction": 0.0,
+     "psnr": null
+    }
+   ]
+  },
+  {
+   "name": "offload frames follow the animation clock",
+   "ok": true,
+   "evidence": {
+    "maxLevels": 213,
+    "meanLevels": 3.939,
+    "differingFraction": 0.031887,
+    "differingPixels": 66120,
+    "psnr": 21.54
+   }
+  },
+  {
+   "name": "a tool 4 drag moves the rack while offload is active; worker revisions follow the drag",
+   "ok": true,
+   "evidence": {
+    "from": [
+     -8.0,
+     0.004999995231628418,
+     3.3428292274475098
+    ],
+    "to": [
+     -8.862466812133789,
+     0.004999995231628418,
+     3.3428292274475098
+    ],
+    "revisions": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9
+    ],
+    "renderers": [
+     "offload",
+     "offload",
+     "offload",
+     "offload",
+     "offload",
+     "offload",
+     "offload",
+     "offload"
+    ],
+    "ticks": [
+     [
+      1.22,
+      16.69,
+      43.50552299618721
+     ],
+     [
+      1.24,
+      16.68,
+      34.228560000658035
+     ],
+     [
+      1.24,
+      16.67,
+      35.94541397690773
+     ],
+     [
+      121.23,
+      16.58,
+      42.87626197934151
+     ],
+     [
+      1.26,
+      16.74,
+      37.32301300764084
+     ],
+     [
+      1.23,
+      16.68,
+      46.48398798704147
+     ],
+     [
+      1.23,
+      16.73,
+      34.03608801960945
+     ],
+     [
+      120.91,
+      16.67,
+      21.88153401017189
+     ]
+    ],
+    "framesPerSecondAfter": 58,
+    "requests": {
+     "count": 6,
+     "history": [
+      {
+       "compositorPci": "0000:65:00.0",
+       "enabled": false,
+       "graphics.alpha_haze": null,
+       "graphics.ambient_occlusion": null,
+       "graphics.anisotropy": null,
+       "graphics.bloom": null,
+       "graphics.bloom_strength": 0.15,
+       "graphics.dynamic_resolution": true,
+       "graphics.exposure": 1.0,
+       "graphics.fog": null,
+       "graphics.fov": 65.0,
+       "graphics.msaa": null,
+       "graphics.normal_maps": null,
+       "graphics.offload": "off",
+       "graphics.offload_device": "auto",
+       "graphics.offload_power_cap_w": null,
+       "graphics.outline": null,
+       "graphics.outline_colour": null,
+       "graphics.outline_quality": null,
+       "graphics.outline_width_px": null,
+       "graphics.quality": "auto",
+       "graphics.reduced_motion": false,
+       "graphics.reflections": null,
+       "graphics.render_scale": "auto",
+       "graphics.scale_max": 1.0,
+       "graphics.scale_min": 0.375,
+       "graphics.sharpen": 0.35,
+       "graphics.sky": null,
+       "graphics.specular": null,
+       "graphics.target_fps": 60,
+       "graphics.upscaler": null,
+       "graphics.visibility_culling": true,
+       "height": 0,
+       "objectRoots": [],
+       "width": 0,
+       "worldLoad": 0,
+       "worldPath": ""
+      },
+      {
+       "worldLoad": 1,
+       "worldPath": "<state>/worlds/com.hyprune.lumen-reach"
+      },
+      {
+       "height": 1080,
+       "width": 1920
+      },
+      {
+       "graphics.dynamic_resolution": false,
+       "graphics.render_scale": 1
+      },
+      {
+       "objectRoots": [
+        "<state>/datahome/hyprune/libraries"
+       ]
+      },
+      {
+       "enabled": true,
+       "graphics.offload": "on"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "the gizmo-moved rack and a hidden authored object match",
+   "ok": true,
+   "evidence": {
+    "rackMoved": {
+     "maxLevels": 0,
+     "meanLevels": 0.0,
+     "differingFraction": 0.0,
+     "differingPixels": 0,
+     "psnr": null
+    },
+    "authoredHidden": {
+     "maxLevels": 0,
+     "meanLevels": 0.0,
+     "differingFraction": 0.0,
+     "differingPixels": 0,
+     "psnr": null
+    },
+    "hideEffect": {
+     "maxLevels": 219,
+     "meanLevels": 4.3881,
+     "differingFraction": 0.044158,
+     "differingPixels": 91565,
+     "psnr": 21.34
+    }
+   }
+  },
+  {
+   "name": "edited world transforms render in the offload worker",
+   "ok": true,
+   "evidence": {
+    "selected": "node-17",
+    "transforms": 1,
+    "revisions": [
+     0,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7
+    ],
+    "compare": {
+     "maxLevels": 0,
+     "meanLevels": 0.0,
+     "differingFraction": 0.0,
+     "differingPixels": 0,
+     "psnr": null
+    },
+    "reason": "ready"
+   }
+  }
+ ],
+ "stage": "parity",
+ "times": [
+  0.0,
+  2.75,
+  7.4
+ ],
+ "levels": 3,
+ "stills": [
+  {
+   "name": "local-authored-t0.png",
+   "renderer": "in-process",
+   "compositorWorldPassGpuMs": 4.126720000000001
+  },
+  {
+   "name": "local-placed-t0.png",
+   "renderer": "in-process",
+   "compositorWorldPassGpuMs": 4.298752
+  },
+  {
+   "name": "local-rack-t0.png",
+   "renderer": "in-process",
+   "compositorWorldPassGpuMs": 3.144704
+  },
+  {
+   "name": "local-authored-t2.75.png",
+   "renderer": "in-process",
+   "compositorWorldPassGpuMs": 2.956288
+  },
+  {
+   "name": "local-placed-t2.75.png",
+   "renderer": "in-process",
+   "compositorWorldPassGpuMs": 4.0243199999999995
+  },
+  {
+   "name": "local-rack-t2.75.png",
+   "renderer": "in-process",
+   "compositorWorldPassGpuMs": 4.127744
+  },
+  {
+   "name": "local-authored-t7.4.png",
+   "renderer": "in-process",
+   "compositorWorldPassGpuMs": 3.871744
+  },
+  {
+   "name": "local-placed-t7.4.png",
+   "renderer": "in-process",
+   "compositorWorldPassGpuMs": 3.007488
+  },
+  {
+   "name": "local-rack-t7.4.png",
+   "renderer": "in-process",
+   "compositorWorldPassGpuMs": 2.956288
+  },
+  {
+   "name": "offload-authored-t0.png",
+   "renderer": "offload",
+   "compositorWorldPassGpuMs": 0.022528
+  },
+  {
+   "name": "offload-placed-t0.png",
+   "renderer": "in-process",
+   "compositorWorldPassGpuMs": 0.023552
+  },
+  {
+   "name": "offload-rack-t0.png",
+   "renderer": "offload",
+   "compositorWorldPassGpuMs": 0.022528
+  },
+  {
+   "name": "offload-authored-t2.75.png",
+   "renderer": "offload",
+   "compositorWorldPassGpuMs": 0.024576
+  },
+  {
+   "name": "offload-placed-t2.75.png",
+   "renderer": "offload",
+   "compositorWorldPassGpuMs": 0.022528
+  },
+  {
+   "name": "offload-rack-t2.75.png",
+   "renderer": "offload",
+   "compositorWorldPassGpuMs": 0.022528
+  },
+  {
+   "name": "offload-authored-t7.4.png",
+   "renderer": "offload",
+   "compositorWorldPassGpuMs": 0.027648
+  },
+  {
+   "name": "offload-placed-t7.4.png",
+   "renderer": "offload",
+   "compositorWorldPassGpuMs": 0.022528000000000003
+  },
+  {
+   "name": "offload-rack-t7.4.png",
+   "renderer": "offload",
+   "compositorWorldPassGpuMs": 0.026624000000000002
+  },
+  {
+   "name": "offload-rack-moved.png",
+   "renderer": "offload",
+   "compositorWorldPassGpuMs": 0.033792
+  },
+  {
+   "name": "offload-authored-shown.png",
+   "renderer": "offload",
+   "compositorWorldPassGpuMs": 0.045056
+  },
+  {
+   "name": "offload-authored-hidden.png",
+   "renderer": "offload",
+   "compositorWorldPassGpuMs": 0.027648000000000002
+  },
+  {
+   "name": "local-authored-hidden.png",
+   "renderer": "in-process",
+   "compositorWorldPassGpuMs": 0.027648000000000002
+  },
+  {
+   "name": "local-rack-moved.png",
+   "renderer": "in-process",
+   "compositorWorldPassGpuMs": 3.391488
+  },
+  {
+   "name": "offload-m3b-edited.png",
+   "renderer": "offload",
+   "compositorWorldPassGpuMs": 0.037888
+  },
+  {
+   "name": "local-m3b-edited.png",
+   "renderer": "in-process",
+   "compositorWorldPassGpuMs": 0.049152
+  }
+ ],
+ "parity": [
+  {
+   "maxLevels": 0,
+   "meanLevels": 0.0,
+   "differingFraction": 0.0,
+   "differingPixels": 0,
+   "psnr": null,
+   "view": "authored",
+   "time": 0.0
+  },
+  {
+   "maxLevels": 0,
+   "meanLevels": 0.0,
+   "differingFraction": 0.0,
+   "differingPixels": 0,
+   "psnr": null,
+   "view": "placed",
+   "time": 0.0
+  },
+  {
+   "maxLevels": 0,
+   "meanLevels": 0.0,
+   "differingFraction": 0.0,
+   "differingPixels": 0,
+   "psnr": null,
+   "view": "rack",
+   "time": 0.0
+  },
+  {
+   "maxLevels": 0,
+   "meanLevels": 0.0,
+   "differingFraction": 0.0,
+   "differingPixels": 0,
+   "psnr": null,
+   "view": "authored",
+   "time": 2.75
+  },
+  {
+   "maxLevels": 0,
+   "meanLevels": 0.0,
+   "differingFraction": 0.0,
+   "differingPixels": 0,
+   "psnr": null,
+   "view": "placed",
+   "time": 2.75
+  },
+  {
+   "maxLevels": 0,
+   "meanLevels": 0.0,
+   "differingFraction": 0.0,
+   "differingPixels": 0,
+   "psnr": null,
+   "view": "rack",
+   "time": 2.75
+  },
+  {
+   "maxLevels": 0,
+   "meanLevels": 0.0,
+   "differingFraction": 0.0,
+   "differingPixels": 0,
+   "psnr": null,
+   "view": "authored",
+   "time": 7.4
+  },
+  {
+   "maxLevels": 0,
+   "meanLevels": 0.0,
+   "differingFraction": 0.0,
+   "differingPixels": 0,
+   "psnr": null,
+   "view": "placed",
+   "time": 7.4
+  },
+  {
+   "maxLevels": 0,
+   "meanLevels": 0.0,
+   "differingFraction": 0.0,
+   "differingPixels": 0,
+   "psnr": null,
+   "view": "rack",
+   "time": 7.4
+  }
+ ],
+ "gizmo": {
+  "rackMoved": {
+   "maxLevels": 0,
+   "meanLevels": 0.0,
+   "differingFraction": 0.0,
+   "differingPixels": 0,
+   "psnr": null
+  },
+  "authoredHidden": {
+   "maxLevels": 0,
+   "meanLevels": 0.0,
+   "differingFraction": 0.0,
+   "differingPixels": 0,
+   "psnr": null
+  },
+  "hideEffect": {
+   "maxLevels": 219,
+   "meanLevels": 4.3881,
+   "differingFraction": 0.044158,
+   "differingPixels": 91565,
+   "psnr": 21.34
+  }
+ },
+ "editedTransforms": {
+  "selected": "node-17",
+  "transforms": 1,
+  "revisions": [
+   0,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7
+  ],
+  "compare": {
+   "maxLevels": 0,
+   "meanLevels": 0.0,
+   "differingFraction": 0.0,
+   "differingPixels": 0,
+   "psnr": null
+  },
+  "reason": "ready"
+ }
+}

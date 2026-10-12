@@ -188,4 +188,5 @@ local renderer.
 (`hl.plugin.hyprune.animation_clock(t)`): stills of the authored armillary, a placed
 catalog rack and armillary, a rack moved with the tool 4 gizmo while offload runs, a
 hidden authored object and an edited scene node match the in-process renderer per
-pixel. Its `perf` stage measures frame times in-process and offloaded.
+pixel. Its `perf` stage measures frame times in-process and offloaded; results in
+`docs/evidence/offload/objects/README.md`.

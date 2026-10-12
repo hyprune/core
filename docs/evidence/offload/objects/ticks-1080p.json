@@ -1,0 +1,210 @@
+{
+ "checks": [
+  {
+   "name": "Lumen Reach has its animated authored armillary",
+   "ok": true,
+   "evidence": {
+    "world": null,
+    "armillary": {
+     "activity": null,
+     "areaId": "sun-court",
+     "id": "sun-court-armillary",
+     "locked": false,
+     "movable": true,
+     "name": "armillary",
+     "path": null,
+     "pose": {
+      "position": [
+       -7.0,
+       4.179999828338623,
+       -10.0
+      ],
+      "rotation": [
+       0.0,
+       0.0,
+       0.0,
+       1.0
+      ]
+     },
+     "ref": "package/armillary",
+     "rule": null,
+     "scale": 1.0,
+     "seat": null,
+     "source": "authored",
+     "state": "active"
+    }
+   }
+  },
+  {
+   "name": "a catalog rack and armillary placed",
+   "ok": true,
+   "evidence": {
+    "rack": {
+     "activity": null,
+     "areaId": "sun-court",
+     "id": "u-8e383f",
+     "locked": false,
+     "movable": true,
+     "name": "Server rack",
+     "path": null,
+     "pose": {
+      "position": [
+       -8.0,
+       0.004999995231628418,
+       3.3428292274475098
+      ],
+      "rotation": [
+       0.0,
+       -0.0,
+       0.0,
+       1.0
+      ]
+     },
+     "ref": "library/com.hyprune.starter@0.1.0/server-rack",
+     "rule": null,
+     "scale": 1.0,
+     "seat": null,
+     "source": "user",
+     "state": "active"
+    },
+    "armillary": {
+     "activity": null,
+     "areaId": "sun-court",
+     "id": "u-845715",
+     "locked": false,
+     "movable": true,
+     "name": "Armillary",
+     "path": null,
+     "pose": {
+      "position": [
+       2.008822441101074,
+       2.051614284515381,
+       12.0
+      ],
+      "rotation": [
+       0.0,
+       -0.7071068286895752,
+       0.0,
+       0.7071068286895752
+      ]
+     },
+     "ref": "library/com.hyprune.starter@0.1.0/armillary",
+     "rule": null,
+     "scale": 1.0,
+     "seat": null,
+     "source": "user",
+     "state": "active"
+    }
+   }
+  }
+ ],
+ "stage": "ticks",
+ "times": [
+  0.0,
+  2.75,
+  7.4
+ ],
+ "levels": 3,
+ "ticks": [
+  {
+   "offload": "off",
+   "state": "tool 1 (no polling)",
+   "presents": 164,
+   "gapsOver40ms": [
+    132.8,
+    132.0,
+    82.1
+   ],
+   "newFrames": 164
+  },
+  {
+   "offload": "on",
+   "state": "tool 1 (no polling)",
+   "presents": 165,
+   "gapsOver40ms": [
+    134.4,
+    92.7,
+    132.7
+   ],
+   "newFrames": 165
+  },
+  {
+   "offload": "off",
+   "state": "tool 1",
+   "fps": 53.7,
+   "tickMs": {
+    "n": 13,
+    "median": 0.378,
+    "p95": 127.815,
+    "mean": 10.186,
+    "max": 127.815
+   },
+   "offloadFraction": 0.0
+  },
+  {
+   "offload": "off",
+   "state": "tool 4, rack selected",
+   "fps": 57.5,
+   "tickMs": {
+    "n": 13,
+    "median": 4.506,
+    "p95": 5.095,
+    "mean": 4.429,
+    "max": 5.095
+   },
+   "offloadFraction": 0.0
+  },
+  {
+   "offload": "off",
+   "state": "tool 5, rack ghost",
+   "fps": 54.0,
+   "tickMs": {
+    "n": 13,
+    "median": 2.388,
+    "p95": 132.924,
+    "mean": 12.461,
+    "max": 132.924
+   },
+   "offloadFraction": 0.0
+  },
+  {
+   "offload": "on",
+   "state": "tool 1",
+   "fps": 56.7,
+   "tickMs": {
+    "n": 13,
+    "median": 0.373,
+    "p95": 0.56,
+    "mean": 0.395,
+    "max": 0.56
+   },
+   "offloadFraction": 1.0
+  },
+  {
+   "offload": "on",
+   "state": "tool 4, rack selected",
+   "fps": 57.8,
+   "tickMs": {
+    "n": 13,
+    "median": 4.483,
+    "p95": 5.717,
+    "mean": 4.47,
+    "max": 5.717
+   },
+   "offloadFraction": 1.0
+  },
+  {
+   "offload": "on",
+   "state": "tool 5, rack ghost",
+   "fps": 54.0,
+   "tickMs": {
+    "n": 13,
+    "median": 2.324,
+    "p95": 121.477,
+    "mean": 11.249,
+    "max": 121.477
+   },
+   "offloadFraction": 0.9230769230769231
+  }
+ ]
+}

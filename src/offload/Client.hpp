@@ -32,6 +32,8 @@ class Client {
     bool connected() const { return fd_ >= 0; }
     bool available() const { return fd_ >= 0 && front_ >= 0 && now() - frontReply_.at("sent").get<double>() <= 50; }
     GLuint fbo() const { return available() ? targets_[front_].fbo : 0; }
+    // Age of the newest complete frame (ms), or -1.
+    double frontAgeMs() const { return front_ >= 0 ? now() - frontReply_.at("sent").get<double>() : -1; }
     Json diagnostics() const {
         Json phases = Json::array();
         for (auto &b : slots_)
