@@ -1526,12 +1526,21 @@ Json machineInputs(const Json &manifest) {
         if (!j.is_object() || inputs.size() >= 16)
             continue;
         Json in = Json::object();
-        for (auto key : {"id", "type", "label", "explain", "default", "values", "min", "max", "maxLength", "repeat"})
+        for (auto key : {"id", "type", "label", "explain", "default", "values", "min", "max", "maxLength", "repeat", "states"})
             if (j.contains(key))
                 in[key] = j[key];
         inputs.push_back(in);
     }
     return {{"primary", machine.contains("primary") ? machine["primary"] : Json(nullptr)}, {"inputs", inputs}};
+}
+// At most `count` code points of UTF-8 text (never a split character).
+static std::string cutText(const std::string &t, size_t count) {
+    size_t chars = 0, cut = 0;
+    while (cut < t.size() && chars < count) {
+        cut += (t[cut] & 0x80) == 0 ? 1 : (t[cut] & 0xe0) == 0xc0 ? 2 : (t[cut] & 0xf0) == 0xe0 ? 3 : 4;
+        ++chars;
+    }
+    return t.substr(0, std::min(cut, t.size()));
 }
 Json Machines::live() const {
     static const char *conditions[]{"fresh", "stale", "missing", "error"};
@@ -1547,8 +1556,8 @@ Json Machines::live() const {
                        {"value", in.value[i]}, {"raw", in.raw[i]}, {"condition", conditions[int(in.condition[i])]},
                        {"publishedAt", in.publishedAt[i] >= 0 ? Json(in.publishedAt[i]) : Json(nullptr)}};
             for (auto key : {"value", "raw"})
-                if (entry[key].is_string() && entry[key].get_ref<const std::string &>().size() > 256)
-                    entry[key] = entry[key].get<std::string>().substr(0, 256);
+                if (entry[key].is_string())
+                    entry[key] = cutText(entry[key].get<std::string>(), 256);
             if (b.bound) {
                 if (source.is_null())
                     source = b.source;
@@ -1557,7 +1566,7 @@ Json Machines::live() const {
             }
             inputs[d.inputs[i].id] = entry;
         }
-        Json error = in.error.is_string() ? Json(in.error.get<std::string>().substr(0, 256)) : Json(nullptr);
+        Json error = in.error.is_string() ? Json(cutText(in.error.get<std::string>(), 256)) : Json(nullptr);
         out.push_back({{"id", o.id}, {"asset", d.id}, {"ref", world_->objectAssets[d.asset].ref.empty() ? Json(nullptr) : Json(world_->objectAssets[d.asset].ref)},
                        {"source", common ? source : Json(nullptr)}, {"status", in.status.is_string() ? in.status : Json(nullptr)},
                        {"error", error}, {"stale", in.anyStale}, {"inputs", inputs}});
