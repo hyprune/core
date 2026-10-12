@@ -662,8 +662,11 @@ struct Runtime {
     std::map<const world::Character *, std::string> companionChecked; // core's character check, first error
     uint64_t companionRevision = 0;
     Vec3 companionFeet{}, companionPublished{}, companionCarryFrom{};
-    float companionHeading = 0, companionTravel = 0, companionCarryHeading = 0, companionCarryDistance = 2;
+    float companionHeading = 0, companionCarryHeading = 0, companionCarryDistance = 2;
     bool companionCarry = false, companionFocused = false, companionMoving = false, companionInView = false;
+    const char *companionLastStep = "none"; // diagnostics: how the last companion step ended
+    float companionFocusRetry = 0;
+    int companionFocusMoves = 0, companionFocusMisses = 0;
     int companionPops = 0; // teleports seen in view (diagnostics; never expected)
     size_t companionLine = 0;
     struct CompanionDrop {
@@ -686,6 +689,12 @@ struct Runtime {
     void companionBind(const Json &patch);
     void companionSetMode(const std::string &mode);
     void companionView(sim::CompanionView &, const interaction::PlacementScene &walk, const interaction::PlacementScene &stand);
+    void companionPlanner(const interaction::PlacementScene &walk);
+    interaction::PlacementScene companionWalkScene();
+    struct CompanionPlannerScope { // clears the planner's scene callbacks when the scene goes
+        sim::GridPlanner &planner;
+        ~CompanionPlannerScope() { planner.stand = {}, planner.leg = {}; }
+    };
     bool companionStep(NpcRun &, float dt, const sim::NpcWorld &, const std::string &paused);
     bool companionPickUp();
     void companionCarryTick();

@@ -296,6 +296,12 @@ void Runtime::companionView(sim::CompanionView &v, const interaction::PlacementS
             return std::nullopt;
         return root;
     };
+    companionPlanner(walkScene);
+}
+// Points the planner at a walk scene. The callbacks hold its address: the caller keeps the
+// scene alive and clears them (CompanionPlannerScope) before it goes.
+void Runtime::companionPlanner(const interaction::PlacementScene &walkScene) {
+    auto body = companionBody;
     companionBrain.planner.stand = [body, scene = &walkScene](Vec3 p) -> std::optional<Vec3> {
         auto floor = interaction::floorAt(*scene, p);
         if (!floor)
@@ -307,6 +313,12 @@ void Runtime::companionView(sim::CompanionView &v, const interaction::PlacementS
     };
     companionBrain.planner.leg = [body, scene = &walkScene](Vec3 a, Vec3 b) { return interaction::checkLeg(*scene, a, b, body, 1).empty(); };
 }
+interaction::PlacementScene Runtime::companionWalkScene() {
+    auto scene = npcScene();
+    scene.approaches.clear(); // passable on the way; never a place to stand (the free spots)
+    scene.keepClear.clear();
+    return scene;
+}
 // One tick of the companion's agent (npcTick): carried, focus, route, follow and stay.
 // Returns whether it moved (it keeps frames coming only then).
 bool Runtime::companionStep(NpcRun &n, float dt, const sim::NpcWorld &w, const std::string &paused) {
@@ -317,9 +329,11 @@ bool Runtime::companionStep(NpcRun &n, float dt, const sim::NpcWorld &w, const s
     Vec3 feet = camera.position - Vec3{0, camera.eyeHeight, 0};
     Vec3 step = feet - companionFeet;
     bool warped = std::hypot(step.x, step.z) > 3 || std::abs(step.y) > 3;
+    // The slot follows the direction of travel, never the view alone: turning round to look at
+    // the companion leaves it where it is. After a warp or a rejoin the view is the best guess.
     if (dt > 0 && std::hypot(step.x, step.z) / dt > .3f && !warped)
-        companionHeading = std::atan2(step.x, step.z), companionTravel = .3f;
-    else if ((companionTravel -= dt) <= 0) {
+        companionHeading = std::atan2(step.x, step.z);
+    else if (warped || companionBrain.teleport) {
         Vec3 f = camera.forward();
         if (std::hypot(f.x, f.z) > .1f)
             companionHeading = std::atan2(f.x, f.z);
@@ -332,13 +346,12 @@ bool Runtime::companionStep(NpcRun &n, float dt, const sim::NpcWorld &w, const s
     }
     bool focus = !layout.desktop.is_null() || fullscreen.phase;
     std::string mode = companionMode();
-    auto walkScene = npcScene();
-    walkScene.approaches.clear();
-    walkScene.keepClear.clear();
+    auto walkScene = companionWalkScene();
+    CompanionPlannerScope scope{companionBrain.planner};
     auto standScene = npcScene();
-    for (auto &k : placementScene().keepClear)
-        standScene.keepClear.push_back(k);
-    standScene.keepClear.insert(standScene.keepClear.end(), placementScene().zones.begin(), placementScene().zones.end());
+    auto placing = placementScene(); // by value: one copy for both ranges
+    standScene.keepClear.insert(standScene.keepClear.end(), placing.keepClear.begin(), placing.keepClear.end());
+    standScene.keepClear.insert(standScene.keepClear.end(), placing.zones.begin(), placing.zones.end());
     sim::CompanionView v;
     v.feet = feet;
     v.heading = companionHeading;
@@ -362,26 +375,36 @@ bool Runtime::companionStep(NpcRun &n, float dt, const sim::NpcWorld &w, const s
                 ++r->companionPops;
         }
     } seen{this, n, v, teleportsBefore, seenBefore};
-    // Focus: out of the focused view when the transition starts, then it waits there.
+    // Focus: out of the focused view as the transition starts (tried twice a second while it is
+    // still in view), then it waits there. The transition hides the cut: not a pop.
     if (focus) {
-        if (!companionFocused && mode != "route" && !companionBrain.hidden()) {
-            companionFocused = true;
-            if (v.inView(a.position))
-                if (auto spot = companionBrain.outOfView(v)) {
-                    a.position = *spot;
-                    a.idle();
-                    companionBrain.slot.reset();
-                    ++companionBrain.teleports;
-                }
+        if (!companionFocused)
+            companionFocused = true, companionFocusRetry = 0;
+        companionFocusRetry -= dt;
+        if (mode != "route" && !companionBrain.hidden() && companionFocusRetry <= 0 && v.inView(a.position)) {
+            companionFocusRetry = .5f;
+            if (auto spot = companionBrain.outOfView(v)) {
+                a.position = *spot;
+                a.idle();
+                companionBrain.slot.reset();
+                ++companionFocusMoves;
+            } else
+                ++companionFocusMisses;
         }
+        companionLastStep = "focus";
         return false;
     }
     companionFocused = false;
-    if (world->collision.empty()) // nothing to walk on: it stays where it is
+    if (world->collision.empty()) { // nothing to walk on: it stays where it is
+        companionLastStep = "no collision";
         return false;
+    }
     bool still = paused == "still" || paused == "reduced motion" || paused == "battery" || paused == "usb-c power" || paused == "power unknown";
-    if (!paused.empty() && !still)
-        return false; // typing, free cursor, idle, inactive: it stands where it is
+    if (!paused.empty() && !still) { // typing, free cursor, idle, inactive: it stands where it is
+        companionLastStep = "paused";
+        return false;
+    }
+    companionLastStep = mode == "route" ? "route" : "brain";
     if (mode == "route") {
         if (!still)
             a.update(dt, w);
@@ -641,6 +664,11 @@ Json Runtime::companionDiagnostics() {
             {"waypoints", b.waypoints.size()},
             {"plannerExpanded", b.planner.expanded},
             {"running", b.running},
+            {"run", n ? Json(n->state) : Json(nullptr)},
+            {"step", companionLastStep},
+            {"teleportPending", b.teleport},
+            {"focusMoves", companionFocusMoves},
+            {"focusMisses", companionFocusMisses},
             {"position", n ? vecJson(n->agent.position) : Json(nullptr)},
             {"heading", n ? n->agent.heading : 0},
             {"clip", n ? Json(n->agent.pose.clip) : Json(nullptr)},

@@ -126,7 +126,7 @@ struct GridPlanner {
 // What the companion sees each tick (follow and stay modes).
 struct CompanionView {
     Vec3 feet{};              // the player's feet
-    float heading = 0;        // their direction of travel (their view yaw while still); forward = (sin, 0, cos)
+    float heading = 0;        // their last direction of travel (not the view: turning round leaves it be); forward = (sin, 0, cos)
     bool warped = false;      // they jumped more than 3 m in one tick (home switch, travel, respawn)
     bool airborne = false;    // flying or climbing: the companion waits
     bool lookedAt = false;    // they aim at the companion

@@ -341,6 +341,9 @@ void Runtime::npcSync() {
             if (!a.route.empty() && !suspended) {
                 Vec3 join = a.route.at(a.s);
                 if (std::hypot(join.x - a.position.x, join.z - a.position.z) > .05f) {
+                    auto walkScene = companionWalkScene();
+                    CompanionPlannerScope scope{companionBrain.planner};
+                    companionPlanner(walkScene);
                     auto legs = companionBrain.planner.plan(a.position, join);
                     a.legs = legs ? *legs : std::vector<Vec3>{join};
                     a.mode = sim::NpcAgent::Mode::FromSeat;
