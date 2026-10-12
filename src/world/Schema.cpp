@@ -178,7 +178,7 @@ void validateManifest(const Json &value) {
     struct Pinned {
         const char *version, *world, *common;
     };
-    static constexpr Pinned pinned[]{{"0.8", worldSchema08, commonSchema08}, {"0.7", worldSchema07, commonSchema07}, {"0.6", worldSchema06, commonSchema06},
+    static constexpr Pinned pinned[]{{"0.9", worldSchema09, commonSchema09}, {"0.8", worldSchema08, commonSchema08}, {"0.7", worldSchema07, commonSchema07}, {"0.6", worldSchema06, commonSchema06},
                                      {"0.5", worldSchema05, commonSchema04}, {"0.4", worldSchema04, commonSchema04},
                                      {"0.3", worldSchema03, commonSchema03}, {"0.2", worldSchema02, commonSchema02}};
     static std::map<std::string, std::pair<Json, Json>> parsed;
@@ -191,7 +191,9 @@ void validateManifest(const Json &value) {
             if (it == parsed.end())
                 it = parsed.emplace(version, std::pair{Json::parse(p.world), Json::parse(p.common)}).first;
             guard.unlock();
-            validate(value, it->second.first, it->second.second, "world");
+            // From 0.9 the world schema keeps its definitions in local $defs.
+            bool local = it->second.first.contains("$defs");
+            validate(value, it->second.first, it->second.second, "world", local ? &it->second.first : nullptr);
             return;
         }
     static const auto common = Json::parse(commonSchema), schema = Json::parse(worldSchema);

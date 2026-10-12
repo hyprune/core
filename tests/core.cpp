@@ -144,8 +144,8 @@ int main(int argc, char **argv) {
             }
             // Numeric comparison; formats this core does not know never pass a gate.
             assert(world::format::atLeast("0.7", "0.6") && !world::format::atLeast("0.6", "0.7") &&
-                   world::format::atLeast("0.8", "0.7") && !world::format::atLeast("0.9", "0.7"));
-            relabel("0.9");
+                   world::format::atLeast("0.9", "0.8") && !world::format::atLeast("0.10", "0.7"));
+            relabel("0.10");
             rejects([&] { world::load(dir); }, "unknown world format accepted");
             auto scene = world::Json::parse(std::ifstream(dir / "scene.gltf"));
             scene["extensionsUsed"] = scene["extensionsRequired"] = {"KHR_mesh_quantization"};

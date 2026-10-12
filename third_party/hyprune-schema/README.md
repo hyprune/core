@@ -23,3 +23,8 @@ constraints. Regenerated with `dev/embed-schema.py`; no runtime sibling access.
 
 World 0.6 playable bounds/backdrop bytes are pinned to `2c1be9b3359025a0467eab7b0c11bc9aa339eeb5`;
 its common schema reuses the already-pinned 0.6 bytes.
+
+World 0.9 (characters, paths, seats, keepClear) and IPC 0.23 (NPC state and methods)
+are pinned to the schema commit recorded in `v0.9/WORLD-SOURCE.json` and
+`ipc-source.json`. The 0.9 world schema keeps its definitions in local `$defs`, so the
+embedded validator resolves them against the world schema itself.
