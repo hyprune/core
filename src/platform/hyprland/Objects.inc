@@ -307,7 +307,7 @@ void Runtime::objectNotice(const std::string &code, const std::string &message, 
     if (!once.empty() && !objectNotices.insert(once).second)
         return;
     ipc->notify("runtime.notice", {{"level", code == "object.blocked" || code == "object.missing" || code == "library.conflict" ||
-                                                     code == "library.invalid" || code == "catalog.invalid"
+                                                     code == "library.invalid" || code == "catalog.invalid" || code == "machine.invalid"
                                                  ? "warning"
                                                  : "info"},
                                    {"code", code},

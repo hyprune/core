@@ -640,9 +640,23 @@ struct Runtime {
     std::optional<Json> npcsMethod(const std::string &method, const Json &params);
     Json npcDiagnostics();
     Json offloadCharacters() const;
-    // Machines (RFC-0013 draft prototype): data-channel values drive placed objects
-    // through HYPRUNE_MACHINES_PROTOTYPE's bindings. Applied in the tick only.
+    // Machines (RFC-0013 draft prototype): data-channel values drive every placed
+    // instance of a machine asset: default bindings (source com.hyprune.sources.<instance
+    // id>), the user bindings file machines.json (re-read on change) and the development
+    // override HYPRUNE_MACHINES_PROTOTYPE. Synced and applied in the tick only.
     world::Machines machines;
+    interaction::InputFile machinesFile{"machines", Json{{"instances", Json::object()}}, [](const Json &j) {
+                                            if (!j.is_object() || !j.value("instances", Json::object()).is_object())
+                                                throw std::runtime_error("machines.json: {\"instances\": {<instance id>: {...}}}");
+                                            for (auto &[id, entry] : j.value("instances", Json::object()).items())
+                                                if (!entry.is_object())
+                                                    throw std::runtime_error("machines.json: instance " + id + " must be an object");
+                                            return j;
+                                        }};
+    Json machinesDev = nullptr; // the development file, when it names the loaded world
+    uint64_t machinesSyncedRevision = ~0ull, machinesSyncedAssets = 0;
+    bool machinesStale = true;  // sync on the next tick (world load, bindings file change)
+    std::set<std::string> machineHints; // instance IDs told which source they read
     void machinesLoad();
     void machinesTick(float dt);
     // What the reticle tells the player (IPC 0.19 interaction.reticle); distance/reach in m, -1 = none.
@@ -2199,10 +2213,14 @@ void Runtime::focusWall(const std::string &id) {
     handover.phase = 1;
 }
 void Runtime::machinesLoad() {
-    // Prototype only: the world format has no machines yet. The bindings file names the
-    // world, the assets' object.json manifests (slots, machine trait) and per-instance
-    // input bindings: {"worldId", "manifests", "instances", "staleMs", "effectAsset"}.
+    // The development override names the world, manifests for package assets (world 0.8
+    // has no traits), bindings and options: {"worldId", "manifests", "instances",
+    // "staleMs", "effectAsset"}. Machines themselves sync in the tick, after the
+    // world's objects (catalog placements merge later).
     machines = {};
+    machinesDev = nullptr;
+    machinesStale = true;
+    machineHints.clear();
     renderer.objectStates.clear();
     renderer.objectExtras.clear();
     renderer.worldLabels.clear();
@@ -2211,16 +2229,49 @@ void Runtime::machinesLoad() {
         return;
     try {
         auto spec = interaction::readJSON(file, 1 << 20);
-        if (spec.value("worldId", "") != world->id)
-            return;
-        machines.load(spec, *world, installed / world->id);
+        if (spec.value("worldId", "") == world->id)
+            machinesDev = spec;
     } catch (const std::exception &e) {
         lastError = std::string("machines prototype: ") + e.what();
-        machines = {};
     }
 }
 void Runtime::machinesTick(float dt) {
-    if (!machines.active() || !world)
+    if (machinesFile.poll())
+        machinesStale = true;
+    if (!world)
+        return;
+    // Instances change with placements and catalog merges (objectsSync): sync then.
+    if (machinesStale || instanceRevision != machinesSyncedRevision || world->objectAssets.size() != machinesSyncedAssets) {
+        machinesStale = false;
+        machinesSyncedRevision = instanceRevision, machinesSyncedAssets = world->objectAssets.size();
+        bool was = machines.active();
+        world::Machines::Setup setup;
+        setup.dev = machinesDev, setup.devRoot = installed / world->id, setup.worldId = world->id;
+        setup.user = machinesFile.error.empty() ? machinesFile.current : Json(nullptr);
+        try {
+            machines.sync(*world, setup);
+        } catch (const std::exception &e) {
+            lastError = std::string("machines: ") + e.what();
+            machines = {};
+        }
+        for (auto &why : machines.errors())
+            objectNotice("machine.invalid", ("Machine: " + why).substr(0, 240), "machine:" + why);
+        if (!machinesFile.error.empty())
+            objectNotice("machine.invalid", ("machines.json: " + machinesFile.error).substr(0, 240), "machines.json:" + machinesFile.error);
+        // A one-time hint: which data source a newly placed machine reads.
+        for (auto &[k, asset] : machines.fresh) {
+            const auto &id = world->objectInstances[k].id;
+            if (machineHints.insert(id).second && k >= authoredInstances)
+                objectNotice("machine.source", "Machine " + id + " reads data source " + world::Machines::defaultClient + "." + id +
+                                                   ": add an entry with id \"" + id + "\" to sources.json");
+        }
+        if (was && !machines.active()) {
+            renderer.objectStates.clear();
+            renderer.objectExtras.clear();
+            renderer.worldLabels.clear();
+        }
+    }
+    if (!machines.active())
         return;
     // Same clock as Control's publication monotonicMs. Still: reduced motion (states,
     // labels, counts and flashes change; nothing spins or travels).
