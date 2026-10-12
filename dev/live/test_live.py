@@ -150,6 +150,18 @@ class Tests(unittest.TestCase):
         self.assertEqual(grants[1]['capabilities'],live.GRANTS)
         self.assertTrue(live.SOURCE_HELPER.is_file())
 
+    def test_source_helper_in_a_checkout_and_a_release_archive(self):
+        self.assertEqual(live.find_source_helper(),live.ROOT/'dev/machines/source-helper.py')
+        with tempfile.TemporaryDirectory() as d:
+            # dev/release/build.sh: hyprune-core/live/dev/live/live.py beside hyprune-core/libexec.
+            archive=pathlib.Path(d)/'hyprune-core';(archive/'live/dev/live').mkdir(parents=True)
+            self.assertIsNone(live.find_source_helper(archive/'live'))
+            helper=archive/'libexec/hyprune/source-helper';helper.parent.mkdir(parents=True);helper.write_text('')
+            self.assertEqual(live.find_source_helper(archive/'live'),helper)
+            self.assertEqual(live.helper_path(helper,'/usr/bin'),f'{archive}/bin:/usr/bin')
+            self.assertEqual(live.helper_path(helper,''),f'{archive}/bin')
+        self.assertEqual(live.helper_path(live.ROOT/'dev/machines/source-helper.py','/usr/bin'),'/usr/bin')
+
     def test_source_helper_gets_its_token_and_renewals_privately(self):
         fake='\n'.join(['import hashlib,os,sys',
             'args=sys.argv[1:];fd=int(args[args.index("--token-fd")+1])',

@@ -14,9 +14,13 @@
 # Archive layout (hyprune-core/):
 #   lib/hyprune-core.so          session plugin
 #   bin/                         hypruned, hyprune-renderer, hyprune-world-check
+#   bin/hyprune-system-gauges    -> share/hyprune/machines/system-gauges.py
+#   libexec/hyprune/source-helper  data.publish source helper (dev/machines)
 #   share/hyprune/input.default.json
+#   share/hyprune/machines/      system-gauges.py (CPU/RAM/GPU/VRAM gauge script)
 #   live/                        dev/live launcher, its build/live binaries and
-#                                src/ipc/Protocol.hpp (the protocol inventory)
+#                                src/ipc/Protocol.hpp (the protocol inventory); it
+#                                finds the source helper in ../libexec/hyprune
 #   abi.json                     the Hyprland commit/tag/ABI hash built against
 #   BUILDINFO.json, LICENSE, licenses/third_party
 set -euo pipefail
@@ -42,10 +46,14 @@ build "$work/session"
 build "$work/live" -DHYPRUNE_LIVE_BUILD=ON
 
 pkg=$work/hyprune-core
-mkdir -p "$pkg"/{lib,bin,share/hyprune,licenses} "$pkg"/live/{dev/live,src/ipc,build/live}
+mkdir -p "$pkg"/{lib,bin,libexec/hyprune,share/hyprune/machines,licenses} "$pkg"/live/{dev/live,src/ipc,build/live}
 install -m755 "$work/session/hyprune-core.so" "$pkg/lib/"
 install -m755 "$work/session/"{hypruned,hyprune-renderer,hyprune-world-check} "$pkg/bin/"
 install -m644 "$root/config/input.default.json" "$pkg/share/hyprune/"
+# Standard library Python only, so both run from these paths without a checkout.
+install -m755 "$root/dev/machines/source-helper.py" "$pkg/libexec/hyprune/source-helper"
+install -m755 "$root/dev/machines/scripts/system-gauges.py" "$pkg/share/hyprune/machines/"
+ln -s ../share/hyprune/machines/system-gauges.py "$pkg/bin/hyprune-system-gauges"
 install -m755 "$root"/dev/live/{live.py,credentials.py,daemon,preflight,up,down,status} "$pkg/live/dev/live/"
 install -m644 "$root/dev/live/LIVE-TEST.md" "$pkg/live/dev/live/"
 install -m644 "$root/dev/devenv.py" "$pkg/live/dev/"
@@ -54,7 +62,7 @@ install -m755 "$work/live/"{hyprune-core.so,hyprune-live-abi} "$pkg/live/build/l
 for helper in hypruned hyprune-renderer hyprune-world-check; do
     ln -s "../../../bin/$helper" "$pkg/live/build/live/$helper"
 done
-strip --strip-unneeded "$pkg"/lib/*.so "$pkg"/bin/* "$pkg"/live/build/live/hyprune-core.so "$pkg"/live/build/live/hyprune-live-abi
+strip --strip-unneeded "$pkg"/lib/*.so "$pkg"/bin/{hypruned,hyprune-renderer,hyprune-world-check} "$pkg"/live/build/live/hyprune-core.so "$pkg"/live/build/live/hyprune-live-abi
 "$pkg/live/build/live/hyprune-live-abi" > "$pkg/abi.json"
 install -m644 "$root/LICENSE" "$pkg/"
 cp -r "$root/third_party" "$pkg/licenses/"

@@ -7,11 +7,27 @@ HERE = ROOT / 'dev/live'
 BUILD = pathlib.Path(os.environ.get('HYPRUNE_LIVE_BUILD_DIR', ROOT / 'build/live'))
 SHELL = pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR', ROOT.parent / 'shell'))
 DEFAULT_WORLD_ID = 'com.hyprune.lumen-reach'
-SOURCE_HELPER = ROOT / 'dev/machines/source-helper.py'
 SOURCES_CLIENT = 'com.hyprune.sources'
 GRANTS = ['state.read', 'world.control', 'surface.control', 'movement.control', 'shell.control', 'runtime.control', 'input.control', 'quest.control', 'objects.control']
 sys.path.insert(0, str(ROOT / 'dev'))
 import devenv
+
+
+def find_source_helper(root=ROOT):
+    """A checkout's dev/machines/source-helper.py, else a release archive's
+    libexec/hyprune/source-helper (the archive's live/ directory is ROOT there)."""
+    return next((path for path in (root/'dev/machines/source-helper.py', root.parent/'libexec/hyprune/source-helper') if path.is_file()), None)
+
+
+def helper_path(helper, path):
+    """PATH for the helper's commands: an installed prefix's bin/ (hyprune-system-gauges) first."""
+    helper=pathlib.Path(helper)
+    if helper.parent.name=='hyprune' and helper.parent.parent.name=='libexec':
+        return os.pathsep.join([str(helper.parent.parent.parent/'bin')]+([path] if path else []))
+    return path
+
+
+SOURCE_HELPER = find_source_helper()
 
 
 def replaced():
@@ -390,6 +406,7 @@ def start_sources(config,sock,token,env,logs,grants,helper=SOURCE_HELPER):
     channel.setsockopt(socket.SOL_SOCKET,socket.SO_PASSCRED,1)
     channel.sendall((token+'\n').encode())
     env={k:v for k,v in env.items() if k not in ('HYPRUNE_TOKEN_FD','HYPRUNE_TOKEN_REFRESH','HYPRUNE_SOURCES_TOKEN','HYPRUNE_MACHINES_TOKEN')}
+    env['PATH']=helper_path(helper,env.get('PATH',''))
     with open(pathlib.Path(logs)/'source-helper.log','a') as log:
         child=subprocess.Popen([sys.executable,str(helper),'--config',str(config),'--socket',str(sock),'--token-fd',str(recipient.fileno()),'--token-refresh'],
                                env=env,pass_fds=(recipient.fileno(),),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT)
@@ -417,7 +434,7 @@ def bootstrap(args,path):
     from credentials import CredentialBroker
     state=json.loads(path.read_text());s=state['session']; root=pathlib.Path(s['runtime'])/'hyprune-live'/s['signature'];runroot=pathlib.Path(state['runroot'])
     sources=sources_config()
-    if sources and not SOURCE_HELPER.is_file():
+    if sources and SOURCE_HELPER is None:
         print('sources.json found but this build has no source helper; not starting it',flush=True);sources=None
     tokens={name:secrets.token_hex(32) for name in ['org.hyprune.live','com.hyprune.shell']+([SOURCES_CLIENT] if sources else [])}
     server=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);sockpath=root/'grants.sock';sockpath.unlink(missing_ok=True);server.bind(str(sockpath));os.chmod(sockpath,0o600);server.listen(1);server.settimeout(20)
