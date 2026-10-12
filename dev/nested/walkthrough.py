@@ -81,4 +81,4 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(); parser.add_argument('output'); a = parser.parse_args()
     os.environ['HYPRUNE_NESTED_PROTOCOL'] = '0.15'
     m3b.acceptance = acceptance
-    s.run(argparse.Namespace(m3b=True, m3a=False, m2=False, m1=False, integration=False, live=False, serve=False, record=False, visible=False, output=a.output))
+    s.run(argparse.Namespace(state='walkthrough', m3b=True, m3a=False, m2=False, m1=False, integration=False, live=False, serve=False, record=False, visible=False, output=a.output))

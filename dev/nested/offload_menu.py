@@ -48,7 +48,7 @@ def acceptance(client,children,args,shell_token,socketpath):
 if __name__=='__main__':
     signal.signal(signal.SIGTERM,lambda *_:(_ for _ in ()).throw(SystemExit('power watchdog')))
     os.environ['HYPRUNE_NESTED_PROTOCOL']='0.10'
-    fixture=s.STATE_ROOT/'.m3b-state';fixture.mkdir(exist_ok=True)
+    fixture=s.state_dir('offload-menu');fixture.mkdir(exist_ok=True)
     for name in ['input.json','layout.json','editor.json']:(fixture/name).unlink(missing_ok=True)
     m3b.acceptance=acceptance
-    s.run(argparse.Namespace(m3b=True,m3a=False,m2=False,m1=False,integration=False,live=False,serve=False,record=False,visible=False))
+    s.run(argparse.Namespace(state='offload-menu',m3b=True,m3a=False,m2=False,m1=False,integration=False,live=False,serve=False,record=False,visible=False))

@@ -42,11 +42,11 @@ def acceptance(client, children, args, shell_token, socketpath):
     print('PASS protocol inheritance: Director exclusive input and native placement pose', flush=True)
 
 if __name__ == '__main__':
-    fixture = s.STATE_ROOT / '.m3b-state'
+    fixture = s.state_dir('protocol-acceptance')
     fixture.mkdir(exist_ok=True)
     (fixture / 'layout.json').write_text(json.dumps({'version': 1, 'bindings': [], 'placements': [placement]}))
     # Deterministic per-run graphics; no owner files are read or replaced.
     (fixture / 'graphics.json').write_text('{}\n')
     m3b.acceptance = acceptance
-    s.run(argparse.Namespace(m3b=True, m3a=False, m2=False, m1=False, integration=False,
+    s.run(argparse.Namespace(state='protocol-acceptance', m3b=True, m3a=False, m2=False, m1=False, integration=False,
                              live=False, serve=False, record=False, visible=False))

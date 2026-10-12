@@ -77,7 +77,7 @@ PanelWindow {
 
 if __name__=='__main__':
     os.environ['HYPRUNE_NESTED_PROTOCOL']='0.9'
-    fixture=s.STATE_ROOT/'.m3b-state';fixture.mkdir(exist_ok=True)
+    fixture=s.state_dir('hud-acceptance');fixture.mkdir(exist_ok=True)
     for name in ['input.json','layout.json','editor.json']:(fixture/name).unlink(missing_ok=True)
     m3b.acceptance=acceptance
-    s.run(argparse.Namespace(m3b=True,m3a=False,m2=False,m1=False,integration=False,live=False,serve=False,record=False,visible=False))
+    s.run(argparse.Namespace(state='hud-acceptance',m3b=True,m3a=False,m2=False,m1=False,integration=False,live=False,serve=False,record=False,visible=False))

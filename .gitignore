@@ -40,3 +40,5 @@ tests/fixtures/m3b/
 /dev/nested/.machines-state/
 /tests/fixtures/catalog/
 /dev/nested/.catalog-state/
+# Harness scripts: one state directory each (session.state_dir).
+/dev/nested/.*-state/

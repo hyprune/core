@@ -106,6 +106,6 @@ def acceptance(client, children, args, shell_token, socketpath):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(); parser.add_argument('output', nargs='?'); a = parser.parse_args()
     os.environ.setdefault('HYPRUNE_NESTED_PROTOCOL', '0.15')
-    fixture = s.STATE_ROOT / '.m3b-state'; fixture.mkdir(parents=True, exist_ok=True)
+    fixture = s.state_dir('wall-audit'); fixture.mkdir(parents=True, exist_ok=True)
     m3b.acceptance = acceptance
-    s.run(argparse.Namespace(m3b=True, m3a=False, m2=False, m1=False, integration=False, live=False, serve=False, record=False, visible=False, output=a.output))
+    s.run(argparse.Namespace(state='wall-audit', m3b=True, m3a=False, m2=False, m1=False, integration=False, live=False, serve=False, record=False, visible=False, output=a.output))

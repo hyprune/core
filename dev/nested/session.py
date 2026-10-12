@@ -73,6 +73,11 @@ def pin_mesa_egl():
         if (pathlib.Path(d)/'50_mesa.json').is_file():
             os.environ['__EGL_VENDOR_LIBRARY_FILENAMES']=str(pathlib.Path(d)/'50_mesa.json');return
 
+def state_dir(name):
+    """A harness script's own state directory: it runs an m3b-style session but never shares
+    .m3b-state (bindings, editor and graphics files left there broke the next --m3b)."""
+    return STATE_ROOT/f'.{name}-state'
+
 def run(args):
     global STATE
     pin_mesa_egl()
@@ -133,6 +138,12 @@ def run(args):
         STATE=STATE_ROOT/'.watermark-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if getattr(args,'reticle',False):
         STATE=STATE_ROOT/'.reticle-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+    if getattr(args,'state',None):
+        STATE=state_dir(args.state);os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+    elif args.m3a or args.m3b or getattr(args,'handover',False):
+        # Local runs keep dev/nested/.<mode>-state across runs: start without the previous run's
+        # homes, bindings, editor, graphics and keymap (an area bound earlier failed --m3b).
+        for name in ('layout.json','editor.json','graphics.json','input.json'):(STATE/name).unlink(missing_ok=True)
     STATE.mkdir(exist_ok=True);os.chmod(STATE,0o700)
     # Player settings (IPC 0.19) start from defaults in every run.
     (STATE/'player.json').unlink(missing_ok=True)
