@@ -244,6 +244,7 @@ if(BUILD_TESTING)
  add_test(NAME wire-text COMMAND text-tests)
  add_test(NAME wire-text-schema COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/wire-text.py $<TARGET_FILE:text-tests>)
  add_test(NAME live-credentials COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/dev/live/test_credentials.py)
+ add_test(NAME remote-tools COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/dev/remote/test_remote.py)
  # The inheritance unit intentionally publishes incomplete projection fixtures;
  # full wire shapes are asserted by wire-schema and every nested helper instead.
  set_tests_properties(ipc PROPERTIES ENVIRONMENT "HYPRUNE_VALIDATE_IPC=0")

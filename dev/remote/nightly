@@ -13,7 +13,7 @@ tests, and the worlds build + validate targets (Blender locally: this is the bak
 host). It writes pages/nightly/<date>.json + .html and index.html into the gallery
 clone, never commits or pushes, and keeps the last 14 runs.
 """
-import argparse, datetime, fcntl, html, json, os, pathlib, re, shutil, socket, subprocess, sys, time
+import argparse, datetime, fcntl, html, json, os, pathlib, re, shlex, shutil, socket, subprocess, sys, time
 HERE = pathlib.Path(__file__).resolve().parent
 HOME = pathlib.Path.home()
 WS = pathlib.Path(os.environ.get('HYPRUNE_NIGHTLY_WS', str(HOME / 'hyprune-nightly')))
@@ -86,13 +86,30 @@ def suites():
     return ['ctest', 'smoke', *modes, *scripts]
 
 
+def dry_run(text, cwd):
+    """The commands in `make -n` output. A recursive $(MAKE) line is printed and then expanded
+    between make[N]: Entering/Leaving directory lines: keep its expansion only (prefixed with a
+    cd when it runs elsewhere), never the directory lines or the make line itself."""
+    lines, dirs, out = [l for l in text.splitlines() if l.strip()], [str(cwd)], []
+    for k, line in enumerate(lines):
+        m = re.match(r"make(\[\d+\])?: (Entering|Leaving) directory '(.*)'$", line)
+        if m:
+            dirs.append(m[3]) if m[2] == 'Entering' else dirs.pop() if len(dirs) > 1 else None
+            continue
+        if k + 1 < len(lines) and re.match(r"make\[\d+\]: Entering directory", lines[k + 1]):
+            continue  # the recursive make itself: its commands follow
+        here = os.path.normpath(dirs[-1])
+        out.append(line if here == os.path.normpath(str(cwd)) else f'cd {shlex.quote(here)} && {line}')
+    return out
+
+
 def make_steps(target, cwd, logs, prefix):
     """`make TARGET` with the bake host's ssh hops run locally (Blender, the PVS kernel). Lines after
     a Blender build are expanded again, so paths derived from the new package resolve."""
     rows = []
     def lines():
         out = subprocess.run(['make', '-n', target], cwd=cwd, capture_output=True, text=True)
-        return [l for l in out.stdout.splitlines() if l.strip()], out.returncode
+        return dry_run(out.stdout, cwd), out.returncode
     todo, code = lines()
     if code:
         return [{'name': f'{prefix}: make -n {target}', 'status': 'fail', 'exitCode': code, 'durationS': 0, 'log': '', 'tail': []}]
@@ -218,7 +235,10 @@ def run():
         result['shas'] = update(logs)
         names = suites()
         result['suites'] = names
-        env = {'HYPRUNE_REMOTE_CORE': str(WS / 'core'), 'HYPRUNE_PERF_WORLD': str(WS / 'worlds/dist/com.hyprune.lumen-reach')}
+        # The nested suites use the pinned Lumen Reach release (the runner installs it into
+        # worlds/dist); this run's worlds build comes after them. --gizmo edits its world object.
+        lumen = str(WS / 'worlds/dist/com.hyprune.lumen-reach')
+        env = {'HYPRUNE_REMOTE_CORE': str(WS / 'core'), 'HYPRUNE_PERF_WORLD': lumen, 'HYPRUNE_GIZMO_WORLD': lumen}
         # capture-pose reproduces an owner capture; exercise it with the committed sample.
         sample = WS / 'core/docs/evidence/live-round2/capture.json'
         if sample.is_file():
@@ -230,7 +250,7 @@ def run():
         # One nested instance per GPU: at four, Lumen Reach loads hit the harness's 5 s IPC timeouts.
         # perf measures at native 4K, alone.
         gpus = max(1, len(list(pathlib.Path('/sys/class/drm').glob('renderD*'))))
-        passes = [('', ['--parallel', str(gpus)], [n for n in names if not n.endswith('.py') and n != 'perf'], {}),
+        passes = [('', ['--parallel', str(gpus), '--pinned'], [n for n in names if not n.endswith('.py') and n != 'perf'], {}),
                   ('-scripts', ['--parallel', '1', '--no-build'], [n for n in names if n.endswith('.py')], {}),
                   ('-perf', ['--parallel', '1', '--no-build'], [n for n in names if n == 'perf'], {'HYPRUNE_NESTED_4K': '1'})]
         summaries = []

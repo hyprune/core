@@ -25,7 +25,8 @@ live-findings ipc-warp`. Any `dev/nested/run.sh` mode works without its `--`
 | Option | Meaning |
 | --- | --- |
 | `--ref REF` | `git fetch origin`, then test `REF` in a detached worktree `../core-remote-<sha10>` (beside `core/`, so `../worlds/dist` and `../schema` resolve). Without it, the current checkout is tested. |
-| `--lumen TAG` | Install that hyprune/worlds release (`lumen-reach-v0.9.0`) into `worlds/dist` after a SHA-256 check. Default: what is installed, else the pin in `hyprune/worlds/releases.json`. Switchyard always follows its pin. |
+| `--lumen TAG` | Install that hyprune/worlds release (`lumen-reach-v0.9.0`) into `worlds/dist` after a SHA-256 check. Default: what is installed (perhaps a local build), else the pin in `hyprune/worlds/releases.json`. |
+| `--pinned` | Replace installed Lumen Reach and Switchyard packages with the published releases pinned in `hyprune/worlds/releases.json` (an unpublished pin keeps the install). The nightly passes it. |
 | `--parallel N` | Concurrent suites (default 4). |
 | `--no-build` | Skip CMake/Ninja and fixture generation. |
 | `--detach` | Run under a transient `systemd-run --user` unit. |
@@ -98,7 +99,9 @@ Each run (`nightly run`, or `systemctl --user start hyprune-nightly`):
 2. Runs the core runner against that core:
    - CTest first;
    - then every automatable `run.sh` mode in parallel isolated instances
-     across the GPUs. live, serve, record and visible are left out.
+     across the GPUs. live, serve, record and visible are left out. That pass
+     uses `--pinned`, so every suite tests the published worlds the meta repo
+     pins; `--gizmo` gets that Lumen Reach through `HYPRUNE_GIZMO_WORLD`.
    - then, one at a time, the harness scripts that drive `session.run`.
      The offload power-wrapped scripts and the walkthrough recorder are left out.
 3. Runs `npm test` in schema and sdk, and the shell unittests.
@@ -109,7 +112,9 @@ Each run (`nightly run`, or `systemctl --user start hyprune-nightly`):
    - schema and `hyprune-world-check` against the published Lumen Reach
      release.
 
-   The make targets are expanded with `make -n`. Their ssh hop
+   The make targets are expanded with `make -n`. A recursive `$(MAKE)`
+   contributes the commands it prints, run in its directory; its own line and
+   the `make[N]: Entering/Leaving directory` lines are dropped. Their ssh hop
    (`tools/remote-*.sh`) becomes the same local Blender call, because the runner
    host is expected to be the Blender host.
 5. Writes `pages/nightly/<date>.json`, `<date>.html` and `index.html` into a

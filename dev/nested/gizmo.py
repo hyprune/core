@@ -27,6 +27,9 @@ def prepare(installed):
     os.environ['HYPRUNE_GIZMO_KEEPCLEAR'] = str(keep)
     source = os.environ.get('HYPRUNE_GIZMO_WORLD', str(s.ROOT.parent / 'worlds/dist' / WORLD))
     # Fail fast: the suite edits the Sun Court world object (Lumen Reach 0.10 and later).
+    if not (pathlib.Path(source) / 'world.json').is_file():
+        raise SystemExit(f"--gizmo needs a Lumen Reach package with the world object '{OBJECT.split(':', 1)[1]}' "
+                         f"(Lumen Reach 0.10+); there is none at {source}. Set HYPRUNE_GIZMO_WORLD to one.")
     manifest = json.loads((pathlib.Path(source) / 'world.json').read_text())
     if not any(o.get('id') == OBJECT.split(':', 1)[1] for o in manifest.get('objects', [])):
         raise SystemExit(f"--gizmo needs Lumen Reach with the world object '{OBJECT.split(':', 1)[1]}' (world format 0.8, "

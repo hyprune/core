@@ -56,15 +56,28 @@ def pinned():
     return json.loads(path.read_text()) if path.is_file() else {}
 
 
-def ensure_world(key, tag=None):
+def wanted_tag(key, pins, installed, pinned_only=False):
+    """The release to install, or None to keep the installed package. By default an install
+    (perhaps a local build) is kept; pinned_only (the nightly) moves to the meta repo's
+    published pin, so an old install can't linger (Lumen 0.9.0 failed suites for days)."""
+    pin = f"{key}-v{pins['version']}" if pins.get('version') and pins.get('published', True) else None
+    if installed and not (pinned_only and pin):
+        return None
+    if pin:
+        return pin
+    raise RuntimeError(f'{key}: no published pin in hyprune/worlds/releases.json and nothing installed')
+
+
+def ensure_world(key, tag=None, pinned_only=False):
     """Install a hyprune/worlds release into worlds/dist after a SHA-256 check."""
     pins = pinned().get(key, {})
     world_id = pins.get('id', f'com.hyprune.{key}')
     dest = WORKSPACE / 'worlds/dist' / world_id
+    installed = json.loads((dest / 'world.json').read_text()).get('version') if (dest / 'world.json').is_file() else None
     if tag is None:
-        if (dest / 'world.json').is_file():
-            return json.loads((dest / 'world.json').read_text()).get('version')
-        tag = f"{key}-v{pins['version']}"
+        tag = wanted_tag(key, pins, installed, pinned_only)
+        if tag is None:
+            return installed
     version = tag.rsplit('-v', 1)[1]
     if (dest / 'world.json').is_file() and json.loads((dest / 'world.json').read_text()).get('version') == version:
         return version
@@ -145,7 +158,8 @@ def run(args):
         if not args.no_build:
             build(tree)
         ensure_schema()
-        summary['worlds'] = {'lumen-reach': ensure_world('lumen-reach', args.lumen), 'switchyard': ensure_world('switchyard')}
+        summary['worlds'] = {'lumen-reach': ensure_world('lumen-reach', args.lumen, args.pinned),
+                             'switchyard': ensure_world('switchyard', None, args.pinned)}
         summary['gpus'] = gpus()
         before = evidence_snapshot(tree)
         nested = [s for s in args.suites if s != 'ctest']
@@ -178,7 +192,8 @@ def detach(args):
     run_id = datetime.datetime.now().strftime('%Y%m%d-%H%M%S') + '-' + os.urandom(2).hex()
     (RUNS / run_id).mkdir(parents=True, exist_ok=True)
     argv = [sys.executable, str(pathlib.Path(__file__).resolve()), '--run-id', run_id, '--parallel', str(args.parallel)]
-    argv += (['--ref', args.ref] if args.ref else []) + (['--lumen', args.lumen] if args.lumen else []) + (['--no-build'] if args.no_build else []) + args.suites
+    argv += (['--ref', args.ref] if args.ref else []) + (['--lumen', args.lumen] if args.lumen else []) + (['--no-build'] if args.no_build else [])
+    argv += (['--pinned'] if args.pinned else []) + args.suites
     env = os.environ.copy()
     env.setdefault('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')
     keep = [f'{k}={v}' for k, v in env.items() if k in ('PATH', 'HOME') or k.startswith(('HYPRUNE_', '__GL_', 'GH_'))]
@@ -206,6 +221,7 @@ def main():
     parser.add_argument('suites', nargs='*', help=f'ctest, smoke, run.sh modes without "--", or dev/nested/<script>.py names (default: {" ".join(DEFAULT)})')
     parser.add_argument('--ref', help='git ref to test in a detached worktree (fetched from origin); default: this checkout')
     parser.add_argument('--lumen', help='hyprune/worlds release tag, e.g. lumen-reach-v0.9.0 (default: installed, else pinned)')
+    parser.add_argument('--pinned', action='store_true', help='replace installed worlds with the published releases pinned in hyprune/worlds/releases.json')
     parser.add_argument('--parallel', type=int, default=4, help='concurrent suites (each nested suite is an isolated instance)')
     parser.add_argument('--no-build', action='store_true')
     parser.add_argument('--detach', action='store_true', help='start in the background and print the run id')
