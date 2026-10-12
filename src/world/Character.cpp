@@ -307,7 +307,7 @@ Character loadCharacter(const std::filesystem::path &path) {
         }
         c.joints.push_back(j);
     }
-    // Images and materials (base colour, factors).
+    // Images and materials (base colour, normal, metallic-roughness, occlusion, emissive; factors).
     for (size_t i = 0; i < raw->images_count; ++i) {
         auto &img = raw->images[i];
         Image out;
@@ -344,6 +344,23 @@ Character loadCharacter(const std::filesystem::path &path) {
             out.slots[0].texture = i;
             out.baseTexture = i;
         }
+        // The data textures matter: without the metallic-roughness texture the glTF default
+        // metallic factor (1) made every character a mirror, black where no sky reflects.
+        c.linearImages.resize(c.images.size(), false);
+        auto data = [&](int slot, const cgltf_texture_view &view) {
+            if (int i = image(view.texture); i >= 0) {
+                out.slots[slot].texture = i;
+                if (i != out.slots[0].texture)
+                    c.linearImages[i] = true;
+            }
+        };
+        data(1, m.normal_texture);
+        data(2, m.pbr_metallic_roughness.metallic_roughness_texture);
+        data(3, m.occlusion_texture);
+        if (out.slots[1].texture >= 0)
+            out.normalScale = m.normal_texture.scale;
+        if (out.slots[3].texture >= 0)
+            out.occlusionStrength = m.occlusion_texture.scale;
         out.emissive = {m.emissive_factor[0], m.emissive_factor[1], m.emissive_factor[2]};
         if (m.has_emissive_strength)
             out.emissive = out.emissive * m.emissive_strength.emissive_strength;

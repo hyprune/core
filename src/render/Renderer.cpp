@@ -3324,11 +3324,14 @@ Renderer::CharacterGPU &Renderer::characterGPU(const world::Character &c) {
     auto &gpu = it->second;
     if (!fresh)
         return gpu;
-    for (auto &image : c.images) {
+    for (size_t i = 0; i < c.images.size(); ++i) {
+        auto &image = c.images[i];
+        bool linear = i < c.linearImages.size() && c.linearImages[i];
         GLuint t;
         glGenTextures(1, &t);
         glBindTexture(GL_TEXTURE_2D, t);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.rgba.data());
+        glTexImage2D(GL_TEXTURE_2D, 0, linear ? GL_RGBA8 : GL_SRGB8_ALPHA8, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     image.rgba.data());
         glGenerateMipmap(GL_TEXTURE_2D);
         gpu.textures.push_back(t);
     }
@@ -3415,9 +3418,12 @@ void Renderer::drawNpcs(const std::array<std::array<float, 4>, 6> &planes, const
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, m.slots[0].texture >= 0 ? gpu.textures[m.slots[0].texture] : 0);
             glBindSampler(0, repeat_);
-            for (int unit : {1, 2, 3, 4}) {
-                glActiveTexture(GL_TEXTURE0 + unit);
-                glBindTexture(GL_TEXTURE_2D, 0);
+            glActiveTexture(GL_TEXTURE1); // no lightmap
+            glBindTexture(GL_TEXTURE_2D, 0);
+            for (int slot : {1, 2, 3}) { // normal, metallic-roughness, occlusion on units 2-4 (passUniforms)
+                glActiveTexture(GL_TEXTURE0 + slot + 1);
+                glBindTexture(GL_TEXTURE_2D, m.slots[slot].texture >= 0 ? gpu.textures[m.slots[slot].texture] : 0);
+                glBindSampler(slot + 1, repeat_);
             }
             glActiveTexture(GL_TEXTURE5); // emissive (visor / eyes)
             glBindTexture(GL_TEXTURE_2D, m.slots[4].texture >= 0 ? gpu.textures[m.slots[4].texture] : 0);

@@ -37,9 +37,10 @@ struct Character {
         std::vector<Channel> channels;
     };
     std::vector<Primitive> primitives;
-    std::vector<Material> materials;        // slots[0].texture indexes images (base colour)
+    std::vector<Material> materials;        // slots index images: base colour, normal, metallic-roughness, occlusion, emissive
     std::vector<std::string> materialNames;
     std::vector<Image> images;
+    std::vector<bool> linearImages;         // per image: data (normal, metallic-roughness, occlusion), not sRGB colour
     std::vector<Joint> joints;
     std::vector<Clip> clips;
     Mat4 armature = Mat4::identity(); // transform of the skeleton root's parent nodes

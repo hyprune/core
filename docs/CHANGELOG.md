@@ -238,9 +238,9 @@ RFC-0006 tool table, Path row:
 - Path edits (add, insert, move, remove) are undo steps: Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y in
   tools 3 and 4. Escape cancels a point drag. The Primary hint reads "Add / drag point".
 
-## Character visibility (no wire change)
+## Character rendering (no wire change)
 
-RFC-0010 runtime rules ("region visibility follows its current position"):
+RFC-0010 runtime rules ("region visibility follows its current position") and character spec:
 
 - Characters are culled by visibility regions as well as the view frustum, with the rule
   placed objects use: a character shares the areas owning scene geometry near its current
@@ -248,6 +248,10 @@ RFC-0010 runtime rules ("region visibility follows its current position"):
   neither drawn nor keeps frames coming (`npcs.drawn`, `animationVisible` in the camera
   diagnostics). Before, any character inside the frustum counted, including ones in other
   areas behind walls.
+- Characters use their normal, metallic-roughness and occlusion textures (uploaded as
+  linear data; base colour and emissive stay sRGB). Before, only the base colour and
+  emissive textures were loaded while the metallic factor (glTF default 1) stayed, so every
+  character shaded as a mirror: black where its probe saw no sun (indoors, at night).
 
 ## Window placement behaviour (no wire change)
 
