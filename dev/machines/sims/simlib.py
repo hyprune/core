@@ -124,9 +124,14 @@ class Blocks:
         return total
 
 
-def main(simulate, description):
-    """Command line shared by every simulator."""
+def main(simulate, description, add_arguments=None):
+    """Command line shared by every simulator.
+
+    With `add_arguments(parser)`, a simulator takes options of its own and is called as
+    simulate(t, args)."""
     parser = argparse.ArgumentParser(description=description)
+    if add_arguments:
+        add_arguments(parser)
     parser.add_argument("--at", type=float, metavar="SECONDS",
                         help="print the state at this Unix time instead of now")
     parser.add_argument("--timeline", nargs=3, type=float, metavar=("FROM", "TO", "STEP"),
@@ -134,6 +139,9 @@ def main(simulate, description):
     parser.add_argument("--with-time", action="store_true",
                         help="add the simulated time as \"_t\" to each line (timeline only)")
     args = parser.parse_args()
+    if add_arguments:
+        plain = simulate
+        simulate = lambda t: plain(t, args)  # noqa: E731
     if args.timeline:
         start, end, step = args.timeline
         if step <= 0:

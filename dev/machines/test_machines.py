@@ -22,10 +22,14 @@ import unittest.mock
 
 HERE = pathlib.Path(__file__).resolve().parent
 SIMS = HERE / "sims"
+SCRIPTS = HERE / "scripts"
 _spec = importlib.util.spec_from_file_location("source_helper", HERE / "source-helper.py")
 helper = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(helper)
 helper.log.setLevel("CRITICAL")
+_spec = importlib.util.spec_from_file_location("system_gauges", HERE / "scripts" / "system-gauges.py")
+gauges = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(gauges)
 
 
 class FakeClock:
@@ -671,6 +675,214 @@ def _runs(items):
     if current:
         runs.append(current)
     return runs
+
+
+# --- gauge scripts -------------------------------------------------------------------
+
+def gauge_sim(*args, **env):
+    out = subprocess.run([str(SCRIPTS / "gauge-sim.py"), *args], capture_output=True, text=True, check=True,
+                         env=sim_env(**env)).stdout
+    return [json.loads(line) for line in out.splitlines()]
+
+
+def expected_level(value):
+    return "fail" if value >= 90 else "warn" if value >= 75 else "ok"
+
+
+class GaugeSim(unittest.TestCase):
+    def test_domains_and_keys(self):
+        rows = gauge_sim("--label", "RAM", "--timeline", str(T0), str(T0 + 600), "1")
+        self.assertEqual(len(rows), 601)
+        for row in rows:
+            self.assertEqual(list(row), ["value", "display", "label", "level"])
+            self.assertTrue(0 <= row["value"] <= 100)
+            self.assertEqual(row["display"], f"{int(row['value'] + 0.5)}%")
+            self.assertEqual(row["label"], "RAM")
+            self.assertEqual(row["level"], expected_level(row["value"]))
+        self.assertEqual({r["level"] for r in rows}, {"ok", "warn", "fail"})
+
+    def test_piecewise_constant_steps(self):
+        rows = gauge_sim("--timeline", str(T0), str(T0 + 119), "1", "--period", "6", MACHINES_SIM_EPOCH=str(T0))
+        steps = [rows[i:i + 6] for i in range(0, 120, 6)]
+        self.assertTrue(all(len({r["value"] for r in step}) == 1 for step in steps))
+        self.assertGreater(len({step[0]["value"] for step in steps}), 15)
+
+    def test_deterministic_seeded_and_labelled(self):
+        args = ["--label", "CPU", "--timeline", str(T0), str(T0 + 60), "6"]
+        self.assertEqual(gauge_sim(*args), gauge_sim(*args))
+        self.assertNotEqual(gauge_sim(*args), gauge_sim(*args, MACHINES_SIM_SEED="other"))
+        self.assertNotEqual([r["value"] for r in gauge_sim(*args)],
+                            [r["value"] for r in gauge_sim("--label", "GPU", *args[2:])])
+        self.assertEqual(gauge_sim("--label", "CPU", "--at", str(T0 + 12))[0],
+                         gauge_sim("--label", "CPU", MACHINES_SIM_TIME=str(T0 + 12))[0])
+        self.assertEqual(gauge_sim("--unit", " GB", "--at", str(T0))[0]["display"][-3:], " GB")
+
+    def test_hold_stops_changing(self):
+        epoch = {"MACHINES_SIM_EPOCH": str(T0)}
+        rows = gauge_sim("--steps", "4", "--hold", "--timeline", str(T0 - 12), str(T0 + 120), "1", **epoch)
+        values = [r["value"] for r in rows]
+        self.assertEqual(values[:12], [values[12]] * 12)  # before the epoch: the first step
+        held = values[12 + 24:]
+        self.assertEqual(set(held), {values[12 + 18]})  # the 4th step, for good
+        self.assertGreater(len(set(values[12:12 + 24])), 1)
+        looped = [r["value"] for r in gauge_sim("--steps", "4", "--timeline", str(T0), str(T0 + 47), "1", **epoch)]
+        self.assertEqual(looped[:24], looped[24:])
+
+    def test_bad_arguments(self):
+        for args in (["--period", "0"], ["--steps", "-1"]):
+            result = subprocess.run([str(SCRIPTS / "gauge-sim.py"), *args], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertNotIn("Traceback", result.stderr)
+
+
+class FakeSystem:
+    """A fake /proc and /sys tree for system-gauges.py."""
+
+    def __init__(self, root):
+        self.root = pathlib.Path(root)
+
+    def write(self, relative, text):
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+    def stat(self, total, idle):
+        # user nice system idle iowait irq softirq steal guest guest_nice
+        self.write("proc/stat", f"cpu  {total - idle} 0 0 {idle} 0 0 0 0 7 7\ncpu0 1 2 3 4\n")
+
+    def gpu(self, bus, vendor, status="active", boot="0", **files):
+        base = f"sys/bus/pci/devices/{bus}"
+        self.write(f"{base}/class", "0x030000")
+        self.write(f"{base}/vendor", vendor)
+        self.write(f"{base}/boot_vga", boot)
+        self.write(f"{base}/power/runtime_status", status)
+        for name, value in files.items():
+            self.write(f"{base}/{name.replace('__', '/')}", str(value))
+        return self.root / base
+
+    def opens(self, pid, target):
+        fd = self.root / f"proc/{pid}/fd"
+        fd.mkdir(parents=True, exist_ok=True)
+        os.symlink(target, fd / str(len(list(fd.iterdir())) + 3))
+
+
+class Recorder:
+    def __init__(self, stdout="37, 2048, 8192\n", error=None):
+        self.calls, self.stdout, self.error = [], stdout, error
+
+    def __call__(self, argv, **kwargs):
+        self.calls.append(argv)
+        if self.error:
+            raise self.error
+        return subprocess.CompletedProcess(argv, 0, self.stdout, "")
+
+
+class SystemGauges(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.system = FakeSystem(self.tmp.name)
+        self.root = self.system.root
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def measure(self, kind, choice="auto", run=None, which=lambda name: "/usr/bin/" + name):
+        return gauges.measure(kind, self.root, choice, run=run or Recorder(), which=which)
+
+    def test_cpu_first_run_samples_then_uses_the_state(self):
+        state = self.root / "state.json"
+        self.system.stat(1000, 800)
+        clock = FakeClock(50.0)
+
+        def sleep(seconds):
+            self.assertEqual(seconds, 0.25)
+            self.system.stat(1100, 850)  # 50 % busy over the sample
+            clock.now += seconds
+
+        first = gauges.cpu(self.root, state, sleep, clock)
+        self.assertEqual(first, {"value": 50.0, "display": "50%", "label": "CPU", "level": "ok"})
+        self.system.stat(1200, 860)  # 90 % busy since the last run
+        clock.now += 5
+        self.assertEqual(gauges.cpu(self.root, state, lambda s: self.fail("sampled again"), clock)["level"], "fail")
+        clock.now += 500  # a stale state samples afresh
+        sampled = []
+        gauges.cpu(self.root, state, sampled.append, clock)
+        self.assertEqual(sampled, [0.25])
+        self.assertEqual(state.stat().st_mode & 0o777, 0o600)
+
+    def test_ram(self):
+        self.system.write("proc/meminfo", "MemTotal:       16777216 kB\nMemFree:  1000 kB\nMemAvailable:    4194304 kB\n")
+        self.assertEqual(self.measure("ram"), {"value": 75.0, "display": "12.0 GB", "label": "RAM", "level": "warn"})
+
+    def test_suspended_nvidia_is_never_woken(self):
+        self.system.gpu("0000:00:02.0", "0x8086", boot="1")
+        self.system.gpu("0000:01:00.0", "0x10de", status="suspended")
+        self.system.opens(100, "/dev/nvidia0")
+        run = Recorder()
+        for kind in ("gpu", "vram"):
+            self.assertEqual(self.measure(kind, run=run), {"value": 0, "display": "asleep", "label": kind.upper(),
+                                                           "level": "ok"})
+        self.assertEqual(run.calls, [])
+
+    def test_nvidia_queried_only_while_in_use(self):
+        self.system.gpu("0000:01:00.0", "0x10de")
+        run = Recorder()
+        self.assertEqual(self.measure("gpu", run=run)["display"], "idle")
+        self.assertEqual(run.calls, [])
+        self.system.opens(100, "/dev/nvidiactl")
+        self.assertEqual(self.measure("gpu", run=run)["display"], "idle")
+        self.system.opens(101, "/dev/nvidia0")
+        self.assertEqual(self.measure("gpu", run=run), {"value": 37.0, "display": "37%", "label": "GPU", "level": "ok"})
+        self.assertEqual(self.measure("vram", run=run), {"value": 25.0, "display": "2.0 GB", "label": "VRAM", "level": "ok"})
+        self.assertEqual(run.calls[0], gauges.NVIDIA_QUERY)
+        self.assertEqual(self.measure("gpu", which=lambda name: None)["display"], "n/a")
+        self.assertEqual(self.measure("gpu", run=Recorder(error=subprocess.TimeoutExpired("nvidia-smi", 3)))["display"], "n/a")
+        self.assertEqual(self.measure("gpu", run=Recorder(stdout="[N/A], 1, 2\n"))["display"], "n/a")
+        self.assertEqual(self.measure("gpu", run=Recorder(stdout="95, 1, 2\n"))["level"], "fail")
+
+    def test_amd(self):
+        self.system.gpu("0000:03:00.0", "0x1002", gpu_busy_percent=80, mem_info_vram_used=8 * 2**30,
+                        mem_info_vram_total=16 * 2**30)
+        self.assertEqual(self.measure("gpu"), {"value": 80.0, "display": "80%", "label": "GPU", "level": "warn"})
+        self.assertEqual(self.measure("vram"), {"value": 50.0, "display": "8.0 GB", "label": "VRAM", "level": "ok"})
+        self.system.write("sys/bus/pci/devices/0000:03:00.0/power/runtime_status", "suspended")
+        self.assertEqual(self.measure("gpu")["display"], "asleep")
+
+    def test_intel_and_choice(self):
+        self.system.gpu("0000:00:02.0", "0x8086", boot="1", drm__card1__gt_act_freq_mhz=450, drm__card1__gt_max_freq_mhz=1500)
+        self.assertEqual(self.measure("gpu"), {"value": 30.0, "display": "~30%", "label": "GPU", "level": "ok"})
+        self.assertEqual(self.measure("vram")["display"], "shared")
+        self.system.gpu("0000:01:00.0", "0x10de", status="suspended")
+        self.assertEqual(self.measure("gpu")["display"], "asleep")  # auto prefers the dGPU
+        self.assertEqual(self.measure("gpu", "intel")["display"], "~30%")
+        self.assertEqual(self.measure("gpu", "amd")["display"], "n/a")
+
+    def test_intel_xe(self):
+        self.system.gpu("0000:00:02.0", "0x8086", tile0__gt0__freq0__act_freq=0, tile0__gt0__freq0__max_freq=2000)
+        self.assertEqual(self.measure("gpu")["display"], "~0%")
+
+    def test_nothing_readable(self):
+        for kind in ("cpu", "ram", "gpu", "vram"):
+            self.assertEqual(self.measure(kind), {"value": 0, "display": "n/a", "label": kind.upper(), "level": "ok"})
+
+    def test_script_runs(self):
+        env = dict(os.environ, XDG_RUNTIME_DIR=self.tmp.name)
+        for kind in ("cpu", "ram"):
+            result = subprocess.run([str(SCRIPTS / "system-gauges.py"), kind], capture_output=True, text=True, env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            row = json.loads(result.stdout)
+            self.assertEqual(list(row), ["value", "display", "label", "level"])
+            self.assertTrue(0 <= row["value"] <= 100)
+        self.assertTrue((self.root / gauges.STATE_NAME).exists())
+
+    def test_example_config_loads(self):
+        config = helper.load_config(HERE / "sources.gauges.example.json")
+        self.assertEqual([s.source_id for s in config["sources"]],
+                         [f"com.hyprune.sources.u-00000{n}" for n in range(1, 5)])
+        self.assertFalse(config["dev"])
+        self.assertTrue(all(s.interval >= 5 for s in config["sources"]))
+        for spec in config["sources"]:
+            self.assertTrue(pathlib.Path(spec.argv[0]).is_file())
 
 
 # --- the helper against a fake core ---------------------------------------------------

@@ -1,0 +1,13 @@
+{
+  "client": {"id": "com.hyprune.sources", "name": "Source helper (prototype)"},
+  "sources": [
+    {"id": "u-000001", "kind": "command", "argv": ["scripts/system-gauges.py", "cpu"],
+     "intervalS": 5, "timeoutS": 4},
+    {"id": "u-000002", "kind": "command", "argv": ["scripts/system-gauges.py", "ram"],
+     "intervalS": 5, "timeoutS": 4},
+    {"id": "u-000003", "kind": "command", "argv": ["scripts/system-gauges.py", "gpu"],
+     "intervalS": 10, "timeoutS": 5},
+    {"id": "u-000004", "kind": "command", "argv": ["scripts/system-gauges.py", "vram"],
+     "intervalS": 10, "timeoutS": 5}
+  ]
+}

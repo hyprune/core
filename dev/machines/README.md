@@ -312,6 +312,87 @@ One build at a time: `idle` 6–25 s, `running` 8–20 s, then `success` or `fai
 | `streak` | Consecutive successes up to now |
 | `lastJob` | Current or latest build, e.g. `web #4821` |
 
+## Gauges: wire a script
+
+Every placed gauge (any machine object) reads its inputs from the source
+`com.hyprune.sources.<instance id>` by default, with keys equal to the input ids: `value`
+(0-100), `display` (short text such as `71%`), `label` (such as `RAM`), and optionally
+`level` (`ok`, `warn` or `fail`) and `average` (a value that replaces the gauge's own
+running average). So a script only has to print those keys, and a `sources.json` entry
+whose `id` is the instance id publishes them to that gauge.
+
+1. Place a gauge: Director → Objects → Catalog, Add a gauge (category Machines), then
+   place it with tool 5 (Placement).
+2. Read its instance id: Director → Objects → Placed, select the gauge; the configure
+   panel shows `ID  u-3f9a1c` and `Data source id: u-3f9a1c`.
+3. Write a script that prints one JSON object with those keys and exits 0, for example
+   `{"value": 71, "display": "71%", "label": "RAM", "level": "ok"}`. Make it executable.
+   `scripts/system-gauges.py` (below) is a ready one for CPU, RAM, GPU and VRAM.
+4. Add an entry to `$XDG_CONFIG_HOME/hyprune/sources.json` (usually
+   `~/.config/hyprune/sources.json`) with the instance id as `id` and an absolute path to
+   the script:
+
+   ```json
+   {"sources": [
+     {"id": "u-3f9a1c", "kind": "command", "argv": ["/path/to/system-gauges.py", "ram"],
+      "intervalS": 5, "timeoutS": 4}
+   ]}
+   ```
+
+   Command intervals are at least 5 s. Relative paths resolve against the directory of
+   `sources.json`. `sources.gauges.example.json` shows four system gauges (its ids,
+   `u-000001` to `u-000004`, are placeholders: use your gauges' ids).
+5. Start Hyprune with the live launcher (`dev/live/up`). When `sources.json` exists, the
+   launcher grants `data.publish` to `com.hyprune.sources`, starts this helper with the
+   grant (renewed over a private descriptor) and logs it to `source-helper.log` in the
+   live state directory; `down` stops it. Edits to `sources.json` apply while it runs: no
+   restart (a new `sources.json` needs the next `up`).
+
+Optional: `$XDG_CONFIG_HOME/hyprune/machines.json` binds a gauge to another source or
+other keys (for example one script publishing several values, or a longer averaging
+window), and is re-read on change:
+
+```json
+{"instances": {"u-3f9a1c": {"source": "com.hyprune.sources.system",
+   "inputs": {"value": {"key": "ram"}, "display": {"key": "ramText"}}, "averageWindowS": 120}}}
+```
+
+`--dev` (or `"devFastIntervals": true`) allows 1 s intervals for the simulators in tests
+and demos only; do not use it for real scripts.
+
+### `scripts/system-gauges.py cpu|ram|gpu|vram`
+
+Prints `{"value", "display", "label", "level"}` (`level` warn from 75, fail from 90) and
+always exits 0; anything it cannot read shows value 0 with a display such as `n/a`.
+
+| Kind | Reads | Display |
+| --- | --- | --- |
+| `cpu` | `/proc/stat`, compared with the previous run (state in `$XDG_RUNTIME_DIR/hyprune-system-gauges.json`; the first run samples for 0.25 s) | `37%` |
+| `ram` | `/proc/meminfo`: MemTotal − MemAvailable | `12.4 GB` |
+| `gpu` | NVIDIA: `nvidia-smi`; AMD: `gpu_busy_percent`; Intel: current clock / maximum clock (an approximation) | `37%`, Intel `~35%` |
+| `vram` | NVIDIA: `nvidia-smi`; AMD: `mem_info_vram_used` / `_total`; Intel: none | `3.2 GB`, Intel `shared` |
+
+With several GPUs it reads the discrete one (NVIDIA, then AMD, then Intel; `--gpu
+nvidia|amd|intel` picks one). A runtime-suspended GPU is never woken: it shows `asleep`.
+`nvidia-smi` runs only while one of your processes has the NVIDIA GPU open; otherwise the
+gauge shows `idle`, so polling does not keep a laptop's dGPU from suspending. Use
+`intervalS` 10 or more for `gpu` and `vram`.
+
+### `scripts/gauge-sim.py`
+
+A deterministic gauge feed for tests and demos, using the simulators' variables and
+options (`MACHINES_SIM_TIME`, `_SHIFT`, `_SEED`, `_EPOCH`; `--at`, `--timeline`). The
+value steps to a new seeded level (0-100) every `--period` seconds (default 6), counted
+from the epoch.
+
+| Option | Meaning |
+| --- | --- |
+| `--label TEXT` | `label` key (default `SIM`); also part of the seed, so gauges differ. |
+| `--unit TEXT` | Appended to `display` (default `%`). |
+| `--period S` | Seconds per step (default 6). |
+| `--steps N` | Steps in the sequence, then it repeats (default 0: endless). |
+| `--hold` | After `--steps` steps keep the last value for good (a gauge settles and stops drawing new frames). |
+
 ## Tests
 
 ```sh
@@ -320,7 +401,9 @@ python3 -m unittest dev/machines/test_machines.py
 
 They cover output parsing and caps, timeouts (process group killed), back-off, JSON
 pointers and fields, sequencing, publish-on-change and keep-alive, HTTP behaviour against a
-local server, 30-minute timelines of every simulator (exact keys, value domains, monotonic
+local server, the gauge scripts (a fake `/proc` and `/sys`: a suspended GPU is never
+queried), token renewal over a descriptor, reloading the configuration, 30-minute timelines
+of every simulator (exact keys, value domains, monotonic
 counters, failures, outages, bursts), and the helper against a fake core socket (hello,
 `data.publish` parameters, a rate refusal, reconnecting with a fresh token, `data.remove`
 on `SIGTERM`).
