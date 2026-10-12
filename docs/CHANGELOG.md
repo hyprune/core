@@ -249,6 +249,23 @@ RFC-0006 tool table, Path row:
 - Path edits (add, insert, move, remove) are undo steps: Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y in
   tools 3 and 4. Escape cancels a point drag. The Primary hint reads "Add / drag point".
 
+## Say captions wrap; occluded residents cost no frames (no wire change)
+
+- A `say` line (up to 160 characters, the schema's limit) wraps over the resident's head
+  in up to four lines, in a bubble that grows upward from the anchor; it was one label cut
+  at about 40 characters with "...". Other labels (world labels, markers, prompts) are
+  unchanged. The overlay diagnostics list a caption's lines.
+- An animating character hidden behind opaque scene geometry from the eye neither keeps
+  frames coming nor is drawn: five rays (centre, head, feet, both sides of its bounds
+  grown for limbs) against the world's opaque meshes (glass, masked and blended surfaces
+  never hide anything) must all be blocked; one clear ray draws it. The test re-runs when
+  the eye or the character moves; the runtime decides, so the offload worker draws the
+  same characters. With `visibility_culling` off nothing is hidden. The agent diagnostics
+  report `occluded`. Measured in nested Lumen Reach 0.11.0 at 4K: facing the Rime Vault
+  console 60.8 fps at rest becomes 0; facing the Sun Court wall the Array Hall resident is
+  in view through the open vestibule and still renders (the resident behind walls no longer
+  counts or draws).
+
 ## Path stops and guides from a seat (no wire change)
 
 - A path stop that faces an anchor (`face: {anchor}`) and an interaction waypoint to an
