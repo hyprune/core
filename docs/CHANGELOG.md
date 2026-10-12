@@ -258,7 +258,9 @@ RFC-0006 tool table, Path row:
 - An animating character hidden behind opaque scene geometry from the eye neither keeps
   frames coming nor is drawn: five rays (centre, head, feet, both sides of its bounds
   grown for limbs) against the world's opaque meshes (glass, masked and blended surfaces
-  never hide anything) must all be blocked; one clear ray draws it. The test re-runs when
+  never hide anything) must all be blocked; one clear ray draws it, and a hit within
+  0.3 m of the eye or the character (or inside its bounds grown by 0.3 m) leaves the ray
+  clear. The test re-runs when
   the eye or the character moves; the runtime decides, so the offload worker draws the
   same characters. With `visibility_culling` off nothing is hidden. The agent diagnostics
   report `occluded`. Measured in nested Lumen Reach 0.11.0 at 4K: facing the Rime Vault
