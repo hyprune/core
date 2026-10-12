@@ -58,7 +58,12 @@ fresh token into the token file. Without the grant the helper logs
 With `--token-fd N --token-refresh` the helper follows the same renewal protocol as the
 shell's bridge: the supervisor writes the launch token as the first line; for every later
 connection the helper writes `renew\n` to the descriptor and reads the next token line
-(waiting at most 10 s, with at most one request outstanding). The supervised live launcher
+(waiting at most 10 s, with at most one request outstanding). Without `--token-refresh` the
+descriptor may hold a single line and close (a pipe): the helper connects with that token,
+and when the connection is later lost and the descriptor has closed, it exits with status 3
+(`cannot reconnect: the token channel is closed`) rather than run commands for a
+connection that cannot come back. A supervisor that renews nothing restarts it with a new
+grant, or a session restart does. The supervised live launcher
 (`dev/live`) starts the helper this way; see "Gauges: wire a script" below. The descriptor
 is not passed on to commands, and token variables are removed from their environment.
 Tokens are never logged.

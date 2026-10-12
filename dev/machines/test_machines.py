@@ -1190,6 +1190,34 @@ class HelperRenewalAndReload(unittest.TestCase):
             self.assertNotIn(first, err)
             self.assertNotIn(second, err)
 
+    def test_one_use_token_over_a_pipe_exits_when_the_connection_is_lost(self):
+        # A session without renewal passes one token line and closes its end.
+        token = "78" * 32
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            core = FakeCore(str(tmp / "control.sock"), token)
+            config = tmp / "sources.json"
+            config.write_text(json.dumps({"sources": [{"id": "tick", "kind": "timer", "timer": "pulse", "everyS": 1}]}))
+            read, write = os.pipe()
+            os.write(write, token.encode() + b"\n")
+            os.close(write)
+            process = subprocess.Popen([PY, str(HERE / "source-helper.py"), "--config", str(config),
+                                        "--socket", str(tmp / "control.sock"), "--token-fd", str(read)],
+                                       pass_fds=(read,), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            os.close(read)
+            try:
+                self.assertTrue(wait_for(lambda: self.published(core, "tick")))
+                core.kick()
+                _, err = process.communicate(timeout=15)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                core.close()
+            self.assertEqual(process.returncode, helper.EXIT_NO_GRANT, err)
+            self.assertIn("token channel is closed", err)
+            self.assertEqual([h["params"].get("token") for h in core.methods("session.hello")], [token, None])
+            self.assertNotIn(token, err)
+
     def test_reloads_the_config_on_change(self):
         token = "56" * 32
         with tempfile.TemporaryDirectory() as tmp:
