@@ -171,6 +171,44 @@ def acceptance(client, children, args, shell_token, socketpath):
 
     if stage == 'perf':
         return measure(client, out, results, check, camera, look, views, perf, offload, diag)
+    if stage == 'ticks':
+        # Tick cost per tool state, both renderers: a tick longer than the offload frame's
+        # freshness budget makes the local renderer stand in.
+        def sample(label):
+            f0 = diag()['timings']['renderedFrames']; t0 = time.monotonic()
+            ticks, renderers = [], []
+            while time.monotonic() - t0 < 2:
+                ticks.append(diag()['timings'].get('cpuUpdateMs')); renderers.append(perf()['activeRenderer']); time.sleep(.1)
+            fps = (diag()['timings']['renderedFrames'] - f0) / (time.monotonic() - t0)
+            return {'state': label, 'fps': round(fps, 1), 'tickMs': stats(ticks), 'offloadFraction': renderers.count('offload') / len(renderers)}
+        rows = []
+        def quiet(label, seconds=3):
+            diag(); time.sleep(seconds)  # no calls in between: the present log alone
+            log = diag().get('presentLog', [])
+            t = [e[0] for e in log]
+            gaps = [round(b - a, 1) for a, b in zip(t, t[1:])]
+            return {'state': label + ' (no polling)', 'presents': len(t), 'gapsOver40ms': [g for g in gaps if g > 40],
+                    'newFrames': sum(1 for e in log if e[1] == 0)}
+        offload('off'); keys('-k', '1'); look(*views['placed']); time.sleep(.5)
+        rows.append({'offload': 'off', **quiet('tool 1')})
+        offload('on'); time.sleep(.5)
+        rows.append({'offload': 'on', **quiet('tool 1')})
+        for mode in ['off', 'on']:
+            offload(mode)
+            keys('-k', '1'); look(*views['placed']); time.sleep(.5)
+            rows.append({'offload': mode, **sample('tool 1')})
+            keys('-k', '4'); look(*views['rack']); center(); click(); time.sleep(.5)
+            rows.append({'offload': mode, **sample('tool 4, rack selected')})
+            keys('-k', '1'); time.sleep(.2)
+            client.call('objects.pocket', {'ref': RACK})
+            camera((-8, 1.7, 8), 0, -.35); time.sleep(.8)
+            rows.append({'offload': mode, **sample('tool 5, rack ghost')})
+            keys('-k', '1'); time.sleep(.3)
+        results['ticks'] = rows
+        (out / 'ticks.json').write_text(json.dumps(results, indent=2) + '\n')
+        for r in rows:
+            print('TICKS', json.dumps(r), flush=True)
+        return
 
     # 1. Fixed animation times, three views: in-process, then offload.
     def sweep(tag):
