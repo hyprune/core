@@ -1,6 +1,7 @@
 #include "interaction/Content.hpp"
 #include "interaction/Tools.hpp"
 #include "surfaces/Layout.hpp"
+#include "surfaces/Stacking.hpp"
 #undef NDEBUG
 #include <cassert>
 #include <iostream>
@@ -202,6 +203,24 @@ void homeArrivals() {
     assert(moved.locate(room, &w, camera, 1200, 675) && moved.instances.back()["anchorId"] == "desk-a");
     assert(!moved.freePoses.contains(room.id));
 }
+// Super+LMB on a workspace wall pulls the client a click there reaches natively: floating
+// above tiled, then the compositor's list order, not capture order (nested --m3a: a tiled X11
+// window captured last was pulled from under two floating ones, by its edge, as a resize).
+void wallPick() {
+    std::vector<surfaces::NativeSlot> m3a{{1612, 12, 941, 1056, 0, 0},  // subsurface lab, tiled
+                                          {2567, 12, 941, 1056, 0, 3},  // X11 lab, tiled, captured last
+                                          {2108, 258, 900, 560, 1, 1},  // popup lab, floating
+                                          {2296, 291, 528, 498, 1, 2}}; // terminal, floating, raised last
+    assert(surfaces::topmostAt(m3a, 2617, 540) == 3u);
+    assert(surfaces::topmostAt(m3a, 3100, 540) == 1u); // only the X11 lab there
+    assert(surfaces::topmostAt(m3a, 1700, 40) == 0u && !surfaces::topmostAt(m3a, 100, 40));
+    m3a[1].layer = 3; // fullscreen covers everything
+    assert(surfaces::topmostAt(m3a, 2617, 540) == 1u);
+    m3a[1].layer = 0;
+    m3a[2].order = 9; // a focus raise reorders the floating layer
+    assert(surfaces::topmostAt(m3a, 2617, 540) == 2u);
+    assert(!surfaces::topmostAt(m3a, 2567 + 941, 540)); // boxes are half-open: past the right edge
+}
 } // namespace
 int main() {
     world::World world;
@@ -359,6 +378,7 @@ int main() {
     spawnReachability();
     std::cout << "PASS spawn in front of the player on reachable floor, zone fallback at viewing height\n";
     homeArrivals();
+    wallPick();
     std::cout << "PASS home arrivals: wall first, tool anchors in authored order, stable, no stale poses\n";
     std::cout << "PASS placement queue, pocket ordering, durable client size, workspace scope and facing toggle\n";
 }

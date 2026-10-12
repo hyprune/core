@@ -10,7 +10,9 @@
 #include "interaction/Gizmo.hpp"
 #include "interaction/Placement.hpp"
 #include "interaction/Tools.hpp"
+#include "quests/Markers.hpp"
 #include "sim/ViewBob.hpp"
+#include "surfaces/Stacking.hpp"
 #include "world/Mounts.hpp"
 #include "world/Objects.hpp"
 #include "world/Catalog.hpp"
@@ -18,7 +20,6 @@
 #include <sys/inotify.h>
 #include <sys/random.h>
 #include "world/Spatial.hpp"
-#include "quests/Markers.hpp"
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
@@ -2324,32 +2325,43 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
             // Pull the actual topmost native client under the workspace-wall hit.
             float x = hit->second.u * monitor->m_size.x + monitor->m_position.x,
                   y = hit->second.v * monitor->m_size.y + monitor->m_position.y;
-            for (auto it = capture.entries.rbegin(); it != capture.entries.rend(); ++it)
-                if (it->instance.workspaceId == wall->workspaceId && !layout.pulled(it->instance, world.get())) {
-                    auto box = it->window->logicalBox();
-                    if (box && x >= box->x && x < box->x + box->w && y >= box->y && y < box->y + box->h) {
-                        e = &*it;
-                        auto s = wall->surface;
-                        s.id = e->surface.id;
-                        s.pixelWidth = e->surface.pixelWidth;
-                        s.pixelHeight = e->surface.pixelHeight;
-                        s.width = wall->surface.width * box->w / monitor->m_size.x;
-                        s.height = wall->surface.height * box->h / monitor->m_size.y;
-                        s.center = wall->surface.center +
-                                   wall->surface.right() *
-                                       ((box->x - monitor->m_position.x + box->w / 2) / monitor->m_size.x - .5f) *
-                                       wall->surface.width +
-                                   wall->surface.up() *
-                                       (.5f - (box->y - monitor->m_position.y + box->h / 2) / monitor->m_size.y) *
-                                       wall->surface.height +
-                                   wall->surface.normal() * .06f;
-                        e->surface = s;
-                        auto h = surfaces::intersect(s, pointerCamera().position, pointerRay());
-                        if (h)
-                            hit = {{s.id, *h}};
-                        break;
-                    }
-                }
+            // Topmost as the compositor stacks them, not by capture order (a tiled window
+            // captured last was taken from under the floating ones above it).
+            const auto &native = Desktop::windowState()->windows();
+            std::vector<surfaces::NativeSlot> slots;
+            std::vector<Capture::Entry *> owners;
+            for (auto &entry : capture.entries)
+                if (entry.instance.workspaceId == wall->workspaceId && !layout.pulled(entry.instance, world.get()))
+                    if (auto w = entry.window.lock())
+                        if (auto box = w->logicalBox()) {
+                            int layer = Fullscreen::controller()->isFullscreen(w) ? 3
+                                        : w->m_pinned                             ? 2
+                                        : w->m_isFloating                         ? 1
+                                                                                  : 0;
+                            slots.push_back({box->x, box->y, box->w, box->h, layer,
+                                             size_t(std::find(native.begin(), native.end(), w) - native.begin())});
+                            owners.push_back(&entry);
+                        }
+            if (auto top = surfaces::topmostAt(slots, x, y)) {
+                e = owners[*top];
+                auto box = e->window.lock()->logicalBox();
+                auto s = wall->surface;
+                s.id = e->surface.id;
+                s.pixelWidth = e->surface.pixelWidth;
+                s.pixelHeight = e->surface.pixelHeight;
+                s.width = wall->surface.width * box->w / monitor->m_size.x;
+                s.height = wall->surface.height * box->h / monitor->m_size.y;
+                s.center =
+                    wall->surface.center +
+                    wall->surface.right() * ((box->x - monitor->m_position.x + box->w / 2) / monitor->m_size.x - .5f) *
+                        wall->surface.width +
+                    wall->surface.up() * (.5f - (box->y - monitor->m_position.y + box->h / 2) / monitor->m_size.y) *
+                        wall->surface.height +
+                    wall->surface.normal() * .06f;
+                e->surface = s;
+                if (auto h = surfaces::intersect(s, pointerCamera().position, pointerRay()))
+                    hit = {{s.id, *h}};
+            }
         }
         if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance))
             return;
