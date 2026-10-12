@@ -119,6 +119,11 @@ Json Server::snapshot() const {
 }
 Json Server::visibleState(const Peer &p) const {
     Json state = state_;
+    if (!protocol::atLeast(p.protocol, "0.22") && state.is_object()) {
+        state.erase("objects");
+        if (state.contains("editor") && state["editor"].is_object())
+            state["editor"] = interaction::beforeObjectsEditor(std::move(state["editor"]));
+    }
     if (!protocol::atLeast(p.protocol, "0.21") && state.is_object()) {
         for (auto key : {"markers", "quests", "focus"})
             state.erase(key);
@@ -373,12 +378,13 @@ void Server::frame(Peer &p, const std::string &bytes) {
             check(params["capabilities"].is_array(), -32602, "invalid capabilities");
             const std::set<std::string> known{"state.read",    "world.control",   "surface.control", "movement.control",
                                               "shell.control", "runtime.control", "data.publish",    "input.control", "camera.author",
-                                              "quest.control"};
+                                              "quest.control",  "objects.control"};
             std::set<std::string> requested;
             for (auto &cap : params["capabilities"]) {
                 check(cap.is_string(), -32602, "invalid capability");
                 auto name = cap.get<std::string>();
                 check(known.contains(name) && (name != "quest.control" || protocol::atLeast(p.protocol, "0.21")) &&
+                          (name != "objects.control" || protocol::atLeast(p.protocol, "0.22")) &&
                           (name != "camera.author" || protocol::atLeast(p.protocol,"0.13")) && (name != "input.control" || protocol::atLeast(p.protocol, "0.6")) &&
                           (protocol::atLeast(p.protocol, "0.2") || name != "data.publish") &&
                           requested.insert(name).second,
@@ -532,9 +538,11 @@ void Server::frame(Peer &p, const std::string &bytes) {
         }
         queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"result", result}}, method);
     } catch (const Error &e) {
-        queue(p, {{"jsonrpc", "2.0"},
-                  {"id", id},
-                  {"error", {{"code", e.code}, {"message", boundedText(e.what(), MessageLimit)}}}});
+        Json error{{"code", e.code}, {"message", boundedText(e.what(), MessageLimit)}};
+        // Error data (the refusing placement rule) is an IPC 0.22 shape; older peers get none.
+        if (e.data.is_object() && protocol::atLeast(p.protocol, "0.22"))
+            error["data"] = e.data;
+        queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"error", std::move(error)}});
         if (!p.hello)
             p.closing = true;
     } catch (const Json::exception &) {

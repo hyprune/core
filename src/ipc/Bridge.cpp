@@ -100,10 +100,13 @@ void Bridge::complete(Json result) {
     send({{"type", "reply"}, {"id", pending_}, {"result", std::move(result)}});
     pending_.clear();
 }
-void Bridge::fail(int code, const std::string &message) {
+void Bridge::fail(int code, const std::string &message, const Json &data) {
     if (pending_.empty())
         return;
-    send({{"type", "reply"}, {"id", pending_}, {"error", {{"code", code}, {"message", message}}}});
+    Json error{{"code", code}, {"message", message}};
+    if (!data.is_null())
+        error["data"] = data;
+    send({{"type", "reply"}, {"id", pending_}, {"error", std::move(error)}});
     pending_.clear();
 }
 bool Bridge::healthy() const {
@@ -158,7 +161,7 @@ void Bridge::poll() {
             if (auto result = handler_(j.at("method"), j.at("params")))
                 complete(*result);
         } catch (const Error &e) {
-            fail(e.code, e.what());
+            fail(e.code, e.what(), e.data);
         } catch (const Json::exception &) {
             fail(-32602, "invalid params");
         } catch (const std::exception &e) {

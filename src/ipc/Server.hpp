@@ -11,7 +11,8 @@ namespace hyprune::ipc {
 using Json = nlohmann::json;
 struct Error : std::runtime_error {
     int code;
-    Error(int c, const std::string &s) : std::runtime_error(s), code(c) {}
+    Json data; // optional JSON-RPC error data (IPC 0.22: {retryable, rule}); null = none
+    Error(int c, const std::string &s, Json d = nullptr) : std::runtime_error(s), code(c), data(std::move(d)) {}
 };
 struct LaunchGrant {
     std::string token, client;

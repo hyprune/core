@@ -3,6 +3,7 @@
 #include "ipc/Server.hpp"
 #include "ipc/GrantIssuer.hpp"
 #include "quests/Engine.hpp"
+#include "world/Catalog.hpp"
 #include <arpa/inet.h>
 #include <atomic>
 #include <filesystem>
@@ -156,13 +157,19 @@ void inheritance(const std::string &runtime) {
     for (auto &[m, grant] : hyprune::quests::Engine::methods())
         methods[m] = "state.read";
     methods["markers.reveal"] = "state.read";
+    for (auto &[m, grant] : hyprune::world::objectMethods())
+        methods[m] = "state.read";
     const std::set<std::string> allGrants{"state.read",      "world.control", "surface.control", "movement.control",
                                           "runtime.control", "shell.control", "data.publish",    "input.control", "camera.author",
-                                          "quest.control"};
+                                          "quest.control",   "objects.control"};
     std::vector<LaunchGrant> grants;
     for (size_t i = 0; i < Supported.size(); ++i)
         grants.push_back({randomId(), "org.hyprune.test", allGrants});
-    Server server(runtime, "inheritance", grants, [](auto &, auto &) { return Json{{"ok", true}}; });
+    Server server(runtime, "inheritance", grants, [](auto &method, auto &) -> Json {
+        if (method == "objects.place") // a refused placement names its rule in error data (0.22 only)
+            throw Error(-32007, "walls: inside a wall", Json{{"retryable", false}, {"rule", "walls"}});
+        return Json{{"ok", true}};
+    });
     server.advertise(methods);
     const Json mounts{{"placements", Json::array({Json{{"pose", true}}, Json{{"anchorId", "wall"}}})},
                       {"instances",Json::array({Json{{"surfaceId","free"}},Json{{"surfaceId","home"},{"areaId","room"}}})}};
@@ -179,7 +186,12 @@ void inheritance(const std::string &runtime) {
                     {"presentation", {{"fov", 10},{"profile",{{"outline",{{"enabled",true}}}}}}},
                     {"interaction", {{"mode", "cursor"}, {"reticle", {{"state", "valid"}, {"action", "place"}}}}},
                     {"apps", Json::array_t(17, Json::object())},
-                    {"editor", {{"mode", "cursor"}}},
+                    {"editor", {{"mode", "cursor"}, {"selectedKind", "node"}, {"submode", "universal"},
+                                {"gizmo", {{"space", "world"}, {"pivot", "base"}, {"snap", false}}},
+                                {"unplaced", {{"count", 2}, {"preview", true}, {"selectedId", "pocket-1"},
+                                              {"windows", Json::array({Json{{"surfaceId", "app"}}})},
+                                              {"objects", Json::array({Json{{"itemId", "pocket-1"}}})}}}}},
+                    {"objects", {{"catalogRevision", 1}, {"instances", Json::array()}}},
                     {"keymap", {{"holds", Json::array({Json{{"action", "menu.open"}}})},
                                 {"config", {{"modes", {{"world", {{"menu", {"Tab[L]"}}, {"markers.reveal", {"Tab"}}}}}}}}}},
                     {"markers", {{"reveal", nullptr}, {"list", Json::array()}}},
@@ -216,6 +228,15 @@ void inheritance(const std::string &runtime) {
             check(early.receive().contains("error"), "quest.control accepted before 0.21");
             requested.erase("quest.control");
         }
+        if (!atLeast(version, "0.22")) {
+            Client early(server.path());
+            auto refused = hello();
+            refused["params"]["protocols"] = {version};
+            refused["params"]["capabilities"] = {"state.read", "objects.control"};
+            early.sendJson(refused);
+            check(early.receive().contains("error"), "objects.control accepted before 0.22");
+            requested.erase("objects.control");
+        }
         h["params"]["capabilities"] = requested;
         c.sendJson(h);
         auto response = c.receive().at("result");
@@ -232,8 +253,12 @@ void inheritance(const std::string &runtime) {
             check(!available || methodAvailable("0.99", method), "future version lost method");
             c.sendJson(req(method, method));
             auto result = c.receive();
-            check(available ? result.contains("result") : result["error"]["code"] == -32601,
-                  "dispatch disagrees with advertisement");
+            if (available && method == "objects.place")
+                check(result["error"]["code"] == -32007 && result["error"]["data"]["rule"] == "walls",
+                      "0.22 refusal lost its rule");
+            else
+                check(available ? result.contains("result") : result["error"]["code"] == -32601,
+                      "dispatch disagrees with advertisement");
         }
         c.sendJson(req("sub", "state.subscribe", {{"topics", {"state"}}}));
         auto state = c.receive().at("result").at("snapshot").at("state");
@@ -278,6 +303,20 @@ void inheritance(const std::string &runtime) {
               "quest events floor");
         for (auto m : {"markers.reveal", "quests.create", "focus.start", "guidance.get"})
             check(methodAvailable(version, m) == atLeast(version, "0.21"), "quest methods floor");
+        check(state.contains("objects") == atLeast(version, "0.22"), "objects state version projection");
+        for (auto m : {"objects.catalog", "objects.place", "objects.configure", "libraries.install", "libraries.list"})
+            check(methodAvailable(version, m) == atLeast(version, "0.22"), "objects methods floor");
+        if (atLeast(version, "0.6")) {
+            auto &e = state["editor"];
+            bool latest = atLeast(version, "0.22");
+            check(e["selectedKind"] == (latest ? "node" : "object") && e["submode"] == (latest ? "universal" : "move") &&
+                      e.contains("gizmo") == latest,
+                  "objects editor projection");
+            if (atLeast(version, "0.15")) // the pocket exists from 0.15
+                check(e["unplaced"].contains("objects") == latest && e["unplaced"]["count"] == (latest ? 2 : 1) &&
+                          e["unplaced"]["selectedId"] == (latest ? "pocket-1" : "app"),
+                      "objects pocket projection");
+        }
         previousMethods = advertised;
         previousEvents = events;
         if (atLeast(version,"0.4")) check(state["presentation"]["profile"].contains("outline")==atLeast(version,"0.13"),"ink compatibility projection");

@@ -163,7 +163,7 @@ int main() {
                 if (auto j = receive(); !j.is_null()) {
                     if (j.at("type") == "reply" && j.at("id") == id) {
                         if (j.contains("error"))
-                            throw Error(j["error"]["code"], j["error"]["message"]);
+                            throw Error(j["error"]["code"], j["error"]["message"], j["error"].value("data", Json()));
                         return j.at("result");
                     }
                     apply(j);

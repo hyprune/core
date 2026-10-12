@@ -31,7 +31,7 @@ class Bridge {
     }
     void poll();
     void complete(Json result);
-    void fail(int code, const std::string &message);
+    void fail(int code, const std::string &message, const Json &data = nullptr);
     uint64_t revision() const { return revision_; }
     bool healthy() const;
 

@@ -62,6 +62,29 @@ inline Json withoutMarkersReveal(Json j) {
             v = withoutMarkersReveal(std::move(v));
     return j;
 }
+// IPC 0.22 editor deltas (RFC-0011 P1) as older peers see them: scene nodes are
+// "object" selections, the universal gizmo mode reads "move", no gizmo state, and the
+// pocket lists windows only (a selected object item reads as the first window or null).
+inline Json beforeObjectsEditor(Json editor) {
+    if (editor.value("selectedKind", "") == "node")
+        editor["selectedKind"] = "object";
+    if (editor.value("submode", "") == "universal")
+        editor["submode"] = "move";
+    editor.erase("gizmo");
+    if (editor.contains("unplaced") && editor["unplaced"].is_object()) {
+        auto &u = editor["unplaced"];
+        u.erase("objects");
+        auto windows = u.value("windows", Json::array());
+        u["count"] = windows.size();
+        auto selected = u.value("selectedId", Json(nullptr));
+        bool window = std::any_of(windows.begin(), windows.end(), [&](const Json &w) { return w.value("surfaceId", Json()) == selected; });
+        if (!window)
+            u["selectedId"] = windows.empty() ? Json(nullptr) : windows[0]["surfaceId"];
+        if (windows.empty())
+            u["preview"] = false;
+    }
+    return editor;
+}
 Json inputConflicts(const Json &);
 struct Action {
     std::string name;
