@@ -152,7 +152,7 @@
       "name": "published values reach the inputs through the binding maps",
       "evidence": {
         "name": {
-          "ageMs": 1001,
+          "ageMs": 952,
           "condition": "fresh",
           "key": "lastJob",
           "raw": "main #1432",
@@ -160,7 +160,7 @@
           "value": "main #1432"
         },
         "progress": {
-          "ageMs": 1001,
+          "ageMs": 952,
           "condition": "fresh",
           "key": "progress",
           "raw": 0.8,
@@ -168,7 +168,7 @@
           "value": 0.8
         },
         "queued": {
-          "ageMs": 1001,
+          "ageMs": 952,
           "condition": "fresh",
           "key": "depth",
           "raw": 70,
@@ -176,7 +176,7 @@
           "value": 4.0
         },
         "stage.1": {
-          "ageMs": 1001,
+          "ageMs": 952,
           "condition": "fresh",
           "key": "stage.1",
           "raw": "running",
@@ -184,7 +184,7 @@
           "value": "running"
         },
         "stage.2": {
-          "ageMs": 1001,
+          "ageMs": 952,
           "condition": "fresh",
           "key": "stage.2",
           "raw": "failed",
@@ -192,7 +192,7 @@
           "value": "fail"
         },
         "started": {
-          "ageMs": 1001,
+          "ageMs": 952,
           "condition": "fresh",
           "key": "jobsStarted",
           "raw": 500,
@@ -200,7 +200,7 @@
           "value": null
         },
         "status": {
-          "ageMs": 1001,
+          "ageMs": 952,
           "condition": "fresh",
           "key": "status",
           "raw": "running",
@@ -221,7 +221,7 @@
         "inView": true,
         "inputs": {
           "name": {
-            "ageMs": 1001,
+            "ageMs": 952,
             "condition": "fresh",
             "key": "lastJob",
             "raw": "main #1432",
@@ -229,7 +229,7 @@
             "value": "main #1432"
           },
           "progress": {
-            "ageMs": 1001,
+            "ageMs": 952,
             "condition": "fresh",
             "key": "progress",
             "raw": 0.8,
@@ -237,7 +237,7 @@
             "value": 0.8
           },
           "queued": {
-            "ageMs": 1001,
+            "ageMs": 952,
             "condition": "fresh",
             "key": "depth",
             "raw": 70,
@@ -245,7 +245,7 @@
             "value": 4.0
           },
           "stage.1": {
-            "ageMs": 1001,
+            "ageMs": 952,
             "condition": "fresh",
             "key": "stage.1",
             "raw": "running",
@@ -253,7 +253,7 @@
             "value": "running"
           },
           "stage.2": {
-            "ageMs": 1001,
+            "ageMs": 952,
             "condition": "fresh",
             "key": "stage.2",
             "raw": "failed",
@@ -261,7 +261,7 @@
             "value": "fail"
           },
           "started": {
-            "ageMs": 1001,
+            "ageMs": 952,
             "condition": "fresh",
             "key": "jobsStarted",
             "raw": 500,
@@ -269,7 +269,7 @@
             "value": null
           },
           "status": {
-            "ageMs": 1001,
+            "ageMs": 952,
             "condition": "fresh",
             "key": "status",
             "raw": "running",
@@ -313,15 +313,15 @@
     {
       "name": "a spinning machine in view keeps frames coming",
       "evidence": {
-        "perSecond": 59.7,
-        "frames": 121,
+        "perSecond": 60.1,
+        "frames": 122,
         "animationFrames": true
       }
     },
     {
       "name": "the change is drawn (lamps, crates, label, lift)",
       "evidence": {
-        "changedFraction": 0.01499
+        "changedFraction": 0.01497
       }
     },
     {
@@ -385,7 +385,7 @@
         "inView": true,
         "inputs": {
           "name": {
-            "ageMs": 833,
+            "ageMs": 16,
             "condition": "fresh",
             "key": "lastJob",
             "raw": "main #1432",
@@ -393,7 +393,7 @@
             "value": "main #1432"
           },
           "progress": {
-            "ageMs": 833,
+            "ageMs": 16,
             "condition": "fresh",
             "key": "progress",
             "raw": 0.8,
@@ -401,7 +401,7 @@
             "value": 0.8
           },
           "queued": {
-            "ageMs": 833,
+            "ageMs": 16,
             "condition": "fresh",
             "key": "depth",
             "raw": 70,
@@ -409,7 +409,7 @@
             "value": 4.0
           },
           "stage.1": {
-            "ageMs": 833,
+            "ageMs": 16,
             "condition": "fresh",
             "key": "stage.1",
             "raw": "success",
@@ -417,7 +417,7 @@
             "value": "ok"
           },
           "stage.2": {
-            "ageMs": 833,
+            "ageMs": 16,
             "condition": "fresh",
             "key": "stage.2",
             "raw": "failed",
@@ -425,7 +425,7 @@
             "value": "fail"
           },
           "started": {
-            "ageMs": 833,
+            "ageMs": 16,
             "condition": "fresh",
             "key": "jobsStarted",
             "raw": 503,
@@ -433,7 +433,7 @@
             "value": null
           },
           "status": {
-            "ageMs": 833,
+            "ageMs": 16,
             "condition": "fresh",
             "key": "status",
             "raw": "success",
@@ -500,7 +500,7 @@
         "inView": true,
         "inputs": {
           "name": {
-            "ageMs": 4272,
+            "ageMs": 4453,
             "condition": "stale",
             "key": "lastJob",
             "raw": "main #1432",
@@ -508,7 +508,7 @@
             "value": "main #1432"
           },
           "progress": {
-            "ageMs": 4272,
+            "ageMs": 4453,
             "condition": "stale",
             "key": "progress",
             "raw": 0.8,
@@ -516,7 +516,7 @@
             "value": 0.8
           },
           "queued": {
-            "ageMs": 4272,
+            "ageMs": 4453,
             "condition": "stale",
             "key": "depth",
             "raw": 70,
@@ -524,7 +524,7 @@
             "value": 4.0
           },
           "stage.1": {
-            "ageMs": 4272,
+            "ageMs": 4453,
             "condition": "stale",
             "key": "stage.1",
             "raw": "success",
@@ -532,7 +532,7 @@
             "value": "ok"
           },
           "stage.2": {
-            "ageMs": 4272,
+            "ageMs": 4453,
             "condition": "stale",
             "key": "stage.2",
             "raw": "failed",
@@ -540,7 +540,7 @@
             "value": "fail"
           },
           "started": {
-            "ageMs": 4272,
+            "ageMs": 4453,
             "condition": "stale",
             "key": "jobsStarted",
             "raw": 503,
@@ -548,7 +548,7 @@
             "value": null
           },
           "status": {
-            "ageMs": 4272,
+            "ageMs": 4453,
             "condition": "stale",
             "key": "status",
             "raw": "failed",
@@ -709,7 +709,7 @@
           "inView": true,
           "inputs": {
             "name": {
-              "ageMs": 305,
+              "ageMs": 241,
               "condition": "fresh",
               "key": "lastJob",
               "raw": "main #1432",
@@ -717,7 +717,7 @@
               "value": "main #1432"
             },
             "progress": {
-              "ageMs": 305,
+              "ageMs": 241,
               "condition": "fresh",
               "key": "progress",
               "raw": 0.8,
@@ -725,7 +725,7 @@
               "value": 0.8
             },
             "queued": {
-              "ageMs": 305,
+              "ageMs": 241,
               "condition": "fresh",
               "key": "depth",
               "raw": 70,
@@ -733,7 +733,7 @@
               "value": 4.0
             },
             "stage.1": {
-              "ageMs": 305,
+              "ageMs": 241,
               "condition": "fresh",
               "key": "stage.1",
               "raw": "success",
@@ -741,7 +741,7 @@
               "value": "ok"
             },
             "stage.2": {
-              "ageMs": 305,
+              "ageMs": 241,
               "condition": "fresh",
               "key": "stage.2",
               "raw": "success",
@@ -749,7 +749,7 @@
               "value": "ok"
             },
             "started": {
-              "ageMs": 305,
+              "ageMs": 241,
               "condition": "fresh",
               "key": "jobsStarted",
               "raw": 604,
@@ -757,7 +757,7 @@
               "value": null
             },
             "status": {
-              "ageMs": 305,
+              "ageMs": 241,
               "condition": "fresh",
               "key": "status",
               "raw": "running",
@@ -807,18 +807,32 @@
     {
       "name": "the source helper publishes with its own grant and machine-b follows build-sim",
       "evidence": {
-        "ageMs": 834,
+        "ageMs": 17,
         "condition": "fresh",
         "key": "status",
-        "raw": "running",
+        "raw": "idle",
         "source": "com.hyprune.sources.build",
-        "value": "running"
+        "value": "idle"
       }
     },
     {
       "name": "on SIGTERM the helper removes its sources",
       "evidence": {
         "exit": 0
+      }
+    },
+    {
+      "name": "offload draws the machines (palettes, labels, crates, toggles, lift) like the in-process renderer",
+      "evidence": {
+        "meanLevels": 0.061,
+        "differing": 0.0,
+        "worker": {
+          "extras": 3,
+          "labels": 2,
+          "labelsDrawn": 2,
+          "revision": 1,
+          "states": 2
+        }
       }
     },
     {

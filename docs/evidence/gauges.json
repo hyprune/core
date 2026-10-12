@@ -7,7 +7,11 @@
     "gauges-3m-held.png",
     "gauge-tube-close.png",
     "gauge-abacus-close.png",
-    "gauge-cube-close.png"
+    "gauge-cube-close.png",
+    "gauges-offload-held-off.png",
+    "gauges-offload-held-on.png",
+    "gauges-offload-changed-on.png",
+    "gauges-offload-changed-off.png"
   ],
   "checks": [
     {
@@ -49,25 +53,25 @@
       "name": "three placed gauges run as machines without a bindings file, each on com.hyprune.sources.<id>",
       "evidence": {
         "gauge-tube": {
-          "id": "u-33b25d",
-          "source": "com.hyprune.sources.u-33b25d"
+          "id": "u-7c7a13",
+          "source": "com.hyprune.sources.u-7c7a13"
         },
         "gauge-abacus": {
-          "id": "u-76e591",
-          "source": "com.hyprune.sources.u-76e591"
+          "id": "u-80118e",
+          "source": "com.hyprune.sources.u-80118e"
         },
         "gauge-cube": {
-          "id": "u-1b39a7",
-          "source": "com.hyprune.sources.u-1b39a7"
+          "id": "u-66145e",
+          "source": "com.hyprune.sources.u-66145e"
         }
       }
     },
     {
       "name": "a notice names the data source each new gauge reads",
       "evidence": [
-        "Machine u-33b25d reads data source com.hyprune.sources.u-33b25d: add an entry with id \"u-33b25d\" to sources.json",
-        "Machine u-76e591 reads data source com.hyprune.sources.u-76e591: add an entry with id \"u-76e591\" to sources.json",
-        "Machine u-1b39a7 reads data source com.hyprune.sources.u-1b39a7: add an entry with id \"u-1b39a7\" to sources.json"
+        "Machine u-7c7a13 reads data source com.hyprune.sources.u-7c7a13: add an entry with id \"u-7c7a13\" to sources.json",
+        "Machine u-80118e reads data source com.hyprune.sources.u-80118e: add an entry with id \"u-80118e\" to sources.json",
+        "Machine u-66145e reads data source com.hyprune.sources.u-66145e: add an entry with id \"u-66145e\" to sources.json"
       ]
     },
     {
@@ -202,44 +206,44 @@
         "gauge-tube": [
           0.281,
           0.298,
-          0.322,
+          0.323,
           0.348,
-          0.364,
+          0.365,
           0.389,
-          0.429,
-          0.46,
-          0.509,
-          0.556,
-          0.588,
-          0.636
+          0.425,
+          0.458,
+          0.506,
+          0.553,
+          0.585,
+          0.631
         ],
         "gauge-abacus": [
-          0.73,
-          0.731,
-          0.737,
-          0.738,
-          0.745,
-          0.747,
+          0.741,
+          0.743,
+          0.748,
           0.75,
           0.756,
           0.757,
-          0.765,
-          0.771,
-          0.786
+          0.761,
+          0.768,
+          0.773,
+          0.775,
+          0.788,
+          0.803
         ],
         "gauge-cube": [
           0.208,
-          0.227,
-          0.259,
-          0.299,
-          0.317,
-          0.332,
-          0.352,
-          0.361,
-          0.376,
-          0.39,
-          0.397,
-          0.409
+          0.256,
+          0.284,
+          0.292,
+          0.318,
+          0.338,
+          0.347,
+          0.367,
+          0.371,
+          0.386,
+          0.405,
+          0.412
         ]
       }
     },
@@ -267,28 +271,61 @@
       "name": "values held: the gauges stop (no motion, no new revision in view), so they force no frames",
       "evidence": {
         "gauges": {
-          "u-33b25d": {
+          "u-7c7a13": {
             "moving": false,
             "inView": true,
-            "revision": 1655
+            "revision": 1657
           },
-          "u-76e591": {
+          "u-80118e": {
             "moving": false,
             "inView": true,
-            "revision": 1830
+            "revision": 1757
           },
-          "u-1b39a7": {
+          "u-66145e": {
             "moving": false,
             "inView": true,
-            "revision": 1727
+            "revision": 1649
           }
         },
         "frames in this view (other world animation included)": {
-          "perSecond": 60.1,
-          "frames": 182,
+          "perSecond": 59.8,
+          "frames": 181,
           "animationFrames": true
         },
         "npcsForceFrames": false
+      }
+    },
+    {
+      "name": "offload: no local fallback with gauges placed, the worker draws their state and labels",
+      "evidence": {
+        "worker": {
+          "extras": 114,
+          "labels": 6,
+          "labelsDrawn": 6,
+          "revision": 1,
+          "states": 3
+        },
+        "renderer": "offload"
+      }
+    },
+    {
+      "name": "offload draws the held gauges like the in-process renderer",
+      "evidence": {
+        "meanLevels": 0.475,
+        "differing": 0.00014
+      }
+    },
+    {
+      "name": "a change made while offloaded reaches the worker and matches the in-process draw",
+      "evidence": {
+        "parity": {
+          "meanLevels": 0.472,
+          "differing": 0.00014
+        },
+        "changedVsHeld": {
+          "meanLevels": 2.326,
+          "differing": 0.01676
+        }
       }
     },
     {

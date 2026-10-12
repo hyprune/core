@@ -255,7 +255,7 @@ def offload_parity(client, check, call, publish, values, inst, front, shot):
     from PIL import Image
     perf = lambda: call('graphics.get', {})['performance']
     def renderer(mode):
-        call('graphics.set', {'patch': {'offload': mode, 'render_scale': 1, 'dynamic_resolution': False, 'offload_power_cap_w': None}})
+        call('graphics.set', {'patch': {'offload': mode, 'render_scale': 1, 'dynamic_resolution': False}})  # the automatic power cap
         want = 'offload' if mode == 'on' else 'in-process'
         try:
             return wait(lambda: perf()['activeRenderer'] == want, 40)
