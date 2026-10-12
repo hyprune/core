@@ -1,7 +1,7 @@
 {
  "nestedOnly": true,
  "world": "Switchyard as world format 0.9",
- "library": "com.hyprune.starter@0.1.0",
+ "library": "com.hyprune.starter@0.1.1",
  "checks": [
   {
    "name": "IPC 0.23 hello advertises the NPC methods",
@@ -24,7 +24,7 @@
   {
    "name": "a world referencing an uninstalled library does not load",
    "ok": true,
-   "evidence": "{'code': -32602, 'message': 'world.library.missing: com.hyprune.starter@0.1.0 (resident-blue) is not installed'}"
+   "evidence": "{'code': -32602, 'message': 'world.library.missing: com.hyprune.starter@0.1.1 (resident-blue) is not installed'}"
   },
   {
    "name": "two authored residents from the library, bound to routes",
@@ -46,7 +46,7 @@
      "path": "package/yard-loop",
      "pose": {
       "position": [
-       -1.4677295684814453,
+       -0.5370208024978638,
        0.0,
        3.0
       ],
@@ -76,7 +76,7 @@
      "path": "package/north-walk",
      "pose": {
       "position": [
-       -5.55656099319458,
+       -6.635432720184326,
        0.0,
        -12.5
       ],
@@ -120,7 +120,7 @@
    "name": "walks its route at about the walk clip speed (0.87 m/s)",
    "ok": true,
    "evidence": {
-    "mPerS": 1.0161577261456751,
+    "mPerS": 1.0146705267074878,
     "agent": {
      "activity": "walking",
      "clip": "walk",
@@ -136,12 +136,12 @@
      "occluded": false,
      "path": "package/north-walk",
      "position": [
-      -2.9087142944335938,
+      -4.139857292175293,
       0.0,
       -12.5
      ],
      "routeLength": 24.0,
-     "s": 9.091285705566406,
+     "s": 7.860142707824707,
      "seat": "",
      "seatFit": {
       "known": true,
@@ -300,9 +300,9 @@
    "ok": true,
    "evidence": {
     "bind": null,
-    "pathId": "path-181560060052264",
+    "pathId": "path-487728322722667",
     "spawn": {
-     "ref": "library/com.hyprune.starter@0.1.0/resident-ember"
+     "ref": "library/com.hyprune.starter@0.1.1/resident-ember"
     },
     "use": "route"
    }
@@ -320,7 +320,7 @@
    "evidence": {
     "areaId": "",
     "closed": false,
-    "id": "path-181560060052264",
+    "id": "path-487728322722667",
     "name": null,
     "points": [
      {
@@ -359,20 +359,20 @@
    "ok": true,
    "evidence": {
     "finish": {
-     "bound": "u-01d173",
-     "id": "path-181560060052264",
-     "revision": 131
+     "bound": "u-903e05",
+     "id": "path-487728322722667",
+     "revision": 118
     },
     "instance": {
      "accent": null,
      "activity": null,
      "areaId": "",
      "character": true,
-     "id": "u-01d173",
+     "id": "u-903e05",
      "locked": false,
      "movable": false,
      "name": "Resident (ember)",
-     "path": "user/path-181560060052264",
+     "path": "user/path-487728322722667",
      "pose": {
       "position": [
        5.997600555419922,
@@ -386,7 +386,7 @@
        0.7071068286895752
       ]
      },
-     "ref": "library/com.hyprune.starter@0.1.0/resident-ember",
+     "ref": "library/com.hyprune.starter@0.1.1/resident-ember",
      "rule": null,
      "scale": 1.0,
      "seat": null,
@@ -400,12 +400,12 @@
    "ok": true,
    "evidence": {
     "from": [
-     6.394973278045654,
+     6.329939842224121,
      0.0027196407318115234,
      0.033999472856521606
     ],
     "to": [
-     8.012336730957031,
+     7.946357727050781,
      0.0027196407318115234,
      0.033999472856521606
     ]
@@ -419,14 +419,14 @@
     "activity": "walking",
     "areaId": "research",
     "character": true,
-    "id": "u-d6a57a",
+    "id": "u-2915aa",
     "locked": false,
     "movable": false,
     "name": "Resident (ember)",
     "path": "package/north-walk",
     "pose": {
      "position": [
-      0.030144691467285156,
+      0.0266876220703125,
       0.0,
       -12.5
      ],
@@ -437,7 +437,7 @@
       0.7071068286895752
      ]
     },
-    "ref": "library/com.hyprune.starter@0.1.0/resident-ember",
+    "ref": "library/com.hyprune.starter@0.1.1/resident-ember",
     "rule": null,
     "scale": 1.0,
     "seat": null,
@@ -491,31 +491,31 @@
    "name": "glances at a player within 4 m (head turned, clamped)",
    "ok": true,
    "evidence": [
-    0.7840707302093506,
-    0.09809887409210205
+    0.7839335203170776,
+    0.09587366878986359
    ]
   },
   {
    "name": "steps aside instead of walking into the player",
    "ok": true,
    "evidence": {
-    "closest": 0.6624475855717338,
-    "widest": 0.8162345290184021,
+    "closest": 0.6487227337725487,
+    "widest": 0.816827118396759,
     "stand": [
-     2.710032272338867,
+     2.721039581298828,
      1.7,
      -12.5
     ],
     "samples": [
      {
       "agent": [
-       4.724689483642578,
+       4.760782241821289,
        0.0,
-       -12.799605369567871
+       -12.783242225646973
       ],
-      "lateral": -0.2996051609516144,
+      "lateral": -0.28324204683303833,
       "player": [
-       2.7100322246551514,
+       2.7210395336151123,
        1.7000000476837158,
        -12.5
       ],
@@ -523,13 +523,13 @@
      },
      {
       "agent": [
-       4.657222747802734,
+       4.693399429321289,
        0.0,
-       -12.932936668395996
+       -12.91640853881836
       ],
-      "lateral": -0.4329366981983185,
+      "lateral": -0.4164082705974579,
       "player": [
-       2.7100322246551514,
+       2.7210395336151123,
        1.7000000476837158,
        -12.5
       ],
@@ -537,13 +537,13 @@
      },
      {
       "agent": [
-       4.572845458984375,
+       4.634365081787109,
        0.0,
-       -13.082977294921875
+       -13.033074378967285
       ],
-      "lateral": -0.5829772353172302,
+      "lateral": -0.533074140548706,
       "player": [
-       2.7100322246551514,
+       2.7210395336151123,
        1.7000000476837158,
        -12.5
       ],
@@ -551,13 +551,13 @@
      },
      {
       "agent": [
-       4.4379730224609375,
+       4.516298294067383,
        0.0,
-       -13.216251373291016
+       -13.166366577148438
       ],
-      "lateral": -0.7162513732910156,
+      "lateral": -0.6663667559623718,
       "player": [
-       2.7100322246551514,
+       2.7210395336151123,
        1.7000000476837158,
        -12.5
       ],
@@ -565,13 +565,13 @@
      },
      {
       "agent": [
-       4.286211013793945,
+       4.381248474121094,
        0.0,
-       -13.316234588623047
+       -13.29981517791748
       ],
-      "lateral": -0.8162345290184021,
+      "lateral": -0.7998151183128357,
       "player": [
-       2.7100322246551514,
+       2.7210395336151123,
        1.7000000476837158,
        -12.5
       ],
@@ -579,13 +579,13 @@
      },
      {
       "agent": [
-       4.151294708251953,
+       4.246278762817383,
        0.0,
-       -13.316234588623047
+       -13.316826820373535
       ],
-      "lateral": -0.8162345290184021,
+      "lateral": -0.816827118396759,
       "player": [
-       2.7100322246551514,
+       2.7210395336151123,
        1.7000000476837158,
        -12.5
       ],
@@ -599,7 +599,9 @@
    "ok": true,
    "evidence": {
     "inView": 60.8,
-    "outOfView": 0.8,
+    "occluded": false,
+    "outOfView": 0.0,
+    "causes": {},
     "forcesFrames": false
    }
   },
@@ -641,14 +643,14 @@
     "interactions": 3,
     "lateral": 0.0,
     "look": [
-     4.1458796747335537e-38,
-     1.848481250649692e-38
+     5.482676651005192e-38,
+     2.4445049151806774e-38
     ],
     "mode": 6,
     "occluded": false,
     "path": "package/yard-loop",
     "position": [
-     3.377200126647949,
+     3.3771860599517822,
      0.0,
      2.5999999046325684
     ],
@@ -685,14 +687,14 @@
      "interactions": 3,
      "lateral": 0.0,
      "look": [
-      -0.5272848010063171,
-      0.0343143604695797
+      -0.5272418856620789,
+      0.03426875174045563
      ],
      "mode": 10,
      "occluded": false,
      "path": "package/yard-loop",
      "position": [
-      2.956261396408081,
+      2.956599473953247,
       0.0,
       2.5999999046325684
      ],
@@ -727,14 +729,14 @@
     "interactions": 3,
     "lateral": 0.0,
     "look": [
-     -5.862335542026204e-17,
-     3.957456216399686e-18
+     -2.0077607084061886e-16,
+     1.4902428013112468e-17
     ],
     "mode": 6,
     "occluded": false,
     "path": "package/yard-loop",
     "position": [
-     3.3771917819976807,
+     3.377199172973633,
      0.0,
      2.5999999046325684
     ],
@@ -759,8 +761,8 @@
    "ok": true,
    "evidence": {
     "activity": "walking",
-    "clip": "walk",
-    "heading": 5.4977874755859375,
+    "clip": "idle",
+    "heading": 5.393301486968994,
     "id": "blue-walker",
     "interactions": 3,
     "lateral": 0.0,
@@ -768,13 +770,13 @@
      -4.203895392974451e-45,
      4.203895392974451e-45
     ],
-    "mode": 8,
+    "mode": 1,
     "occluded": false,
     "path": "package/yard-loop",
     "position": [
-     2.0138096809387207,
+     2.0,
      0.0,
-     2.986192226409912
+     3.000001907348633
     ],
     "routeLength": 40.99998474121094,
     "s": 20.500001907348633,
@@ -894,8 +896,8 @@
     ],
     "text": "The loop takes about a minute. Mind the step by the signal box, and wait for me at the bench where the yard lamps stand; the north walk is near gates.",
     "truncated": false,
-    "x": 0.5072916746139526,
-    "y": 0.09531551599502563
+    "x": 0.5072916150093079,
+    "y": 0.09531542658805847
    }
   },
   {
@@ -978,12 +980,12 @@
      "occluded": true,
      "path": "package/north-walk",
      "position": [
-      7.878009796142578,
+      8.23628044128418,
       0.0,
       -12.5
      ],
      "routeLength": 24.0,
-     "s": 19.878009796142578,
+     "s": 20.23628044128418,
      "seat": "",
      "seatFit": {
       "known": true,
@@ -1020,12 +1022,12 @@
      "occluded": false,
      "path": "package/north-walk",
      "position": [
-      -1.0015439987182617,
+      -1.0213127136230469,
       0.0,
       -12.5
      ],
      "routeLength": 24.0,
-     "s": 10.998456001281738,
+     "s": 10.978687286376953,
      "seat": "",
      "seatFit": {
       "known": true,
@@ -1045,12 +1047,44 @@
    }
   },
   {
+   "name": "from the yard, behind the dock wall: hidden by the wall",
+   "ok": true,
+   "evidence": {
+    "agent": {
+     "position": [
+      0.5622119903564453,
+      0.0,
+      -12.5
+     ],
+     "occluded": true
+    },
+    "drawn": 0,
+    "animationVisible": false
+   }
+  },
+  {
+   "name": "the same view past the wall's end: drawn",
+   "ok": true,
+   "evidence": {
+    "agent": {
+     "position": [
+      6.005239486694336,
+      0.0,
+      -12.5
+     ],
+     "occluded": false
+    },
+    "drawn": 1,
+    "animationVisible": false
+   }
+  },
+  {
    "name": "an authored character disables (hidden, no agent)",
    "ok": true,
    "evidence": {
     "accent": null,
     "activity": null,
-    "areaId": "research",
+    "areaId": "",
     "character": true,
     "id": "crimson-walker",
     "locked": false,
@@ -1059,7 +1093,7 @@
     "path": null,
     "pose": {
      "position": [
-      -1.6935844421386719,
+      6.683542251586914,
       0.0,
       -12.5
      ],
@@ -1091,11 +1125,11 @@
     "activity": null,
     "areaId": "",
     "character": true,
-    "id": "u-01d173",
+    "id": "u-903e05",
     "locked": false,
     "movable": false,
     "name": "Resident (ember)",
-    "path": "user/path-181560060052264",
+    "path": "user/path-487728322722667",
     "pose": {
      "position": [
       5.997600555419922,
@@ -1109,7 +1143,7 @@
       0.7071068286895752
      ]
     },
-    "ref": "library/com.hyprune.starter@0.1.0/resident-ember",
+    "ref": "library/com.hyprune.starter@0.1.1/resident-ember",
     "rule": null,
     "scale": 1.0,
     "seat": null,
@@ -1123,21 +1157,21 @@
    "evidence": {
     "activity": "idle",
     "clip": "idle",
-    "heading": -0.4514530599117279,
-    "id": "u-4209b0",
+    "heading": 0.0,
+    "id": "u-dabab1",
     "interactions": 0,
     "lateral": 0.0,
     "look": [
-     -8.689821839880096e-08,
-     0.062264617532491684
+     0.0,
+     0.33604684472084045
     ],
     "mode": 0,
     "occluded": false,
     "path": "",
     "position": [
-     -7.127452850341797,
+     6.005239486694336,
      0.0,
-     2.200371742248535
+     -7.5
     ],
     "routeLength": 0.0,
     "s": 0.0,
@@ -1170,8 +1204,8 @@
      0.15
     ],
     "areaId": "",
-    "id": "u-01d173",
-    "path": "user/path-181560060052264",
+    "id": "u-903e05",
+    "path": "user/path-487728322722667",
     "pose": {
      "position": [
       5.997600555419922,
@@ -1185,7 +1219,7 @@
       0.7071067690849304
      ]
     },
-    "ref": "library/com.hyprune.starter@0.1.0/resident-ember",
+    "ref": "library/com.hyprune.starter@0.1.1/resident-ember",
     "scale": 1.0,
     "worldId": "org.hyprune.npc-yard"
    }
@@ -1203,14 +1237,14 @@
      "activity": "walking",
      "areaId": "",
      "character": true,
-     "id": "u-01d173",
+     "id": "u-903e05",
      "locked": false,
      "movable": false,
      "name": "Resident (ember)",
-     "path": "user/path-181560060052264",
+     "path": "user/path-487728322722667",
      "pose": {
       "position": [
-       7.299361228942871,
+       6.845765113830566,
        0.0027196407318115234,
        0.033999472856521606
       ],
@@ -1221,7 +1255,7 @@
        0.7071068286895752
       ]
      },
-     "ref": "library/com.hyprune.starter@0.1.0/resident-ember",
+     "ref": "library/com.hyprune.starter@0.1.1/resident-ember",
      "rule": null,
      "scale": 1.0,
      "seat": null,
@@ -1231,7 +1265,7 @@
     {
      "accent": null,
      "activity": null,
-     "areaId": "research",
+     "areaId": "",
      "character": true,
      "id": "crimson-walker",
      "locked": false,
@@ -1264,9 +1298,9 @@
    "name": "offload draws skinned characters like the in-process renderer",
    "ok": true,
    "evidence": {
-    "parityMeanLevels": 0.0,
-    "parityDiffering": 0.0,
-    "hiddenDiffering": 0.13386
+    "parityMeanLevels": 0.515,
+    "parityDiffering": 1e-05,
+    "hiddenDiffering": 0.13468
    }
   }
  ]
