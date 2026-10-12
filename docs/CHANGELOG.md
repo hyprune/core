@@ -238,6 +238,17 @@ RFC-0006 tool table, Path row:
 - Path edits (add, insert, move, remove) are undo steps: Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y in
   tools 3 and 4. Escape cancels a point drag. The Primary hint reads "Add / drag point".
 
+## Path stops and guides from a seat (no wire change)
+
+- A path stop that faces an anchor (`face: {anchor}`) and an interaction waypoint to an
+  anchor load: anchor references are checked after the world's anchors are loaded (paths
+  load with the objects, before the mounts). An unknown anchor is still refused.
+- A seated resident asked to guide stands up (its stand clip, or the sit clip reversed),
+  steps off to its seat's approach point and joins the guide path; the join leg is checked
+  from there, not from the seat (it was refused with -32007 "can't walk there"). After the
+  guide it walks back and sits down again; the seat stays reserved meanwhile. A guide
+  cancelled before the character reaches the path turns back at once.
+
 ## Character rendering (no wire change)
 
 RFC-0010 runtime rules ("region visibility follows its current position") and character spec:
