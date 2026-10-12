@@ -48,8 +48,9 @@ class Layout {
     void restore(const Json &);
     void pull(const Instance &, const world::World *);
     std::string place(const Instance &, const std::string &anchorId, const world::World *);
-    // Back to a workspace wall (its own by default, or the one it is dropped onto).
-    void release(const Instance &, const world::World *, int wallWorkspace = 0);
+    // Back to a workspace wall: the one it is dropped onto, else the home it left. Returns
+    // that workspace, where the window belongs natively again (tiled).
+    int release(const Instance &, const world::World *, int wallWorkspace = 0);
     void recall(std::span<const Instance>);
     bool pulled(const Instance &, const world::World *) const;
     // Composed on workspace `id`'s wall (its pose is its rectangle there) rather than drawn on
@@ -63,12 +64,17 @@ class Layout {
     }
     std::optional<Surface> locate(const Instance &, const world::World *, const sim::Camera &, int pw, int ph);
     std::vector<std::pair<std::string, Json>> events;
-    // A window without a durable rule that arrives on a home workspace (opened there or
-    // moved there): the first keeps the area's primary wall, later ones take its free tool
-    // anchors in authored order. Runtime only, like a spawn pose; durable rules still come
-    // from explicit placement. walled: surface -> the workspace whose wall shows it.
-    std::map<std::string, int> walled;
-    std::map<std::string, std::pair<int, std::string>> arrivals; // surface -> {workspace, anchor}
+    // Home workspace windows are tiled windows of that workspace, shown on its wall. One
+    // the user moves into the world (pull/carry, place, mount, pocket) leaves for the room
+    // workspace: homes maps it to the home workspace it left, until it returns.
+    std::map<std::string, int> homes;
+    // The home binding a window belongs to: its workspace's, or the one it left for the world.
+    const Json *homeOf(const Instance &, const world::World *) const;
+    // Still on its home workspace but moved into the world: to be moved to the room.
+    bool leaving(const Instance &i) const {
+        auto h = homes.find(i.id);
+        return h != homes.end() && h->second == i.workspaceId;
+    }
     // A closed or departed window gives up its wall, arrival anchor and holds.
     void forget(const std::string &surfaceId);
 
@@ -94,7 +100,7 @@ class Layout {
     std::string holder(const std::string &anchorId, const std::string &except) const;
     bool taken(const std::string &anchorId, const std::string &except) const;
     void hold(const std::string &surfaceId, const std::string &anchorId);
-    void leaveHome(const std::string &surfaceId);
+    void enterWorld(const Instance &, const world::World *);
     Json rule(const Instance &) const;
     bool matches(const Json &, const Instance &) const;
     const Json *saved(const Instance &, const world::World *) const;

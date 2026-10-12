@@ -34,6 +34,8 @@ class Capture {
     // worldFloated are the ones floated that way; tileRequests are those back on their
     // home wall, re-tiled there.
     std::vector<PHLWINDOWREF> floatRequests, tileRequests;
+    // Home windows moved into the world: to move natively to the room workspace.
+    std::vector<PHLWINDOWREF> worldRequests;
     std::set<const void *> worldFloated;
     // Windows on this output that the last refresh could not capture, and why (diagnostics).
     std::vector<std::pair<std::string, std::string>> skipped;

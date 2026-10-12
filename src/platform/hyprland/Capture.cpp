@@ -259,12 +259,17 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         if (elsewhere)
             it->visible = false;
         if (!attached && !elsewhere && !Fullscreen::controller()->isFullscreen(w)) {
-            bool free = inRoom || (layout && layout->pulled(it->instance, world));
-            if (free && !w->m_isFloating) {
+            // Only the room floats. A home window the user moved into the world (pulled,
+            // placed, mounted, pocketed) moves natively to the room first and floats there.
+            if (!inRoom && layout && layout->pulled(it->instance, world)) {
+                worldRequests.push_back(w);
+                if (layout->carried != it->surface.id)
+                    it->visible = false;
+            } else if (inRoom && !w->m_isFloating) {
                 floatRequests.push_back(w);
                 if (!layout || layout->carried != it->surface.id)
                     it->visible = false; // never posed at its tiled size: shown once floating
-            } else if (!free && w->m_isFloating && worldFloated.contains(w.get()))
+            } else if (!inRoom && w->m_isFloating && worldFloated.contains(w.get()))
                 tileRequests.push_back(w);
         }
         if (attached && layout) {

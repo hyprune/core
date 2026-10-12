@@ -91,11 +91,10 @@ void spawnReachability() {
     if (zoned.spawn(second, &blocked, camera, against, 16.f / 9))
         assert(std::abs(zoned.freePoses.at(second.id).center.y - placed.center.y) < .3f);
 }
-// Windows arriving on a home workspace without a durable rule (opened or moved there):
-// the first keeps the primary wall, later ones take the area's tool anchors in authored
-// order and keep them, whatever order the compositor lists windows in (live take: moved
-// windows got no pose, and a second matching client "relocated" off a free anchor).
-void homeArrivals() {
+// Home workspace windows are tiled windows of that workspace, on its wall, however they
+// got there (opened there, opened in focus, moved there). Only the room floats: a home
+// window the user moves into the world goes to the room and returns to its own wall.
+void homeWindows() {
     world::World w;
     w.id = "org.hyprune.test.homes";
     auto tool = [](const char *id, float x) {
@@ -126,47 +125,46 @@ void homeArrivals() {
                 at[i->id] = layout.instances.back()["anchorId"];
         return at;
     };
-    auto first = refresh({&desk, &kiosk, &signal});
-    assert(!first.contains("desk") && first.at("kiosk") == "desk-a" && first.at("signal") == "desk-b");
-    assert(!layout.pulled(desk, &w) && layout.pulled(kiosk, &w) && layout.walled.at("desk") == 21);
-    for (int k = 0; k < 3; ++k) // a focus raise reorders the compositor's list: nobody moves
-        assert(refresh({&signal, &kiosk, &desk}) == first && refresh({&kiosk, &desk, &signal}) == first);
-    assert(layout.placements.empty() && layout.events.empty()); // runtime only, no notices
-    // The wall window closes: the next arrival takes the wall, tools stay where they are.
-    layout.forget(desk.id);
-    surfaces::Instance late{"late", "foot", "Late", 21};
-    auto after = refresh({&late, &kiosk, &signal});
-    assert(!after.contains("late") && after.at("kiosk") == "desk-a" && after.at("signal") == "desk-b");
-    // A window floated natively on the workspace belongs to its wall's own layout.
-    surfaces::Instance floated{"floated", "kitty", "Floated", 21, true};
-    after = refresh({&late, &kiosk, &signal, &floated});
-    assert(!after.contains("floated") && !layout.pulled(floated, &w) && after.at("signal") == "desk-b");
-    // Returned (or dropped) onto the wall: it stays there.
-    layout.release(signal, &w);
-    after = refresh({&late, &kiosk, &signal});
-    assert(!after.contains("signal") && !layout.pulled(signal, &w) && layout.walled.at("signal") == 21);
-
-    // Wall composition: the wall window and a menu it opens are composed on wall 21; a window
-    // pulled into the world is not, and neither is its menu (nested --m3a: an X11 menu of a
-    // staged window was drawn on the far wall, so clicks never reached it).
-    surfaces::Instance menu{"menu", "kitty", "Menu", 21};
-    assert(layout.composedOnWall(21, late, false, &w) && layout.composedOnWall(21, menu, false, &w, &late));
-    assert(!layout.composedOnWall(21, kiosk, false, &w) && !layout.composedOnWall(21, menu, false, &w, &kiosk));
-    assert(!layout.composedOnWall(22, late, false, &w) && !layout.composedOnWall(22, menu, false, &w, &late));
-    // A home on another output shows its windows on its wall only, pulled or not, menus too.
-    assert(layout.composedOnWall(21, kiosk, true, &w) && layout.composedOnWall(21, menu, false, &w, &kiosk, true));
-
-    // Anchors that durable rules restore to are left for them while others are free.
-    surfaces::Layout reserved;
-    reserved.workspaceBase = 20;
-    reserved.deriveDefaults(&w);
-    surfaces::Instance owner{"owner", "btop", "", 20};
-    reserved.placeOnMount(owner, w.anchors[2], &w); // desk-a, for the room's btop
-    reserved.instances = world::Json::array();
-    surfaces::Instance a{"a", "kitty", "A", 21}, b{"b", "kitty", "B", 21};
-    reserved.locate(a, &w, camera, 1200, 675);
-    assert(reserved.locate(b, &w, camera, 1200, 675) && reserved.instances.back()["anchorId"] == "desk-b");
-    assert(reserved.locate(owner, &w, camera, 1200, 675) && reserved.instances.back()["anchorId"] == "desk-a");
+    surfaces::Instance room{"room-kiosk", "kitty", "Kiosk", 20};
+    layout.placeOnMount(room, w.anchors[2], &w); // a durable rule for a room window titled Kiosk
+    layout.instances = world::Json::array();
+    for (int k = 0; k < 3; ++k) // any compositor order: every home window stays on the wall
+        assert(refresh({&desk, &kiosk, &signal}).empty() && refresh({&signal, &kiosk, &desk}).empty());
+    for (auto *i : {&desk, &kiosk, &signal})
+        assert(!layout.pulled(*i, &w) && !layout.leaving(*i));
+    assert(layout.events.empty());
+    // Pulled off the wall (carry / Director): it leaves for the room, then places there.
+    layout.pull(kiosk, &w);
+    assert(layout.leaving(kiosk) && layout.pulled(kiosk, &w) && layout.homes.at(kiosk.id) == 21);
+    kiosk.workspaceId = 20; // moved natively to the room
+    auto anchor = layout.place(kiosk, "desk-b", &w);
+    assert(anchor == "desk-b" && layout.homeOf(kiosk, &w) && layout.homeOf(kiosk, &w)->at("id") == 21);
+    auto at = refresh({&desk, &kiosk, &signal});
+    assert(at.size() == 1 && at.at("kiosk") == "desk-b" && layout.pulled(kiosk, &w));
+    // Returned: back to its own workspace, on the wall again.
+    assert(layout.release(kiosk, &w) == 21 && !layout.homes.contains(kiosk.id));
+    kiosk.workspaceId = 21;
+    assert(refresh({&desk, &kiosk, &signal}).empty() && !layout.pulled(kiosk, &w));
+    // A relaunched window restored by a durable rule in the room belongs to that rule's area:
+    // it can be placed again and returns to that area's home.
+    surfaces::Instance before{"before", "kitty", "Relaunched", 20}, relaunched{"relaunched", "kitty", "Relaunched", 20};
+    layout.placeOnMount(before, w.anchors[3], &w); // its durable rule, saved before it closed
+    layout.forget(before.id);
+    layout.instances = world::Json::array();
+    assert(layout.homeOf(relaunched, &w) && layout.homeOf(relaunched, &w)->at("id") == 21);
+    assert(layout.place(relaunched, "rig", &w) == "rig" && layout.release(relaunched, &w) == 21);
+    // Pocketing a home window takes it into the world too.
+    layout.stash(signal, {});
+    assert(layout.leaving(signal) && layout.pulled(signal, &w));
+    // A free room window moved onto a home workspace is a tiled window there.
+    surfaces::Instance free{"free", "foot", "Free", 20};
+    surfaces::Surface pose;
+    pose.logicalSize(1200, 675, .002f);
+    pose.center = {0, 1.7f, 0};
+    assert(layout.spawn(free, &w, camera, pose, 16.f / 9) && layout.locate(free, &w, camera, 1200, 675));
+    free.workspaceId = 21;
+    layout.instances = world::Json::array();
+    assert(!layout.locate(free, &w, camera, 1200, 675) && !layout.freePoses.contains(free.id));
 
     // Two live clients matching one rule share no target and raise no relocation notice.
     surfaces::Layout twins;
@@ -185,27 +183,7 @@ void homeArrivals() {
             }
     }
     assert(seen.at("one") != seen.at("two") && twins.events.empty());
-
-    // A free room window moved onto a home workspace arrives there: no stale room pose.
-    surfaces::Layout moved;
-    moved.workspaceBase = 20;
-    moved.deriveDefaults(&w);
-    surfaces::Instance wall{"walled", "kitty", "Wall", 21}, room{"room", "kitty", "Room", 20};
-    moved.locate(wall, &w, camera, 1200, 675);
-    surfaces::Surface pose;
-    pose.logicalSize(1200, 675, .002f);
-    pose.center = {0, 1.7f, 0};
-    assert(moved.spawn(room, &w, camera, pose, 16.f / 9) && moved.freePoses.contains(room.id));
-    moved.locate(room, &w, camera, 1200, 675);
-    room.workspaceId = 21;
-    moved.instances = world::Json::array();
-    moved.locate(wall, &w, camera, 1200, 675);
-    assert(moved.locate(room, &w, camera, 1200, 675) && moved.instances.back()["anchorId"] == "desk-a");
-    assert(!moved.freePoses.contains(room.id));
 }
-// Super+LMB on a workspace wall pulls the client a click there reaches natively: floating
-// above tiled, then the compositor's list order, not capture order (nested --m3a: a tiled X11
-// window captured last was pulled from under two floating ones, by its edge, as a resize).
 void wallPick() {
     std::vector<surfaces::NativeSlot> m3a{{1612, 12, 941, 1056, 0, 0},  // subsurface lab, tiled
                                           {2567, 12, 941, 1056, 0, 3},  // X11 lab, tiled, captured last
@@ -377,8 +355,8 @@ int main() {
     }
     spawnReachability();
     std::cout << "PASS spawn in front of the player on reachable floor, zone fallback at viewing height\n";
-    homeArrivals();
+    homeWindows();
     wallPick();
-    std::cout << "PASS home arrivals: wall first, tool anchors in authored order, stable, no stale poses\n";
+    std::cout << "PASS home windows stay on their wall; pulled ones go to the room and return home\n";
     std::cout << "PASS placement queue, pocket ordering, durable client size, workspace scope and facing toggle\n";
 }

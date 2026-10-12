@@ -269,14 +269,27 @@ void Layout::hold(const std::string &surfaceId, const std::string &anchorId) {
     if (!anchorId.empty())
         holders[anchorId] = surfaceId;
 }
-void Layout::leaveHome(const std::string &surfaceId) {
-    arrivals.erase(surfaceId);
-    walled.erase(surfaceId);
+const Json *Layout::homeOf(const Instance &i, const world::World *w) const {
+    if (auto b = binding(i.workspaceId, w))
+        return b;
+    if (auto h = homes.find(i.id); h != homes.end())
+        return binding(h->second, w);
+    // A room window a durable rule restored (a relaunch) belongs to that rule's area.
+    if (auto p = saved(i, w); p && w)
+        for (const auto *list : {&bindings, &defaults})
+            for (const auto &b : *list)
+                if (b.at("worldId") == w->id && b.at("areaId") == p->at("areaId"))
+                    return &b;
+    return nullptr;
+}
+void Layout::enterWorld(const Instance &i, const world::World *w) {
+    if (binding(i.workspaceId, w))
+        homes[i.id] = i.workspaceId;
 }
 void Layout::forget(const std::string &surfaceId) {
     identities.erase(surfaceId);
     lastWorkspace.erase(surfaceId);
-    leaveHome(surfaceId);
+    homes.erase(surfaceId);
     hold(surfaceId, "");
     temporaryAnchors.erase(surfaceId);
 }
@@ -344,23 +357,24 @@ void Layout::restore(const Json &data) {
     temporaryAnchors.clear();
 }
 void Layout::pull(const Instance &i, const world::World *w) {
-    need(binding(i.workspaceId, w), -32003, "window has no area home");
+    need(homeOf(i, w), -32003, "window has no area home"); // on its home, or a tool that left one
     need(carried.empty() || carried == i.id, -32004, "already carrying a tool");
     freePoses.erase(i.id);
     carried = i.id;
     recalled.erase(i.id);
     temporaryAnchors.erase(i.id);
-    leaveHome(i.id);
+    unplaced.erase(i.id); // a pull brings a pocketed window out to the player
+    std::erase(pocketOrder, i.id);
+    enterWorld(i, w);
 }
 bool Layout::pulled(const Instance &i, const world::World *w) const {
+    // A home window is pulled only once the user moved it into the world; durable rules
+    // restore windows in the room, never a home workspace's own tiled windows.
     if (unplaced.contains(i.id) || freePoses.contains(i.id) || carried == i.id || recalled.contains(i.id) ||
-        arrivals.contains(i.id) || saved(i, w))
+        leaving(i) || (saved(i, w) && !binding(i.workspaceId, w)))
         return true;
-    if (!w)
-        if (auto b = binding(i.workspaceId, nullptr))
-            return std::any_of(placements.begin(), placements.end(), [&](auto &p) {
-                return p.at("worldId") == b->at("worldId") && p.at("areaId") == b->at("areaId") && matches(p, i);
-            });
+    if (!w && !binding(i.workspaceId, nullptr)) // no world loaded: a room window with any saved rule
+        return std::any_of(placements.begin(), placements.end(), [&](auto &p) { return matches(p, i); });
     return false;
 }
 bool Layout::composedOnWall(int id, const Instance &i, bool elsewhere, const world::World *w, const Instance *parent,
@@ -372,7 +386,7 @@ bool Layout::composedOnWall(int id, const Instance &i, bool elsewhere, const wor
 std::string Layout::place(const Instance &i, const std::string &requested, const world::World *w) {
     freePoses.erase(i.id);
     occupiedPoses.erase(i.id);
-    auto b = binding(i.workspaceId, w);
+    auto b = homeOf(i, w);
     need(b, -32003, "window has no area home");
     const Json *chosen = nullptr;
     for (const auto &a : w->anchors) {
@@ -394,13 +408,18 @@ std::string Layout::place(const Instance &i, const std::string &requested, const
     carried.clear();
     recalled.erase(i.id);
     temporaryAnchors.erase(i.id);
-    leaveHome(i.id);
+    enterWorld(i, w);
     return id;
 }
-void Layout::release(const Instance &i, const world::World *w, int wallWorkspace) {
+int Layout::release(const Instance &i, const world::World *w, int wallWorkspace) {
     freePoses.erase(i.id);
     occupiedPoses.erase(i.id);
-    auto b = binding(i.workspaceId, w);
+    auto h = homes.find(i.id);
+    auto b = homeOf(i, w);
+    int target = wallWorkspace           ? wallWorkspace
+                 : h != homes.end()      ? h->second
+                 : b && !binding(i.workspaceId, w) ? b->at("id").get<int>()
+                                         : i.workspaceId;
     unplaced.erase(i.id);
     content.erase(i.id);
     std::erase(pocketOrder, i.id);
@@ -412,8 +431,8 @@ void Layout::release(const Instance &i, const world::World *w, int wallWorkspace
         carried.clear();
     recalled.erase(i.id);
     temporaryAnchors.erase(i.id);
-    leaveHome(i.id);
-    walled[i.id] = wallWorkspace ? wallWorkspace : i.workspaceId;
+    homes.erase(i.id);
+    return target;
 }
 void Layout::recall(std::span<const Instance> live) {
     freePoses.clear();
@@ -432,7 +451,8 @@ void Layout::stash(const Instance &i, Surface s) {
     pocketOrder.insert(pocketOrder.begin(), i.id);
     freePoses.erase(i.id);
     occupiedPoses.erase(i.id);
-    leaveHome(i.id);
+    if (binding(i.workspaceId, nullptr))
+        homes[i.id] = i.workspaceId; // a pocketed home window waits in the room
     if (carried == i.id)
         carried.clear();
 }
@@ -577,14 +597,11 @@ bool Layout::spawn(const Instance &i, const world::World *w, const sim::Camera &
 }
 std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, const sim::Camera &camera, int pw,
                                       int ph) {
-    // An arrival belongs to the workspace it arrived on; moving on starts over. A free
-    // window moved onto a home workspace arrives there, wherever it was in the world.
-    if (auto a = arrivals.find(i.id); a != arrivals.end() && a->second.first != i.workspaceId)
-        arrivals.erase(a);
-    if (auto h = walled.find(i.id); h != walled.end() && h->second != i.workspaceId)
-        walled.erase(h);
+    // A window moved onto a home workspace (by the user or a script) is a tiled window of
+    // that workspace, wherever it was in the world before.
     auto last = lastWorkspace.find(i.id);
     if (last != lastWorkspace.end() && last->second != i.workspaceId && carried != i.id && binding(i.workspaceId, w)) {
+        homes.erase(i.id);
         freePoses.erase(i.id);
         occupiedPoses.erase(i.id);
         fittedScale.erase(i.id);
@@ -603,7 +620,7 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
     if (!b && recalled.contains(i.id))
         b = binding(i.workspaceId, nullptr);
     // Recalled room clients have no home binding: they come to the player like the rest.
-    if (!b && !freePoses.contains(i.id) && !saved(i, w) && !recalled.contains(i.id)) {
+    if (!b && !freePoses.contains(i.id) && !saved(i, w) && !recalled.contains(i.id) && carried != i.id) {
         hold(i.id, "");
         return {};
     }
@@ -612,7 +629,9 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
     s.title = i.title;
     s.pixelWidth = pw;
     s.pixelHeight = ph;
-    auto p = saved(i, w);
+    // Durable rules pose windows in the room; a home window is posed by one only on its way
+    // into the world (just placed, still on its home workspace).
+    auto p = b && !leaving(i) ? nullptr : saved(i, w);
     std::string anchorId;
     if (freePoses.contains(i.id)) {
         s = freePoses.at(i.id);
@@ -784,52 +803,11 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
                                         : "No safe free mount; recalled " + i.title + " in front of player"}}});
             }
         }
-    } else if (b) {
-        // Arrived on its home workspace without a durable rule: the first window keeps the
-        // area's primary wall, later ones take its free tool anchors in authored order,
-        // leaving anchors that durable rules restore to until nothing else is free. A window
-        // the user floats there is part of that workspace's own layout: it stays on the wall.
-        bool wallTaken = std::any_of(walled.begin(), walled.end(),
-                                     [&](auto &v) { return v.second == i.workspaceId && v.first != i.id; });
-        if (walled.contains(i.id) || (!arrivals.contains(i.id) && (!wallTaken || i.floating))) {
-            walled[i.id] = i.workspaceId;
-            hold(i.id, "");
-            identities[i.id] = rule(i);
-            return {};
-        }
-        const Json home = b->at("areaId");
-        auto reserved = [&](const Json &a) {
-            return std::any_of(placements.begin(), placements.end(), [&](auto &q) {
-                return q.at("worldId") == w->id && q.at("anchorId") == a.at("id");
-            });
-        };
-        auto fits = [&](const Json &a) {
-            auto fitted = mountFit(a, pw, ph, *w);
-            if (fitted)
-                s = *fitted;
-            return fitted.has_value();
-        };
-        const Json *chosen = nullptr;
-        if (auto a = arrivals.find(i.id); a != arrivals.end())
-            if (auto kept = anchor(a->second.second, w);
-                kept && kept->at("areaId") == home && !taken(a->second.second, i.id) && fits(*kept))
-                chosen = kept;
-        for (bool allowReserved : {false, true})
-            for (auto candidate : toolAnchors(*w, home))
-                if (!chosen && (allowReserved || !reserved(*candidate)) && !taken(candidate->at("id"), i.id) &&
-                    fits(*candidate))
-                    chosen = candidate;
-        if (!chosen) { // no free tool: it stays on the wall with the workspace's other windows
-            arrivals.erase(i.id);
-            walled[i.id] = i.workspaceId;
-            hold(i.id, "");
-            identities[i.id] = rule(i);
-            return {};
-        }
-        anchorId = chosen->at("id");
-        arrivals[i.id] = {i.workspaceId, anchorId};
     } else {
+        // A home workspace's own window: tiled there and shown on its wall (Capture gives it
+        // its rectangle on the wall).
         hold(i.id, "");
+        identities[i.id] = rule(i);
         return {};
     }
     s.id = i.id;
@@ -842,6 +820,7 @@ std::optional<Surface> Layout::locate(const Instance &i, const world::World *w, 
     instances.push_back({{"surfaceId", i.id},
                          {"workspaceId", i.workspaceId},
                          {"areaId", b                    ? b->at("areaId")
+                                    : homeOf(i, w)       ? homeOf(i, w)->at("areaId")
                                     : p && !anchorId.empty() ? p->at("areaId")
                                     : Json(spawnAreas.contains(i.id) ? spawnAreas.at(i.id) : "")},
                          {"anchorId", anchorId},
@@ -885,7 +864,7 @@ std::optional<Surface> fitToMount(const Json &mount, int pw, int ph, std::span<c
 }
 void Layout::placeOnMount(const Instance &i, const Json &mount, const world::World *w) {
     need(w && mount.at("mount").at("role") == "tool-mount", -32003, "not a tool mount");
-    auto b = binding(i.workspaceId, w);
+    auto b = homeOf(i, w);
     need(!b || b->at("areaId") == mount.at("areaId"), -32004, "tool mount belongs to another area");
     need(!taken(mount.at("id"), i.id), -32004, "tool mount occupied");
     // One placement per client and world (room clients) or per home area (homed clients).
@@ -904,13 +883,13 @@ void Layout::placeOnMount(const Instance &i, const Json &mount, const world::Wor
         carried.clear();
     recalled.erase(i.id);
     temporaryAnchors.erase(i.id);
-    leaveHome(i.id);
+    enterWorld(i, w);
 }
 void Layout::mount(const Instance &i, const world::World *w, Surface s) {
     s.rotation = quaternionProduct(s.rotation, {0, std::sin(s.yaw / 2), 0, std::cos(s.yaw / 2)});
     s.yaw = 0;
     need(w && !overlaps(s, w->collision), -32005, "mount intersects geometry");
-    auto b = binding(i.workspaceId, w);
+    auto b = homeOf(i, w);
     Json area = b ? b->at("areaId") : Json(spawnAreas.contains(i.id) ? spawnAreas.at(i.id) : "");
     if (area == "" && !w->areas.empty())
         area = w->areas.front().at("id");
@@ -930,7 +909,7 @@ void Layout::mount(const Instance &i, const world::World *w, Surface s) {
     spawnAreas[i.id] = area;
     recalled.erase(i.id);
     temporaryAnchors.erase(i.id);
-    leaveHome(i.id);
+    enterWorld(i, w);
     if (carried == i.id)
         carried.clear();
 }

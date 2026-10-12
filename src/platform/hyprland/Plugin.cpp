@@ -441,6 +441,7 @@ struct Runtime {
     void axis(IPointer::SAxisEvent);
     void handTick(float);
     void floatIntoWorld(PHLWINDOWREF);
+    void moveWindow(const PHLWINDOW &, int workspace, bool tile);
     std::string resumeUse; // surface typed into when a window gesture started
     std::map<const void *, Vector2D> arrivalSizes; // size before a move into the room
     void motionTick(float);
@@ -552,6 +553,8 @@ struct Runtime {
     void runInput(uint64_t upTo);
     void scheduleInput(uint64_t upTo);
     void deferInput(std::function<void()>);
+    // Windows taken into the world across a world load, until the new capture re-keys them.
+    std::vector<std::pair<PHLWINDOWREF, int>> leftHomes;
     // The workspace each output showed last, so a switch knows what it leaves.
     std::map<const void *, int> shownWorkspaces;
     void settleWorkspaceSwitch(const PHLWORKSPACE &);
@@ -926,10 +929,37 @@ void Runtime::refresh() {
         capture.windowScale = config["windows"]["scale"];
         capture.worldWorkspace = worldWorkspace;
         capture.refresh(monitor.lock(), world.get(), &layout, &camera);
+        std::erase_if(leftHomes, [&](auto &left) {
+            if (!left.first || !left.first->m_isMapped)
+                return true;
+            for (auto &e : capture.entries)
+                if (e.window == left.first) {
+                    layout.homes.try_emplace(e.surface.id, left.second);
+                    return true;
+                }
+            return false;
+        });
         // Configure after the capture iteration completes: native layout changes
         // may reorder the compositor's window list or invoke other plugin hooks.
         for (auto window : std::exchange(capture.floatRequests, {}))
             deferInput([window] { runtime->floatIntoWorld(window); });
+        for (auto window : std::exchange(capture.worldRequests, {}))
+            deferInput([window] {
+                // Into the world: natively onto the room workspace, where it floats. Only if it
+                // is still on its way: a return in between keeps it home.
+                if (!runtime->active || !window || !window->m_isMapped || !window->m_workspace ||
+                    window->m_workspace->m_id == runtime->worldWorkspace)
+                    return;
+                auto entry = std::find_if(runtime->capture.entries.begin(), runtime->capture.entries.end(),
+                                          [&](auto &e) { return e.window == window; });
+                if (entry == runtime->capture.entries.end())
+                    return;
+                auto instance = entry->instance;
+                instance.workspaceId = int(window->m_workspace->m_id);
+                if (!runtime->layout.pulled(instance, runtime->world.get()))
+                    return;
+                runtime->moveWindow(window.lock(), runtime->worldWorkspace, false);
+            });
         for (auto window : std::exchange(capture.tileRequests, {}))
             deferInput([window] {
                 // Back on its home wall: restore the tiling it had before the world floated it.
@@ -962,6 +992,27 @@ void Runtime::refresh() {
                 w->m_target->rememberFloatingSize(logical);
                 w->sendWindowSize(true);
             });
+    }
+}
+// Native workspace moves for the world: into the room (floated there by the next capture)
+// or back to a wall's workspace, tiled. Never from a render pass: input, IPC and deferred
+// work only.
+void Runtime::moveWindow(const PHLWINDOW &w, int workspace, bool tile) {
+    if (renderPass.active())
+        throw std::runtime_error("workspace move inside render pass");
+    if (!w || !w->m_isMapped || workspace <= 0)
+        return;
+    if (!w->m_workspace || w->m_workspace->m_id != workspace) {
+        auto r = g_pKeybindManager->m_dispatchers.at("movetoworkspacesilent")(
+            std::to_string(workspace) + ",address:" + std::format("0x{:x}", reinterpret_cast<uintptr_t>(w.get())));
+        if (!r.success)
+            throw std::runtime_error("workspace move failed");
+    }
+    if (tile && w->m_isFloating && workspace != config["windows"]["world_workspace"].get<int>()) { // the room floats
+        capture.worldFloated.erase(w.get());
+        auto tiled = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_DISABLE, w);
+        if (!tiled)
+            throw std::runtime_error("client tiling rejected: " + tiled.error().message);
     }
 }
 void Runtime::floatIntoWorld(PHLWINDOWREF window) {
@@ -1507,6 +1558,12 @@ void Runtime::finishLoad() {
         npcLoad();
         machinesLoad();
         outsidePlayable = false;
+        // Windows taken into the world keep the home they left across a world change; the
+        // new world's capture gives them new surface IDs.
+        for (auto &e : capture.entries)
+            if (auto h = layout.homes.find(e.surface.id); h != layout.homes.end())
+                leftHomes.push_back({e.window, h->second});
+        layout.homes.clear();
         capture.release();
         layout.invalidateCollision();
         layout.freePoses.clear();
@@ -2274,28 +2331,19 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
                     h && h->distance < 12 && h->distance <= heldDepth + .5f && (!wall || h->distance < wall->second))
                     wall = {{f.workspaceId, h->distance}};
             if (held && wall) {
-                auto w = held->window.lock();
-                layout.release(held->instance, world.get(), wall->first);
-                auto r = g_pKeybindManager->m_dispatchers.at("movetoworkspacesilent")(
-                    std::to_string(wall->first) +
-                    ",address:" + std::format("{:x}", reinterpret_cast<uintptr_t>(w.get())));
-                if (!r.success)
-                    throw std::runtime_error("drop workspace failed");
-                auto tiled = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_DISABLE, w);
-                if (!tiled)
-                    throw std::runtime_error("client tiling rejected: " + tiled.error().message);
+                moveWindow(held->window.lock(), layout.release(held->instance, world.get(), wall->first), true);
             } else if (held) {
                 layout.carried.clear();
                 if (auto snapped = mountTarget(*held))
                     layout.placeOnMount(held->instance, *snapped->first, world.get());
-                else if (layout.binding(held->instance.workspaceId, world.get()))
+                else if (layout.homeOf(held->instance, world.get()))
                     layout.mount(held->instance, world.get(), hands.pose);
             }
         }
         if (g != interaction::Gesture::Carry)
             if (auto held = capture.find(id)) {
                 layout.carried.clear();
-                if (layout.binding(held->instance.workspaceId, world.get()))
+                if (layout.homeOf(held->instance, world.get()))
                     layout.mount(held->instance, world.get(), hands.pose);
             }
         refresh();
@@ -2382,7 +2430,7 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
         typing = false;
         keys.clear();
         smoothIntent = {};
-        if (layout.binding(e->instance.workspaceId, world.get()))
+        if (layout.homeOf(e->instance, world.get()))
             layout.pull(e->instance, world.get());
         auto g = event.button == config["input"]["carry_button"].get<uint32_t>() ? interaction::Gesture::Carry
                                                                                  : interaction::Gesture::CornerResize;
@@ -3080,7 +3128,7 @@ void Runtime::action(interaction::Action a) {
             if (temporary) {
                 hands.end();
                 layout.carried.clear();
-                if (layout.binding(e->instance.workspaceId, world.get()))
+                if (layout.homeOf(e->instance, world.get()))
                     layout.mount(e->instance, world.get(), hands.pose);
             }
         } else {
@@ -3096,7 +3144,7 @@ void Runtime::action(interaction::Action a) {
                     hands.pose = hands.start = next;
                     hands.grabYaw = camera.yaw;
                     hands.offset = next.right() * x + next.up() * y;
-                } else if (layout.binding(e->instance.workspaceId, world.get()))
+                } else if (layout.homeOf(e->instance, world.get()))
                     layout.mount(e->instance, world.get(), next);
             }
         }
@@ -3723,7 +3771,7 @@ void Runtime::toolsTick() {
                                                             monitor->m_size.y);
                     resizeClient(*e, next, width, height);
                 }
-                if (layout.binding(e->instance.workspaceId, world.get()))
+                if (layout.homeOf(e->instance, world.get()))
                     layout.mount(e->instance, world.get(), next);
             } else {
                 interaction::Box b;
@@ -4347,8 +4395,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                 throw;
             }
         }
-        if (method == "surface.return")
-            layout.release(e->instance, world.get());
+        if (method == "surface.return") // back to its wall: natively home again, tiled
+            moveWindow(e->window.lock(), layout.release(e->instance, world.get()), true);
         refresh();
         publish();
         ipc->notify("mounts.changed", {{"mounts", layout.state(world.get())}});

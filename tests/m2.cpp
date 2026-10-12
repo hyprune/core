@@ -159,6 +159,8 @@ int main(int argc, char **argv) {
         rejects([&] { layout.bind(12, w->id, "sun-court", w.get()); });
         surfaces::Instance terminal{"terminal", "kitty", "M2 terminal", 10};
         layout.pull(terminal, w.get());
+        check(layout.leaving(terminal) && layout.homes.at(terminal.id) == 10, "pulled home window not leaving");
+        terminal.workspaceId = layout.roomWorkspace; // core moves it natively into the room
         sim::Camera camera;
         auto plane = layout.locate(terminal, w.get(), camera, 1600, 900);
         check(plane.has_value() && !surfaces::overlaps(*plane, w->collision), "carry collision");
@@ -200,6 +202,10 @@ int main(int argc, char **argv) {
         restored = surfaces::Layout{};
         restored.restore(saved);
         terminal.id = "relaunched";
+        auto onHome = terminal;
+        onHome.workspaceId = 10; // relaunched on its home workspace: a tiled window on the wall
+        check(!restored.locate(onHome, w.get(), camera, 1600, 900) && !restored.pulled(onHome, w.get()),
+              "durable rule pulled a home workspace window");
         plane = restored.locate(terminal, w.get(), camera, 1600, 900);
         check(plane && std::abs(plane->center.x + 2.7f) < .001f, "placement relaunch");
         surfaces::Layout custom;
@@ -226,11 +232,13 @@ int main(int argc, char **argv) {
         check(recovered && !surfaces::overlaps(*recovered, w->collision), "editor geometry left stale pose cache");
         w->collision = std::move(triangles);
         custom.invalidateCollision();
-        custom.pull(terminal, w.get());
-        auto pulled = custom.locate(terminal, w.get(), camera, 1600, 900);
+        auto homeTerminal = terminal; // a copy still on its home workspace, pulled off the wall
+        homeTerminal.workspaceId = 10;
+        custom.pull(homeTerminal, w.get());
+        auto pulled = custom.locate(homeTerminal, w.get(), camera, 1600, 900);
         check(pulled && length(pulled->center - mounted->center) > 1, "saved custom pose overrode hand pull");
-        custom.recall(std::span(&terminal, 1));
-        auto recalled = custom.locate(terminal, w.get(), camera, 1600, 900);
+        custom.recall(std::span(&homeTerminal, 1));
+        auto recalled = custom.locate(homeTerminal, w.get(), camera, 1600, 900);
         check(recalled && length(recalled->center - mounted->center) > 1, "saved custom pose overrode recall");
         durable["placements"][0]["pose"]["rotation"] = {0, 0, 0, 0};
         rejects([&] { custom.restore(durable); });
