@@ -151,11 +151,6 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   `path.unwalkable`, `world.library.missing`, `object.protected`. Older sessions keep
   the 0.22 shapes (no `npcs`, character fields stripped, `path`/`activity`/`seat`
   null, `interact` reads `click`).
-
-### Changes without a protocol bump
-
-These are wire-compatible behavior changes that integrators may notice:
-
 - **0.24** Live machine state (RFC-0013 amendment). No new grant. `objects.catalog`
   entries gain `machine`: `null`, or the object's declared machine inputs as authored
   `{primary, inputs: [{id, type, label, explain, default?, values?, min?, max?, maxLength?,
@@ -167,6 +162,11 @@ These are wire-compatible behavior changes that integrators may notice:
   (draft): a change restarts the running averages fed by that source. The source helper's
   control channel (`sources.sock` beside core's socket: status, test, restart, restart-all,
   reload; same user only) is local and not part of IPC.
+
+### Changes without a protocol bump
+
+These are wire-compatible behavior changes that integrators may notice:
+
 - **0.22** Object catalog and user placements (RFC-0011 P1). New grant
   `objects.control` (requestable from 0.22). New required state key `objects
   {catalogRevision,instances[<=512],pocket[<=16],usage,limits}`: this world's authored
