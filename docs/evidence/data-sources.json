@@ -1,0 +1,134 @@
+{
+  "nestedOnly": true,
+  "world": "com.hyprune.lumen-reach",
+  "library": "com.hyprune.starter@0.2.0",
+  "checks": [
+    {
+      "name": "IPC 0.24: the catalog declares the gauge inputs; live lists the placed gauge before any data",
+      "evidence": {
+        "machine": {
+          "default": 0,
+          "explain": "The liquid height, 0 (empty) to 100 (full); the liquid sloshes as it settles.",
+          "id": "value",
+          "label": "Value",
+          "max": 100,
+          "min": 0,
+          "type": "number"
+        },
+        "live": {
+          "id": "u-e33192",
+          "source": "com.hyprune.sources.u-e33192",
+          "status": null
+        }
+      }
+    },
+    {
+      "name": "the helper runs idle without sources.json, connected, on its control socket",
+      "evidence": {
+        "config": "sources.json",
+        "limits": {
+          "intervalS": [
+            1,
+            86400
+          ],
+          "devIntervalS": 1,
+          "timeoutS": [
+            1,
+            60
+          ]
+        }
+      }
+    },
+    {
+      "name": "Test runs the exact argv through the helper and shows its JSON; nothing is published",
+      "evidence": {
+        "argv": [
+          "--label",
+          "CPU",
+          "--period",
+          "2"
+        ],
+        "values": {
+          "value": 78.7,
+          "display": "79%",
+          "label": "CPU",
+          "level": "warn"
+        },
+        "durationMs": 40
+      }
+    },
+    {
+      "name": "Save writes the entry (0600, atomic) and the helper reloads at once",
+      "evidence": {
+        "sources": [
+          {
+            "id": "u-e33192",
+            "kind": "command",
+            "argv": [
+              "gauge-sim.py",
+              "--label",
+              "CPU",
+              "--period",
+              "2"
+            ],
+            "intervalS": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "values arrive in live without a world reload: the gauge shows the script",
+      "evidence": {
+        "live": {
+          "average": 0.0,
+          "display": "17%",
+          "label": "CPU",
+          "level": "ok",
+          "value": 16.6
+        },
+        "worldLoads": 1
+      }
+    },
+    {
+      "name": "editing the interval changes the run cadence (1 s -> 4 s), no restart",
+      "evidence": {
+        "meanGapS": {
+          "1": 1.04,
+          "4": 4.04
+        }
+      }
+    },
+    {
+      "name": "Restart re-runs the command at once; Reset average restarts the running average",
+      "evidence": {
+        "runAfterMs": 41,
+        "resets": 1,
+        "ring": {
+          "level": 0.3061688342345965,
+          "target": 0.306,
+          "tilt": 0.0
+        },
+        "value": 30.6
+      }
+    },
+    {
+      "name": "Remove deletes the entry and the source is withdrawn (the gauge falls back to its defaults)",
+      "evidence": {
+        "live": {
+          "condition": "missing",
+          "key": "value",
+          "publishedAt": null,
+          "raw": null,
+          "source": "com.hyprune.sources.u-e33192",
+          "value": 0
+        }
+      }
+    },
+    {
+      "name": "no world reload anywhere",
+      "evidence": {
+        "worldLoads": 1
+      }
+    }
+  ]
+}
