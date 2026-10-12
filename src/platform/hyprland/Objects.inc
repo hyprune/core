@@ -116,6 +116,7 @@ void Runtime::catalogTick() {
             // Validation waits for a 1 s quiet period (an object being copied in).
             catalogDirty = true;
             catalogQuiet = now + std::chrono::seconds(1);
+    auto section = timed("catalog");
         }
     }
     if (catalogScan.valid() && catalogScan.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
@@ -321,6 +322,7 @@ void Runtime::objectsSync() {
     for (size_t k = 0; k < authoredInstances; ++k) {
         auto &inst = world->objectInstances[k];
         ObjectInfo info;
+    auto section = timed("objects.sync");
         info.id = inst.id;
         info.source = "authored";
         info.ref = "package/" + world->objectAssets[inst.asset].id;
@@ -484,9 +486,12 @@ void Runtime::objectsTick() {
             break;
         }
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
-    if (!renderer.objectAssetsPending())
-        renderer.stageObjectAssets();
-    renderer.continueObjectAssets();
+    {
+        auto section = timed("objects.upload");
+        if (!renderer.objectAssetsPending())
+            renderer.stageObjectAssets();
+        renderer.continueObjectAssets();
+    }
     if (objectsDirty)
         objectsSync();
 }
@@ -552,6 +557,7 @@ std::optional<std::string> Runtime::budgetRefusal(const world::CatalogEntry &e, 
 // player, upright; floor objects drop to the floor under the aim point. Surface
 // (Secondary): on the aimed surface, if the object may sit on that kind of surface.
 // Either way the bounds touch the surface (asset conventions put the origin there).
+                auto section = timed("objects.merge");
 std::optional<interaction::Transform> Runtime::placeAhead(const world::CatalogEntry &e, int asset, bool surface,
                                                           float *distance, std::string *why) {
     if (!world || asset < 0)
@@ -704,6 +710,7 @@ void Runtime::objectGhostDraw(interaction::GizmoFrame &frame, const interaction:
                     auto kx = q(x), ky = q(y);
                     if (ky < kx)
                         std::swap(kx, ky), std::swap(x, y);
+    auto section = timed("tools.ghost");
                     std::array<int64_t, 6> k{kx[0], kx[1], kx[2], ky[0], ky[1], ky[2]};
                     normals[k].push_back(nn);
                     ends[k] = {x, y};

@@ -289,7 +289,7 @@ def run(args):
     if args.integration: environment['HYPRUNE_WORKSPACE_LOCATIONS']=str(STATE/'locations.json')
     config=str(HERE/'hyprland.lua')
     if os.environ.get('HYPRUNE_NESTED_4K')=='1':
-        config=str(STATE/'4k-hyprland.lua');pathlib.Path(config).write_text((HERE/'hyprland.lua').read_text().replace('1920x1080@60','3840x2160@60'))
+        config=str(STATE/'4k-hyprland.lua');pathlib.Path(config).write_text((HERE/'hyprland.lua').read_text().replace('1920x1080@60','3840x2160@60').replace('scale = 1','scale = '+os.environ.get('HYPRUNE_NESTED_4K_SCALE','1')))
     if args.live:
         config=str(STATE/'live-hyprland.lua')
         pathlib.Path(config).write_text((HERE/'hyprland.lua').read_text().replace('general = {','input = { resolve_binds_by_sym = true },\n    general = {')+'\nhl.bind("SUPER + SHIFT + N",hl.dsp.exec_cmd("true"),{description="Keep this binding"})\nhl.bind("SUPER + SHIFT + H",hl.dsp.exec_cmd("true"),{description="Keep H binding"})\n')
@@ -298,7 +298,7 @@ def run(args):
         Path=pathlib.Path
         Path(config).write_text((HERE/'hyprland.lua').read_text().replace('general = {','input = { resolve_binds_by_sym = true },\n    general = {')+ '\nhl.bind("SUPER + TAB", hl.dsp.exec_cmd("touch '+str(STATE/'native-super-tab')+'"))\nhl.bind("SUPER + F9", hl.dsp.exec_cmd("touch '+str(STATE/'native-unrelated')+'"))\n')
     if os.environ.get('HYPRUNE_NESTED_4K')=='1':
-        text=pathlib.Path(config).read_text().replace('1920x1080@60','3840x2160@60');config=str(STATE/'4k-hyprland.lua');pathlib.Path(config).write_text(text)
+        text=pathlib.Path(config).read_text().replace('1920x1080@60','3840x2160@60').replace('scale = 1','scale = '+os.environ.get('HYPRUNE_NESTED_4K_SCALE','1'));config=str(STATE/'4k-hyprland.lua');pathlib.Path(config).write_text(text)
     if os.environ.get('HYPRUNE_NESTED_SMALL')=='1':
         text=pathlib.Path(config).read_text().replace('1920x1080@60','640x480@60');config=str(STATE/'small-hyprland.lua');pathlib.Path(config).write_text(text)
     prepare_lock.close()

@@ -31,7 +31,9 @@ def run(client, children, shell_token, socketpath, archive, world):
 
     def center():
         for _ in range(4):
-            xy = list(map(float, s.ctl('cursorpos').split(','))); pointer(2560 - xy[0], 540 - xy[1]); time.sleep(.04)
+            m = next(m for m in json.loads(s.ctl('-j', 'monitors')) if m['name'] == 'HEADLESS-1')
+            cx, cy = m['x'] + m['width'] / m['scale'] / 2, m['y'] + m['height'] / m['scale'] / 2
+            xy = list(map(float, s.ctl('cursorpos').split(','))); pointer(cx - xy[0], cy - xy[1]); time.sleep(.04)
     center()
     sub = client.call('state.subscribe', {'topics': ['state']})['subscriptionId']
     state = lambda: client.call('state.snapshot', {'subscriptionId': sub})['snapshot']['state']
@@ -115,7 +117,8 @@ def run(client, children, shell_token, socketpath, archive, world):
     timeline, t0 = [], [0.]
 
     def mark(text):
-        timeline.append({'time': round(time.monotonic() - t0[0], 2), 'action': text}); print('demo', timeline[-1], flush=True)
+        timeline.append({'time': round(time.monotonic() - t0[0], 2), 'monotonicMs': round(time.monotonic() * 1000, 1), 'action': text})
+        print('demo', timeline[-1], flush=True)
 
     def add(ref, name):
         director(); time.sleep(.4)
@@ -131,7 +134,8 @@ def run(client, children, shell_token, socketpath, archive, world):
     camera([-10, 3.2, 14], .35, -.12)
     time.sleep(1.5)
     log = open(s.STATE / 'recorder.log', 'w')
-    recorder = s.envrun('wf-recorder', '-o', 'HEADLESS-1', '-r', '30', '-D', '--no-dmabuf', '-c', 'h264_nvenc', '-x', 'bgr0',
+    # CATALOG_RECORD=0 runs the same script without the recorder (its load, for frame-time runs).
+    recorder = s.envrun('true') if os.environ.get('CATALOG_RECORD') == '0' else s.envrun('wf-recorder', '-o', 'HEADLESS-1', '-r', os.environ.get('CATALOG_FPS', '30'), '-D', '--no-dmabuf', '-c', 'h264_nvenc', '-x', 'bgr0',
                         '-p', 'preset=p4', '-p', 'rc=constqp', '-p', 'qp=16', '-f', str(out), stdout=log, stderr=subprocess.STDOUT)
     children.append(recorder); time.sleep(1.0); t0[0] = time.monotonic()
     still = None

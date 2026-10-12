@@ -220,6 +220,41 @@ struct Runtime {
     void gizmoDraw();
     Json gizmoDiagnostics();
     void projectCursor();
+    // Frame-time diagnostics (HYPRUNE_FRAME_LOG=<file>, development): JSON lines per
+    // presentation, tick (with section times), renderer draw and IPC method. Buffered in
+    // memory and written at the end of a tick, never in the render pass.
+    struct FrameLog {
+        std::FILE *file = nullptr;
+        std::map<std::string, double> sections;
+        std::vector<std::string> pending;
+        std::vector<std::string> marks;
+        double renderStart = 0;
+        static double now() {
+            return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        }
+        void line(const Json &j) {
+            if (file && pending.size() < 100000)
+                pending.push_back(j.dump());
+        }
+        void flush() {
+            if (!file)
+                return;
+            for (auto &l : pending)
+                std::fputs((l + "\n").c_str(), file);
+            std::fflush(file);
+            pending.clear();
+        }
+    } frameLog;
+    struct Timed {
+        FrameLog *log;
+        std::string name;
+        double start;
+        ~Timed() {
+            if (log && log->file)
+                log->sections[name] += FrameLog::now() - start;
+        }
+    };
+    Timed timed(std::string name) { return {frameLog.file ? &frameLog : nullptr, std::move(name), frameLog.file ? FrameLog::now() : 0}; }
     // RFC-0011 P1 objects (Objects.inc): the catalog (world package, libraries, user
     // folder), user placements and authored overrides as world object instances, pocket
     // items for tool 5 and the IPC 0.22 methods.
@@ -713,6 +748,7 @@ void motion(void *self, const Vector2D &delta) {
         runtime->deferInput([] { runtime->acceptCapture("MouseMove", runtime->modifiers, true); });
     if (runtime && runtime->active) {
         auto now =
+    auto section = runtime ? runtime->timed("input.motion") : Runtime::Timed{nullptr, "", 0};
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
                 .count();
         runtime->inputEvent(runtime->inputMode(), "MouseMove", runtime->modifiers, true, now, float(delta.x));
@@ -3863,6 +3899,7 @@ void Runtime::toolsTick() {
         layout.invalidateCollision();
         world->collisionIndex.rebuild(world->collision);
         world->visualTriangles.clear();
+        auto rebuild = timed("tools.rebuild");
         for (const auto &mesh : world->meshes) {
             auto it = committed.find(mesh.node);
             auto matrix = it == committed.end() ? Mat4::identity() : it->second;
@@ -3994,6 +4031,9 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (renderPass.active())
             throw ipc::Error(-32004, "graphics update during render");
         if (method == "graphics.set") {
+    auto section = timed("method " + method);
+    if (frameLog.file && !method.starts_with("_"))
+        frameLog.marks.push_back(method);
             if (params.size() != 1 || !params.contains("patch") || !params["patch"].is_object())
                 throw ipc::Error(-32602, "graphics patch required");
             if (!ipc::protocol::atLeast(protocol, "0.10"))
@@ -4592,7 +4632,10 @@ void Runtime::tick() {
     }
     if (renderPass.active())
         throw std::runtime_error("deferred work inside compositor render pass");
-    ipc->poll();
+    {
+        auto section = timed("ipc");
+        ipc->poll();
+    }
     if (auto next = graphicsFile.poll())
         applyGraphics(*next);
     if (auto next = playerFile.poll())
@@ -4601,8 +4644,11 @@ void Runtime::tick() {
         applyInput(*next);
     renderer.debug = debug;
     replayBeforeTick();
-    for (auto &a : input.tick(inputClock(), inputMode()))
-        action(a);
+    {
+        auto section = timed("actions");
+        for (auto &a : input.tick(inputClock(), inputMode()))
+            action(a);
+    }
     if (!ipc->healthy()) {
         if (active)
             exit();
@@ -4624,10 +4670,36 @@ void Runtime::tick() {
     }
     // Observe workspace changes before committing a ready asynchronous load.
     // This also lets a newer location cancel an in-flight mapping request.
-    safe([&] { workspaceLocation(); });
+    {
+        auto section = timed("workspace");
+        safe([&] { workspaceLocation(); });
+    }
     finishLoad();
-    objectsTick();
+    {
+        auto section = timed("objects");
+        objectsTick();
+    }
     if (locked() && active)
+    // Frame log: this tick's sections, written when it ends (every return path).
+    struct TickLog {
+        Runtime *r;
+        double start = FrameLog::now();
+        ~TickLog() {
+            if (!r->frameLog.file)
+                return;
+            Json sections = Json::object();
+            for (auto &[name, ms] : r->frameLog.sections)
+                if (ms >= .05)
+                    sections[name] = std::round(ms * 100) / 100;
+            Json j{{"kind", "tick"}, {"t", start}, {"ms", FrameLog::now() - start}, {"sections", sections}};
+            if (!r->frameLog.marks.empty())
+                j["marks"] = r->frameLog.marks;
+            r->frameLog.line(j);
+            r->frameLog.sections.clear();
+            r->frameLog.marks.clear();
+            r->frameLog.flush();
+        }
+    } tickLog{this};
         exit();
     if (auto m = monitor.lock(); m && presentedMonitor != monitor) {
         presentedListener = m->m_events.presented.listen([](Time::steady_tp) {
@@ -4734,6 +4806,7 @@ void Runtime::tick() {
         smoothIntent.forward += (intent.forward - smoothIntent.forward) * mb;
         smoothIntent.right += (intent.right - smoothIntent.right) * mb;
         smoothIntent.up += (intent.up - smoothIntent.up) * mb;
+        auto section = timed("control");
         intent.forward = climbing.active() ? intent.forward : smoothIntent.forward;
         intent.right = climbing.active() ? intent.right : smoothIntent.right;
         intent.up = smoothIntent.up;
@@ -4784,21 +4857,43 @@ void Runtime::tick() {
             smoothIntent = {};
             cancelGrab();
         }
-        motionTick(dt);
-        npcTick(dt);
-        machinesTick(dt);
-        handTick(dt);
-        toolsTick();
-        reticleTick();
+        {
+            auto section = timed("motion");
+            motionTick(dt);
+        }
+        {
+            auto section = timed("npc");
+            npcTick(dt);
+        }
+        {
+            auto section = timed("machines");
+            machinesTick(dt);
+        }
+        {
+            auto section = timed("hands");
+            handTick(dt);
+        }
+        {
+            auto section = timed("tools");
+            toolsTick();
+        }
+        {
+            auto section = timed("reticle");
+            reticleTick();
+        }
         auto captureStarted = std::chrono::steady_clock::now();
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         captureGPU.begin();
-        refresh();
+        {
+            auto section = timed("refresh");
+            refresh();
+        }
         captureGPU.end();
         renderer.captureMs =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - captureStarted).count();
         if (fullscreen.phase == 1 || fullscreen.phase == 3)
             transitionTick(0);
+        auto movementSection = timed("movement");
         for (auto &entry : capture.entries)
             if (typing && entry.visible && !entry.parentKeyboard && !entry.parentId.empty() &&
                 entry.parentId == focused && Desktop::focusState()->window() == entry.window) {
@@ -4824,6 +4919,7 @@ void Runtime::tick() {
         renderer.pointerX = layerCursor ? -1.f : (typing || editor.activeHandle >= 0) ? pointerX : .5f;
         renderer.pointerY = layerCursor ? -1.f : (typing || editor.activeHandle >= 0) ? pointerY : .5f;
         {
+        { auto done = std::move(movementSection); }
             auto &r = renderer.reticle;
             auto &player = config["player"];
             static const std::map<std::string, int> states{
@@ -4877,7 +4973,13 @@ void Runtime::tick() {
         animationFrames = !loading && monitor->m_enabled && monitor->m_dpmsStatus &&
                           renderer.animationVisible(camera, float(monitor->m_pixelSize.x) /
                                                                 std::max(1.f, float(monitor->m_pixelSize.y)));
-        if (frameForced() || frameKey(frameSurfaces()) != renderedKey) {
+        auto keyStart = frameLog.file ? FrameLog::now() : 0;
+        bool changedFrame = frameForced() || frameKey(frameSurfaces()) != renderedKey;
+        if (frameLog.file)
+            frameLog.sections["framekey"] += FrameLog::now() - keyStart;
+        if (changedFrame) {
+            if (frameLog.file)
+                frameLog.marks.push_back("frame");
             g_pHyprRenderer->damageMonitor(monitor.lock());
             monitor->scheduleFrame();
         }
@@ -4886,14 +4988,23 @@ void Runtime::tick() {
     renderer.updateMs =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - updateStarted).count();
     cursor();
-    questsTick();
+    {
+        auto section = timed("quests");
+        questsTick();
+    }
     auto ipcStarted = std::chrono::steady_clock::now();
     if (ipcStarted >= nextPublish || !control.events.empty() || !layout.events.empty()) {
         nextPublish = ipcStarted + std::chrono::milliseconds(33);
         publish();
     }
-    offloadTick();
-    publishHUD();
+    {
+        auto section = timed("offload");
+        offloadTick();
+    }
+    {
+        auto section = timed("hud");
+        publishHUD();
+    }
     ipc->poll();
     renderer.gpuCaptureMs = captureGPU.available ? captureGPU.milliseconds : -1;
     renderer.ipcMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ipcStarted).count();
@@ -4947,6 +5058,7 @@ struct FrameHash {
         requires std::is_arithmetic_v<T>
     FrameHash &operator()(T v) {
         bytes(&v, sizeof v);
+        auto section = timed("publish");
         return *this;
     }
     FrameHash &operator()(Vec3 v) { return (*this)(v.x)(v.y)(v.z); }
@@ -5017,6 +5129,8 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     for (auto &f : capture.workspaces)
         h(f.key);
     h(typing && !layerCursor)(r.debug)(r.showAreaMarkers)(r.showInteractionHints)(r.useDistance)(r.renderScale);
+    if (frameLog.file)
+        frameLog.line({{"kind", "present"}, {"t", FrameLog::now()}});
     h(r.logicalScale)(r.pointerX)(r.pointerY)(r.scopeVignette)(r.materialDetails)(r.effects)(r.worldOnly)(r.font);
     h(r.waypoint)(r.route)(r.toolPrompt)(r.overlayStyle)(r.graphics)(r.profile);
     h(markers.frameHash(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -5123,8 +5237,12 @@ Json luaValue(lua_State *L, int index, int depth = 0) {
                 if (i < 1 || i > 5)
                     throw std::runtime_error("array index out of range");
                 result[i - 1] = v;
+            double drawStart = runtime->frameLog.file ? Runtime::FrameLog::now() : 0;
             } else {
                 if (lua_type(L, -2) != LUA_TSTRING)
+            if (runtime->frameLog.file) // buffered only; written by the next tick
+                runtime->frameLog.line({{"kind", "draw"}, {"t", drawStart}, {"ms", Runtime::FrameLog::now() - drawStart},
+                                        {"new", r.frames != frames}});
                     throw std::runtime_error("config key must be string");
                 result[lua_tostring(L, -2)] = v;
             }
@@ -5251,6 +5369,7 @@ int luaCamera(lua_State *state) {
              float aspect = m ? float(m->m_pixelSize.x) / std::max(1.f, float(m->m_pixelSize.y)) : 16 / 9.f;
              return Json{{"state", runtime->npcState},
                          {"forcesFrames", runtime->animationFrames &&
+    auto section = runtime->timed("lua.camera"); // development diagnostics (nested harness)
                                               runtime->renderer.npcAnimationVisible(runtime->camera, aspect)},
                          {"drawn", runtime->renderer.npcsDrawn},
                          {"agents", agents}};
@@ -5482,6 +5601,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     methods.insert({{"capture.annotate", "shell.control"},
                     {"workspace.bind", "world.control"},
                     {"workspace.focus", "surface.control"},
+    if (auto file = getenv("HYPRUNE_FRAME_LOG"))
+        runtime->frameLog.file = std::fopen(file, "w");
                     {"workspace.unfocus", "surface.control"},
                     {"surface.pull", "surface.control"},
                     {"surface.place", "surface.control"},
@@ -5693,6 +5814,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     runtime->inputNames.erase(it);
                 }
                 if (key.empty())
+            if (runtime->frameLog.file && stage == RENDER_PRE)
+                runtime->frameLog.renderStart = Runtime::FrameLog::now();
+            if (runtime->frameLog.file && stage == RENDER_POST && runtime->frameLog.renderStart > 0) // the compositor's whole frame
+                runtime->frameLog.line({{"kind", "render"}, {"t", runtime->frameLog.renderStart},
+                                        {"ms", Runtime::FrameLog::now() - runtime->frameLog.renderStart}});
                     return;
                 if (runtime->session.playing && key != "F12") { info.cancelled=true; return; }
                 unsigned bit = sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R       ? 64
