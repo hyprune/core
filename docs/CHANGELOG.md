@@ -190,6 +190,22 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Window placement behaviour (no wire change)
+
+RFC-0005 "Amendment: reachable spawns, home windows and world switches":
+
+- Only the room workspace (`windows.world_workspace`, default 20) floats. Windows on a
+  home workspace stay tiled windows of that workspace and appear on its wall, however
+  they got there (opened there, opened while focused into the wall, or moved there).
+  The earlier rule that later home arrivals take tool mounts is withdrawn.
+- A window taken into the world (pull, carry off a wall, place, mount, pocket) moves
+  natively to the room workspace and floats there. `surface.return` and dropping it on
+  a wall move it back to that wall's workspace and tile it.
+- Durable placement rules restore windows on the room workspace only; a home
+  workspace's own windows are never pulled out by a rule.
+- New room windows spawn ahead of the player on reachable floor (unchanged).
+- `mounts.instances` lists a taken window with `workspaceId` 20 and its home area.
+
 ## World format versions
 
 - **0.1** Initial manifest, glTF scene, explicit collision, spawns, PNG lightmaps.
