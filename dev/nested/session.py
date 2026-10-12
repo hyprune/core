@@ -61,6 +61,16 @@ def library_of(archive,fallback):
                 j=json.load(t.extractfile(m));return f"{j['id']}@{j['version']}"
     return fallback
 
+def library_object_count(archive,fallback):
+    """How many objects a library .tar.zst's library.json lists (fallback if the archive is missing)."""
+    import tarfile
+    if not pathlib.Path(archive).is_file():return fallback
+    with tarfile.open(archive,'r:zst') as t:
+        for m in t.getmembers():
+            if m.name.count('/')==1 and m.name.endswith('/library.json'):
+                return len(json.load(t.extractfile(m))['objects'])
+    return fallback
+
 def ctl(*args):
     return subprocess.check_output([str(HERE/'ctl.py'),'hyprctl',*args],text=True).strip()
 def envrun(*args,**kwargs):

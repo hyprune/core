@@ -29,6 +29,7 @@ from m2 import wait, keys
 WORLD = 'com.hyprune.lumen-reach'
 ARCHIVE = pathlib.Path(os.environ.get('HYPRUNE_CATALOG_LIBRARY', str(pathlib.Path.home() / 'objects-p1/library-dry-run/com.hyprune.starter-0.1.0.tar.zst')))
 LIBRARY = s.library_of(ARCHIVE, 'com.hyprune.starter@0.1.0')  # the archive's own id@version
+OBJECTS = s.library_object_count(ARCHIVE, 11)  # the archive's own object count
 VERSION = LIBRARY.split('@')[1]
 RACK = f'library/{LIBRARY}/server-rack'
 ARMILLARY = 'sun-court-armillary'
@@ -189,7 +190,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     libs = client.call('libraries.list', {})['libraries']
     check('the starter library installs (and again, idempotently) and lists ready',
           installed['id'] == 'com.hyprune.starter' and installed['version'] == VERSION and again['id'] == installed['id'] and
-          libs and libs[0]['state'] == 'ready' and libs[0]['objects'] == 11 and libs[0]['root'] == 'user' and
+          libs and libs[0]['state'] == 'ready' and libs[0]['objects'] == OBJECTS and libs[0]['root'] == 'user' and
           (s.STATE / f'datahome/hyprune/libraries/{LIBRARY}/library.json').is_file() and
           any('already installed' in n['message'] for n in notices('library.installed')),
           {'install': installed, 'library': libs[0]})
