@@ -485,6 +485,7 @@ void Runtime::objectsWorldLoaded() {
     authoredInstances = world->objectInstances.size();
     packageAssets = world->objectAssets.size();
     mergedAssets.clear();
+    ++worldLoads;
     sceneCollision = world->collision.size();
     for (auto &inst : world->objectInstances)
         if (inst.collisionCount)

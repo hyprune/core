@@ -90,6 +90,7 @@ struct Runtime {
     offload::ObjectSender offloadObjects;
     std::vector<offload::AssetSource> mergedAssets;
     size_t packageAssets = 0;
+    uint64_t worldLoads = 0; // a reload of the same world merges catalog assets anew: new worker
     std::string offloadLocalReason() const;
     Json offloadRequest, offloadPolicy = Json::object(), offloadChanges = Json::object();
     uint64_t offloadGeneration = 0;
@@ -1299,7 +1300,8 @@ void Runtime::offloadTick() {
         if (std::filesystem::is_directory(root, error))
             roots.push_back(root.string());
     Json request = {{"enabled", enabled}, {"graphics", g}, {"compositorPci", compositorPci()},
-                    {"worldPath", world ? (installed / world->id).string() : ""}, {"objectRoots", roots},
+                    {"worldPath", world ? (installed / world->id).string() : ""}, {"worldLoad", worldLoads},
+                    {"objectRoots", roots},
                     {"width", monitor ? int(monitor->m_pixelSize.x) : 0},
                     {"height", monitor ? int(monitor->m_pixelSize.y) : 0}};
     if (request != offloadRequest) {
