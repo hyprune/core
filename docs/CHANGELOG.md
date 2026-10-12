@@ -231,12 +231,21 @@ RFC-0005 "Amendment: reachable spawns, home windows and world switches":
   instanced, culls by swept bounds, lights `probe` assets with the runtime sun plus a
   per-instance ambient probe from the world's baked light, renders on demand only
   while an animated object is visible in the active world view, and holds the t = 0
-  pose under `graphics.reduced_motion`. Worlds with objects use the in-process
-  renderer (offload reports "world objects use local renderer"). No IPC change.
+  pose under `graphics.reduced_motion`. Until 2026-10-12, worlds with objects used
+  the in-process renderer (offload reported "world objects use local renderer").
+  No IPC change.
   Correction (2026-10-11): an object shares the visibility of the static geometry
   around it (the areas owning scene meshes its swept sphere overlaps; none: frustum
   only), not the first area containing its centre, which in derived regions is a
   camera cell visible from nowhere. `hyprune-world-check` reports `regions`.
+  Offload (2026-10-12): the optional offload renderer (RFC-0009) draws world objects
+  too: authored instances, catalog placements, hidden ones and gizmo edits, at the
+  same animation clock with the same instanced path and lighting, and edited
+  scene-node transforms. `performance.reason` no longer reports "world objects use
+  local renderer" or "edited world transforms use local renderer"; the
+  environment-gated machines and NPC prototypes keep the local renderer ("machines
+  prototype uses local renderer", "NPC prototype uses local renderer"). No IPC
+  change: `reason` is free text.
 
 Older packages remain accepted by core at every format version above.
 

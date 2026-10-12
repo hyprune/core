@@ -158,6 +158,34 @@ releases its monitoring handle, permitting normal driver power management.
 Offload is optional and defaults off. It needs the `hyprune-renderer` binary
 (built with Vulkan/GBM development packages), compatible NVIDIA GLES/Vulkan
 LINEAR DMA-BUF interop, and Linux x86-64 Landlock ABI 3 or newer. Unsupported
-systems continue using the prepared in-process renderer. Edited world-node
-transforms also select local rendering in phase 1. No cursor/focus/workspace
+systems continue using the prepared in-process renderer. No cursor/focus/workspace
 transition belongs to the renderer switch.
+
+### World objects and edits in the offload worker
+
+The worker loads the same package, so it has the authored object assets and
+instances. Everything that draws differently from the package travels with the
+poses, as a delta against what the worker already has (`src/offload/Objects.hpp`):
+
+| State | Sent |
+| --- | --- |
+| World-animation clock | Every pose (the plugin's clock, so both renderers draw the same pose) |
+| Output scale | Every pose (outline widths) |
+| Catalog assets merged after load | Once, by object directory and manifest; the worker decodes them on a thread and uploads between frames |
+| Instances (user placements, gizmo edits, relit probes) | The count, and the records of changed instances only |
+| Hidden instances | The set with its own revision, only when it changes |
+| Edited scene-node transforms | Changed and removed nodes |
+
+A delta is committed to the plugin's mirror only once its pose was written, so
+transport backpressure never drops a change; the frame reply carries the applied
+revision (`objectsRevision`) and whether assets are still loading. A new worker
+starts from the package and gets every instance in its first pose. The worker may
+read the catalog object roots that exist (Landlock, read-only); one created later
+restarts it once. The machines and NPC prototypes (environment-gated) keep the
+local renderer.
+
+`dev/nested/offload_objects.py` checks this on Lumen Reach with the clock pinned
+(`hl.plugin.hyprune.animation_clock(t)`): stills of the authored armillary, a placed
+catalog rack and armillary, a rack moved with the tool 4 gizmo while offload runs, a
+hidden authored object and an edited scene node match the in-process renderer per
+pixel. Its `perf` stage measures frame times in-process and offloaded.
