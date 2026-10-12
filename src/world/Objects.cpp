@@ -28,6 +28,93 @@ Mat4 instanceModel(Vec3 p, const std::array<float, 4> &q, float scale) {
     m.v[12] = p.x, m.v[13] = p.y, m.v[14] = p.z;
     return m;
 }
+ObjectAsset buildObjectAsset(World &w, const std::filesystem::path &root, const std::string &id, const std::string &scenePath,
+                             const std::string &formatVersion, LoadOptions options, const Json &animations,
+                             const std::string &proxy, bool unlit, size_t &memory) {
+    ObjectAsset a;
+    a.id = id;
+    const std::string label = "objectAssets " + a.id;
+    a.unlit = unlit;
+    size_t firstMaterial = w.materials.size();
+    // Same extension rules as scene.gltf for this format; never lightmapped.
+    GltfScene scene;
+    try {
+        scene = loadGltf(w, root, scenePath, formatVersion, options, Json::array(), Json::array(), proxy, memory);
+    } catch (const std::exception &e) {
+        throw std::runtime_error(label + ": " + e.what());
+    }
+    require(!scene.meshes.empty(), label + ": no rendered meshes");
+    a.meshes = std::move(scene.meshes);
+    a.nodeParents = scene.parents;
+    a.nodeNames = scene.names;
+    a.nodeOrigins = scene.origins;
+    a.materialNames = scene.materialNames;
+    a.firstMaterial = scene.materialBase;
+    a.collision = std::move(scene.collision);
+    if (a.unlit)
+        for (size_t m = firstMaterial; m < w.materials.size(); ++m)
+            w.materials[m].unlit = true;
+    std::map<unsigned, int> targets;
+    require(animations.size() <= 16, label + ": at most 16 animations");
+    for (const auto &e : animations) {
+        Animation an;
+        an.name = e.at("node").get<std::string>();
+        an.node = nodeNamed(scene.names, an.name, label);
+        require(targets.emplace(an.node, int(a.animations.size())).second,
+                label + ": two animations target node \"" + an.name + "\"");
+        auto type = e.at("type").get<std::string>();
+        require(type == "spin" || type == "orbit" || type == "bob", label + ": unknown animation type");
+        an.type = type == "spin" ? Animation::Spin : type == "orbit" ? Animation::Orbit : Animation::Bob;
+        auto axis = vec(e.at("axis"));
+        require(std::abs(length(axis) - 1) <= .001f, label + ": animation \"" + an.name + "\" axis must be a unit vector");
+        an.axis = normalized(axis);
+        bool bob = an.type == Animation::Bob;
+        require(bob ? e.contains("amplitude") && !e.contains("pivot") : e.contains("pivot") && !e.contains("amplitude"),
+                label + ": " + type + " animation \"" + an.name + "\" " +
+                    (bob ? "needs an amplitude and takes no pivot" : "needs a pivot and takes no amplitude"));
+        if (bob) {
+            an.amplitude = e.at("amplitude").get<float>();
+            require(an.amplitude > 0 && an.amplitude <= 10, label + ": bob amplitude must be in (0, 10] m");
+        } else
+            an.pivot = vec(e.at("pivot"));
+        an.period = e.at("period").get<float>();
+        require(an.period >= .5f && an.period <= 3600, label + ": animation period must be 0.5-3600 s");
+        an.phase = e.value("phase", 0.f);
+        require(an.phase >= 0 && an.phase < 1, label + ": animation phase must be in [0, 1)");
+        an.origin = scene.origins[an.node];
+        require(std::isfinite(an.origin.x + an.origin.y + an.origin.z), label + ": nonfinite node transform");
+        a.animations.push_back(std::move(an));
+    }
+    for (auto &[node, index] : targets)
+        for (int p = a.nodeParents[node]; p >= 0; p = a.nodeParents[p])
+            require(!targets.contains(unsigned(p)), label + ": animation \"" + a.animations[index].name +
+                                                        "\" is inside animated node \"" + scene.names[p] + "\"");
+    a.nodeAnimation.assign(a.nodeParents.size(), -1);
+    for (size_t n = 0; n < a.nodeParents.size(); ++n)
+        for (int i = int(n); i >= 0; i = a.nodeParents[i])
+            if (auto it = targets.find(unsigned(i)); it != targets.end()) {
+                a.nodeAnimation[n] = it->second;
+                break;
+            }
+    if (!proxy.empty())
+        require(a.animationOf(nodeNamed(scene.names, proxy, label)) < 0,
+                label + ": collision node \"" + proxy + "\" is inside an animated subtree");
+    // Swept bounds about the rest-pose box centre: every pose of every node.
+    Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
+    for (const auto &mesh : a.meshes)
+        for (const auto &v : mesh.vertices)
+            lo = {std::min(lo.x, v.position.x), std::min(lo.y, v.position.y), std::min(lo.z, v.position.z)},
+            hi = {std::max(hi.x, v.position.x), std::max(hi.y, v.position.y), std::max(hi.z, v.position.z)};
+    a.center = (lo + hi) * .5f;
+    a.low = lo, a.high = hi;
+    for (const auto &mesh : a.meshes) {
+        int i = a.animationOf(mesh.node);
+        for (const auto &v : mesh.vertices)
+            a.radius = std::max(a.radius, i < 0 ? length(v.position - a.center)
+                                                : animation::sweptDistance(a.animations[i], v.position, a.center));
+    }
+    return a;
+}
 void loadObjects(World &w, const std::filesystem::path &root, const std::string &formatVersion, LoadOptions options,
                  size_t &memory) {
     const auto &j = w.manifest;
@@ -38,96 +125,16 @@ void loadObjects(World &w, const std::filesystem::path &root, const std::string 
     require(assets.size() <= 32 && objects.size() <= 256, "at most 32 object assets and 256 objects");
     std::map<std::string, unsigned> ids;
     for (const auto &entry : assets) {
-        ObjectAsset a;
-        a.id = entry.at("id").get<std::string>();
-        const std::string label = "objectAssets " + a.id;
-        require(ids.emplace(a.id, unsigned(w.objectAssets.size())).second, "duplicate object asset id " + a.id);
+        auto id = entry.at("id").get<std::string>();
+        const std::string label = "objectAssets " + id;
+        require(ids.emplace(id, unsigned(w.objectAssets.size())).second, "duplicate object asset id " + id);
         // Reserved for shared object libraries (a later world format).
         require(!entry.contains("library"), label + ": library references are reserved for a later world format");
         require(entry.contains("scene"), label + ": scene required");
-        a.unlit = entry.value("lighting", Json::object()).value("mode", "probe") == "unlit";
         std::string proxy = entry.contains("collision") ? entry["collision"].at("node").get<std::string>() : "";
-        size_t firstMaterial = w.materials.size();
-        // Same extension rules as scene.gltf for this format; never lightmapped.
-        GltfScene scene;
-        try {
-            scene = loadGltf(w, root, entry.at("scene").get<std::string>(), formatVersion, options, Json::array(),
-                             Json::array(), proxy, memory);
-        } catch (const std::exception &e) {
-            throw std::runtime_error(label + ": " + e.what());
-        }
-        require(!scene.meshes.empty(), label + ": no rendered meshes");
-        a.meshes = std::move(scene.meshes);
-        a.nodeParents = scene.parents;
-        a.nodeNames = scene.names;
-        a.nodeOrigins = scene.origins;
-        a.materialNames = scene.materialNames;
-        a.firstMaterial = scene.materialBase;
-        a.collision = std::move(scene.collision);
-        if (a.unlit)
-            for (size_t m = firstMaterial; m < w.materials.size(); ++m)
-                w.materials[m].unlit = true;
-        std::map<unsigned, int> targets;
-        const auto animations = entry.value("animations", Json::array());
-        require(animations.size() <= 16, label + ": at most 16 animations");
-        for (const auto &e : animations) {
-            Animation an;
-            an.name = e.at("node").get<std::string>();
-            an.node = nodeNamed(scene.names, an.name, label);
-            require(targets.emplace(an.node, int(a.animations.size())).second,
-                    label + ": two animations target node \"" + an.name + "\"");
-            auto type = e.at("type").get<std::string>();
-            require(type == "spin" || type == "orbit" || type == "bob", label + ": unknown animation type");
-            an.type = type == "spin" ? Animation::Spin : type == "orbit" ? Animation::Orbit : Animation::Bob;
-            auto axis = vec(e.at("axis"));
-            require(std::abs(length(axis) - 1) <= .001f, label + ": animation \"" + an.name + "\" axis must be a unit vector");
-            an.axis = normalized(axis);
-            bool bob = an.type == Animation::Bob;
-            require(bob ? e.contains("amplitude") && !e.contains("pivot") : e.contains("pivot") && !e.contains("amplitude"),
-                    label + ": " + type + " animation \"" + an.name + "\" " +
-                        (bob ? "needs an amplitude and takes no pivot" : "needs a pivot and takes no amplitude"));
-            if (bob) {
-                an.amplitude = e.at("amplitude").get<float>();
-                require(an.amplitude > 0 && an.amplitude <= 10, label + ": bob amplitude must be in (0, 10] m");
-            } else
-                an.pivot = vec(e.at("pivot"));
-            an.period = e.at("period").get<float>();
-            require(an.period >= .5f && an.period <= 3600, label + ": animation period must be 0.5-3600 s");
-            an.phase = e.value("phase", 0.f);
-            require(an.phase >= 0 && an.phase < 1, label + ": animation phase must be in [0, 1)");
-            an.origin = scene.origins[an.node];
-            require(std::isfinite(an.origin.x + an.origin.y + an.origin.z), label + ": nonfinite node transform");
-            a.animations.push_back(std::move(an));
-        }
-        for (auto &[node, index] : targets)
-            for (int p = a.nodeParents[node]; p >= 0; p = a.nodeParents[p])
-                require(!targets.contains(unsigned(p)), label + ": animation \"" + a.animations[index].name +
-                                                            "\" is inside animated node \"" + scene.names[p] + "\"");
-        a.nodeAnimation.assign(a.nodeParents.size(), -1);
-        for (size_t n = 0; n < a.nodeParents.size(); ++n)
-            for (int i = int(n); i >= 0; i = a.nodeParents[i])
-                if (auto it = targets.find(unsigned(i)); it != targets.end()) {
-                    a.nodeAnimation[n] = it->second;
-                    break;
-                }
-        if (!proxy.empty())
-            require(a.animationOf(nodeNamed(scene.names, proxy, label)) < 0,
-                    label + ": collision node \"" + proxy + "\" is inside an animated subtree");
-        // Swept bounds about the rest-pose box centre: every pose of every node.
-        Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
-        for (const auto &mesh : a.meshes)
-            for (const auto &v : mesh.vertices)
-                lo = {std::min(lo.x, v.position.x), std::min(lo.y, v.position.y), std::min(lo.z, v.position.z)},
-                hi = {std::max(hi.x, v.position.x), std::max(hi.y, v.position.y), std::max(hi.z, v.position.z)};
-        a.center = (lo + hi) * .5f;
-        a.low = lo, a.high = hi;
-        for (const auto &mesh : a.meshes) {
-            int i = a.animationOf(mesh.node);
-            for (const auto &v : mesh.vertices)
-                a.radius = std::max(a.radius, i < 0 ? length(v.position - a.center)
-                                                    : animation::sweptDistance(a.animations[i], v.position, a.center));
-        }
-        w.objectAssets.push_back(std::move(a));
+        w.objectAssets.push_back(buildObjectAsset(w, root, id, entry.at("scene").get<std::string>(), formatVersion, options,
+                                                  entry.value("animations", Json::array()), proxy,
+                                                  entry.value("lighting", Json::object()).value("mode", "probe") == "unlit", memory));
     }
     std::set<std::string> objectIds;
     for (const auto &entry : objects) {
@@ -344,5 +351,54 @@ void lightObjects(World &w, std::optional<size_t> only) {
         o.sunVisibility = open / 5.f;
         o.sun = strength * o.sunVisibility;
     }
+}
+std::shared_ptr<World> loadObjectAsset(const std::filesystem::path &dir, const Json &manifest, LoadOptions options) {
+    auto w = std::make_shared<World>();
+    size_t memory = 0;
+    const auto traits = manifest.value("traits", Json::object());
+    const Json animations = traits.contains("decorative") ? traits["decorative"].value("animations", Json::array()) : Json::array();
+    std::string proxy = traits.contains("collidable") ? traits["collidable"].value("node", std::string()) : "";
+    bool unlit = manifest.value("lighting", Json::object()).value("mode", "probe") == "unlit";
+    // Object formats (0.9 on) take the glTF extension rules of the newest world format
+    // they extend: world 0.8's (KTX2, meshopt and quantisation included).
+    auto asset = buildObjectAsset(*w, dir, manifest.at("id").get<std::string>(), manifest.at("scene").get<std::string>(), "0.8",
+                                  options, animations, proxy, unlit, memory);
+    // RFC-0011: core recomputes the rest bounds; more than 1 cm off on any face rejects the object.
+    if (!traits.contains("character") && manifest.contains("bounds")) {
+        auto &b = manifest["bounds"];
+        Vec3 lo = vec(b.at("min")), hi = vec(b.at("max"));
+        float off = std::max({std::abs(lo.x - asset.low.x), std::abs(lo.y - asset.low.y), std::abs(lo.z - asset.low.z),
+                              std::abs(hi.x - asset.high.x), std::abs(hi.y - asset.high.y), std::abs(hi.z - asset.high.z)});
+        require(off <= .0105f, "bounds: the decoded scene differs from object.json bounds by " + std::to_string(off) + " m");
+    }
+    w->objectAssets.push_back(std::move(asset));
+    return w;
+}
+unsigned mergeObjectAsset(World &into, World &scratch) {
+    require(scratch.objectAssets.size() == 1, "one object asset per scratch world");
+    const size_t materialBase = into.materials.size(), imageBase = into.images.size();
+    // Samplers parallel the images (an image without one uses the default sampler).
+    into.samplers.resize(imageBase);
+    for (auto m : scratch.materials) {
+        for (auto &slot : m.slots)
+            if (slot.texture >= 0)
+                slot.texture += int(imageBase);
+        if (m.baseTexture >= 0)
+            m.baseTexture += int(imageBase);
+        if (m.lightmap >= 0)
+            m.lightmap += int(imageBase);
+        into.materials.push_back(m);
+    }
+    scratch.samplers.resize(scratch.images.size());
+    for (size_t i = 0; i < scratch.images.size(); ++i) {
+        into.images.push_back(std::move(scratch.images[i]));
+        into.samplers.push_back(scratch.samplers[i]);
+    }
+    auto asset = std::move(scratch.objectAssets[0]);
+    for (auto &mesh : asset.meshes)
+        mesh.material += unsigned(materialBase);
+    asset.firstMaterial += materialBase;
+    into.objectAssets.push_back(std::move(asset));
+    return unsigned(into.objectAssets.size() - 1);
 }
 } // namespace hyprune::world

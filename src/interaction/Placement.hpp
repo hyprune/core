@@ -40,10 +40,16 @@ struct PlacementScene {
     bool player = false;
     Vec3 playerLow{}, playerHigh{}; // capsule segment
     float playerRadius = .3f;
+    // Rule 3 per movable.surfaces (RFC-0011 P1): "floor" needs an upward surface (normal
+    // y >= 0.65) within 7 cm below the base centre, "wall" collision within 5 cm behind
+    // (the shape's -Z axis), "ceiling" collision within 5 cm above, a comma list when any
+    // of them holds; "any" and "" (scene nodes, world 0.8 instances: advisory only) never
+    // fail. Worlds without collision skip it.
+    std::string support;
 };
 struct PlacementVerdict {
     bool ok = true;
-    std::string rule;    // "playable", "walls", "window", "approach", "zone", "keep-clear", "player"
+    std::string rule;    // "playable", "walls", "support", "window", "approach", "zone", "keep-clear", "player"
     std::string message; // short, for the readout and runtime.notice
     bool supported = true; // advisory: rests on an upward surface (or floats)
 };

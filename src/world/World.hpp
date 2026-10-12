@@ -98,6 +98,9 @@ struct ObjectInstance {
     std::array<float, 4> rotation{0, 0, 0, 1};
     float authoredScale = 1;
     size_t collisionFirst = 0, collisionCount = 0;
+    // Not drawn, no collision, no animation frames (a hidden authored instance or a
+    // user placement that breaks a placement rule; RFC-0011).
+    bool hidden = false;
     // Lighting (mode "probe"): ambient irradiance for upward/downward-facing
     // normals and the direct sun strength, from the world's baked light at load
     // (or the authored `ambient`). Linear RGB, world shader units.

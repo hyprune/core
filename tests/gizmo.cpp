@@ -416,7 +416,7 @@ void undo() {
     assert(w.submode() == "move");
     w.universal = true;
     w.wheel(1), w.wheel(1), w.wheel(1);
-    assert(w.positionMode == 3 && w.gizmoMode() == "universal" && w.submode() == "move");
+    assert(w.positionMode == 3 && w.gizmoMode() == "universal" && w.submode() == "universal"); // IPC 0.22 names it
     w.wheel(1);
     assert(w.positionMode == 0);
 }

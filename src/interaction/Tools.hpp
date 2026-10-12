@@ -27,10 +27,15 @@ class Tools {
     std::string selected, kind, activePath;
     int activeHandle = -1;
     Json paths = Json::array(), objects = Json::array(), locks = Json::array();
+    // RFC-0011 overlay (editor.json version 2): user placements and overrides of
+    // authored world objects, per world id. objects keeps scene-node transforms only.
+    Json placements = Json::array(), overrides = Json::array();
+    bool migrated = false; // restore() upgraded a version 1 file (instance records moved)
+    static constexpr size_t placementsPerWorld = 128, placementLimit = 1024, overrideLimit = 1024;
     bool localAxes = false, snap = false;
     // Gizmo 2.0: pivot at the base (bottom centre) instead of the centre; the
-    // universal mode joins the wheel cycle only when enabled (HYPRUNE_GIZMO_UNIVERSAL):
-    // IPC's editor submode has no "universal" value, so it reports "move".
+    // universal mode joins the wheel cycle only when enabled (HYPRUNE_GIZMO_UNIVERSAL);
+    // the submode reports "universal" (IPC 0.22; older peers see "move").
     bool pivotBase = false, universal = false;
     std::string gizmoMode() const; // move, rotate, scale or universal
     // Undo/redo of transforms (tool 4, Ctrl+Z / Ctrl+Shift+Z). before/after are the
@@ -62,6 +67,11 @@ class Tools {
     void toggleLock(const std::string &world, const surfaces::Instance &);
     void restore(const Json &);
     Json saved() const;
+    // Overlay records of one world (null when absent).
+    Json placement(const std::string &world, const std::string &id) const;
+    Json override(const std::string &world, const std::string &objectId) const;
+    void setPlacement(const std::string &world, const std::string &id, Json record);  // null removes
+    void setOverride(const std::string &world, const std::string &objectId, Json record); // null removes
 
   private:
     mutable std::map<std::string, Json> liveLocks;

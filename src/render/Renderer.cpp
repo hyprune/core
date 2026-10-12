@@ -633,7 +633,7 @@ bool Renderer::animating() const {
     if (!world_ || graphics.value("reduced_motion", false) == true)
         return false;
     for (const auto &o : world_->objectInstances)
-        if (o.speed > 0 && world_->objectAssets[o.asset].animated())
+        if (!o.hidden && o.speed > 0 && world_->objectAssets[o.asset].animated())
             return true;
     return false;
 }
@@ -642,6 +642,8 @@ bool Renderer::animating() const {
 // at every animation pose.
 bool Renderer::instanceVisible(const world::ObjectInstance &o, const std::array<std::array<float, 4>, 6> &planes,
                                const std::vector<bool> &areas, bool regions) const {
+    if (o.hidden)
+        return false;
     if (regions && !o.regions.empty() &&
         std::none_of(o.regions.begin(), o.regions.end(), [&](int r) { return size_t(r) < areas.size() && areas[r]; }))
         return false;
@@ -767,6 +769,7 @@ void Renderer::init() {
     }
 }
 void Renderer::freeWorld() {
+    cancelObjectAssets();
     for (auto b : batches_) {
         glDeleteBuffers(1, &b.vbo);
         glDeleteBuffers(1, &b.ibo);
@@ -782,9 +785,328 @@ void Renderer::freeWorld() {
     environment_ = 0;
     world_.reset();
 }
+// Image textures and samplers for world images from p->imageBase on (all of them for a
+// world upload; the appended ones for object assets added later).
+void Renderer::imageJobs(PendingUpload *p, const UploadAdder &push) {
+    auto add = [&](size_t bytes, std::function<void()> run, std::string kind = "resource upload") {
+        push(bytes, std::move(run), std::move(kind));
+    };
+    p->textures.resize(p->world->images.size() - p->imageBase);
+    p->colors.resize(p->textures.size());
+    p->samplers.resize(p->textures.size());
+    p->dataSamplers.resize(p->textures.size());
+    constexpr size_t chunk = 256 * 1024;
+    auto uses = world::imageUses(*p->world);
+    for (size_t i = 0; i < p->textures.size(); ++i) {
+        const auto &image = p->world->images[p->imageBase + i];
+        // One upload per image. Colour images are sRGB (hardware decode before
+        // filtering); data images stay raw. An image used both ways keeps one sRGB
+        // copy plus a skip-decode data sampler, or two copies without the extension.
+        bool color = uses[p->imageBase + i].color, data = uses[p->imageBase + i].data || !color;
+        bool twoCopies = color && data && !srgbDecode_;
+        for (int pass = 0; pass < (twoCopies ? 2 : 1); ++pass) {
+            bool srgb = color && pass == (twoCopies ? 1 : 0);
+            auto texture = [p, i, srgb] { return srgb ? p->colors[i] : p->textures[i]; };
+            add(0, [p, i, srgb, color, twoCopies] {
+                const auto &im = p->world->images[p->imageBase + i];
+                auto &id = srgb ? p->colors[i] : p->textures[i];
+                glGenTextures(1, &id);
+                if (srgb && !twoCopies)
+                    p->textures[i] = id; // data slots sample the same texture
+                else if (!color)
+                    p->colors[i] = id;
+                glBindTexture(GL_TEXTURE_2D, id);
+                if (!im.levels.empty()) {
+                    // Transcoded KTX2: the package's own mip chain, no runtime mips.
+                    glTexStorage2D(GL_TEXTURE_2D, im.levels.size(),
+                                   srgb ? srgbVariant(im.compressedFormat) : im.compressedFormat, im.width, im.height);
+                    return;
+                }
+                int levels = 1;
+                for (int dim = std::max(im.width, im.height); dim > 1; dim /= 2)
+                    ++levels;
+                glTexStorage2D(GL_TEXTURE_2D, levels, srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8, im.width, im.height);
+            });
+            if (!image.levels.empty()) {
+                GLenum format = srgb ? srgbVariant(image.compressedFormat) : image.compressedFormat;
+                size_t blockBytes = image.compressedFormat == 0x83F0 ? 8 : 16; // BC1 vs BC3/BC7/ASTC 4x4
+                for (size_t level = 0; level < image.levels.size(); ++level) {
+                    int lw = std::max(1, image.width >> level), lh = std::max(1, image.height >> level);
+                    size_t rowBytes = size_t((lw + 3) / 4) * blockBytes;
+                    int blockRows = std::max(size_t(1), chunk / rowBytes);
+                    for (int y = 0; y < lh; y += blockRows * 4) {
+                        int count = std::min(blockRows * 4, lh - y);
+                        size_t offset = size_t(y / 4) * rowBytes, bytes = size_t((count + 3) / 4) * rowBytes;
+                        add(bytes, [p, i, level, y, lw, count, format, offset, bytes, texture] {
+                            glBindTexture(GL_TEXTURE_2D, texture());
+                            glCompressedTexSubImage2D(GL_TEXTURE_2D, level, 0, y, lw, count, format, bytes,
+                                                      p->world->images[p->imageBase + i].levels[level].data() + offset);
+                        });
+                    }
+                }
+                continue;
+            }
+            int rows = std::max(size_t(1), chunk / (size_t(image.width) * 4));
+            for (int y = 0; y < image.height; y += rows) {
+                int count = std::min(rows, image.height - y);
+                add(size_t(image.width) * count * 4, [p, i, y, count, texture] {
+                    const auto &im = p->world->images[p->imageBase + i];
+                    glBindTexture(GL_TEXTURE_2D, texture());
+                    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, y, im.width, count, GL_RGBA, GL_UNSIGNED_BYTE,
+                                    im.rgba.data() + size_t(y) * im.width * 4);
+                });
+            }
+            add(
+                0,
+                [texture] {
+                    glBindTexture(GL_TEXTURE_2D, texture());
+                    glGenerateMipmap(GL_TEXTURE_2D);
+                },
+                "mipmap");
+        }
+        bool lightmap = std::any_of(p->world->materials.begin(), p->world->materials.end(),
+                                    [&](auto &m) { return m.lightmap == int(p->imageBase + i); });
+        bool skipDecode = color && data && srgbDecode_;
+        add(0, [this, p, i, lightmap, skipDecode] {
+            auto s = p->imageBase + i < p->world->samplers.size() ? p->world->samplers[p->imageBase + i] : world::Sampler{};
+            auto &id = p->samplers[i];
+            glGenSamplers(1, &id);
+            glSamplerParameteri(id, GL_TEXTURE_MIN_FILTER, s.minFilter);
+            glSamplerParameteri(id, GL_TEXTURE_MAG_FILTER, s.magFilter);
+            glSamplerParameteri(id, GL_TEXTURE_WRAP_S, lightmap ? GL_CLAMP_TO_EDGE : s.wrapS);
+            glSamplerParameteri(id, GL_TEXTURE_WRAP_T, lightmap ? GL_CLAMP_TO_EDGE : s.wrapT);
+            // Lightmaps use their package sampler: a mipmapped filter opts in to
+            // trilinear irradiance (RFC-0004 mip-safe gutters). The bake pipeline's
+            // 4 px gutters cover two levels; deeper levels would pull in black
+            // atlas background or neighbouring islands.
+            if (lightmap)
+                glSamplerParameterf(id, GL_TEXTURE_MAX_LOD, float(lightmapMipLevels));
+            GLint count = 0;
+            glGetIntegerv(GL_NUM_EXTENSIONS, &count);
+            bool anisotropy = false;
+            for (int n = 0; n < count; ++n) {
+                std::string_view ext(reinterpret_cast<const char *>(glGetStringi(GL_EXTENSIONS, n)));
+                anisotropy |= ext == "GL_EXT_texture_filter_anisotropic" || ext == "GL_ARB_texture_filter_anisotropic";
+            }
+            if (anisotropy && s.magFilter == GL_LINEAR && s.minFilter == GL_LINEAR_MIPMAP_LINEAR) {
+                float max = 1;
+                glGetFloatv(0x84FF, &max);
+                glSamplerParameterf(id, 0x84FE, std::min(graphics["anisotropy"].get<float>(), max));
+            }
+            p->dataSamplers[i] = id;
+            if (skipDecode) {
+                // Same filtering, raw texels: EXT_texture_sRGB_decode on the sampler.
+                glGenSamplers(1, &p->dataSamplers[i]);
+                for (GLenum name : {GL_TEXTURE_MIN_FILTER, GL_TEXTURE_MAG_FILTER, GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T}) {
+                    GLint value = 0;
+                    glGetSamplerParameteriv(id, name, &value);
+                    glSamplerParameteri(p->dataSamplers[i], name, value);
+                }
+                GLfloat lod = 0, aniso = 1;
+                glGetSamplerParameterfv(id, GL_TEXTURE_MAX_LOD, &lod);
+                glSamplerParameterf(p->dataSamplers[i], GL_TEXTURE_MAX_LOD, lod);
+                if (anisotropy) {
+                    glGetSamplerParameterfv(id, 0x84FE, &aniso);
+                    glSamplerParameterf(p->dataSamplers[i], 0x84FE, aniso);
+                }
+                glSamplerParameteri(p->dataSamplers[i], 0x8A48 /*SRGB_DECODE*/, 0x8A4A /*SKIP_DECODE*/);
+            }
+        });
+    }
+}
+// Batches for the scene meshes (world uploads) and object asset meshes from p->assetBase on.
+void Renderer::meshJobs(PendingUpload *p, const UploadAdder &push) {
+    constexpr size_t chunk = 256 * 1024;
+    auto add = [&](size_t bytes, std::function<void()> run, std::string kind = "resource upload") {
+        push(bytes, std::move(run), std::move(kind));
+    };
+    // Scene meshes, then each object asset's meshes once (drawn per instance).
+    std::vector<int> meshAsset, meshIndex;
+    if (!p->incremental)
+        for (const auto &mesh : p->world->meshes)
+            p->meshes.push_back(&mesh), meshAsset.push_back(-1), meshIndex.push_back(-1);
+    for (size_t a = p->assetBase; a < p->world->objectAssets.size(); ++a)
+        for (size_t m = 0; m < p->world->objectAssets[a].meshes.size(); ++m)
+            p->meshes.push_back(&p->world->objectAssets[a].meshes[m]), meshAsset.push_back(int(a)), meshIndex.push_back(int(m));
+    p->batches.resize(p->meshes.size());
+    for (size_t i = 0; i < p->batches.size(); ++i) {
+        auto &mesh = *p->meshes[i];
+        auto &b = p->batches[i];
+        b.count = mesh.vertices.size();
+        b.material = mesh.material;
+        b.node = mesh.node;
+        b.asset = meshAsset[i];
+        b.mesh = meshIndex[i];
+        b.lo = b.hi = mesh.vertices.empty() ? Vec3{} : mesh.vertices[0].position;
+        for (auto &v : mesh.vertices) {
+            b.center += v.position;
+            b.lo = {std::min(b.lo.x, v.position.x), std::min(b.lo.y, v.position.y), std::min(b.lo.z, v.position.z)};
+            b.hi = {std::max(b.hi.x, v.position.x), std::max(b.hi.y, v.position.y), std::max(b.hi.z, v.position.z)};
+        }
+        if (b.count)
+            b.center = b.center / float(b.count);
+        // Indexed meshes draw their optimized GPU copy with glDrawElements;
+        // meshes without one (e.g. built in code) draw the flat list.
+        bool indexed = !mesh.indices.empty();
+        const auto *vertices = indexed ? &mesh.gpuVertices : &mesh.vertices;
+        if (indexed)
+            b.count = mesh.indices.size();
+        b.indexed = indexed;
+        size_t bytes = vertices->size() * sizeof(world::Vertex), indexBytes = mesh.indices.size() * 4;
+        add(0, [p, i, bytes, indexBytes] {
+            auto &b = p->batches[i];
+            layout(b.vao, b.vbo);
+            glBufferData(GL_ARRAY_BUFFER, bytes, nullptr, GL_STATIC_DRAW);
+            if (indexBytes) {
+                // Element buffer binding is VAO state: our VAO is bound here.
+                glGenBuffers(1, &b.ibo);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, b.ibo);
+                glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexBytes, nullptr, GL_STATIC_DRAW);
+            }
+        });
+        for (size_t offset = 0; offset < bytes; offset += chunk) {
+            auto count = std::min(chunk, bytes - offset);
+            add(count, [p, i, offset, count, vertices] {
+                glBindBuffer(GL_ARRAY_BUFFER, p->batches[i].vbo);
+                glBufferSubData(GL_ARRAY_BUFFER, offset, count, reinterpret_cast<const char *>(vertices->data()) + offset);
+            });
+        }
+        for (size_t offset = 0; offset < indexBytes; offset += chunk) {
+            auto count = std::min(chunk, indexBytes - offset);
+            add(count, [p, i, offset, count] {
+                glBindVertexArray(p->batches[i].vao);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, p->batches[i].ibo);
+                glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, offset, count,
+                                reinterpret_cast<const char *>(p->meshes[i]->indices.data()) + offset);
+            });
+        }
+    }
+}
+// One std140 Material range per world material, in a new uniform buffer.
+void Renderer::materialConstants(PendingUpload *p) {
+    GLint align = 256;
+    glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &align);
+    p->materialStride = (sizeof(MaterialStd140) + align - 1) / align * align;
+    std::vector<unsigned char> data(size_t(p->materialStride) * p->world->materials.size());
+    for (size_t i = 0; i < p->world->materials.size(); ++i) {
+        auto block = std140(p->world->materials[i]);
+        std::memcpy(data.data() + i * p->materialStride, &block, sizeof block);
+    }
+    glGenBuffers(1, &p->materialUbo);
+    glBindBuffer(GL_UNIFORM_BUFFER, p->materialUbo);
+    glBufferData(GL_UNIFORM_BUFFER, data.size(), data.data(), GL_STATIC_DRAW);
+}
+bool Renderer::stageObjectAssets() {
+    if (!world_ || pending_ || assets_)
+        return false;
+    size_t firstImage = textures_.size(), firstAsset = uploadedAssets_;
+    if (firstImage >= world_->images.size() && firstAsset >= world_->objectAssets.size())
+        return true;
+    GLState state;
+    assets_ = std::make_unique<PendingUpload>();
+    auto p = assets_.get();
+    p->world = world_;
+    p->incremental = true;
+    p->imageBase = firstImage;
+    p->assetBase = firstAsset;
+    auto add = [&](size_t bytes, std::function<void()> run, std::string kind) { p->jobs.push_back({bytes, std::move(run), std::move(kind)}); };
+    imageJobs(p, add);
+    add(0, [p] { materialConstants(p); }, "material constants");
+    meshJobs(p, add);
+    p->assetEnd = world_->objectAssets.size();
+    return true;
+}
+void Renderer::cancelObjectAssets() {
+    if (!assets_)
+        return;
+    GLState state;
+    auto p = assets_.get();
+    if (p->fence)
+        glDeleteSync(p->fence);
+    for (auto b : p->batches) {
+        glDeleteBuffers(1, &b.vbo);
+        glDeleteBuffers(1, &b.ibo);
+        glDeleteVertexArrays(1, &b.vao);
+    }
+    release(p->textures, p->colors, [](GLsizei n, const GLuint *ids) { glDeleteTextures(n, ids); });
+    release(p->samplers, p->dataSamplers, [](GLsizei n, const GLuint *ids) { glDeleteSamplers(n, ids); });
+    glDeleteBuffers(1, &p->materialUbo);
+    assets_.reset();
+}
+bool Renderer::continueObjectAssets(double milliseconds, size_t byteBudget) {
+    if (!assets_)
+        return true;
+    if (!world_ || assets_->world != world_ || pending_) {
+        cancelObjectAssets();
+        return true;
+    }
+    GLState state;
+    auto p = assets_.get();
+    if (p->fence) {
+        auto result = glClientWaitSync(p->fence, 0, 0);
+        if (result == GL_TIMEOUT_EXPIRED)
+            return false;
+        glDeleteSync(p->fence);
+        p->fence = nullptr;
+        if (result == GL_WAIT_FAILED) {
+            cancelObjectAssets();
+            throw std::runtime_error("object asset upload fence failed");
+        }
+    }
+    auto start = std::chrono::steady_clock::now();
+    size_t bytes = 0;
+    unsigned jobs = 0;
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    while (glGetError() != GL_NO_ERROR) {
+    }
+    try {
+        while (p->next < p->jobs.size()) {
+            auto &job = p->jobs[p->next];
+            if (jobs && bytes + job.bytes > byteBudget)
+                break;
+            glActiveTexture(GL_TEXTURE0);
+            job.run();
+            bytes += job.bytes;
+            p->gpuBytes += job.bytes;
+            ++p->next;
+            ++jobs;
+            if (glGetError() != GL_NO_ERROR)
+                throw std::runtime_error("object asset GPU upload failed");
+            if (std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() >= milliseconds)
+                break;
+        }
+    } catch (...) {
+        cancelObjectAssets();
+        throw;
+    }
+    if (jobs) {
+        p->fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        glFlush();
+        return false;
+    }
+    // Done: the new images append to the texture tables (indexed by world image), the
+    // new batches join the draw list and the rebuilt material buffer replaces the old.
+    textures_.insert(textures_.end(), p->textures.begin(), p->textures.end());
+    colorTextures_.insert(colorTextures_.end(), p->colors.begin(), p->colors.end());
+    samplers_.insert(samplers_.end(), p->samplers.begin(), p->samplers.end());
+    dataSamplers_.insert(dataSamplers_.end(), p->dataSamplers.begin(), p->dataSamplers.end());
+    batches_.insert(batches_.end(), p->batches.begin(), p->batches.end());
+    glDeleteBuffers(1, &materialUbo_);
+    materialUbo_ = p->materialUbo;
+    materialStride_ = p->materialStride;
+    gpuBytes_ += p->gpuBytes;
+    uploadedAssets_ = p->assetEnd;
+    assets_.reset();
+    return true;
+}
 void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
     GLState state;
     cancelPrepare();
+    cancelObjectAssets();
     warmStep_ = -1;
     // CPU decode and environment prefiltering already happen on the loader worker.
     srgbDecode_ = srgbDecodeAllowed && extension("GL_EXT_texture_sRGB_decode");
@@ -857,144 +1179,8 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
         compile(&easu_, fsrVertex.c_str(), easuFragment.c_str(), "shader fsr1 easu", false, true);
         compile(&rcas_, fsrVertex.c_str(), rcasFragment.c_str(), "shader fsr1 rcas", false, true);
     }
-    p->textures.resize(p->world->images.size());
-    p->colors.resize(p->textures.size());
-    p->samplers.resize(p->textures.size());
-    p->dataSamplers.resize(p->textures.size());
-    constexpr size_t chunk = 256 * 1024;
-    auto uses = world::imageUses(*p->world);
-    for (size_t i = 0; i < p->textures.size(); ++i) {
-        const auto &image = p->world->images[i];
-        // One upload per image. Colour images are sRGB (hardware decode before
-        // filtering); data images stay raw. An image used both ways keeps one sRGB
-        // copy plus a skip-decode data sampler, or two copies without the extension.
-        bool color = uses[i].color, data = uses[i].data || !color;
-        bool twoCopies = color && data && !srgbDecode_;
-        for (int pass = 0; pass < (twoCopies ? 2 : 1); ++pass) {
-            bool srgb = color && pass == (twoCopies ? 1 : 0);
-            auto texture = [p, i, srgb] { return srgb ? p->colors[i] : p->textures[i]; };
-            add(0, [p, i, srgb, color, twoCopies] {
-                const auto &im = p->world->images[i];
-                auto &id = srgb ? p->colors[i] : p->textures[i];
-                glGenTextures(1, &id);
-                if (srgb && !twoCopies)
-                    p->textures[i] = id; // data slots sample the same texture
-                else if (!color)
-                    p->colors[i] = id;
-                glBindTexture(GL_TEXTURE_2D, id);
-                if (!im.levels.empty()) {
-                    // Transcoded KTX2: the package's own mip chain, no runtime mips.
-                    glTexStorage2D(GL_TEXTURE_2D, im.levels.size(),
-                                   srgb ? srgbVariant(im.compressedFormat) : im.compressedFormat, im.width, im.height);
-                    return;
-                }
-                int levels = 1;
-                for (int dim = std::max(im.width, im.height); dim > 1; dim /= 2)
-                    ++levels;
-                glTexStorage2D(GL_TEXTURE_2D, levels, srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8, im.width, im.height);
-            });
-            if (!image.levels.empty()) {
-                GLenum format = srgb ? srgbVariant(image.compressedFormat) : image.compressedFormat;
-                size_t blockBytes = image.compressedFormat == 0x83F0 ? 8 : 16; // BC1 vs BC3/BC7/ASTC 4x4
-                for (size_t level = 0; level < image.levels.size(); ++level) {
-                    int lw = std::max(1, image.width >> level), lh = std::max(1, image.height >> level);
-                    size_t rowBytes = size_t((lw + 3) / 4) * blockBytes;
-                    int blockRows = std::max(size_t(1), chunk / rowBytes);
-                    for (int y = 0; y < lh; y += blockRows * 4) {
-                        int count = std::min(blockRows * 4, lh - y);
-                        size_t offset = size_t(y / 4) * rowBytes, bytes = size_t((count + 3) / 4) * rowBytes;
-                        add(bytes, [p, i, level, y, lw, count, format, offset, bytes, texture] {
-                            glBindTexture(GL_TEXTURE_2D, texture());
-                            glCompressedTexSubImage2D(GL_TEXTURE_2D, level, 0, y, lw, count, format, bytes,
-                                                      p->world->images[i].levels[level].data() + offset);
-                        });
-                    }
-                }
-                continue;
-            }
-            int rows = std::max(size_t(1), chunk / (size_t(image.width) * 4));
-            for (int y = 0; y < image.height; y += rows) {
-                int count = std::min(rows, image.height - y);
-                add(size_t(image.width) * count * 4, [p, i, y, count, texture] {
-                    const auto &im = p->world->images[i];
-                    glBindTexture(GL_TEXTURE_2D, texture());
-                    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, y, im.width, count, GL_RGBA, GL_UNSIGNED_BYTE,
-                                    im.rgba.data() + size_t(y) * im.width * 4);
-                });
-            }
-            add(
-                0,
-                [texture] {
-                    glBindTexture(GL_TEXTURE_2D, texture());
-                    glGenerateMipmap(GL_TEXTURE_2D);
-                },
-                "mipmap");
-        }
-        bool lightmap = std::any_of(p->world->materials.begin(), p->world->materials.end(),
-                                    [&](auto &m) { return m.lightmap == int(i); });
-        bool skipDecode = color && data && srgbDecode_;
-        add(0, [this, p, i, lightmap, skipDecode] {
-            auto s = i < p->world->samplers.size() ? p->world->samplers[i] : world::Sampler{};
-            auto &id = p->samplers[i];
-            glGenSamplers(1, &id);
-            glSamplerParameteri(id, GL_TEXTURE_MIN_FILTER, s.minFilter);
-            glSamplerParameteri(id, GL_TEXTURE_MAG_FILTER, s.magFilter);
-            glSamplerParameteri(id, GL_TEXTURE_WRAP_S, lightmap ? GL_CLAMP_TO_EDGE : s.wrapS);
-            glSamplerParameteri(id, GL_TEXTURE_WRAP_T, lightmap ? GL_CLAMP_TO_EDGE : s.wrapT);
-            // Lightmaps use their package sampler: a mipmapped filter opts in to
-            // trilinear irradiance (RFC-0004 mip-safe gutters). The bake pipeline's
-            // 4 px gutters cover two levels; deeper levels would pull in black
-            // atlas background or neighbouring islands.
-            if (lightmap)
-                glSamplerParameterf(id, GL_TEXTURE_MAX_LOD, float(lightmapMipLevels));
-            GLint count = 0;
-            glGetIntegerv(GL_NUM_EXTENSIONS, &count);
-            bool anisotropy = false;
-            for (int n = 0; n < count; ++n) {
-                std::string_view ext(reinterpret_cast<const char *>(glGetStringi(GL_EXTENSIONS, n)));
-                anisotropy |= ext == "GL_EXT_texture_filter_anisotropic" || ext == "GL_ARB_texture_filter_anisotropic";
-            }
-            if (anisotropy && s.magFilter == GL_LINEAR && s.minFilter == GL_LINEAR_MIPMAP_LINEAR) {
-                float max = 1;
-                glGetFloatv(0x84FF, &max);
-                glSamplerParameterf(id, 0x84FE, std::min(graphics["anisotropy"].get<float>(), max));
-            }
-            p->dataSamplers[i] = id;
-            if (skipDecode) {
-                // Same filtering, raw texels: EXT_texture_sRGB_decode on the sampler.
-                glGenSamplers(1, &p->dataSamplers[i]);
-                for (GLenum name : {GL_TEXTURE_MIN_FILTER, GL_TEXTURE_MAG_FILTER, GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T}) {
-                    GLint value = 0;
-                    glGetSamplerParameteriv(id, name, &value);
-                    glSamplerParameteri(p->dataSamplers[i], name, value);
-                }
-                GLfloat lod = 0, aniso = 1;
-                glGetSamplerParameterfv(id, GL_TEXTURE_MAX_LOD, &lod);
-                glSamplerParameterf(p->dataSamplers[i], GL_TEXTURE_MAX_LOD, lod);
-                if (anisotropy) {
-                    glGetSamplerParameterfv(id, 0x84FE, &aniso);
-                    glSamplerParameterf(p->dataSamplers[i], 0x84FE, aniso);
-                }
-                glSamplerParameteri(p->dataSamplers[i], 0x8A48 /*SRGB_DECODE*/, 0x8A4A /*SKIP_DECODE*/);
-            }
-        });
-    }
-    add(
-        0,
-        [p] {
-            GLint align = 256;
-            glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &align);
-            p->materialStride = (sizeof(MaterialStd140) + align - 1) / align * align;
-            std::vector<unsigned char> data(size_t(p->materialStride) * p->world->materials.size());
-            for (size_t i = 0; i < p->world->materials.size(); ++i) {
-                auto block = std140(p->world->materials[i]);
-                std::memcpy(data.data() + i * p->materialStride, &block, sizeof block);
-            }
-            glGenBuffers(1, &p->materialUbo);
-            glBindBuffer(GL_UNIFORM_BUFFER, p->materialUbo);
-            glBufferData(GL_UNIFORM_BUFFER, data.size(), data.data(), GL_STATIC_DRAW);
-        },
-        "material constants");
+    imageJobs(p, [&](size_t bytes, std::function<void()> run, std::string kind) { add(bytes, std::move(run), std::move(kind)); });
+    add(0, [p] { materialConstants(p); }, "material constants");
     add(0, [p] {
         glGenTextures(1, &p->cube);
         glBindTexture(GL_TEXTURE_CUBE_MAP, p->cube);
@@ -1012,66 +1198,7 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
                 glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, mip, GL_RGBA16F, l.size, l.size, 0, GL_RGBA,
                              GL_FLOAT, l.faces[face].data());
             });
-    // Scene meshes, then each object asset's meshes once (drawn per instance).
-    std::vector<int> meshAsset, meshIndex;
-    for (const auto &mesh : p->world->meshes)
-        p->meshes.push_back(&mesh), meshAsset.push_back(-1), meshIndex.push_back(-1);
-    for (size_t a = 0; a < p->world->objectAssets.size(); ++a)
-        for (size_t m = 0; m < p->world->objectAssets[a].meshes.size(); ++m)
-            p->meshes.push_back(&p->world->objectAssets[a].meshes[m]), meshAsset.push_back(int(a)), meshIndex.push_back(int(m));
-    p->batches.resize(p->meshes.size());
-    for (size_t i = 0; i < p->batches.size(); ++i) {
-        auto &mesh = *p->meshes[i];
-        auto &b = p->batches[i];
-        b.count = mesh.vertices.size();
-        b.material = mesh.material;
-        b.node = mesh.node;
-        b.asset = meshAsset[i];
-        b.mesh = meshIndex[i];
-        b.lo = b.hi = mesh.vertices.empty() ? Vec3{} : mesh.vertices[0].position;
-        for (auto &v : mesh.vertices) {
-            b.center += v.position;
-            b.lo = {std::min(b.lo.x, v.position.x), std::min(b.lo.y, v.position.y), std::min(b.lo.z, v.position.z)};
-            b.hi = {std::max(b.hi.x, v.position.x), std::max(b.hi.y, v.position.y), std::max(b.hi.z, v.position.z)};
-        }
-        if (b.count)
-            b.center = b.center / float(b.count);
-        // Indexed meshes draw their optimized GPU copy with glDrawElements;
-        // meshes without one (e.g. built in code) draw the flat list.
-        bool indexed = !mesh.indices.empty();
-        const auto *vertices = indexed ? &mesh.gpuVertices : &mesh.vertices;
-        if (indexed)
-            b.count = mesh.indices.size();
-        b.indexed = indexed;
-        size_t bytes = vertices->size() * sizeof(world::Vertex), indexBytes = mesh.indices.size() * 4;
-        add(0, [p, i, bytes, indexBytes] {
-            auto &b = p->batches[i];
-            layout(b.vao, b.vbo);
-            glBufferData(GL_ARRAY_BUFFER, bytes, nullptr, GL_STATIC_DRAW);
-            if (indexBytes) {
-                // Element buffer binding is VAO state: our VAO is bound here.
-                glGenBuffers(1, &b.ibo);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, b.ibo);
-                glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexBytes, nullptr, GL_STATIC_DRAW);
-            }
-        });
-        for (size_t offset = 0; offset < bytes; offset += chunk) {
-            auto count = std::min(chunk, bytes - offset);
-            add(count, [p, i, offset, count, vertices] {
-                glBindBuffer(GL_ARRAY_BUFFER, p->batches[i].vbo);
-                glBufferSubData(GL_ARRAY_BUFFER, offset, count, reinterpret_cast<const char *>(vertices->data()) + offset);
-            });
-        }
-        for (size_t offset = 0; offset < indexBytes; offset += chunk) {
-            auto count = std::min(chunk, indexBytes - offset);
-            add(count, [p, i, offset, count] {
-                glBindVertexArray(p->batches[i].vao);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, p->batches[i].ibo);
-                glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, offset, count,
-                                reinterpret_cast<const char *>(p->meshes[i]->indices.data()) + offset);
-            });
-        }
-    }
+    meshJobs(p, [&](size_t bytes, std::function<void()> run, std::string kind) { add(bytes, std::move(run), std::move(kind)); });
     for (auto &finish : finishers)
         finish();
     add(
@@ -1158,6 +1285,7 @@ bool Renderer::continuePrepare(double milliseconds, size_t byteBudget) {
             return false;
         freeWorld();
         world_ = p->world;
+        uploadedAssets_ = world_->objectAssets.size();
         animationEpoch_ = std::chrono::steady_clock::now(); // the world-animation clock starts at load
         batches_ = std::move(p->batches);
         textures_ = std::move(p->textures);

@@ -31,6 +31,14 @@ class Renderer {
     void drawLoading(GLuint target, int width, int height);
     void drawHUD(GLuint target, int width, int height);
     void collisionChanged(); // Deferred owner tick after editor transforms.
+    // RFC-0011 user placements: object assets (and their images) appended to the current
+    // world after it became current. Stage stages everything not uploaded yet; continue
+    // from the owner tick (GL context current, never in the frame). Instances of an asset
+    // draw once its batches exist. stage returns false while another upload is pending.
+    bool stageObjectAssets();
+    bool continueObjectAssets(double milliseconds = 2, size_t byteBudget = 2 * 1024 * 1024); // true when idle
+    bool objectAssetsPending() const { return bool(assets_); }
+    void cancelObjectAssets();
     // Optional prepared, display-encoded opaque world colour. Native depth,
     // window buffers, glass, prompts and debug UI remain in this GL owner.
     GLuint externalWorldFbo = 0;
@@ -180,7 +188,17 @@ class Renderer {
         GLsync fence = nullptr;
         std::vector<Job> jobs;
         size_t next = 0;
+        // Object assets appended to the current world (RFC-0011 user placements): only
+        // images from imageBase and asset meshes from assetBase; no scene, no environment.
+        bool incremental = false;
+        size_t imageBase = 0, assetBase = 0, assetEnd = 0;
     };
+    using UploadAdder = std::function<void(size_t, std::function<void()>, std::string)>;
+    void imageJobs(PendingUpload *, const UploadAdder &);
+    static void materialConstants(PendingUpload *);
+    void meshJobs(PendingUpload *, const UploadAdder &);
+    std::unique_ptr<PendingUpload> assets_; // incremental object asset upload
+    size_t uploadedAssets_ = 0;             // world object assets with batches
     std::unique_ptr<PendingUpload> pending_;
     double uploadMs_ = 0, uploadMaxMs_ = 0, uploadMaxJobMs_ = 0;
     std::string uploadSlowestJob_;

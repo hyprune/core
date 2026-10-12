@@ -1,5 +1,6 @@
 #include "Tools.hpp"
 #include <chrono>
+#include <set>
 namespace hyprune::interaction {
 Mat4 Transform::matrix(Vec3 origin) const {
     auto m = Mat4::identity();
@@ -151,7 +152,7 @@ std::string Tools::submode() const {
     if (slot == 3)
         return std::string(pathMode >= 3 ? "closed " : "open ") + std::array{"line", "curve", "arc"}[pathMode % 3];
     if (slot == 4)
-        return std::array{"move", "rotate", "scale", "move"}[std::clamp(positionMode, 0, 3)];
+        return std::array{"move", "rotate", "scale", "universal"}[std::clamp(positionMode, 0, 3)];
     return slot == 1 ? "normal" : "placement";
 }
 void Tools::wheel(int steps) {
@@ -244,14 +245,68 @@ void Tools::toggleLock(const std::string &world, const surfaces::Instance &i) {
     }
 }
 Json Tools::saved() const {
-    return {{"version", 1}, {"paths", paths}, {"objects", objects}, {"locks", locks}};
+    return {{"version", 2}, {"paths", paths}, {"objects", objects}, {"locks", locks}, {"placements", placements},
+            {"overrides", overrides}};
 }
-void Tools::restore(const Json &j) {
-    if (!j.is_object() || j.size() != 4 || j.at("version") != 1)
+namespace {
+Json find(const Json &list, const char *key, const std::string &world, const std::string &id) {
+    for (auto &r : list)
+        if (r.value("worldId", Json()) == world && r.value(key, Json()) == id)
+            return r;
+    return nullptr;
+}
+void put(Json &list, const char *key, const std::string &world, const std::string &id, Json record) {
+    auto &a = list.get_ref<Json::array_t &>();
+    auto it = std::find_if(a.begin(), a.end(), [&](auto &r) { return r["worldId"] == world && r[key] == id; });
+    if (record.is_null()) {
+        if (it != a.end())
+            a.erase(it);
+    } else if (it != a.end())
+        *it = std::move(record);
+    else
+        a.push_back(std::move(record));
+}
+} // namespace
+Json Tools::placement(const std::string &world, const std::string &id) const { return find(placements, "id", world, id); }
+Json Tools::override(const std::string &world, const std::string &objectId) const { return find(overrides, "objectId", world, objectId); }
+void Tools::setPlacement(const std::string &world, const std::string &id, Json record) { put(placements, "id", world, id, std::move(record)); }
+void Tools::setOverride(const std::string &world, const std::string &objectId, Json record) {
+    put(overrides, "objectId", world, objectId, std::move(record));
+}
+void Tools::restore(const Json &input) {
+    if (!input.is_object() || !input.contains("version") || (input["version"] != 1 && input["version"] != 2) ||
+        input.size() != (input["version"] == 1 ? 4u : 6u))
         throw std::runtime_error("invalid editor state");
+    Json j = input;
+    bool upgrade = j["version"] == 1;
+    if (upgrade) {
+        // Version 1 kept Gizmo 2.0's world-object transforms as "object:<id>" records
+        // in objects; they become overrides keyed by the plain instance id.
+        j["placements"] = Json::array();
+        j["overrides"] = Json::array();
+        if (j["objects"].is_array()) {
+            Json nodes = Json::array();
+            for (auto &o : j["objects"]) {
+                std::string id = o.is_object() && o.contains("objectId") && o["objectId"].is_string() ? o["objectId"].get<std::string>() : "";
+                if (!id.starts_with("object:")) {
+                    nodes.push_back(o);
+                    continue;
+                }
+                if (o.size() != 6 || !o.contains("scale") || !o["scale"].is_array() || o["scale"].empty())
+                    throw std::runtime_error("invalid object transform");
+                j["overrides"].push_back({{"worldId", o.at("worldId")}, {"objectId", id.substr(7)}, {"areaId", o.at("areaId")},
+                                          {"pose", {{"position", o.at("position")}, {"rotation", o.at("rotation")}}},
+                                          {"scale", o["scale"][0]}});
+            }
+            j["objects"] = nodes;
+        }
+    }
     for (auto key : {"paths", "objects", "locks"})
         if (!j.at(key).is_array() || j.at(key).size() > 128)
             throw std::runtime_error("editor state budget");
+    if (!j.at("placements").is_array() || j["placements"].size() > placementLimit || !j.at("overrides").is_array() ||
+        j["overrides"].size() > overrideLimit)
+        throw std::runtime_error("editor state budget");
     auto text = [](const Json &j) {
         if (!j.is_string() || j.get<std::string>().size() > 256)
             throw std::runtime_error("invalid editor ID");
@@ -297,6 +352,56 @@ void Tools::restore(const Json &j) {
         for (auto k : {"worldId", "appClass", "title"})
             text(l.at(k));
     }
+    auto pose = [&](const Json &p) {
+        if (!p.is_object() || p.size() != 2)
+            throw std::runtime_error("invalid object pose");
+        vector(p.at("position"), 3);
+        vector(p.at("rotation"), 4);
+        float norm = 0;
+        for (auto v : p["rotation"])
+            norm += v.get<float>() * v.get<float>();
+        if (std::abs(norm - 1) > .01f)
+            throw std::runtime_error("invalid object quaternion");
+    };
+    auto scale = [](const Json &s) {
+        if (!s.is_number() || !std::isfinite(s.get<double>()) || s.get<double>() < .01 || s.get<double>() > 100)
+            throw std::runtime_error("invalid object scale");
+    };
+    std::map<std::string, size_t> perWorld;
+    std::set<std::pair<std::string, std::string>> placementIds, overrideIds;
+    for (auto &r : j["placements"]) {
+        if (!r.is_object() || r.size() < 6 || r.size() > 7 || (r.size() == 7 && !r.contains("locked")))
+            throw std::runtime_error("invalid placement");
+        for (auto k : {"worldId", "id", "areaId", "ref"})
+            text(r.at(k));
+        pose(r.at("pose"));
+        scale(r.at("scale"));
+        if (r.contains("locked") && !r["locked"].is_boolean())
+            throw std::runtime_error("invalid placement lock");
+        if (!placementIds.insert({r["worldId"].get<std::string>(), r["id"].get<std::string>()}).second)
+            throw std::runtime_error("duplicate placement id");
+        if (++perWorld[r["worldId"].get<std::string>()] > placementsPerWorld)
+            throw std::runtime_error("placement budget");
+    }
+    for (auto &r : j["overrides"]) {
+        if (!r.is_object() || !r.contains("worldId") || !r.contains("objectId"))
+            throw std::runtime_error("invalid override");
+        for (auto &[k, v] : r.items()) {
+            if (k == "worldId" || k == "objectId" || k == "areaId")
+                text(v);
+            else if (k == "pose")
+                pose(v);
+            else if (k == "scale")
+                scale(v);
+            else if (k == "hidden" || k == "locked") {
+                if (!v.is_boolean())
+                    throw std::runtime_error("invalid override flag");
+            } else
+                throw std::runtime_error("invalid override field");
+        }
+        if (!overrideIds.insert({r["worldId"].get<std::string>(), r["objectId"].get<std::string>()}).second)
+            throw std::runtime_error("duplicate override");
+    }
     size_t total = 0;
     for (auto &path : j["paths"])
         total += path["points"].size();
@@ -305,6 +410,9 @@ void Tools::restore(const Json &j) {
     paths = j["paths"];
     objects = j["objects"];
     locks = j["locks"];
+    placements = j["placements"];
+    overrides = j["overrides"];
+    migrated = upgrade;
     liveLocks.clear();
     selected.clear();
     activePath.clear();

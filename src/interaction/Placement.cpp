@@ -156,7 +156,7 @@ std::set<std::string> brokenSoftRules(const PlacementScene &s, const Box &shape,
     std::set<std::string> waived;
     for (int i = 0; i < 4; ++i) {
         auto v = checkPlacement(s, shape, own, waived);
-        if (v.ok || v.rule == "walls" || v.rule == "playable" || v.rule == "player")
+        if (v.ok || v.rule == "walls" || v.rule == "playable" || v.rule == "player" || v.rule == "support")
             break;
         waived.insert(v.rule);
     }
@@ -218,6 +218,33 @@ PlacementVerdict checkPlacement(const PlacementScene &s, const Box &shape, std::
     }
     if (inside >= 5 && open == 0)
         return fail("walls", "Inside solid geometry");
+    // 3. Supported, per the object's surfaces.
+    if (!s.collision.empty() && !s.support.empty() && s.support != "any") {
+        bool held = false;
+        auto holds = [&](const std::string &surface) {
+            if (surface == "floor")
+                return floorBelow(s, base + Vec3{0, .05f, 0}, .12f).has_value();
+            if (surface == "wall") {
+                auto back = shape.axes[2] * -1.f;
+                return cast(s, shape.centre, back, shape.extent(back) + .05f).has_value();
+            }
+            if (surface == "ceiling")
+                return cast(s, shape.centre, {0, 1, 0}, shape.extent({0, 1, 0}) + .05f).has_value();
+            return false;
+        };
+        size_t start = 0;
+        while (!held && start <= s.support.size()) {
+            auto end = s.support.find(',', start);
+            held = holds(s.support.substr(start, end == std::string::npos ? std::string::npos : end - start));
+            if (end == std::string::npos)
+                break;
+            start = end + 1;
+        }
+        if (!held)
+            return fail("support", s.support.starts_with("floor") ? "Needs a floor under it"
+                                   : s.support.starts_with("wall") ? "Needs a wall behind it"
+                                                                   : "Needs a ceiling above it");
+    }
     // 4. Windows stay visible.
     for (auto &w : s.windows)
         if (!waived.contains("window") && boxBox(inner, w))
