@@ -36,7 +36,8 @@ def step(t, period, steps, hold):
 def simulate(t, args):
     k = step(t, args.period, args.steps, args.hold)
     value = round(100 * simlib.unit(simlib.seed(), "gauge", args.label, k), 1)
-    return {"value": value, "display": f"{math.floor(value + 0.5)}{args.unit}", "label": args.label, "level": level(value)}
+    unit = args.unit if args.unit in ("", "%") else " " + args.unit  # "71%", "12 GB"
+    return {"value": value, "display": f"{math.floor(value + 0.5)}{unit}", "label": args.label, "level": level(value)}
 
 
 def _positive(text):
@@ -55,7 +56,7 @@ def _count(text):
 
 def add_arguments(parser):
     parser.add_argument("--label", default="SIM", help="the label key (default SIM)")
-    parser.add_argument("--unit", default="%", help="appended to the display text (default %%)")
+    parser.add_argument("--unit", default="%", help="appended to the display text, after a space unless it is %% (default %%)")
     parser.add_argument("--period", type=_positive, default=6.0, help="seconds per step (default 6)")
     parser.add_argument("--steps", type=_count, default=0,
                         help="steps in the sequence (default 0: endless)")

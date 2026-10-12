@@ -190,8 +190,13 @@ def checks(client, children, source):
         hints = notices('machine.source')
     check('a notice names the data source each new gauge reads',
           all(any(i in h['message'] for h in hints) for i in ids.values()), [h['message'] for h in hints])
-    check('unfed gauges: labels show a dash, nothing moves', all(b['labels']['display'] == '—' and not b['moving'] for b in bound.values()),
-          {g: b['labels'] for g, b in bound.items()})
+    # A new abacus counts its resting beads in (the stack rate), then everything rests.
+    try:
+        bound = wait(lambda: (lambda b: b if all(not x['moving'] for x in b.values()) else None)({g: inst(i) for g, i in ids.items()}), 10)
+    except AssertionError:
+        bound = {g: inst(i) for g, i in ids.items()}
+    check('unfed gauges: labels show a dash and, once placed, nothing moves', all(b['labels']['display'] == '—' and not b['moving'] for b in bound.values()),
+          {g: {'labels': b['labels'], 'moving': b['moving'], 'stacks': b['stacksShown']} for g, b in bound.items()})
 
     # 2. Sources: the scripts start now; the helper picks the new entries up.
     epoch = int(time.time()) + 2
@@ -213,7 +218,7 @@ def checks(client, children, source):
     recorder = None
     if os.environ.get('HYPRUNE_GAUGES_RECORD') == '1':
         middle = [p0[0], 0, p0[2]]
-        look([middle[0], 1.45, middle[2] + 3.2], [middle[0], .75, middle[2]])
+        look([middle[0], 1.45, middle[2] + 3.2], [middle[0], .75, middle[2]]); time.sleep(.5)
         log = open(s.STATE / 'recorder.log', 'w')
         recorder = s.envrun('wf-recorder', '-o', 'HEADLESS-1', '-r', '30', '-D', '--no-dmabuf', '-c', 'libx264', '-x', 'yuv420p',
                             '-p', 'preset=veryfast', '-p', 'crf=18', '-f', str(out / 'gauges.mp4'), stdout=log, stderr=subprocess.STDOUT)
@@ -241,7 +246,7 @@ def checks(client, children, source):
                 got = b['stacks'].get(slot) if kind == 'count' else b['levels'].get(slot, {}).get('target') if kind == 'level' else None
                 if got is not None and b['inputs']['value']['raw'] == inst(ids[g])['inputs']['value']['raw']:
                     assert abs(got - expected) < 1e-6, (g, d['target'], v, got, expected)
-        if recorder is None and not stills and time.time() > epoch + PERIOD * 2.5:
+        if not stills and time.time() > epoch + PERIOD * 2.5:
             look([p0[0], 1.45, p0[2] + 3.2], [p0[0], .75, p0[2]]); time.sleep(.6)
             stills.append(shot('gauges-3m.png'))
         time.sleep(.5)
