@@ -1,6 +1,7 @@
 #include "Machines.hpp"
 #include "interaction/InputFile.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <set>
@@ -750,6 +751,7 @@ void Machines::prepare(Instance &in, size_t object) const {
     in.inputAverages.assign(n, {}), in.driveAverages.assign(d.drives.size(), {});
     in.raw.assign(n, nullptr), in.condition.assign(n, Condition::Missing);
     in.age.assign(n, -1), in.fired.assign(n, 0), in.seenSequence.assign(n, 0);
+    in.publishedAt.assign(n, -1), in.resetSeen.assign(n, nullptr);
     in.value.clear();
     for (size_t i = 0; i < n; ++i)
         in.value.push_back(d.inputs[i].fallback);
@@ -945,6 +947,8 @@ std::vector<size_t> Machines::instances() const {
 void Machines::evaluate(Instance &in, const Json &sources, int64_t nowMs, bool still) {
     const auto &d = *in.def;
     in.anyStale = false;
+    in.status = in.error = nullptr;
+    bool first = true;
     for (size_t i = 0; i < d.inputs.size(); ++i) {
         const auto &input = d.inputs[i];
         auto &bind = in.bindings[i];
@@ -963,10 +967,32 @@ void Machines::evaluate(Instance &in, const Json &sources, int64_t nowMs, bool s
             in.condition[i] = Condition::Missing, in.raw[i] = nullptr, in.value[i] = input.fallback, in.age[i] = -1;
             in.gates[i].rebaseline();
             in.inputAverages[i].reset();
+            in.publishedAt[i] = -1, in.seenSequence[i] = 0;
             continue;
         }
         in.raw[i] = *raw;
         in.age[i] = nowMs - (*entry)["monotonicMs"].get<int64_t>();
+        // The publication's wall-clock time, fixed once per sequence (state changes with data only).
+        auto sequence = (*entry).value("sequence", uint64_t(0));
+        if (sequence != in.seenSequence[i] || in.publishedAt[i] < 0) {
+            auto wall = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            in.seenSequence[i] = sequence, in.publishedAt[i] = wall - std::max<int64_t>(in.age[i], 0);
+        }
+        const auto &meta = (*entry)["values"];
+        if (first) {
+            first = false;
+            in.status = meta.contains("_status") ? meta["_status"] : Json("ok");
+            in.error = meta.contains("_error") ? meta["_error"] : Json(nullptr);
+        }
+        // A change of the source's `_reset` restarts the averages fed by this input.
+        Json reset = meta.contains("_reset") ? meta["_reset"] : Json(0); // absent: 0
+        if (!in.resetSeen[i].is_null() && reset != in.resetSeen[i]) {
+            in.inputAverages[i].reset();
+            for (size_t k = 0; k < d.drives.size(); ++k)
+                if (d.drives[k].input == int(i) || d.drives[k].override == int(i))
+                    in.driveAverages[k].reset();
+        }
+        in.resetSeen[i] = reset;
         auto status = (*entry)["values"].value("_status", "ok");
         in.condition[i] = status == "error" ? Condition::Error : in.age[i] > staleMs_ ? Condition::Stale : Condition::Fresh;
         if (input.type == Input::Event) {
@@ -1489,6 +1515,54 @@ void Machines::tick(double dt, const Json &sources, int64_t nowMs, bool still) {
                   heading({0, 0, 1}, e.scale);
         extras.push_back(e);
     }
+}
+Json machineInputs(const Json &manifest) {
+    if (!manifest.is_object() || !manifest.value("traits", Json::object()).is_object() ||
+        !manifest["traits"].contains("machine") || !manifest["traits"]["machine"].is_object())
+        return nullptr;
+    const auto &machine = manifest["traits"]["machine"];
+    Json inputs = Json::array();
+    for (auto &j : machine.value("inputs", Json::array())) {
+        if (!j.is_object() || inputs.size() >= 16)
+            continue;
+        Json in = Json::object();
+        for (auto key : {"id", "type", "label", "explain", "default", "values", "min", "max", "maxLength", "repeat"})
+            if (j.contains(key))
+                in[key] = j[key];
+        inputs.push_back(in);
+    }
+    return {{"primary", machine.contains("primary") ? machine["primary"] : Json(nullptr)}, {"inputs", inputs}};
+}
+Json Machines::live() const {
+    static const char *conditions[]{"fresh", "stale", "missing", "error"};
+    Json out = Json::array();
+    for (auto &in : instances_) {
+        const auto &d = *in.def;
+        const auto &o = world_->objectInstances[in.object];
+        Json inputs = Json::object(), source = nullptr;
+        bool common = true;
+        for (size_t i = 0; i < d.inputs.size(); ++i) {
+            const auto &b = in.bindings[i];
+            Json entry{{"source", b.bound ? Json(b.source) : Json(nullptr)}, {"key", b.bound ? Json(b.key) : Json(nullptr)},
+                       {"value", in.value[i]}, {"raw", in.raw[i]}, {"condition", conditions[int(in.condition[i])]},
+                       {"publishedAt", in.publishedAt[i] >= 0 ? Json(in.publishedAt[i]) : Json(nullptr)}};
+            for (auto key : {"value", "raw"})
+                if (entry[key].is_string() && entry[key].get_ref<const std::string &>().size() > 256)
+                    entry[key] = entry[key].get<std::string>().substr(0, 256);
+            if (b.bound) {
+                if (source.is_null())
+                    source = b.source;
+                else if (source != b.source)
+                    common = false;
+            }
+            inputs[d.inputs[i].id] = entry;
+        }
+        Json error = in.error.is_string() ? Json(in.error.get<std::string>().substr(0, 256)) : Json(nullptr);
+        out.push_back({{"id", o.id}, {"asset", d.id}, {"ref", world_->objectAssets[d.asset].ref.empty() ? Json(nullptr) : Json(world_->objectAssets[d.asset].ref)},
+                       {"source", common ? source : Json(nullptr)}, {"status", in.status.is_string() ? in.status : Json(nullptr)},
+                       {"error", error}, {"stale", in.anyStale}, {"inputs", inputs}});
+    }
+    return out;
 }
 Json Machines::diagnostics() const {
     static const char *conditions[]{"fresh", "stale", "missing", "error"};

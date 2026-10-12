@@ -199,6 +199,7 @@ void inheritance(const std::string &runtime) {
                                                                  {"accent", {1, 0, 0}}, {"path", "user/path-1"},
                                                                  {"activity", "suspended"}, {"seat", nullptr}}})}}},
                     {"npcs", {{"motion", "auto"}, {"state", "animating"}}},
+                    {"live", {{"instances", Json::array()}}},
                     {"keymap", {{"holds", Json::array({Json{{"action", "menu.open"}}})},
                                 {"config", {{"modes", {{"world", {{"menu", {"Tab[L]"}}, {"markers.reveal", {"Tab"}}}}}}}}}},
                     {"markers", {{"reveal", nullptr}, {"list", Json::array()}}},
@@ -314,6 +315,7 @@ void inheritance(const std::string &runtime) {
         // IPC 0.23 (RFC-0011 P2): NPC state, character fields, path fields, the interact reticle.
         bool npcs = atLeast(version, "0.23");
         check(state.contains("npcs") == npcs, "npcs state version projection");
+        check(state.contains("live") == atLeast(version, "0.24"), "live state version projection (RFC-0013)");
         if (atLeast(version, "0.22")) {
             auto &i = state["objects"]["instances"][0];
             check(i.contains("character") == npcs && i.contains("accent") == npcs &&

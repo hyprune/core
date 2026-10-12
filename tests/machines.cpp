@@ -389,6 +389,55 @@ int main(int argc, char **argv) {
         g.sync(*lab, setup);
         check(g.instances().size() == 1 && g.errors().size() == 1 && g.errors()[0].find("u-0a0b0c") != std::string::npos,
               "a broken user entry skips that instance and reports why");
+        // IPC 0.24: live state and the catalog's machine inputs; _reset restarts averages.
+        check(world::machineInputs(manifest)["inputs"].size() == 5 && world::machineInputs(manifest)["primary"] == "level" &&
+                  world::machineInputs(manifest)["inputs"][0]["max"] == 100 && world::machineInputs(Json::object()).is_null(),
+              "machineInputs: declared inputs as authored");
+        {
+            setup.user = nullptr;
+            world::Machines h;
+            auto lab2 = world::load(fixture);
+            auto scratch2 = world::loadObjectAsset(dir, manifest, {});
+            unsigned asset2 = world::mergeObjectAsset(*lab2, *scratch2);
+            world::ObjectInstance o;
+            o.id = "u-0f0f0f", o.asset = asset2, o.model = world::instanceModel({0, 0, 0}, {0, 0, 0, 1}, 1);
+            lab2->objectInstances.push_back(o);
+            h.sync(*lab2, setup);
+            int64_t c = 9000000;
+            uint64_t seq = 1;
+            Json values{{"value", 20}, {"display", "20%"}, {"label", "CPU"}};
+            auto feed = [&](double seconds, bool republish) {
+                for (double t = 0; t < seconds - 1e-9; t += 1 / 60.) {
+                    c += 16;
+                    if (republish)
+                        ++seq;
+                    h.tick(1 / 60., Json::array({Json{{"sourceId", "com.hyprune.sources.u-0f0f0f"}, {"values", values}, {"sequence", seq},
+                                                      {"monotonicMs", republish ? c : c - 16 * int64_t(t * 60)}, {"ttlMs", 60000}}}), c, false);
+                }
+            };
+            feed(.5, true);
+            auto l0 = h.live();
+            check(l0.size() == 1 && l0[0]["id"] == "u-0f0f0f" && l0[0]["source"] == "com.hyprune.sources.u-0f0f0f" &&
+                      l0[0]["status"] == "ok" && l0[0]["error"].is_null() && l0[0]["inputs"]["display"]["value"] == "20%" &&
+                      l0[0]["inputs"]["value"]["condition"] == "fresh" && l0[0]["inputs"]["value"]["publishedAt"].is_number_integer() &&
+                      l0[0]["inputs"]["average"]["condition"] == "missing" && l0[0]["inputs"]["average"]["publishedAt"].is_null(),
+                  "live: source, status, inputs with publishedAt");
+            feed(.3, false); // the last publication evaluated (4 per second)
+            auto held = h.live();
+            feed(1, false);
+            check(h.live() == held, "live changes with the data only (not per tick)");
+            values["value"] = 80;
+            feed(5, true);
+            double moved = h.diagnostics()["instances"][0]["levels"]["ring"]["target"];
+            check(moved > .3 && moved < .8, "the ring averages 20 and 80");
+            values["_reset"] = 1;
+            feed(.5, true);
+            check(std::abs(h.diagnostics()["instances"][0]["levels"]["ring"]["target"].get<double>() - .8) < 1e-9,
+                  "a new _reset restarts the average at the current value");
+            values["_status"] = "error", values["_error"] = "exit 2: no such file";
+            feed(.5, true);
+            check(h.live()[0]["status"] == "error" && h.live()[0]["error"] == "exit 2: no such file", "live: the source's error");
+        }
         // World-wide stack copy cap.
         setup.user = nullptr;
         for (int i = 0; i < 9; ++i)

@@ -90,6 +90,9 @@ struct Track {
     float nearest(Vec3 p) const; // arc length of the closest sample
 };
 } // namespace machines
+// IPC 0.24 catalog `machine`: a manifest's declared machine inputs as authored (repeat
+// not expanded) and its primary input, or null when it has no machine trait.
+Json machineInputs(const Json &manifest);
 class Machines {
   public:
     // Where machine definitions and bindings come from. dev: the HYPRUNE_MACHINES_PROTOTYPE
@@ -124,6 +127,9 @@ class Machines {
     std::vector<WorldLabel> labels;      // rebuilt each tick
     std::vector<size_t> instances() const;
     Json diagnostics() const; // shaped like RFC-0013's `live` state key, plus runtime counts
+    // IPC 0.24 state key `live`: per bound instance its source, status, error and inputs
+    // (value, raw, condition, publishedAt in Unix ms). Changes only with the data.
+    Json live() const;
     const std::vector<std::string> &errors() const { return errors_; }
     // Instances bound since the previous sync with the default source (for a one-time hint).
     std::vector<std::pair<size_t, std::string>> fresh;
@@ -260,6 +266,9 @@ class Machines {
         std::vector<int64_t> age;           // per input: ms since publication, -1 missing
         std::vector<int> fired;             // per input: events this evaluation
         std::vector<uint64_t> seenSequence; // per input
+        std::vector<int64_t> publishedAt;   // per input: Unix ms of the publication held, -1 missing
+        std::vector<Json> resetSeen;        // per input: the source's `_reset` (null: not seen)
+        Json status = nullptr, error = nullptr; // the first bound input's source: _status, _error
         // Target state
         std::vector<int> paletteEntry;      // per palette
         std::vector<float> emission;        // per palette

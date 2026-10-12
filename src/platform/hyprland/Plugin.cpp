@@ -380,6 +380,7 @@ struct Runtime {
     Json objectsState();
     Json pocketObjectsJson() const;
     std::optional<Json> objectsMethod(const std::string &method, const Json &params);
+    std::string objectsProtocol = "0.1"; // the calling session's protocol, for objectsMethod
     std::string newPlacementId() const;
     std::string areaAt(Vec3) const;
     Json placementRecord(const ObjectInfo &, const interaction::Transform &);
@@ -1713,6 +1714,7 @@ void Runtime::publish() {
     publication["markers"] = markers.stateKey();
     publication["objects"] = objectsState();
     publication["npcs"] = npcsState();
+    publication["live"] = {{"instances", machines.live()}};
     for (auto &e : capture.entries)
         if (world && editor.locked(world->id, e.instance))
             publication["editor"]["locked"].push_back(e.surface.id);
@@ -4525,8 +4527,10 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     }
     if (locked())
         throw ipc::Error(-32005, "session locked");
-    if (world::objectMethods().contains(method))
+    if (world::objectMethods().contains(method)) {
+        objectsProtocol = protocol;
         return objectsMethod(method, params);
+    }
     if (method == "workspace.bind") {
         if (params.size() != 3 || !params.at("id").is_number_integer())
             throw ipc::Error(-32602, "invalid area binding");

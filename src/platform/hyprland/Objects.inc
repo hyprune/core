@@ -1139,7 +1139,14 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
     auto record = [&](const ObjectInfo &i) { return i.source == "authored" ? editor.override(world->id, i.id) : editor.placement(world->id, i.id); };
     if (method == "objects.catalog") {
         only({});
-        return Json{{"revision", catalogRevision}, {"entries", catalogEntries()}};
+        auto entries = catalogEntries();
+        // IPC 0.24 (RFC-0013): a machine's declared inputs, for its data source panel.
+        if (ipc::protocol::atLeast(objectsProtocol, "0.24"))
+            for (auto &e : entries) {
+                auto *entry = catalogEntry(e["ref"]);
+                e["machine"] = entry ? world::machineInputs(entry->manifest) : Json(nullptr);
+            }
+        return Json{{"revision", catalogRevision}, {"entries", entries}};
     }
     if (method == "libraries.list") {
         only({});
