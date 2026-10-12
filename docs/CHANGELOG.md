@@ -118,6 +118,39 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   `markers.core_draw` is off. Quests and focus run in hypruned and persist privately
   under `$XDG_STATE_HOME/hyprune/{quests,focus}`; guidance is
   `$XDG_CONFIG_HOME/hyprune/guidance.json`. Older sessions see none of this.
+- **0.23** Characters, paths and interactions (RFC-0011 P2, RFC-0010; world format
+  0.9). No new grant: changes need `objects.control`, `paths.list` needs `state.read`,
+  `interaction.choose` needs `world.control`. New required state key `npcs {motion,
+  state (none|animating|paused|still|off), reason, usage {authored,user}, limits
+  {authored:16,user:8}, drawing, aimed, interaction}`: `aimed` is the character with
+  interactions under the reticle within the use distance (`{objectId,name,prompt,
+  interactions[{id,label,type}]}`), `interaction` the running one (`type`
+  choose|say|waypoint|guide|panel, `choices[{id,label}]`, `line`, `lineIndex`,
+  `lineCount`, `panel`), `drawing` a `paths.draw` in progress. `objects.instances[]`
+  gain `character` and `accent`; `path` (`package/<id>` or `user/<id>`), `activity`
+  (idle|walking|running|stopped|sitting|guiding|interacting|suspended) and `seat` are
+  set for characters; `state` may be `suspended` (route not walkable). Moving
+  characters' positions publish at most twice a second. `editor.paths[]` gain `use`,
+  `name`, `speed`, `stops`. `interaction.reticle.action` gains `interact`.
+  `graphics.get/set` gain `npc_motion` (auto|always|still|off; persisted in
+  `graphics.json`, wins over Lua `npc.motion`; `auto` animates only on a full or
+  limited AC power profile). Methods: `npcs.spawn {ref, path?|pose?, phase?, speed?,
+  accent?, reverse?}` → `{revision,id}`, `npcs.bind {id, ...}` (user characters:
+  route or standing spot and settings), `npcs.disable {id,disabled}` (authored and
+  user), `npcs.remove {id}|{all}` (user), `paths.list` (package and user paths with
+  `walkable`, `problems`, `bound`), `paths.set {path}` → `{revision,id}` (a route must
+  be walkable), `paths.remove {id,unbind?}` (removing the route being drawn cancels the
+  draw), `paths.draw {use?,name?,spawn?|bind?}` (tool 3 with a fresh path; finishing it
+  spawns or rebinds), `paths.finish` → `{revision,id,bound}`, `interaction.choose
+  {objectId, interactionId|null}`. Errors: -32004 unknown id/ref/path, -32005
+  protected/authored/not a character, -32007 walkability or placement rule (`rule`
+  `walkable` or `support`), -32008 budget (8 user characters per world, 8 per path,
+  the 0.22 object budgets). `objects.transform`, `objects.pocket`, `objects.place` and
+  `objects.configure` refuse characters (-32005). Notices: `npc.spawned`, `npc.removed`,
+  `npc.disabled`, `npc.enabled`, `npc.suspended`, `path.saved`, `path.removed`,
+  `path.unwalkable`, `world.library.missing`, `object.protected`. Older sessions keep
+  the 0.22 shapes (no `npcs`, character fields stripped, `path`/`activity`/`seat`
+  null, `interact` reads `click`).
 
 ### Changes without a protocol bump
 
@@ -261,6 +294,25 @@ RFC-0005 "Amendment: reachable spawns, home windows and world switches":
   environment-gated machines and NPC prototypes keep the local renderer ("machines
   prototype uses local renderer", "NPC prototype uses local renderer"). No IPC
   change: `reason` is free text.
+- **0.9** Characters, paths, seats and keepClear (RFC-0011 P2, RFC-0004 amendment).
+  `objectAssets[]` take one source: an inline `scene` (the 0.8 `animations`/`collision`
+  shorthand or `traits`, not both), a package object directory `dir` (with
+  `object.json`) or an installed library object (`library` `id@version` + `object`);
+  a missing library fails the load with `runtime.notice` `world.library.missing` and
+  the previous scene stays. Assets with the `character` trait load as skinned
+  characters (RFC-0010 spec). `objects[]` gain `path` (a `route`; no `pose`; starts at
+  `phase` along it), `reverse`, `seat` (unbound characters sit there), `accent`,
+  `interactions` (`say`, `waypoint`, `guide`, `panel`; `travel` and `quest` reserved)
+  and `locked`; at most 16 character instances, 8 per path, characters unscaled. New
+  `paths[]` (≤ 64, 1,024 points; `use` route|track|generic; tool 3's segment geometry;
+  `stops` with seconds and a clip, a facing or a seat), `seats[]` (≤ 64) and
+  `keepClear[]` (≤ 64). Routes are checked for walkability every 0.25 m (floor within
+  0.35 m of the previous sample, body capsule clear, playable union, no screen
+  approach); characters on a route that fails stand still (`suspended`).
+  `hyprune-world-check` reports characters and routes and fails on an unwalkable
+  authored route. Characters render through the offload renderer too (the worker
+  poses them from the same pose inputs); the NPC prototype (`HYPRUNE_NPC_PROTOTYPE`)
+  is withdrawn.
 
 Older packages remain accepted by core at every format version above.
 

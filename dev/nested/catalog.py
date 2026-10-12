@@ -7,7 +7,7 @@ HYPRUNE_GIZMO_OBJECTS=1 stands in for world 0.9's movable authored objects.
 Checks:
 1. Contract: 0.22 hello with objects.control, the objects state key, the new methods.
 2. libraries.install: hash checked, installed, idempotent; libraries.list; the catalog with
-   placeable flags and reasons (characters, movers), the SDK's triangle and GPU estimates.
+   placeable flags and reasons (movers; characters are spawnable), the SDK's triangle and GPU estimates.
 3. The user folder: an object dropped in is validated after the quiet period; an invalid
    one is listed with its errors.
 4. Pocket and tool 5: objects.pocket selects tool 5 and the item; the ghost follows the
@@ -17,7 +17,7 @@ Checks:
 7. Tool 5 Alternate pockets a user object; remove; undo restores it.
 8. Authored objects: transform, hide (no draw, no collision), reset.
 9. Lock: configure locked refuses transforms and drags.
-10. Protection and budgets: characters can't be pocketed; 17 pocket items refused.
+10. Protection and budgets: characters can't be pocketed (they are spawned: npcs.spawn); 17 pocket items refused.
 11. Persistence: a world reload keeps placements and poses; editor.json holds them.
 12. libraries.remove makes placements missing; reinstalling restores them.
 Evidence: docs/evidence/catalog.json and stills in the state dir.
@@ -198,7 +198,8 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('catalog: library objects with placeability, characters and movers refused with a reason',
           catalog['revision'] == state()['objects']['catalogRevision'] and rack['placeable'] and rack['state'] == 'ready' and
           rack['traits'] == ['collidable', 'decorative', 'machine', 'movable'] and rack['thumbnail'].endswith('server-rack/thumbnail.png') and
-          reasons['resident-blue'].startswith('character:') and reasons['job-token'].startswith('mover:') and
+          entries['library/com.hyprune.starter@0.1.0/resident-blue']['placeable'] and 'resident-blue' not in reasons and
+          reasons['job-token'].startswith('mover:') and
           entries['package/armillary']['placeable'] and entries['library/com.hyprune.starter@0.1.0/armillary']['placeable'],
           {'entries': len(entries), 'reasons': reasons})
     check('catalog estimates are the SDK\'s: server rack triangles, GPU bytes, proxy triangles',
@@ -356,8 +357,8 @@ def acceptance(client, children, args, shell_token, socketpath):
 
     # 10. Protection and budgets.
     char = error('objects.pocket', {'ref': 'library/com.hyprune.starter@0.1.0/resident-blue'})
-    check('characters are never pocketed or placed (P2): -32005 with the reason',
-          char and char['code'] == -32005 and char['message'].startswith('character:'), char)
+    check('characters are never pocketed or placed (spawned with npcs.spawn from IPC 0.23): -32005',
+          char and char['code'] == -32005 and 'npcs.spawn' in char['message'], char)
     for _ in range(16 - len(objects()['pocket'])):
         client.call('objects.pocket', {'ref': 'user/lamp'})
     full = error('objects.pocket', {'ref': 'user/lamp'})
