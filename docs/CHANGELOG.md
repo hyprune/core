@@ -383,8 +383,8 @@ RFC-0013 draft, object manifest 0.10 draft (no version bump):
   `surface`, `settle` `ease`/`spring`) and drive target `level:<id>` (0–1).
 - Stacks: `cap` up to 100, `rate` (copies per second), signed `spacing`, copies take
   their states slot's paint; at most 1024 stacked copies per world.
-- Machine draw state is in-process only: while machines are active the world renders
-  locally rather than in the offload worker.
+- Machines render in the offload worker too (their draw state travels with each pose);
+  a placed gauge no longer forces the local renderer.
 - Packaging: the release archive (`dev/release/build.sh`) ships the source helper as
   `libexec/hyprune/source-helper`, the gauge script as
   `share/hyprune/machines/system-gauges.py` and the command `bin/hyprune-system-gauges`

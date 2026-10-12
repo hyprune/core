@@ -175,14 +175,22 @@ poses, as a delta against what the worker already has (`src/offload/Objects.hpp`
 | Instances (user placements, gizmo edits, relit probes) | The count, and the records of changed instances only |
 | Hidden instances | The set with its own revision, only when it changes |
 | Edited scene-node transforms | Changed and removed nodes |
+| Machine draw state (`src/offload/Machines.hpp`) | Per bound instance its paints, offsets and animation turns; per owner instance its extra draws (stack copies, levels, items, effect pieces; relative ones as a local matrix on the worker's own instance model); the world labels when they change |
 
 A delta is committed to the plugin's mirror only once its pose was written, so
 transport backpressure never drops a change; the frame reply carries the applied
 revision (`objectsRevision`) and whether assets are still loading. A new worker
 starts from the package and gets every instance in its first pose. The worker may
 read the catalog object roots that exist (Landlock, read-only); one created later
-restarts it once. The machines and NPC prototypes (environment-gated) keep the
-local renderer.
+restarts it once. Machines render in the worker like any object (a placed gauge
+no longer forces the local renderer); `machinesRevision` and the worker's machine
+counts come back in the frame reply.
+
+When the worker misbehaves, `HYPRUNE_DEBUG_RENDERER=1` in hypruned's environment
+passes to the worker, which then logs its start, readiness and each pose's size on
+the inherited stderr (a nested session's `hyprland.log`); hypruned logs a worker that
+ends other than by its stop (signal or exit status), and the transport error says
+whether the worker closed the channel or a packet was truncated.
 
 `dev/nested/offload_objects.py` checks this on Lumen Reach with the clock pinned
 (`hl.plugin.hyprune.animation_clock(t)`): stills of the authored armillary, a placed
