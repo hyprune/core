@@ -44,6 +44,10 @@ than 50 ms; otherwise the local renderer drew the world for that frame
 GPU. At 4K the worker on the x8 GPU takes twice as long to copy, so its frames
 often reach the 50 ms limit.
 
-Both modes show the same ~130 ms tick about once a second (1.6 % of frames over
-40 ms). It is not offload related: a catalog rescan loop that is fixed separately.
-`ticks-1080p.json` records it per tool state without polling (presentation gaps).
+Both modes showed the same ~130 ms tick about once a second (1.6 % of frames over
+40 ms). It was not offload related: a catalog rescan loop, fixed on main in
+6f38ebf. `ticks-1080p.json` records it per tool state without polling
+(presentation gaps). After that fix (`perf-1080p-after-hitch-fix.json`, 1080p):
+no frame over 40 ms in any phase (longest 20 ms), compositor GPU 5.1 ms in-process
+and 0.93 ms offloaded, worker 2.6 ms, pose to frame ready 10.1 ms, worker frame
+shown in 99.5 % of drawn frames; ticks during a gizmo drag stay near 1.2 ms.
