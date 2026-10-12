@@ -62,6 +62,7 @@ FIELD_TYPES = {"string", "number", "int", "bool", "counter"}
 OUTPUTS = {"json", "number", "text", "lines"}
 TOKEN_RE = re.compile(r"[a-f0-9]{64}")
 TOKEN_READ_TIMEOUT_S = 10.0
+EXIT_NO_GRANT = 3  # the token descriptor closed and the connection is gone: nothing can reconnect
 CONFIG_CHECK_S = 1.0  # how often the config file's mtime is checked
 META_KEYS = 4  # _status, _error, _exitCode or _httpStatus, _reset
 CONTROL_REQUEST_CAP = 64 * 1024
@@ -1044,6 +1045,10 @@ class Publisher:
     def connected(self):
         return self.connection is not None
 
+    def exhausted(self):
+        """True when tokens come from a descriptor that has closed: no grant can follow."""
+        return bool(self.tokens and self.tokens.fd is not None and self.tokens.closed)
+
     def connect(self, now):
         if self.connection or now < self.reconnect_at:
             return False
@@ -1288,6 +1293,7 @@ class Runner:
         self.results = queue.Queue()     # fetch results and control requests, in order
         self.jobs = queue.Queue()
         self.stopping = threading.Event()
+        self.exit_code = 0
         self.was_connected = False
         self.retired = []  # removed sources still to be withdrawn with data.remove
         self.tests = threading.BoundedSemaphore(CONTROL_TESTS)
@@ -1403,6 +1409,12 @@ class Runner:
                     self.jobs.put(source)
         if not self.publisher.connected():
             self.publisher.connect(now)
+            if not self.publisher.connected() and getattr(self.publisher, "exhausted", lambda: False)():
+                # One-use launch tokens: without a supervisor that renews them nothing can
+                # reconnect, so stop running commands for a connection that cannot return.
+                log.error("cannot reconnect: the token channel is closed (a new grant needs a restart); exiting")
+                self.exit_code = EXIT_NO_GRANT
+                self.stopping.set()
         connected = self.publisher.connected()
         if connected and not self.was_connected:
             for source in self.sources:
@@ -1881,7 +1893,7 @@ def main(argv=None):
     finally:
         if server is not None:
             server.close()
-    return 0
+    return runner.exit_code
 
 
 if __name__ == "__main__":

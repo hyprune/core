@@ -11,10 +11,30 @@ machines can be developed and demonstrated without any external service.
 This is a **prototype** for the source helper described in the RFC-0013 (live objects)
 draft. It runs out of process and uses only the `data.publish` contract that core already
 has (IPC 0.2+): no new methods, fields or limits. It sits in `dev/` beside the nested
-harness that drives it because it is a development tool, not a shipped component. The
-shipped helper is expected to become a bundled, supervised extension as the draft
-describes (privilege split, user-confirmed commands, secret storage, a Sources page);
-this script exists to exercise the data model and the limits before that is built.
+harness that drives it. Release builds also install it (below), so installed sessions
+can feed gauges, but it is still the prototype: the helper the draft describes (a
+bundled, supervised extension with a privilege split, user-confirmed commands, secret
+storage and a Sources page) is not built yet, and this script exercises the data model
+and the limits until it is.
+
+## Installed paths
+
+`dev/release/build.sh` puts these in the release archive (`hyprune-core/`); other
+installs of core use the same layout under their prefix:
+
+| Path | From |
+| --- | --- |
+| `libexec/hyprune/source-helper` | `source-helper.py` |
+| `share/hyprune/machines/system-gauges.py` | `scripts/system-gauges.py` |
+| `bin/hyprune-system-gauges` | a link to the gauge script, for `argv` in `sources.json` |
+
+Both are standard-library Python and need nothing else from the checkout. A session
+launcher always starts the helper (see "Gauges: wire a script", step 5); it runs the helper with its Python as `python3 <prefix>/libexec/hyprune/source-helper`
+and puts `<prefix>/bin` first on the helper's `PATH`, so `sources.json` can name the
+gauge script as `hyprune-system-gauges` on any install. The release archive's live
+launcher (`live/dev/live/live.py`) finds the helper at `../libexec/hyprune/source-helper`;
+in a checkout it uses `dev/machines/source-helper.py`. The simulators and
+`scripts/gauge-sim.py` stay in the checkout.
 
 Everything is Python 3 standard library.
 
@@ -60,7 +80,12 @@ fresh token into the token file. Without the grant the helper logs
 With `--token-fd N --token-refresh` the helper follows the same renewal protocol as the
 shell's bridge: the supervisor writes the launch token as the first line; for every later
 connection the helper writes `renew\n` to the descriptor and reads the next token line
-(waiting at most 10 s, with at most one request outstanding). The supervised live launcher
+(waiting at most 10 s, with at most one request outstanding). Without `--token-refresh` the
+descriptor may hold a single line and close (a pipe): the helper connects with that token,
+and when the connection is later lost and the descriptor has closed, it exits with status 3
+(`cannot reconnect: the token channel is closed`) rather than run commands for a
+connection that cannot come back. A supervisor that renews nothing restarts it with a new
+grant, or a session restart does. The supervised live launcher
 (`dev/live`) starts the helper this way; see "Gauges: wire a script" below. The descriptor
 is not passed on to commands, and token variables are removed from their environment.
 Tokens are never logged.
@@ -451,14 +476,20 @@ whose `id` is the instance id publishes them to that gauge.
    ]}
    ```
 
+   On an installed system use the gauge script by name,
+   `"argv": ["hyprune-system-gauges", "ram"]` (see "Installed paths"); from a checkout,
+   use the absolute path of `dev/machines/scripts/system-gauges.py`.
    Command intervals are at least 5 s. Relative paths resolve against the directory of
    `sources.json`. `sources.gauges.example.json` shows four system gauges (its ids,
    `u-000001` to `u-000004`, are placeholders: use your gauges' ids).
-5. Start Hyprune with the live launcher (`dev/live/up`). When `sources.json` exists, the
-   launcher grants `data.publish` to `com.hyprune.sources`, starts this helper with the
-   grant (renewed over a private descriptor) and logs it to `source-helper.log` in the
-   live state directory; `down` stops it. Edits to `sources.json` apply while it runs: no
-   restart (a new `sources.json` needs the next `up`).
+5. Start Hyprune with the live launcher (`dev/live/up`, also in the release archive).
+   The launcher always grants `data.publish` to `com.hyprune.sources` and starts this
+   helper with `--config $XDG_CONFIG_HOME/hyprune/sources.json` (passed even while the
+   file does not exist: the helper idles until it appears) and a grant renewed over a
+   private descriptor; it logs to `source-helper.log` in the live state directory, and
+   `down` stops it. The starter session (`hyprune-session`, in the hyprune/hyprune
+   repository) does the same from the installed path. Edits to `sources.json`, and a new
+   `sources.json`, apply while it runs: no restart.
 
 Optional: `$XDG_CONFIG_HOME/hyprune/machines.json` binds a gauge to another source or
 other keys (for example one script publishing several values, or a longer averaging
@@ -514,10 +545,11 @@ python3 -m unittest dev/machines/test_machines.py
 They cover output parsing and caps, timeouts (process group killed), back-off, JSON
 pointers and fields, sequencing, publish-on-change and keep-alive, HTTP behaviour against a
 local server, the gauge scripts (a fake `/proc` and `/sys`: a suspended GPU is never
-queried), token renewal over a descriptor, reloading the configuration, the control channel
-(status shape, test runs that publish nothing, restart killing a running command and
-`_reset`, restart-all reconnecting with a renewed token, reload, idling until a config
-appears, the peer uid check, stale sockets), 30-minute timelines
+queried), token renewal over a descriptor (and the exit once a one-use descriptor is spent),
+reloading the configuration, the control channel (status shape, test runs that publish
+nothing, restart killing a running command and `_reset`, restart-all reconnecting with a
+renewed token, reload, idling until a config appears, the peer uid check, stale sockets),
+30-minute timelines
 of every simulator (exact keys, value domains, monotonic
 counters, failures, outages, bursts), and the helper against a fake core socket (hello,
 `data.publish` parameters, a rate refusal, reconnecting with a fresh token, `data.remove`

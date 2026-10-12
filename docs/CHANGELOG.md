@@ -374,3 +374,12 @@ RFC-0013 draft, object manifest 0.10 draft (no version bump):
   their states slot's paint; at most 1024 stacked copies per world.
 - Machine draw state is in-process only: while machines are active the world renders
   locally rather than in the offload worker.
+- Packaging: the release archive (`dev/release/build.sh`) ships the source helper as
+  `libexec/hyprune/source-helper`, the gauge script as
+  `share/hyprune/machines/system-gauges.py` and the command `bin/hyprune-system-gauges`
+  (a link to it); all are standard-library Python that run from those paths. The
+  archive's live launcher finds the helper there and, like the checkout's, now always
+  starts it with a renewable `com.hyprune.sources` grant and
+  `--config $XDG_CONFIG_HOME/hyprune/sources.json`, whether or not that file exists. A helper whose one-use token came
+  over a descriptor that has since closed exits with status 3 when its connection is
+  lost, instead of retrying without a grant.

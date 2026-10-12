@@ -139,16 +139,28 @@ class Tests(unittest.TestCase):
         with patch.dict(live.os.environ,{'WAYLAND_DISPLAY':'missing'}),patch.object(live,'instances',return_value=[]):
             with self.assertRaises(RuntimeError):live.select(types.SimpleNamespace(instance=None))
 
-    def test_sources_grant_only_with_a_sources_file(self):
+    def test_sources_config_path_even_without_the_file(self):
+        # The helper always starts, idle until sources.json appears.
         with tempfile.TemporaryDirectory() as d,patch.dict(live.os.environ,{'XDG_CONFIG_HOME':d}):
-            self.assertIsNone(live.sources_config())
-            (pathlib.Path(d)/'hyprune').mkdir();(pathlib.Path(d)/'hyprune/sources.json').write_text('{"sources":[]}')
             self.assertEqual(live.sources_config(),pathlib.Path(d)/'hyprune/sources.json')
+            self.assertFalse(live.sources_config().exists())
         grants=live.launch_grants({'org.hyprune.live':'a'*64,'com.hyprune.shell':'b'*64,'com.hyprune.sources':'c'*64})
         self.assertEqual([g['client'] for g in grants],['org.hyprune.live','com.hyprune.shell','com.hyprune.sources'])
         self.assertEqual(grants[2],{'token':'c'*64,'client':'com.hyprune.sources','capabilities':['data.publish']})
         self.assertEqual(grants[1]['capabilities'],live.GRANTS)
         self.assertTrue(live.SOURCE_HELPER.is_file())
+
+    def test_source_helper_in_a_checkout_and_a_release_archive(self):
+        self.assertEqual(live.find_source_helper(),live.ROOT/'dev/machines/source-helper.py')
+        with tempfile.TemporaryDirectory() as d:
+            # dev/release/build.sh: hyprune-core/live/dev/live/live.py beside hyprune-core/libexec.
+            archive=pathlib.Path(d)/'hyprune-core';(archive/'live/dev/live').mkdir(parents=True)
+            self.assertIsNone(live.find_source_helper(archive/'live'))
+            helper=archive/'libexec/hyprune/source-helper';helper.parent.mkdir(parents=True);helper.write_text('')
+            self.assertEqual(live.find_source_helper(archive/'live'),helper)
+            self.assertEqual(live.helper_path(helper,'/usr/bin'),f'{archive}/bin:/usr/bin')
+            self.assertEqual(live.helper_path(helper,''),f'{archive}/bin')
+        self.assertEqual(live.helper_path(live.ROOT/'dev/machines/source-helper.py','/usr/bin'),'/usr/bin')
 
     def test_source_helper_gets_its_token_and_renewals_privately(self):
         fake='\n'.join(['import hashlib,os,sys',
