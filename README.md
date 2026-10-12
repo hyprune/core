@@ -146,7 +146,8 @@ a full daemon package registry are follow-up work.
 ## Worlds and graphics
 
 `HYPRUNE_WORLD_DIR` names an **installed directory of packages**, each subdirectory
-matching its world ID. It is trusted launcher configuration, never a public RPC
+matching its world ID (default `$XDG_DATA_HOME/hyprune/worlds`, else
+`~/.local/share/hyprune/worlds`; directories starting with `.` are never loaded). It is trusted launcher configuration, never a public RPC
 path. The nested harness installs its generated fixture there. `world.load` accepts
 only an ID and optional spawn ID, never a path, URI or executable.
 

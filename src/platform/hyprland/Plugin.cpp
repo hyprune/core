@@ -5964,8 +5964,16 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     }
     runtime->lastEditor = runtime->editor.saved();
     runtime->catalogInit();
+    // HYPRUNE_WORLD_DIR, else $XDG_DATA_HOME/hyprune/worlds (absolute only), else ~/.local/share:
+    // the root the SDK CLI and the installers write (RFC-0015 "Where state lives").
     const char *installed = getenv("HYPRUNE_WORLD_DIR");
-    runtime->installed = installed ? installed : std::string(getenv("HOME")) + "/.local/share/hyprune/worlds";
+    const char *dataHome = getenv("XDG_DATA_HOME");
+    if (installed)
+        runtime->installed = installed;
+    else if (dataHome && dataHome[0] == '/')
+        runtime->installed = std::filesystem::path(dataHome) / "hyprune/worlds";
+    else
+        runtime->installed = std::filesystem::path(getenv("HOME") ? getenv("HOME") : "/") / ".local/share/hyprune/worlds";
     const char *dir = getenv("XDG_RUNTIME_DIR");
     const char *sig = getenv("HYPRLAND_INSTANCE_SIGNATURE");
     if (!dir || !sig)
