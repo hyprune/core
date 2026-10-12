@@ -347,6 +347,21 @@ bool Runtime::companionStep(NpcRun &n, float dt, const sim::NpcWorld &w, const s
     if (auto c = characterAim(); c && c->first == companionId && c->second < 8)
         v.lookedAt = true;
     companionView(v, walkScene, standScene);
+    // Diagnostics: can the player see it, and did a teleport ever happen in view (a pop)?
+    int teleportsBefore = companionBrain.teleports;
+    bool seenBefore = !companionBrain.hidden() && v.inView(a.position);
+    struct Seen {
+        Runtime *r;
+        NpcRun &n;
+        sim::CompanionView &v;
+        int before;
+        bool seen;
+        ~Seen() {
+            r->companionInView = !r->companionBrain.hidden() && v.inView(n.agent.position);
+            if (r->companionBrain.teleports > before && (seen || r->companionInView))
+                ++r->companionPops;
+        }
+    } seen{this, n, v, teleportsBefore, seenBefore};
     // Focus: out of the focused view when the transition starts, then it waits there.
     if (focus) {
         if (!companionFocused && mode != "route" && !companionBrain.hidden()) {
@@ -630,6 +645,8 @@ Json Runtime::companionDiagnostics() {
             {"heading", n ? n->agent.heading : 0},
             {"clip", n ? Json(n->agent.pose.clip) : Json(nullptr)},
             {"moving", companionMoving},
+            {"inView", companionInView},
+            {"pops", companionPops},
             {"feet", vecJson(companionFeet)},
             {"carry", companionCarry ? Json{{"valid", companionDrop.valid}, {"route", companionDrop.route}, {"at", vecJson(companionDrop.at)}} : Json(nullptr)}};
 }

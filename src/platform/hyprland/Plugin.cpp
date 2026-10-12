@@ -663,7 +663,8 @@ struct Runtime {
     uint64_t companionRevision = 0;
     Vec3 companionFeet{}, companionPublished{}, companionCarryFrom{};
     float companionHeading = 0, companionTravel = 0, companionCarryHeading = 0, companionCarryDistance = 2;
-    bool companionCarry = false, companionFocused = false, companionMoving = false;
+    bool companionCarry = false, companionFocused = false, companionMoving = false, companionInView = false;
+    int companionPops = 0; // teleports seen in view (diagnostics; never expected)
     size_t companionLine = 0;
     struct CompanionDrop {
         Vec3 at{};
