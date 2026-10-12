@@ -363,6 +363,12 @@ bool Layout::pulled(const Instance &i, const world::World *w) const {
             });
     return false;
 }
+bool Layout::composedOnWall(int id, const Instance &i, bool elsewhere, const world::World *w, const Instance *parent,
+                            bool parentElsewhere) const {
+    if (parent)
+        return composedOnWall(id, *parent, parentElsewhere, w);
+    return i.workspaceId == id && (elsewhere || !pulled(i, w));
+}
 std::string Layout::place(const Instance &i, const std::string &requested, const world::World *w) {
     freePoses.erase(i.id);
     occupiedPoses.erase(i.id);

@@ -145,6 +145,16 @@ void homeArrivals() {
     after = refresh({&late, &kiosk, &signal});
     assert(!after.contains("signal") && !layout.pulled(signal, &w) && layout.walled.at("signal") == 21);
 
+    // Wall composition: the wall window and a menu it opens are composed on wall 21; a window
+    // pulled into the world is not, and neither is its menu (nested --m3a: an X11 menu of a
+    // staged window was drawn on the far wall, so clicks never reached it).
+    surfaces::Instance menu{"menu", "kitty", "Menu", 21};
+    assert(layout.composedOnWall(21, late, false, &w) && layout.composedOnWall(21, menu, false, &w, &late));
+    assert(!layout.composedOnWall(21, kiosk, false, &w) && !layout.composedOnWall(21, menu, false, &w, &kiosk));
+    assert(!layout.composedOnWall(22, late, false, &w) && !layout.composedOnWall(22, menu, false, &w, &late));
+    // A home on another output shows its windows on its wall only, pulled or not, menus too.
+    assert(layout.composedOnWall(21, kiosk, true, &w) && layout.composedOnWall(21, menu, false, &w, &kiosk, true));
+
     // Anchors that durable rules restore to are left for them while others are free.
     surfaces::Layout reserved;
     reserved.workspaceBase = 20;

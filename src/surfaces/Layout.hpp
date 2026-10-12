@@ -52,6 +52,12 @@ class Layout {
     void release(const Instance &, const world::World *, int wallWorkspace = 0);
     void recall(std::span<const Instance>);
     bool pulled(const Instance &, const world::World *) const;
+    // Composed on workspace `id`'s wall (its pose is its rectangle there) rather than drawn on
+    // its own: on that workspace and not pulled into the world, unless its home lives on
+    // another output (shown on its wall only). An attached child (an X11 menu, a transient
+    // dialog) goes with its parent: a menu of a window pulled into the world stays beside it.
+    bool composedOnWall(int id, const Instance &window, bool elsewhere, const world::World *w,
+                        const Instance *parent = nullptr, bool parentElsewhere = false) const;
     bool hasPlacement(const Instance &instance, const world::World *world) const {
         return saved(instance, world) != nullptr;
     }

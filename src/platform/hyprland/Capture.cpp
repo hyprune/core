@@ -655,7 +655,13 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         };
         std::vector<std::pair<std::pair<int, size_t>, Entry *>> stack;
         for (auto &entry : entries) {
-            if (entry.instance.workspaceId != id || (!entry.elsewhere && layout.pulled(entry.instance, world)))
+            auto parent =
+                entry.parentId.empty() ? entries.end() : std::find_if(entries.begin(), entries.end(), [&](auto &p) {
+                    return p.surface.id == entry.parentId;
+                });
+            bool attached = parent != entries.end();
+            if (!layout.composedOnWall(id, entry.instance, entry.elsewhere, world,
+                                       attached ? &parent->instance : nullptr, attached && parent->elsewhere))
                 continue;
             auto window = entry.window.lock();
             if (!window || !window->logicalBox())
