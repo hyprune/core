@@ -307,7 +307,12 @@ def offload_parity(client, check, ids, p0, look, inst, out, stills):
         client.call('graphics.set', {'patch': {'offload': mode, 'render_scale': 1, 'dynamic_resolution': False,
                                                'offload_power_cap_w': 20}})
         want = 'offload' if mode == 'on' else 'in-process'
-        return wait(lambda: perf()['activeRenderer'] == want, 40)
+        try:
+            return wait(lambda: perf()['activeRenderer'] == want, 40)
+        except AssertionError:
+            c = s.camera()
+            raise AssertionError(('offload did not switch', want, perf(), c.get('offloadRequests'), c.get('offloadClient'),
+                                  (c['timings'].get('offload') or {})))
 
     def shot(name):
         path = out / f'gauges-offload-{name}.png'
