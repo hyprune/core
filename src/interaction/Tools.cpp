@@ -1,4 +1,5 @@
 #include "Tools.hpp"
+#include "sim/Route.hpp"
 #include <chrono>
 #include <set>
 namespace hyprune::interaction {
@@ -74,19 +75,11 @@ std::vector<Line> pathLines(const Json &p) {
     size_t count = points.size() + (p.at("closed").get<bool>() ? 1 : 0);
     for (size_t i = 1; i < count; i++) {
         auto a = vec(points[(i - 1) % points.size()]["position"]), b = vec(points[i % points.size()]["position"]);
-        std::string type = points[i % points.size()]["type"];
+        auto before = vec(points[(i > 1 ? i - 2 : 0) % points.size()]["position"]);
+        auto type = sim::segmentType(points[i % points.size()]["type"]);
         Vec3 prev = a;
-        for (int k = 1; k <= 24; k++) {
-            float t = k / 24.f;
-            Vec3 next = a + (b - a) * t;
-            if (type == "curve") {
-                auto before = vec(points[(i > 1 ? i - 2 : 0) % points.size()]["position"]);
-                auto tangent = (b - before) * .5f;
-                next = a * (2 * t * t * t - 3 * t * t + 1) + tangent * (t * t * t - 2 * t * t + t) +
-                       b * (-2 * t * t * t + 3 * t * t) + (b - a) * (t * t * t - t * t);
-            }
-            if (type == "arc")
-                next += normalized(cross(b - a, {0, 1, 0})) * std::sin(t * 3.141593f) * length(b - a) * .3f;
+        for (int k = 1; k <= sim::samplesPerSegment; k++) {
+            Vec3 next = sim::segmentPoint(before, a, b, type, k / float(sim::samplesPerSegment));
             out.push_back({prev, next, {.85f, .65f, .18f}, .025f, int(i % points.size())});
             prev = next;
         }
