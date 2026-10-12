@@ -168,7 +168,7 @@ def run(client, children, shell_token, socketpath, archive, world):
         wait(lambda: ghost()['valid'], 5)
         click()
         time.sleep(.6)
-        look_at([arm_at[0] - 9, 4.2, arm_at[2] + 2.5], [arm_at[0] - 2, 1.4, arm_at[2] - 3], 1.8)
+        look_at([arm_at[0] - 8.5, 3.8, arm_at[2] + 3.5], [arm_at[0] - .5, 1.8, arm_at[2]], 1.8)
         time.sleep(.8)
         # Tool 4: select the rack, move it along x, turn it.
         keys('-k', '4'); time.sleep(.3)
