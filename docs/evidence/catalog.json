@@ -2,7 +2,7 @@
   "nestedOnly": true,
   "world": "com.hyprune.lumen-reach",
   "protocol": "0.22",
-  "library": "main-0.2.0.tar.zst",
+  "library": "final.tar.zst",
   "stills": [
     "tool5-ghost.png",
     "rack-placed.png",
@@ -74,7 +74,7 @@
           "version": "0.2.0"
         },
         "library": {
-          "digest": "8e548d48b24f5f5d688a2dff4a96d223a66f3dd13e97f83be37af6f80fd274c7",
+          "digest": "458d9b989895b418a61947d2c21a313bd9dc0547190c2cd8f97bc6d33d80a3f2",
           "errors": [],
           "formatVersion": "0.10",
           "id": "com.hyprune.starter",
@@ -184,7 +184,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-ea6de6",
+        "id": "u-2b6470",
         "locked": false,
         "movable": true,
         "name": "Server rack",
@@ -224,7 +224,7 @@
           24
         ],
         "hidden": false,
-        "id": "u-ea6de6",
+        "id": "u-2b6470",
         "radius": 1.3823989629745483
       }
     },
@@ -273,7 +273,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-2a649a",
+        "id": "u-a853fd",
         "locked": false,
         "movable": true,
         "name": "Floor lamp",
@@ -301,7 +301,7 @@
     },
     {
       "name": "tool 4 selects the user object",
-      "evidence": "object:u-ea6de6"
+      "evidence": "object:u-2b6470"
     },
     {
       "name": "a move-handle drag moves the rack along x; the overlay records it",
@@ -352,14 +352,14 @@
     },
     {
       "name": "objects.remove deletes a user placement and its record",
-      "evidence": "u-b800bc"
+      "evidence": "u-a87725"
     },
     {
       "name": "undo restores the removed object",
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-b800bc",
+        "id": "u-a87725",
         "locked": false,
         "movable": true,
         "name": "Floor lamp",
@@ -498,7 +498,7 @@
     {
       "name": "a world reload keeps every placement and pose; the pocket is dropped",
       "evidence": {
-        "u-ea6de6": {
+        "u-2b6470": {
           "position": [
             -8.75777530670166,
             0.005222201347351074,
@@ -511,7 +511,7 @@
             1.0
           ]
         },
-        "u-b800bc": {
+        "u-a87725": {
           "position": [
             -8.0,
             0.005222141742706299,
@@ -531,7 +531,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-ea6de6",
+        "id": "u-2b6470",
         "locked": false,
         "movable": false,
         "name": "server-rack",
@@ -562,7 +562,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-ea6de6",
+        "id": "u-2b6470",
         "locked": false,
         "movable": true,
         "name": "Server rack",
