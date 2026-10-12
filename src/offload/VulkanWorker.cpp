@@ -1,3 +1,4 @@
+#include "Objects.hpp"
 #include "Sandbox.hpp"
 #include "VkContext.hpp"
 #include "Watchdog.hpp"
@@ -21,9 +22,10 @@ struct Image {
 };
 int main(int argc, char **argv) {
     try {
-        check(argc == 8, "usage: renderer FD WORLD DRM WIDTH HEIGHT FPS CONTROL");
+        check(argc >= 8, "usage: renderer FD WORLD DRM WIDTH HEIGHT FPS CONTROL [OBJECT_ROOT...]");
         prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
-        sandbox(argv[2]);
+        // Catalog object roots (library and user objects) are readable like the package.
+        sandbox(argv[2], {argv + 8, argv + argc});
         Watchdog watchdog(std::stoi(argv[7]));
         prctl(PR_SET_PDEATHSIG, SIGTERM);
         int sock = std::stoi(argv[1]), w = std::stoi(argv[4]), h = std::stoi(argv[5]), fps = std::stoi(argv[6]);
@@ -272,6 +274,14 @@ int main(int argc, char **argv) {
         renderer.applyGraphics(render::graphicsDefaults());
         renderer.worldOnly = true;
         renderer.prepare(scene);
+        // World objects follow the plugin's state (Objects.hpp); catalog assets decode on a
+        // thread and upload between frames, like the in-process renderer.
+        offload::ObjectReceiver objects;
+        objects.start(*scene);
+        const unsigned formats = render::Renderer::compressedFormats();
+        offload::ObjectReceiver::Loader loadAsset = [formats](const std::filesystem::path &dir, const Json &manifest) {
+            return world::loadObjectAsset(dir, manifest, {formats});
+        };
         send(sock, {{"type", "ready"}});
         double nextRender = 0;
         Json lastGraphics, lastProfile;
@@ -303,6 +313,8 @@ int main(int argc, char **argv) {
                     reply["renderScale"] = timing["renderScale"];
                     reply["msaaSamples"] = timing["msaaSamples"];
                     reply["gpuEffectsMs"] = timing["gpuEffectsMs"];
+                    reply["objectDraw"] = timing["objects"];
+                    reply["objectsLoading"] = objects.loading() || renderer.objectAssetsPending();
                     if (b.acquire < 0)
                         b.acquire = fence(gl.display);
                     send(sock, reply, {b.acquire});
@@ -310,6 +322,9 @@ int main(int argc, char **argv) {
                     b.acquire = -1;
                     b.pending = false;
                 }
+            if (objects.merge(*scene, !renderer.objectAssetsPending()))
+                renderer.stageObjectAssets();
+            renderer.continueObjectAssets();
             // Keep retiring completed slots while waiting for the next capped
             // submission. Sleeping after dequeue used to delay frame replies.
             if (now() < nextRender) {
@@ -331,7 +346,7 @@ int main(int argc, char **argv) {
             check(fds.empty(), "unexpected worker descriptors");
             if (p["type"] == "stop")
                 break;
-            check(p["version"] == 1 && p["type"] == "pose", "protocol");
+            check(p["version"] == 2 && p["type"] == "pose", "protocol");
             auto graphics =
                 interaction::configPatch(interaction::defaultConfig(), {{"graphics", p.at("graphics")}}).at("graphics");
             if (graphics != lastGraphics) {
@@ -350,6 +365,17 @@ int main(int argc, char **argv) {
             auto &b = slots[i];
             const double period = 1000. / fps;
             nextRender = now() - nextRender > period ? now() + period : nextRender + period;
+            if (p.contains("objects") && !p["objects"].is_null()) {
+                objects.apply(p["objects"], scene->objectAssets.size(), loadAsset);
+                renderer.transforms = objects.transforms;
+            }
+            objects.materialize(*scene);
+            if (p.contains("clock") && p["clock"].is_number())
+                renderer.animationClock = p["clock"].get<double>();
+            if (p.contains("logicalScale") && p["logicalScale"].is_number())
+                renderer.logicalScale = std::clamp(p["logicalScale"].get<float>(), .25f, 4.f);
+            p.erase("objects");
+            p["objectsRevision"] = objects.revision();
             b.request = p;
             sim::Camera camera;
             auto pose = p["pose"];

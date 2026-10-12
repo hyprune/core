@@ -12,10 +12,11 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <vector>
 namespace hyprune::offload {
 // Applied before driver initialization, parsing the world or accepting
 // frame requests. Existing private sockets/DRM FDs stay usable; no new IPC peers.
-inline void sandbox(const std::filesystem::path &package) {
+inline void sandbox(const std::filesystem::path &package, const std::vector<std::filesystem::path> &readable = {}) {
     if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0))
         throw std::runtime_error("no-new-privileges");
     const int abi = syscall(SYS_landlock_create_ruleset, nullptr, 0, LANDLOCK_CREATE_RULESET_VERSION);
@@ -52,6 +53,9 @@ inline void sandbox(const std::filesystem::path &package) {
                       "/etc/egl", "/var/cache/fontconfig", "/sys", "/proc/self", "/proc/driver/nvidia", "/proc/sys"})
         allow(path);
     allow(std::filesystem::canonical(package));
+    for (auto &path : readable)
+        if (path.is_absolute())
+            allow(path);
     allow("/dev/dri", true);
     for (auto &entry : std::filesystem::directory_iterator("/dev"))
         if (entry.path().filename().string().starts_with("nvidia"))

@@ -483,6 +483,8 @@ void Runtime::objectsSync() {
 // they start from, the package catalog; pocketed objects are dropped (RFC-0011).
 void Runtime::objectsWorldLoaded() {
     authoredInstances = world->objectInstances.size();
+    packageAssets = world->objectAssets.size();
+    mergedAssets.clear();
     sceneCollision = world->collision.size();
     for (auto &inst : world->objectInstances)
         if (inst.collisionCount)
@@ -557,6 +559,7 @@ void Runtime::objectsTick() {
                 auto section = timed("objects.merge");
                 auto scratch = slot.load.get();
                 slot.index = int(world::mergeObjectAsset(*world, *scratch));
+                mergedAssets.push_back({slot.entry.directory, slot.entry.manifest});
             } catch (const std::exception &e) {
                 slot.error = e.what();
                 objectNotice("object.missing", "Can't load " + slot.entry.name + ": " + e.what(), "load:" + ref + slot.entry.digest);

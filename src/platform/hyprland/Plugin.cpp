@@ -63,6 +63,7 @@ extern "C" {
 #include "ipc/Protocol.hpp"
 #include "ipc/Text.hpp"
 #include "offload/Client.hpp"
+#include "offload/Objects.hpp"
 #include "offload/Supervisor.hpp"
 #include "sim/Npc.hpp"
 #include "world/Machines.hpp"
@@ -84,7 +85,13 @@ HANDLE handle = nullptr;
 struct Runtime {
     render::Renderer renderer;
     offload::Client offload;
-    Json offloadRequest, offloadPolicy = Json::object();
+    // World objects in the offload worker: what it has (sender mirror), the package's
+    // asset count and where each later merged asset came from (catalog objects).
+    offload::ObjectSender offloadObjects;
+    std::vector<offload::AssetSource> mergedAssets;
+    size_t packageAssets = 0;
+    std::string offloadLocalReason() const;
+    Json offloadRequest, offloadPolicy = Json::object(), offloadChanges = Json::object();
     uint64_t offloadGeneration = 0;
     bool renderedOffload = false;
     sim::Camera displayedCamera;
@@ -1227,10 +1234,8 @@ Json Runtime::performance() const {
                        supervised == "off" || supervised == "inactive";
         state["reason"] = running ? offload.error : supervised;
     }
-    if (!renderer.transforms.empty() && config["graphics"]["offload"] != "off")
-        state["reason"] = "edited world transforms use local renderer";
-    else if (world && !world->objectInstances.empty() && config["graphics"]["offload"] != "off")
-        state["reason"] = "world objects use local renderer";
+    if (auto local = offloadLocalReason(); !local.empty() && config["graphics"]["offload"] != "off")
+        state["reason"] = local;
     bool custom = false;
     for (auto &[key, value] : graphicsFile.current.items())
         if (key != "quality" && !value.is_null()) custom = true;
@@ -1270,16 +1275,50 @@ static const std::string &compositorPci() {
                                                                                          : g_pCompositor->m_drm.fd);
     return pci;
 }
+// Draw state only the in-process renderer has: development prototypes (env-gated).
+std::string Runtime::offloadLocalReason() const {
+    if (machines.active())
+        return "machines prototype uses local renderer";
+    if (npcCharacter && !npcAgents.empty())
+        return "NPC prototype uses local renderer";
+    return "";
+}
 void Runtime::offloadTick() {
     if (renderPass.active()) throw std::runtime_error("offload lifecycle inside frame");
     auto g = config["graphics"];
-    bool enabled = active && world && monitor && !loading && !locked() &&
-                   g["offload"] != "off" && renderer.transforms.empty() && world->objectInstances.empty();
+    bool enabled = active && world && monitor && !loading && !locked() && g["offload"] != "off" &&
+                   offloadLocalReason().empty();
+    // Catalog objects decode in the worker too: it may read the object roots that exist
+    // (one created later restarts it once with the new root).
+    Json roots = Json::array();
+    std::error_code error;
+    for (auto &root : {catalogRoots.userObjects, catalogRoots.userLibraries})
+        if (!root.empty() && std::filesystem::is_directory(root, error))
+            roots.push_back(root.string());
+    for (auto &root : catalogRoots.systemLibraries)
+        if (std::filesystem::is_directory(root, error))
+            roots.push_back(root.string());
     Json request = {{"enabled", enabled}, {"graphics", g}, {"compositorPci", compositorPci()},
-                    {"worldPath", world ? (installed / world->id).string() : ""},
+                    {"worldPath", world ? (installed / world->id).string() : ""}, {"objectRoots", roots},
                     {"width", monitor ? int(monitor->m_pixelSize.x) : 0},
                     {"height", monitor ? int(monitor->m_pixelSize.y) : 0}};
     if (request != offloadRequest) {
+        // Diagnostics: what restarted the worker (each change is a new generation).
+        Json changed = Json::object();
+        for (auto &[key, value] : request.items())
+            if (!offloadRequest.is_object() || offloadRequest.value(key, Json()) != value) {
+                if (key != "graphics")
+                    changed[key] = value;
+                else
+                    for (auto &[k, v] : value.items())
+                        if (!offloadRequest.is_object() || offloadRequest[key].value(k, Json()) != v)
+                            changed["graphics." + k] = v;
+            }
+        auto history = offloadChanges.value("history", Json::array());
+        history.push_back(changed);
+        if (history.size() > 8)
+            history.erase(history.begin());
+        offloadChanges = {{"count", offloadChanges.value("count", 0) + 1}, {"history", history}};
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         offload.stop(); renderedOffload = false;
         offload.error.clear();
@@ -1304,8 +1343,21 @@ void Runtime::offloadPump() {
         auto view = camera;
         view.position.y += view.climbBob;
         view.climbBob = 0;
-        offload.tick(view, renderer.graphics, renderer.profile, offloadPolicy.value("targetFPS", 30));
+        // World objects: the animation clock in every pose, their state as a delta against
+        // what the worker has, committed once the pose is sent.
+        auto objects = [&] {
+            return Json{{"clock", renderer.animationSeconds()}, {"logicalScale", renderer.logicalScale},
+                        {"objects", world ? offloadObjects.delta(*world, renderer.transforms, mergedAssets, packageAssets)
+                                          : Json(nullptr)}};
+        };
+        offload.tick(view, renderer.graphics, renderer.profile, offloadPolicy.value("targetFPS", 30), objects,
+                     [&] { offloadObjects.commit(); });
         if (!offload.connected()) {
+            auto errors = offloadChanges.value("errors", Json::array());
+            errors.push_back({{"generation", offloadGeneration}, {"error", offload.error}});
+            if (errors.size() > 8)
+                errors.erase(errors.begin());
+            offloadChanges["errors"] = errors;
             auto stop = offloadRequest; stop["enabled"] = false; stop["generation"] = offloadGeneration;
             ipc->renderer(stop);
         }
@@ -4076,7 +4128,10 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         if (params.at("generation") != offloadGeneration || !offloadRequest.value("enabled", false))
             close(params.at("fd").get<int>());
-        else offload.attach(params.at("fd"), offloadRequest.at("width"), offloadRequest.at("height"), offloadGeneration);
+        else {
+            offload.attach(params.at("fd"), offloadRequest.at("width"), offloadRequest.at("height"), offloadGeneration);
+            offloadObjects.reset(packageAssets);
+        }
         return Json::object();
     }
     if (method == "_renderer.state") {
@@ -5385,6 +5440,8 @@ int luaCamera(lua_State *state) {
         {"pitch", runtime->camera.pitch},
         {"frames", runtime->renderer.frames},
         {"animationFrames", runtime->animationFrames},
+        {"offloadRequests", runtime->offloadChanges},
+        {"offloadClient", runtime->offload.diagnostics()},
         {"grabbed", runtime->grabbed},
         {"gesture", int(runtime->hands.gesture)},
         {"activeHandle", runtime->editor.activeHandle},
@@ -5730,6 +5787,14 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
 #ifndef HYPRUNE_LIVE_BUILD
     // Nested test hook: the placement verdict for the tool 4 selection moved to
     // (x, y, z), same rotation and scale. Read-only; nothing is committed.
+    // Nested test hook: pins the world-animation clock at t seconds (no argument: the
+    // steady clock again). The offload worker draws at the same time.
+    HyprlandAPI::addLuaFunction(handle, "hyprune", "animation_clock", [](lua_State *state) {
+        if (runtime)
+            runtime->renderer.animationClock =
+                lua_gettop(state) >= 1 && !lua_isnil(state, 1) ? std::optional<double>(luaL_checknumber(state, 1)) : std::nullopt;
+        return 0;
+    });
     HyprlandAPI::addLuaFunction(handle, "hyprune", "gizmo_probe", [](lua_State *state) {
         Json j = nullptr;
         if (runtime && runtime->world && runtime->editor.kind == "object" && !runtime->editor.selected.empty()) {

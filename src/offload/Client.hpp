@@ -3,6 +3,7 @@
 #include "render/GLState.hpp"
 #include "sim/Camera.hpp"
 #include <drm_fourcc.h>
+#include <functional>
 #include <poll.h>
 namespace hyprune::offload {
 class Client {
@@ -31,6 +32,13 @@ class Client {
     bool connected() const { return fd_ >= 0; }
     bool available() const { return fd_ >= 0 && front_ >= 0 && now() - frontReply_.at("sent").get<double>() <= 50; }
     GLuint fbo() const { return available() ? targets_[front_].fbo : 0; }
+    Json diagnostics() const {
+        Json phases = Json::array();
+        for (auto &b : slots_)
+            phases.push_back(b.phase);
+        return {{"front", front_}, {"frontSequence", frontSequence_}, {"sequence", sequence_}, {"phases", phases},
+                {"frontAgeMs", front_ >= 0 ? Json(now() - frontReply_.at("sent").get<double>()) : Json(nullptr)}};
+    }
     sim::Camera camera() const {
         auto p = frontReply_.at("pose");
         sim::Camera c;
@@ -50,7 +58,10 @@ class Client {
         started_ = now();
         error.clear();
     }
-    void tick(const sim::Camera &camera, const Json &graphics, const Json &profile, int fps) {
+    // extra: fields added to the next pose (animation clock, object state delta); posted: called
+    // once that pose was written, so a delta is never lost to backpressure.
+    void tick(const sim::Camera &camera, const Json &graphics, const Json &profile, int fps,
+              const std::function<Json()> &extra = {}, const std::function<void()> &posted = {}) {
         if (fd_ < 0)
             return;
         render::GLState guard;
@@ -170,7 +181,7 @@ class Client {
                         auto &b = slots_[i];
                         auto sent = now();
                         b.request = {{"type", "pose"},
-                                     {"version", 1},
+                                     {"version", 2},
                                      {"slot", i},
                                      {"generation", generation_},
                                      {"sequence", ++sequence_},
@@ -180,8 +191,13 @@ class Client {
                                      {"pose",
                                       {camera.position.x, camera.position.y, camera.position.z, camera.yaw,
                                        camera.pitch, camera.fov, camera.roll, camera.shiftX, camera.shiftY}}};
+                        if (extra)
+                            b.request.update(extra());
                         if (sendPacket(fd_, b.request)) {
                             b.phase = 1;
+                            b.request.erase("objects"); // the reply carries objectsRevision instead
+                            if (posted)
+                                posted();
                             auto period = 1000. / std::clamp(fps, 1, 60);
                             nextSend_ = sent - nextSend_ > period ? sent + period : nextSend_ + period;
                         }

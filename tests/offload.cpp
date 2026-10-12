@@ -1,4 +1,5 @@
 #include "interaction/Config.hpp"
+#include "offload/Objects.hpp"
 #include "offload/Packet.hpp"
 #include "offload/Policy.hpp"
 #include "offload/Sandbox.hpp"
@@ -10,6 +11,137 @@
 #include <sys/wait.h>
 #include <thread>
 using namespace hyprune;
+// World objects in the worker (Objects.hpp): deltas carry only what changed, survive
+// backpressure, and the worker's instances match the plugin's exactly.
+static void objectSync() {
+    using namespace offload;
+    world::World live, worker;
+    for (auto *w : {&live, &worker}) {
+        w->objectAssets.resize(2);
+        w->objectAssets[1].animations.push_back({});
+        w->objectAssets[1].nodeAnimation = {0};
+    }
+    auto instance = [](unsigned asset, float x) {
+        world::ObjectInstance o;
+        o.asset = asset;
+        o.model = world::instanceModel({x, 1.f / 3, -2}, {0, .3826834f, 0, .9238795f}, 1.25f);
+        o.center = {x, 1, 2}, o.radius = .7f, o.ambientUp = {.1f, .2f, .3f}, o.sun = .55f;
+        o.regions = {2, 5};
+        return o;
+    };
+    live.objectInstances = {instance(0, 1), instance(1, 2), instance(0, 3)};
+    worker.objectInstances = {instance(1, 9)}; // the package's own: replaced by the first delta
+    ObjectSender sender;
+    ObjectReceiver receiver;
+    sender.reset(2);
+    receiver.start(worker);
+    assert(worker.objectInstances.empty());
+    ObjectReceiver::Loader noLoad = [](const std::filesystem::path &, const Json &) -> std::shared_ptr<world::World> {
+        throw std::runtime_error("unexpected load");
+    };
+    auto same = [&] {
+        assert(worker.objectInstances.size() == live.objectInstances.size());
+        for (size_t k = 0; k < live.objectInstances.size(); ++k) {
+            auto &a = live.objectInstances[k], &b = worker.objectInstances[k];
+            assert(a.hidden == b.hidden);
+            if (!a.hidden)
+                assert(instanceRecord(a) == instanceRecord(b) && a.model == b.model && a.regions == b.regions);
+        }
+    };
+    auto send = [&](const std::map<unsigned, Mat4> &transforms = {}) {
+        auto d = sender.delta(live, transforms, {}, 2);
+        if (!d.is_null()) {
+            // Through the transport, as the worker receives it.
+            auto wire = Json::parse(Json{{"objects", d}}.dump());
+            receiver.apply(wire["objects"], worker.objectAssets.size(), noLoad);
+            sender.commit();
+        }
+        receiver.materialize(worker);
+        return d;
+    };
+    auto first = send();
+    assert(first["count"] == 3 && first["instances"].size() == 3 && !first.contains("hidden"));
+    same();
+    assert(send().is_null()); // nothing changed: no delta at all
+    // One moved instance: one record, nothing else.
+    live.objectInstances[1].model.v[12] += .5f;
+    auto moved = send();
+    assert(moved["instances"].size() == 1 && moved["instances"][0][0] == 1 && !moved.contains("count") &&
+           !moved.contains("hidden") && !moved.contains("transforms"));
+    same();
+    // Hidden set: its own revision, no records.
+    live.objectInstances[2].hidden = true;
+    auto hidden = send();
+    assert(hidden["hidden"]["revision"] == 1 && hidden["hidden"]["set"] == Json::array({2}) && !hidden.contains("instances"));
+    same();
+    // Backpressure: an unsent delta is not committed; the next one still holds the change.
+    live.objectInstances[0].sun = .25f;
+    auto lost = sender.delta(live, {}, {}, 2);
+    assert(lost["instances"].size() == 1);
+    auto again = send();
+    assert(again["base"] == lost["base"] && again["instances"] == lost["instances"]);
+    same();
+    // A delta from the wrong base is a protocol error.
+    bool threw = false;
+    try {
+        receiver.apply(again, worker.objectAssets.size(), noLoad);
+    } catch (const std::runtime_error &) {
+        threw = true;
+    }
+    assert(threw);
+    // Removing a placement shrinks the list; edited node transforms: changed and removed.
+    live.objectInstances.pop_back();
+    auto shrink = send();
+    assert(shrink["count"] == 2 && shrink["hidden"]["set"].empty());
+    same();
+    auto m = Mat4::identity();
+    m.v[13] = 2;
+    auto t1 = send({{4, m}, {5, m}});
+    assert(t1["transforms"]["set"].size() == 2 && receiver.transforms.size() == 2 && receiver.transforms.at(5) == m);
+    m.v[13] = 3;
+    auto t2 = send({{4, m}});
+    assert(t2["transforms"]["set"].size() == 1 && t2["transforms"]["erase"] == Json::array({5}));
+    assert(receiver.transforms.size() == 1 && receiver.transforms.at(4) == m);
+    // A catalog asset merged after load: the worker decodes it from its source; its
+    // instance stays hidden there until the asset merged.
+    auto scratch = std::make_shared<world::World>();
+    scratch->objectAssets.resize(1);
+    scratch->objectAssets[0].id = "rack";
+    live.objectAssets.push_back(scratch->objectAssets[0]);
+    live.objectInstances.push_back(instance(2, 7));
+    std::promise<void> gate;
+    auto opened = gate.get_future().share();
+    ObjectReceiver::Loader load = [&, opened](const std::filesystem::path &dir, const Json &manifest) {
+        assert(dir == "/objects/rack" && manifest["id"] == "rack");
+        opened.wait();
+        auto copy = std::make_shared<world::World>();
+        copy->objectAssets = scratch->objectAssets;
+        return copy;
+    };
+    std::vector<AssetSource> sources{{"/objects/rack", {{"id", "rack"}}}};
+    auto added = sender.delta(live, {{4, m}}, sources, 2);
+    assert(added["assets"].size() == 1 && added["assets"][0]["index"] == 2 && added["count"] == 3);
+    receiver.apply(Json::parse(added.dump()), worker.objectAssets.size(), load);
+    sender.commit();
+    receiver.materialize(worker);
+    assert(receiver.loading() && worker.objectInstances.size() == 3 && worker.objectInstances[2].hidden);
+    assert(!receiver.merge(worker, true)); // still decoding
+    gate.set_value();
+    while (!receiver.merge(worker, true))
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    receiver.materialize(worker);
+    assert(!receiver.loading() && worker.objectAssets.size() == 3 && worker.objectAssets[2].id == "rack");
+    same();
+    // An asset with no recorded source can't be sent: offload stops instead of drawing wrong.
+    live.objectAssets.push_back({});
+    threw = false;
+    try {
+        sender.delta(live, {}, sources, 2);
+    } catch (const std::runtime_error &) {
+        threw = true;
+    }
+    assert(threw);
+}
 int main(int argc, char **argv) {
     if (argc == 8 && std::string(argv[3]) == "/dev/null") {
         offload::Watchdog watchdog(std::stoi(argv[7]));
@@ -118,13 +250,23 @@ int main(int argc, char **argv) {
     auto directory = std::filesystem::temp_directory_path() / ("hyprune-sandbox-" + std::to_string(getpid()));
     std::filesystem::create_directory(directory);
     std::ofstream(directory / "world.json") << "{}";
+    // A catalog object root is readable (not writable) like the package; its siblings aren't.
+    std::filesystem::create_directories(directory.string() + "-objects/a");
+    std::ofstream(directory.string() + "-objects/a/object.json") << "{}";
+    std::filesystem::create_directories(directory.string() + "-other");
+    std::ofstream(directory.string() + "-other/object.json") << "{}";
     auto sandboxPid = fork();
     assert(sandboxPid >= 0);
     if (!sandboxPid) {
-        sandbox(directory);
+        sandbox(directory, {directory.string() + "-objects", "relative/ignored"});
         int allowed = open((directory / "world.json").c_str(), O_RDONLY);
         assert(allowed >= 0);
         close(allowed);
+        allowed = open((directory.string() + "-objects/a/object.json").c_str(), O_RDONLY);
+        assert(allowed >= 0);
+        close(allowed);
+        assert(open((directory.string() + "-objects/a/new").c_str(), O_WRONLY | O_CREAT, 0600) < 0);
+        assert(open((directory.string() + "-other/object.json").c_str(), O_RDONLY) < 0);
         assert(open("/etc/passwd", O_RDONLY) < 0);
         assert(open((directory / "forbidden").c_str(), O_WRONLY | O_CREAT, 0600) < 0);
         int sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -137,6 +279,9 @@ int main(int argc, char **argv) {
     waitpid(sandboxPid, &sandboxStatus, 0);
     assert(WIFEXITED(sandboxStatus) && WEXITSTATUS(sandboxStatus) == 0);
     std::filesystem::remove_all(directory);
+    std::filesystem::remove_all(directory.string() + "-objects");
+    std::filesystem::remove_all(directory.string() + "-other");
+    objectSync();
     int pair[2];
     assert(!socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, pair));
     int fd = open("/dev/null", O_RDONLY | O_CLOEXEC);

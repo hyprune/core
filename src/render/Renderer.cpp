@@ -627,6 +627,8 @@ static std::array<std::array<float, 4>, 6> frustumPlanes(const Mat4 &vp) {
 double Renderer::animationSeconds() const {
     if (!animating())
         return 0;
+    if (animationClock)
+        return *animationClock;
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - animationEpoch_).count();
 }
 bool Renderer::animating() const {

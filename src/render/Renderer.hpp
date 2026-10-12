@@ -141,6 +141,9 @@ class Renderer {
     // becomes current and follows the steady clock; graphics.reduced_motion pins
     // every animation at its t = 0 pose.
     double animationSeconds() const;
+    // A pinned world-animation clock in seconds: the offload worker draws at the time the
+    // plugin sends; tests freeze both renderers at the same time. Unset: the steady clock.
+    std::optional<double> animationClock;
     bool animating() const; // an animated object exists and motion is allowed
     // True while animating and an animated instance's swept bounds are in the
     // view frustum and not region-culled, or a moving NPC is in the frustum: the

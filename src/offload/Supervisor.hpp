@@ -352,6 +352,9 @@ class Supervisor {
                                              std::to_string(request_.at("height").get<int>()),
                                              std::to_string(policy_.fps),
                                              "199"};
+            for (auto &root : request_.value("objectRoots", Json::array()))
+                if (root.is_string() && !root.get<std::string>().empty() && root.get<std::string>()[0] == '/')
+                    args.push_back(root.get<std::string>());
             std::vector<char *> av;
             for (auto &v : args)
                 av.push_back(v.data());
