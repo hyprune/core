@@ -1,0 +1,1051 @@
+{
+ "nestedOnly": true,
+ "world": "Switchyard as world format 0.9",
+ "library": "com.hyprune.starter@0.1.0",
+ "checks": [
+  {
+   "name": "IPC 0.23 hello advertises the NPC methods",
+   "ok": true,
+   "evidence": [
+    "surfaces.recall",
+    "travel.cancel",
+    "travel.start",
+    "ui.close",
+    "ui.open",
+    "waypoint.clear",
+    "waypoint.set",
+    "workspace.activate",
+    "workspace.bind",
+    "workspace.focus",
+    "workspace.unfocus",
+    "world.load"
+   ]
+  },
+  {
+   "name": "a world referencing an uninstalled library does not load",
+   "ok": true,
+   "evidence": "{'code': -32602, 'message': 'world.library.missing: com.hyprune.starter@0.1.0 (resident-blue) is not installed'}"
+  },
+  {
+   "name": "two authored residents from the library, bound to routes",
+   "ok": true,
+   "evidence": [
+    {
+     "accent": [
+      0.20000000298023224,
+      0.5,
+      0.949999988079071
+     ],
+     "activity": "walking",
+     "areaId": "concourse",
+     "character": true,
+     "id": "blue-walker",
+     "locked": false,
+     "movable": false,
+     "name": "blue",
+     "path": "package/yard-loop",
+     "pose": {
+      "position": [
+       -1.4460697174072266,
+       0.0,
+       3.0
+      ],
+      "rotation": [
+       0.0,
+       -0.7071068286895752,
+       0.0,
+       0.7071068286895752
+      ]
+     },
+     "ref": "package/blue",
+     "rule": null,
+     "scale": 1.0,
+     "seat": null,
+     "source": "authored",
+     "state": "active"
+    },
+    {
+     "accent": null,
+     "activity": "walking",
+     "areaId": "build",
+     "character": true,
+     "id": "crimson-walker",
+     "locked": false,
+     "movable": false,
+     "name": "crimson",
+     "path": "package/north-walk",
+     "pose": {
+      "position": [
+       -5.581597805023193,
+       0.0,
+       -12.5
+      ],
+      "rotation": [
+       0.0,
+       0.7071068286895752,
+       0.0,
+       0.7071068286895752
+      ]
+     },
+     "ref": "package/crimson",
+     "rule": null,
+     "scale": 1.0,
+     "seat": null,
+     "source": "authored",
+     "state": "active"
+    }
+   ]
+  },
+  {
+   "name": "npcs state",
+   "ok": true,
+   "evidence": {
+    "aimed": null,
+    "drawing": null,
+    "interaction": null,
+    "limits": {
+     "authored": 16,
+     "user": 8
+    },
+    "motion": "always",
+    "reason": null,
+    "state": "animating",
+    "usage": {
+     "authored": 2,
+     "user": 0
+    }
+   }
+  },
+  {
+   "name": "walks its route at about the walk clip speed (0.87 m/s)",
+   "ok": true,
+   "evidence": {
+    "mPerS": 1.0135248633068479,
+    "agent": {
+     "activity": "walking",
+     "clip": "walk",
+     "heading": 1.5707963705062866,
+     "id": "crimson-walker",
+     "interactions": 0,
+     "lateral": 0.0,
+     "look": [
+      0.0,
+      0.0
+     ],
+     "mode": 1,
+     "path": "package/north-walk",
+     "position": [
+      -2.883596420288086,
+      0.0,
+      -12.5
+     ],
+     "routeLength": 24.0,
+     "s": 9.116403579711914,
+     "seat": "",
+     "seatFit": {
+      "known": true,
+      "seatHeight": -0.05546848475933075,
+      "sink": 0.08278996497392654
+     },
+     "seatOffset": 0.0,
+     "seats": 0,
+     "state": "active",
+     "stops": 0,
+     "user": false,
+     "yielding": false
+    }
+   }
+  },
+  {
+   "name": "drawn in view",
+   "ok": true,
+   "evidence": {
+    "drawn": 1,
+    "animationVisible": true
+   }
+  },
+  {
+   "name": "paths.list: authored routes, walkable",
+   "ok": true,
+   "evidence": [
+    {
+     "bound": [
+      "blue-walker"
+     ],
+     "closed": true,
+     "id": "yard-loop",
+     "name": "Yard loop",
+     "points": [
+      {
+       "position": [
+        -12,
+        0,
+        9.5
+       ],
+       "type": "line"
+      },
+      {
+       "position": [
+        2,
+        0,
+        9.5
+       ],
+       "type": "line"
+      },
+      {
+       "position": [
+        2,
+        0,
+        3
+       ],
+       "type": "line"
+      },
+      {
+       "position": [
+        -12,
+        0,
+        3
+       ],
+       "type": "line"
+      }
+     ],
+     "problems": [],
+     "ref": "package/yard-loop",
+     "source": "package",
+     "speed": null,
+     "stops": [
+      {
+       "point": 2,
+       "seat": "bench-1/left",
+       "seconds": 6
+      },
+      {
+       "clip": "wave",
+       "point": 0,
+       "seconds": 2
+      }
+     ],
+     "use": "route",
+     "walkable": true
+    },
+    {
+     "bound": [
+      "crimson-walker"
+     ],
+     "closed": false,
+     "id": "north-walk",
+     "name": null,
+     "points": [
+      {
+       "position": [
+        -12,
+        0,
+        -12.5
+       ],
+       "type": "line"
+      },
+      {
+       "position": [
+        12,
+        0,
+        -12.5
+       ],
+       "type": "line"
+      }
+     ],
+     "problems": [],
+     "ref": "package/north-walk",
+     "source": "package",
+     "speed": null,
+     "stops": [],
+     "use": "route",
+     "walkable": true
+    }
+   ]
+  },
+  {
+   "name": "paths.draw selects tool 3 with a new route",
+   "ok": true,
+   "evidence": {
+    "bind": null,
+    "pathId": "path-166096811645132",
+    "spawn": {
+     "ref": "library/com.hyprune.starter@0.1.0/resident-ember"
+    },
+    "use": "route"
+   }
+  },
+  {
+   "name": "tool 3 refuses a route point off walkable floor (a wall)",
+   "ok": true,
+   "evidence": {
+    "points": 0
+   }
+  },
+  {
+   "name": "three floor points drawn",
+   "ok": true,
+   "evidence": {
+    "areaId": "",
+    "closed": false,
+    "id": "path-166096811645132",
+    "name": null,
+    "points": [
+     {
+      "position": [
+       5.997600555419922,
+       0.0027196407318115234,
+       0.033999472856521606
+      ],
+      "type": "line"
+     },
+     {
+      "position": [
+       10.997600555419922,
+       0.0027196407318115234,
+       0.033999472856521606
+      ],
+      "type": "line"
+     },
+     {
+      "position": [
+       10.997600555419922,
+       0.0027196407318115234,
+       4.033999919891357
+      ],
+      "type": "line"
+     }
+    ],
+    "speed": null,
+    "stops": [],
+    "use": "route",
+    "worldId": "org.hyprune.npc-yard"
+   }
+  },
+  {
+   "name": "paths.finish spawns the resident on the drawn route",
+   "ok": true,
+   "evidence": {
+    "finish": {
+     "bound": "u-29cc7c",
+     "id": "path-166096811645132",
+     "revision": 135
+    },
+    "instance": {
+     "accent": null,
+     "activity": null,
+     "areaId": "",
+     "character": true,
+     "id": "u-29cc7c",
+     "locked": false,
+     "movable": false,
+     "name": "Resident (ember)",
+     "path": "user/path-166096811645132",
+     "pose": {
+      "position": [
+       5.997600555419922,
+       0.0027196407318115234,
+       0.033999472856521606
+      ],
+      "rotation": [
+       0.0,
+       0.7071068286895752,
+       0.0,
+       0.7071068286895752
+      ]
+     },
+     "ref": "library/com.hyprune.starter@0.1.0/resident-ember",
+     "rule": null,
+     "scale": 1.0,
+     "seat": null,
+     "source": "user",
+     "state": "loading"
+    }
+   }
+  },
+  {
+   "name": "the user resident walks its route",
+   "ok": true,
+   "evidence": {
+    "from": [
+     6.407260894775391,
+     0.0027196407318115234,
+     0.033999472856521606
+    ],
+    "to": [
+     8.037080764770508,
+     0.0027196407318115234,
+     0.033999472856521606
+    ]
+   }
+  },
+  {
+   "name": "npcs.spawn binds to an authored route too",
+   "ok": true,
+   "evidence": {
+    "accent": null,
+    "activity": "walking",
+    "areaId": "research",
+    "character": true,
+    "id": "u-9e2b4d",
+    "locked": false,
+    "movable": false,
+    "name": "Resident (ember)",
+    "path": "package/north-walk",
+    "pose": {
+     "position": [
+      0.026393890380859375,
+      0.0,
+      -12.5
+     ],
+     "rotation": [
+      0.0,
+      0.7071068286895752,
+      0.0,
+      0.7071068286895752
+     ]
+    },
+    "ref": "library/com.hyprune.starter@0.1.0/resident-ember",
+    "rule": null,
+    "scale": 1.0,
+    "seat": null,
+    "source": "user",
+    "state": "active"
+   }
+  },
+  {
+   "name": "npcs.bind refuses an unknown route",
+   "ok": true,
+   "evidence": "{'code': -32004, 'message': 'unknown path package/missing'}"
+  },
+  {
+   "name": "carry (Super+LMB) on a character is refused",
+   "ok": true,
+   "evidence": {
+    "refusals": 1
+   }
+  },
+  {
+   "name": "tool 4 does not select a character",
+   "ok": true,
+   "evidence": null
+  },
+  {
+   "name": "tool 5 does not pocket a character",
+   "ok": true,
+   "evidence": []
+  },
+  {
+   "name": "objects.transform refuses characters (-32005)",
+   "ok": true,
+   "evidence": "{'code': -32005, 'message': 'characters are protected'}"
+  },
+  {
+   "name": "objects.pocket refuses characters (-32005)",
+   "ok": true,
+   "evidence": "{'code': -32005, 'message': 'characters are protected: spawn them with npcs.spawn'}"
+  },
+  {
+   "name": "objects.place refuses characters (-32005)",
+   "ok": true,
+   "evidence": "{'code': -32005, 'message': 'characters are spawned on a route or a standing spot: use npcs.spawn'}"
+  },
+  {
+   "name": "objects.configure refuses characters (-32005)",
+   "ok": true,
+   "evidence": "{'code': -32005, 'message': 'characters are protected'}"
+  },
+  {
+   "name": "glances at a player within 4 m (head turned, clamped)",
+   "ok": true,
+   "evidence": [
+    0.784061074256897,
+    0.09811370074748993
+   ]
+  },
+  {
+   "name": "steps aside instead of walking into the player",
+   "ok": true,
+   "evidence": {
+    "closest": 0.64947840272066,
+    "widest": 0.8164236545562744,
+    "stand": [
+     2.7363727569580076,
+     1.7,
+     -12.5
+    ],
+    "samples": [
+     {
+      "agent": [
+       4.734218597412109,
+       0.0,
+       -12.79964542388916
+      ],
+      "lateral": -0.2996455132961273,
+      "player": [
+       2.736372709274292,
+       1.7000000476837158,
+       -12.5
+      ],
+      "present": true
+     },
+     {
+      "agent": [
+       4.666746139526367,
+       0.0,
+       -12.932991027832031
+      ],
+      "lateral": -0.43299102783203125,
+      "player": [
+       2.736372709274292,
+       1.7000000476837158,
+       -12.5
+      ],
+      "present": true
+     },
+     {
+      "agent": [
+       4.5824127197265625,
+       0.0,
+       -13.08299446105957
+      ],
+      "lateral": -0.5829948782920837,
+      "player": [
+       2.736372709274292,
+       1.7000000476837158,
+       -12.5
+      ],
+      "present": true
+     },
+     {
+      "agent": [
+       4.430644989013672,
+       0.0,
+       -13.232958793640137
+      ],
+      "lateral": -0.7329590320587158,
+      "player": [
+       2.736372709274292,
+       1.7000000476837158,
+       -12.5
+      ],
+      "present": true
+     },
+     {
+      "agent": [
+       4.278835296630859,
+       0.0,
+       -13.316423416137695
+      ],
+      "lateral": -0.8164236545562744,
+      "player": [
+       2.736372709274292,
+       1.7000000476837158,
+       -12.5
+      ],
+      "present": true
+     },
+     {
+      "agent": [
+       4.1438751220703125,
+       0.0,
+       -13.316423416137695
+      ],
+      "lateral": -0.8164236545562744,
+      "player": [
+       2.736372709274292,
+       1.7000000476837158,
+       -12.5
+      ],
+      "present": true
+     }
+    ]
+   }
+  },
+  {
+   "name": "animating characters in view render frames; out of view, none",
+   "ok": true,
+   "evidence": {
+    "inView": 60.8,
+    "outOfView": 0.0,
+    "forcesFrames": false
+   }
+  },
+  {
+   "name": "still characters cost no frames",
+   "ok": true,
+   "evidence": {
+    "fps": 0.0
+   }
+  },
+  {
+   "name": "reduced motion poses them still",
+   "ok": true,
+   "evidence": {
+    "aimed": null,
+    "drawing": null,
+    "interaction": null,
+    "limits": {
+     "authored": 16,
+     "user": 8
+    },
+    "motion": "always",
+    "reason": "reduced motion",
+    "state": "paused",
+    "usage": {
+     "authored": 2,
+     "user": 1
+    }
+   }
+  },
+  {
+   "name": "sits on the bench seat (root lifted by the seat fit)",
+   "ok": true,
+   "evidence": {
+    "activity": "sitting",
+    "clip": "sit_idle",
+    "heading": 4.71238899230957,
+    "id": "blue-walker",
+    "interactions": 3,
+    "lateral": 0.0,
+    "look": [
+     4.1489392698005605e-38,
+     1.849843733146555e-38
+    ],
+    "mode": 6,
+    "path": "package/yard-loop",
+    "position": [
+     3.377200126647949,
+     0.0,
+     2.5999999046325684
+    ],
+    "routeLength": 40.99998474121094,
+    "s": 20.500001907348633,
+    "seat": "bench-1/left",
+    "seatFit": {
+     "known": true,
+     "seatHeight": -0.06109088659286499,
+     "sink": 0.12745562195777893
+    },
+    "seatOffset": 0.36109089851379395,
+    "seats": 1,
+    "state": "active",
+    "stops": 2,
+    "user": false,
+    "yielding": false
+   }
+  },
+  {
+   "name": "stands up and walks on",
+   "ok": true,
+   "evidence": {
+    "activity": "walking",
+    "clip": "idle",
+    "heading": 5.288404941558838,
+    "id": "blue-walker",
+    "interactions": 3,
+    "lateral": 0.0,
+    "look": [
+     -0.7848955392837524,
+     0.05046069622039795
+    ],
+    "mode": 1,
+    "path": "package/yard-loop",
+    "position": [
+     2.0,
+     0.0,
+     3.000001907348633
+    ],
+    "routeLength": 40.99998474121094,
+    "s": 20.500001907348633,
+    "seat": "",
+    "seatFit": {
+     "known": true,
+     "seatHeight": -0.06109088659286499,
+     "sink": 0.12745562195777893
+    },
+    "seatOffset": 0.0,
+    "seats": 1,
+    "state": "active",
+    "stops": 2,
+    "user": false,
+    "yielding": false
+   }
+  },
+  {
+   "name": "the aimed resident offers its interactions (reticle interact)",
+   "ok": true,
+   "evidence": {
+    "aimed": {
+     "interactions": [
+      {
+       "id": "talk",
+       "label": "Talk",
+       "type": "say"
+      },
+      {
+       "id": "mark",
+       "label": "Mark the north walk",
+       "type": "waypoint"
+      },
+      {
+       "id": "show",
+       "label": "Show me the north walk",
+       "type": "guide"
+      }
+     ],
+     "name": "blue",
+     "objectId": "blue-walker",
+     "prompt": "Talk to blue"
+    },
+    "reticle": {
+     "action": "interact",
+     "state": "valid"
+    }
+   }
+  },
+  {
+   "name": "E opens the choice list",
+   "ok": true,
+   "evidence": {
+    "choices": [
+     {
+      "id": "talk",
+      "label": "Talk"
+     },
+     {
+      "id": "mark",
+      "label": "Mark the north walk"
+     },
+     {
+      "id": "show",
+      "label": "Show me the north walk"
+     }
+    ],
+    "interactionId": null,
+    "label": "blue",
+    "line": null,
+    "lineCount": 0,
+    "lineIndex": 0,
+    "objectId": "blue-walker",
+    "panel": null,
+    "type": "choose"
+   }
+  },
+  {
+   "name": "say shows its first line",
+   "ok": true,
+   "evidence": {
+    "choices": [],
+    "interactionId": "talk",
+    "label": "Talk",
+    "line": "Welcome to the yard.",
+    "lineCount": 2,
+    "lineIndex": 0,
+    "objectId": "blue-walker",
+    "panel": null,
+    "type": "say"
+   }
+  },
+  {
+   "name": "E advances the line",
+   "ok": true,
+   "evidence": {
+    "choices": [],
+    "interactionId": "talk",
+    "label": "Talk",
+    "line": "The loop takes about a minute.",
+    "lineCount": 2,
+    "lineIndex": 1,
+    "objectId": "blue-walker",
+    "panel": null,
+    "type": "say"
+   }
+  },
+  {
+   "name": "and ends it after the last",
+   "ok": true,
+   "evidence": {
+    "aimed": {
+     "interactions": [
+      {
+       "id": "talk",
+       "label": "Talk",
+       "type": "say"
+      },
+      {
+       "id": "mark",
+       "label": "Mark the north walk",
+       "type": "waypoint"
+      },
+      {
+       "id": "show",
+       "label": "Show me the north walk",
+       "type": "guide"
+      }
+     ],
+     "name": "blue",
+     "objectId": "blue-walker",
+     "prompt": "Talk to blue"
+    },
+    "drawing": null,
+    "interaction": null,
+    "limits": {
+     "authored": 16,
+     "user": 8
+    },
+    "motion": "still",
+    "reason": null,
+    "state": "still",
+    "usage": {
+     "authored": 2,
+     "user": 1
+    }
+   }
+  },
+  {
+   "name": "waypoint sets the waypoint",
+   "ok": true,
+   "evidence": {
+    "id": "npc-blue-walker-mark",
+    "label": "Mark the north walk",
+    "position": [
+     0.0,
+     0.0,
+     -12.5
+    ],
+    "target": {
+     "position": [
+      0,
+      0,
+      -12.5
+     ]
+    }
+   }
+  },
+  {
+   "name": "an authored character disables (hidden, no agent)",
+   "ok": true,
+   "evidence": {
+    "accent": null,
+    "activity": null,
+    "areaId": "commons",
+    "character": true,
+    "id": "crimson-walker",
+    "locked": false,
+    "movable": false,
+    "name": "crimson",
+    "path": null,
+    "pose": {
+     "position": [
+      8.753713607788086,
+      0.0,
+      -12.5
+     ],
+     "rotation": [
+      0.0,
+      0.7071068286895752,
+      0.0,
+      0.7071068286895752
+     ]
+    },
+    "ref": "package/crimson",
+    "rule": null,
+    "scale": 1.0,
+    "seat": null,
+    "source": "authored",
+    "state": "hidden"
+   }
+  },
+  {
+   "name": "authored characters are never removed",
+   "ok": true,
+   "evidence": "{'code': -32005, 'message': 'authored characters are never removed; disable them instead'}"
+  },
+  {
+   "name": "a user character disables too",
+   "ok": true,
+   "evidence": {
+    "accent": null,
+    "activity": null,
+    "areaId": "",
+    "character": true,
+    "id": "u-29cc7c",
+    "locked": false,
+    "movable": false,
+    "name": "Resident (ember)",
+    "path": "user/path-166096811645132",
+    "pose": {
+     "position": [
+      5.997600555419922,
+      0.0027196407318115234,
+      0.033999472856521606
+     ],
+     "rotation": [
+      0.0,
+      0.7071068286895752,
+      0.0,
+      0.7071068286895752
+     ]
+    },
+    "ref": "library/com.hyprune.starter@0.1.0/resident-ember",
+    "rule": null,
+    "scale": 1.0,
+    "seat": null,
+    "source": "user",
+    "state": "hidden"
+   }
+  },
+  {
+   "name": "a standing user character",
+   "ok": true,
+   "evidence": {
+    "activity": "idle",
+    "clip": "idle",
+    "heading": -1.2563798427581787,
+    "id": "u-5f6966",
+    "interactions": 0,
+    "lateral": 0.0,
+    "look": [
+     -1.1538424615764598e-07,
+     0.0620066374540329
+    ],
+    "mode": 0,
+    "path": "",
+    "position": [
+     2.1901955604553223,
+     0.0,
+     2.9381496906280518
+    ],
+    "routeLength": 0.0,
+    "s": 0.0,
+    "seat": "",
+    "seatFit": {
+     "known": true,
+     "seatHeight": -0.09637195616960526,
+     "sink": 0.11372097581624985
+    },
+    "seatOffset": 0.0,
+    "seats": 0,
+    "state": "active",
+    "stops": 0,
+    "user": true,
+    "yielding": false
+   }
+  },
+  {
+   "name": "a user character removes",
+   "ok": true,
+   "evidence": null
+  },
+  {
+   "name": "editor.json keeps the user character with its route",
+   "ok": true,
+   "evidence": {
+    "accent": [
+     0.95,
+     0.55,
+     0.15
+    ],
+    "areaId": "",
+    "id": "u-29cc7c",
+    "path": "user/path-166096811645132",
+    "pose": {
+     "position": [
+      5.997600555419922,
+      0.0027196407318115234,
+      0.033999472856521606
+     ],
+     "rotation": [
+      0.0,
+      0.7071067690849304,
+      0.0,
+      0.7071067690849304
+     ]
+    },
+    "ref": "library/com.hyprune.starter@0.1.0/resident-ember",
+    "scale": 1.0,
+    "worldId": "org.hyprune.npc-yard"
+   }
+  },
+  {
+   "name": "after a reload: the user character walks its route, the disabled one stays off",
+   "ok": true,
+   "evidence": [
+    {
+     "accent": [
+      0.949999988079071,
+      0.550000011920929,
+      0.15000000596046448
+     ],
+     "activity": "walking",
+     "areaId": "",
+     "character": true,
+     "id": "u-29cc7c",
+     "locked": false,
+     "movable": false,
+     "name": "Resident (ember)",
+     "path": "user/path-166096811645132",
+     "pose": {
+      "position": [
+       7.258119583129883,
+       0.0027196407318115234,
+       0.033999472856521606
+      ],
+      "rotation": [
+       0.0,
+       0.7071068286895752,
+       0.0,
+       0.7071068286895752
+      ]
+     },
+     "ref": "library/com.hyprune.starter@0.1.0/resident-ember",
+     "rule": null,
+     "scale": 1.0,
+     "seat": null,
+     "source": "user",
+     "state": "active"
+    },
+    {
+     "accent": null,
+     "activity": null,
+     "areaId": "commons",
+     "character": true,
+     "id": "crimson-walker",
+     "locked": false,
+     "movable": false,
+     "name": "crimson",
+     "path": null,
+     "pose": {
+      "position": [
+       -7.199999809265137,
+       0.0,
+       -12.5
+      ],
+      "rotation": [
+       0.0,
+       0.7071068286895752,
+       0.0,
+       0.7071068286895752
+      ]
+     },
+     "ref": "package/crimson",
+     "rule": null,
+     "scale": 1.0,
+     "seat": null,
+     "source": "authored",
+     "state": "hidden"
+    }
+   ]
+  },
+  {
+   "name": "offload draws skinned characters like the in-process renderer",
+   "ok": true,
+   "evidence": {
+    "parityMeanLevels": 0.0,
+    "parityDiffering": 0.0,
+    "hiddenDiffering": 0.14167
+   }
+  }
+ ]
+}

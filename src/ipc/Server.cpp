@@ -119,6 +119,26 @@ Json Server::snapshot() const {
 }
 Json Server::visibleState(const Peer &p) const {
     Json state = state_;
+    // IPC 0.23 (RFC-0011 P2): NPC state, character fields of object instances, path fields
+    // of editor paths and the `interact` reticle action; older peers keep the 0.22 shapes.
+    if (!protocol::atLeast(p.protocol, "0.23") && state.is_object()) {
+        state.erase("npcs");
+        if (state.contains("objects") && state["objects"].is_object() && state["objects"].contains("instances"))
+            for (auto &i : state["objects"]["instances"]) {
+                i.erase("character");
+                i.erase("accent");
+                i["path"] = nullptr, i["activity"] = nullptr, i["seat"] = nullptr;
+                if (i.value("state", "") == "suspended")
+                    i["state"] = "active";
+            }
+        if (state.contains("editor") && state["editor"].is_object() && state["editor"].contains("paths"))
+            for (auto &path : state["editor"]["paths"])
+                for (auto key : {"use", "name", "speed", "stops"})
+                    path.erase(key);
+        if (state.contains("interaction") && state["interaction"].contains("reticle") &&
+            state["interaction"]["reticle"].value("action", "") == "interact")
+            state["interaction"]["reticle"]["action"] = "click";
+    }
     if (!protocol::atLeast(p.protocol, "0.22") && state.is_object()) {
         state.erase("objects");
         if (state.contains("editor") && state["editor"].is_object())

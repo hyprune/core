@@ -159,32 +159,7 @@ interaction::PlacementScene Runtime::placementScene() {
     }
     // Screen approaches: in front of every anchor, tool mount and workspace wall,
     // its width plus 0.3 m each side, from 0.1 m above its floor to its top edge, 1.5 m deep.
-    interaction::PlacementScene floorOnly;
-    floorOnly.collision = world->collision;
-    floorOnly.index = &world->collisionIndex;
-    floorOnly.ignore = s.ignore;
-    for (auto &a : world->anchors) {
-        if (!a.contains("pose") || !a.contains("size"))
-            continue;
-        Vec3 centre = vec3(a["pose"]["position"]);
-        auto q = a["pose"]["rotation"].get<std::array<float, 4>>();
-        float width = a["size"][0].get<float>(), height = a["size"][1].get<float>();
-        auto right = rotate(q, {1, 0, 0}), normal = rotate(q, {0, 0, 1});
-        auto front = centre + normal * .75f;
-        float top = centre.y + height * .5f;
-        float floor = interaction::floorBelow(floorOnly, front, 60).value_or(centre.y - height * .5f);
-        interaction::Box b;
-        b.axes = {right, Vec3{0, 1, 0}, normalized(Vec3{normal.x, 0, normal.z})};
-        if (length(b.axes[2]) < .5f)
-            continue; // floor or ceiling screens have no approach
-        b.axes[0] = normalized(cross(b.axes[1], b.axes[2]));
-        float low = floor + .1f;
-        if (top <= low)
-            continue;
-        b.centre = Vec3{front.x, (low + top) * .5f, front.z};
-        b.half = {width * .5f + .3f, (top - low) * .5f, .75f};
-        s.approaches.push_back(b);
-    }
+    s.approaches = interaction::approachZones(*world, s.ignore);
     for (auto &z : world->placementZones)
         if (z.contains("bounds"))
             s.zones.push_back(interaction::aabbBox(vec3(z["bounds"]["min"]), vec3(z["bounds"]["max"])));
@@ -197,8 +172,10 @@ interaction::PlacementScene Runtime::placementScene() {
             lo = {std::min(lo.x, p.x), std::min(lo.y, p.y), std::min(lo.z, p.z)}, hi = {std::max(hi.x, p.x), std::max(hi.y, p.y), std::max(hi.z, p.z)};
         s.keepClear.push_back(interaction::aabbBox(lo - Vec3{.4f, 0, .4f}, hi + Vec3{.4f, 1.9f, .4f}));
     }
-    // keepClear volumes (world 0.9, RFC-0011): no world format carries them yet; a
-    // development file can supply them (HYPRUNE_GIZMO_KEEPCLEAR, [{id,min,max}]).
+    // keepClear volumes (world 0.9, RFC-0011), and a development file's
+    // (HYPRUNE_GIZMO_KEEPCLEAR, [{id,min,max}]).
+    for (auto &k : world->keepClear)
+        s.keepClear.push_back(interaction::aabbBox(vec3(k["min"]), vec3(k["max"])));
     for (auto &k : gizmoKeepClear)
         s.keepClear.push_back(k);
     s.player = true;
@@ -486,6 +463,8 @@ std::map<size_t, Mat4> Runtime::applyInstanceModels() {
         return committed;
     for (size_t k = 0; k < world->objectInstances.size(); ++k) {
         auto &inst = world->objectInstances[k];
+        if (inst.character)
+            continue; // the NPC runtime moves characters (no proxy, never edited)
         auto &asset = world->objectAssets[inst.asset];
         auto id = "object:" + inst.id;
         auto pose = objectPose(id);

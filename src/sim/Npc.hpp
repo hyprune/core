@@ -55,6 +55,9 @@ struct NpcAgent {
     // undo (feet clearance = lift - sink, kept within [-0.03, 0.45] m or the stop stays plain).
     bool seatKnown = false;
     float seatHeight = 0, seatSink = 0;
+    // The travel the import step removed from `sit` (its extras.speed x duration): sitting
+    // moves the root back by it from the anchor, so the hips land on the seat.
+    float sitTravel = 0;
     float speed = 0;                 // route speed, m/s (0: walkSpeed)
     float rate = 1;                  // instance speed: scales pace and clip rate
     bool reverse = false;
@@ -156,7 +159,8 @@ struct NpcAgent {
         if (homeSeat >= 0 && homeSeat < int(seats.size()) && seatLift(seats[homeSeat]) && has("sit_idle")) {
             auto &h = seats[homeSeat];
             seat = homeSeat;
-            position = h.position, heading = h.yaw;
+            heading = h.yaw;
+            sitBack(1);
             seatOffset = seatOffsetTo = seatLift(h).value_or(0);
             mode = Mode::Seated;
             pose = {};
@@ -326,7 +330,8 @@ struct NpcAgent {
             return 0.f;
         if (lateral != 0 && std::abs(side - lateral) >= clearance - .05f)
             return lateral; // already clear of the player: hold until they are behind
-        int away = side >= 0 ? -1 : 1;
+        // Keep the side already chosen (a player right on the line would flip it every tick).
+        int away = lateralTarget != 0 ? (lateralTarget > 0 ? 1 : -1) : side >= 0 ? -1 : 1;
         for (int choice : {away, -away}) {
             float target = side + choice * clearance;
             if (std::abs(target) > widest)
@@ -362,7 +367,8 @@ struct NpcAgent {
             idle();
             return;
         }
-        float v = pace() * (std::abs(diff) > .35f ? .6f : 1.f);
+        // Slower round corners, and while still stepping out of the player's way.
+        float v = pace() * (std::abs(diff) > .35f ? .6f : 1.f) * (std::abs(lateralTarget - lateral) > .3f ? .5f : 1.f);
         float step = v * dt;
         // The next stop on the way (exactly at it: leaving it).
         float l = route.length();
@@ -387,7 +393,7 @@ struct NpcAgent {
                 direction = -direction; // open routes: to the end and back
             } else
                 s = route.wrap(next);
-            float lstep = .8f * dt;
+            float lstep = 1.f * dt;
             lateral += std::clamp(lateralTarget - lateral, -lstep, lstep);
             place();
         }
@@ -507,9 +513,16 @@ struct NpcAgent {
             play("sit", false);
         }
     }
+    // The root while sitting: back from the anchor by the sit clip's travel, u of the way.
+    void sitBack(float u) {
+        auto &h = seats[seat];
+        position = h.position - h.forward() * (sitTravel * std::clamp(u, 0.f, 1.f));
+    }
     void sitTick(float) {
         float d = std::max(1e-3f, duration("sit"));
-        seatOffset = seatOffsetFrom + (seatOffsetTo - seatOffsetFrom) * std::clamp(pose.clipTime / d, 0.f, 1.f);
+        float u = std::clamp(pose.clipTime / d, 0.f, 1.f);
+        seatOffset = seatOffsetFrom + (seatOffsetTo - seatOffsetFrom) * u;
+        sitBack(u);
         if (clipDone()) {
             seatOffset = seatOffsetTo;
             mode = Mode::Seated;
@@ -533,6 +546,7 @@ struct NpcAgent {
         float d = std::max(1e-3f, duration(pose.clip));
         float u = clipRate >= 0 ? pose.clipTime / d : 1 - pose.clipTime / d;
         seatOffset = seatOffsetFrom * (1 - std::clamp(u, 0.f, 1.f));
+        sitBack(1 - u);
         if (!clipDone())
             return;
         seatOffset = 0;

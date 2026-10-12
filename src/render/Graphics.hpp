@@ -26,7 +26,9 @@ inline Json graphicsDefaults() {
             {"fov", 65.},
             {"exposure", 1.},
             {"bloom_strength", .15},
-            {"reduced_motion", false}};
+            {"reduced_motion", false},
+            // IPC 0.23: characters' motion (null: Lua npc.motion, default auto).
+            {"npc_motion", nullptr}};
 }
 inline Json graphicsPresets() {
     return {{"low",
@@ -77,6 +79,7 @@ inline Json graphicsPresets() {
 inline Json graphicsOptions() {
     return {{"quality", {"auto", "low", "medium", "high", "ultra"}},
             {"offload", {"off", "auto", "on"}},
+            {"npc_motion", {"auto", "always", "still", "off"}},
             {"outline_quality", {"fast", "smooth"}}, {"upscaler", {"fsr1", "bilinear"}}, {"outline", {false, true}}, {"visibility_culling", {false,true}},
             {"msaa", {1, 2, 4}},
             {"bloom", {"off", "low", "high"}},

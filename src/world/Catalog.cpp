@@ -223,7 +223,13 @@ const std::map<std::string, std::string> &objectMethods() {
         {"objects.remove", "objects.control"},     {"objects.hide", "objects.control"},
         {"objects.reset", "objects.control"},      {"objects.configure", "objects.control"},
         {"libraries.list", "state.read"},          {"libraries.install", "objects.control"},
-        {"libraries.remove", "objects.control"}};
+        {"libraries.remove", "objects.control"},
+        // IPC 0.23 (RFC-0011 P2): characters, paths and interactions.
+        {"npcs.spawn", "objects.control"},         {"npcs.bind", "objects.control"},
+        {"npcs.disable", "objects.control"},       {"npcs.remove", "objects.control"},
+        {"paths.list", "state.read"},              {"paths.set", "objects.control"},
+        {"paths.remove", "objects.control"},       {"paths.draw", "objects.control"},
+        {"paths.finish", "objects.control"},       {"interaction.choose", "world.control"}};
     return methods;
 }
 std::optional<ObjectRef> parseRef(const std::string &ref) {
@@ -329,8 +335,16 @@ void decidePlaceable(CatalogEntry &e) {
         e.reason = "invalid: " + (e.errors.empty() ? std::string("the object failed validation") : e.errors[0]);
         return;
     }
+    auto newer = [&] {
+        return e.formatVersion.is_string() && std::find(objects::formats().begin(), objects::formats().end(),
+                                                        e.formatVersion.get<std::string>()) == objects::formats().end();
+    };
+    // Characters (RFC-0011 P2): spawned on a route or a standing spot (npcs.spawn), not placed.
     if (e.has("character")) {
-        e.reason = "character: user characters arrive with routes (RFC-0011 P2)";
+        if (newer())
+            e.reason = "format: object format " + e.formatVersion.get<std::string>() + " is newer than this core";
+        else
+            e.placeable = true;
         return;
     }
     if (e.has("mover")) {
@@ -689,7 +703,27 @@ std::vector<CatalogEntry> packageEntries(const World &w, const fs::path &package
             e.traits.push_back("decorative");
         if (assets[k].contains("collision"))
             e.traits.push_back("collidable");
-        if (devMovable) {
+        // World 0.9: the asset's traits (inline, object directory or library object); a
+        // directory or library asset is described by its object.json.
+        if (a.traits.is_object())
+            for (auto &[name, value] : a.traits.items())
+                if (std::find(e.traits.begin(), e.traits.end(), name) == e.traits.end())
+                    e.traits.push_back(name);
+        if (a.manifest.is_object()) {
+            e.manifest = a.manifest;
+            e.directory = a.directory;
+            e.name = a.manifest.value("name", a.id).substr(0, 64);
+            e.category = a.manifest.value("category", e.category);
+            e.version = a.manifest.value("version", Json(nullptr));
+            e.formatVersion = a.manifest.value("formatVersion", Json(nullptr));
+            e.license = a.manifest.value("license", Json(nullptr));
+        } else if (a.traits.is_object() && !a.traits.empty())
+            e.manifest["traits"] = a.traits;
+        if (a.traits.is_object() && a.traits.contains("movable")) {
+            e.surfaces = a.traits["movable"].value("surfaces", Json::array({"floor"}));
+            e.scale = a.traits["movable"].value("scale", Json::array({1, 1}));
+        }
+        if (devMovable && !a.traits.contains("movable") && !a.character) {
             e.traits.push_back("movable");
             e.surfaces = Json::array({"any"});
             e.scale = Json::array({.25, 4});
@@ -703,15 +737,15 @@ std::vector<CatalogEntry> packageEntries(const World &w, const fs::path &package
         e.collisionTriangles = a.collision.size();
         // The SDK's estimate from the asset's glTF (buffers and image headers).
         try {
-            auto scenePath = assets[k].value("scene", std::string());
-            auto bytes = readFile(package, scenePath, 128u << 20);
+            auto scenePath = assets[k].value("scene", e.manifest.value("scene", std::string()));
+            auto bytes = readFile(e.directory, scenePath, 128u << 20);
             auto scene = gltfDocument(bytes, scenePath);
             uint64_t gpu = 0;
             for (auto &b : scene.gltf.value("buffers", Json::array()))
                 gpu += b.value("byteLength", uint64_t(0));
             for (auto &image : scene.gltf.value("images", Json::array()))
                 if (image.contains("uri")) {
-                    auto data = readFile(package, resourcePath(scenePath, image["uri"]), 128u << 20);
+                    auto data = readFile(e.directory, resourcePath(scenePath, image["uri"]), 128u << 20);
                     if (auto h = imageHeader(reinterpret_cast<const unsigned char *>(data.data()), data.size()))
                         gpu += (uint64_t(h->width) * h->height * (h->format == "ktx2" ? 1 : 4) * 4 + 2) / 3;
                 }

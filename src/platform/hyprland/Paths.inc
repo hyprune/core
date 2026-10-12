@@ -25,7 +25,18 @@ std::optional<Vec3> Runtime::pathTarget() {
     }
     return p;
 }
+// Routes (use: route) take points on walkable floor only (RFC-0011 "Walkability").
+bool Runtime::routePath(const std::string &id) const {
+    auto p = editor.path(id);
+    return p.is_object() && world::pathUse(p) == "route";
+}
+bool Runtime::walkablePoint(Vec3 p) {
+    if (!world || world->collision.empty())
+        return true;
+    return !interaction::checkSpot(npcScene(), p, {});
+}
 void Runtime::pathTick() {
+    pathTargetWalkable = true;
     if (!world || editor.slot != 3 || typing || layerCursor || freeCursor || control.uiVisible()) {
         pathHover.reset();
         if (pathDrag)
@@ -33,17 +44,45 @@ void Runtime::pathTick() {
         return;
     }
     if (pathDrag) {
-        if (auto p = pathTarget())
+        if (auto p = pathTarget()) {
             editor.movePoint(pathDrag->path, pathDrag->point, *p);
+            if (routePath(pathDrag->path))
+                pathTargetWalkable = walkablePoint(*p);
+        }
         return;
     }
+    if (!editor.activePath.empty() && routePath(editor.activePath))
+        if (auto p = pathTarget())
+            pathTargetWalkable = walkablePoint(*p);
     auto h = worldHit();
     pathHover = interaction::pickPath(editor.paths, world->id, pointerCamera().position, pointerRay(),
                                       h ? h->distance : config["player"]["reach_placement"].get<float>());
 }
 void Runtime::pathEdit(const std::string &id, const Json &before) {
-    editor.recordEdit("path", world->id, id, before, editor.path(id));
+    // A route characters walk stays walkable: an edit that breaks it is refused (RFC-0011).
+    auto after = editor.path(id);
+    bool bound = std::any_of(npcs.begin(), npcs.end(), [&](auto &n) { return n.path == "user/" + id; });
+    if (bound && after.is_object() && world::pathUse(after) == "route") {
+        auto &w = routeWalkability(after, {});
+        if (!w.walkable || after.value("points", Json::array()).size() < 2) {
+            editor.setPath(id, before);
+            ipc->notify("runtime.notice", {{"level", "info"},
+                                           {"code", "path.unwalkable"},
+                                           {"message", "Edit refused: characters walk this route (" +
+                                                           (w.problems.empty() ? std::string("too short") : w.problems[0]) + ")"}});
+            reticleFlash = {"invalid", "path", -1, -1};
+            reticleFlashUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(700);
+            saveEditor();
+            return;
+        }
+    }
+    editor.recordEdit("path", world->id, id, before, after);
     saveEditor();
+}
+void Runtime::refuseUnwalkable() {
+    ipc->notify("runtime.notice", {{"level", "info"}, {"code", "path.unwalkable"}, {"message", "Routes need walkable floor here"}});
+    reticleFlash = {"invalid", "path", -1, -1};
+    reticleFlashUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(700);
 }
 // Primary in tool 3: press on a point starts its drag, on a segment inserts a point there,
 // elsewhere adds a point to the active path (as before).
@@ -53,6 +92,10 @@ void Runtime::pathPress() {
         return;
     }
     if (pathHover && pathHover->segment >= 0) {
+        if (routePath(pathHover->path) && !walkablePoint(pathHover->at)) {
+            refuseUnwalkable();
+            return;
+        }
         auto before = editor.path(pathHover->path);
         editor.insertPoint(pathHover->path, pathHover->segment, pathHover->at);
         pathEdit(pathHover->path, before);
@@ -60,6 +103,10 @@ void Runtime::pathPress() {
         return;
     }
     if (auto p = pathTarget()) {
+        if (!editor.activePath.empty() && routePath(editor.activePath) && !walkablePoint(*p)) {
+            refuseUnwalkable();
+            return;
+        }
         auto b = layout.binding(monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
         auto id = editor.activePath;
         auto before = id.empty() ? Json(nullptr) : editor.path(id);
@@ -73,6 +120,10 @@ void Runtime::pathRelease(bool cancel) {
         return;
     auto drag = std::move(*pathDrag);
     pathDrag.reset();
+    if (!cancel && routePath(drag.path) && !pathTargetWalkable) {
+        refuseUnwalkable();
+        cancel = true;
+    }
     if (cancel) {
         editor.setPath(drag.path, drag.before);
         saveEditor();

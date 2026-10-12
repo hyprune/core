@@ -102,8 +102,8 @@ def run(args):
         STATE=STATE_ROOT/'.gizmo-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if getattr(args,'feel',False):
         STATE=STATE_ROOT/'.feel-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
-    if getattr(args,'npc',False):
-        STATE=STATE_ROOT/'.npc-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+    if getattr(args,'npcs',False):
+        STATE=STATE_ROOT/'.npcs-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if getattr(args,'machines',False):
         STATE=STATE_ROOT/'.machines-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if getattr(args,'handover',False):
@@ -241,8 +241,8 @@ def run(args):
     if getattr(args,'feel',False):
         from feel import prepare
         prepare(installed)
-    if getattr(args,'npc',False):
-        from npc import prepare
+    if getattr(args,'npcs',False):
+        from npcs import prepare
         prepare(installed)
     if getattr(args,'machines',False):
         from machines import prepare
@@ -274,7 +274,7 @@ def run(args):
     if args.m3b:
         for grant in grants:grant['capabilities'].append('input.control')
     if getattr(args,'quests',False):grants[0]['capabilities']+=['shell.control','data.publish','input.control','camera.author','quest.control']
-    if getattr(args,'catalog',False):
+    if getattr(args,'catalog',False) or getattr(args,'npcs',False):
         grants[0]['capabilities']+=['shell.control','data.publish','input.control','quest.control','objects.control']
         grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','input.control','quest.control','objects.control']})
     if getattr(args,'quests',False):grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','input.control','quest.control']})
@@ -342,7 +342,7 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,"0.22" if getattr(args,"catalog",False) else "0.21" if getattr(args,"quests",False) else "0.19" if getattr(args,"reticle",False) or getattr(args,"gizmo",False) or getattr(args,"live_take",False) else "0.16" if getattr(args,"upscaler",False) or getattr(args,"live_findings",False) else "0.15" if getattr(args,"perf",False) or getattr(args,"autodrive",False) or getattr(args,"static_world",False) or getattr(args,"objects",False) or getattr(args,"feel",False) or getattr(args,"capture_pose",False) or getattr(args,"npc",False) or getattr(args,"machines",False) or getattr(args,"handover",False) or getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) or getattr(args,"workspace_homes",False) or getattr(args,"long_titles",False) or getattr(args,"watermark",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.23" if getattr(args,"npcs",False) else "0.22" if getattr(args,"catalog",False) else "0.21" if getattr(args,"quests",False) else "0.19" if getattr(args,"reticle",False) or getattr(args,"gizmo",False) or getattr(args,"live_take",False) else "0.16" if getattr(args,"upscaler",False) or getattr(args,"live_findings",False) else "0.15" if getattr(args,"perf",False) or getattr(args,"autodrive",False) or getattr(args,"static_world",False) or getattr(args,"objects",False) or getattr(args,"feel",False) or getattr(args,"capture_pose",False) or getattr(args,"machines",False) or getattr(args,"handover",False) or getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) or getattr(args,"workspace_homes",False) or getattr(args,"long_titles",False) or getattr(args,"watermark",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
         if getattr(args,"live_take",False):
             from live_take import acceptance
@@ -364,8 +364,8 @@ def run(args):
             from handover import acceptance
             acceptance(client,children,args,shell_token,socketpath)
             return
-        if getattr(args,"npc",False):
-            from npc import acceptance
+        if getattr(args,"npcs",False):
+            from npcs import acceptance
             acceptance(client,children,args,shell_token,socketpath)
             return
         if getattr(args,"machines",False):
@@ -705,6 +705,6 @@ def m1(client):
     print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--ipc-warp',action='store_true');parser.add_argument('--perf',action='store_true');parser.add_argument('--upscaler',action='store_true');parser.add_argument('--autodrive',action='store_true');parser.add_argument('--static-world',action='store_true');parser.add_argument('--objects',action='store_true');parser.add_argument('--quests',action='store_true');parser.add_argument('--catalog',action='store_true');parser.add_argument('--gizmo',action='store_true');parser.add_argument('--feel',action='store_true');parser.add_argument('--npc',action='store_true');parser.add_argument('--machines',action='store_true');parser.add_argument('--handover',action='store_true');parser.add_argument('--capture-pose',action='store_true');parser.add_argument('--live-take',action='store_true');parser.add_argument('--playable',action='store_true');parser.add_argument('--workspace-homes',action='store_true');parser.add_argument('--long-titles',action='store_true');parser.add_argument('--live-findings',action='store_true');parser.add_argument('--render-fail',action='store_true');parser.add_argument('--placement',action='store_true');parser.add_argument('--reticle',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--watermark',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--ipc-warp',action='store_true');parser.add_argument('--perf',action='store_true');parser.add_argument('--upscaler',action='store_true');parser.add_argument('--autodrive',action='store_true');parser.add_argument('--static-world',action='store_true');parser.add_argument('--objects',action='store_true');parser.add_argument('--quests',action='store_true');parser.add_argument('--catalog',action='store_true');parser.add_argument('--gizmo',action='store_true');parser.add_argument('--feel',action='store_true');parser.add_argument('--npcs',action='store_true');parser.add_argument('--machines',action='store_true');parser.add_argument('--handover',action='store_true');parser.add_argument('--capture-pose',action='store_true');parser.add_argument('--live-take',action='store_true');parser.add_argument('--playable',action='store_true');parser.add_argument('--workspace-homes',action='store_true');parser.add_argument('--long-titles',action='store_true');parser.add_argument('--live-findings',action='store_true');parser.add_argument('--render-fail',action='store_true');parser.add_argument('--placement',action='store_true');parser.add_argument('--reticle',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--watermark',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
     try:run(args)
     except KeyboardInterrupt:print("Nested session stopped.",flush=True)

@@ -96,8 +96,9 @@ void refs() {
         check(!world::parseRef(bad), bad);
     check(world::versionLess("1.0.0-rc.1", "1.0.0") && world::versionLess("1.2.0", "1.10.0") && !world::versionLess("2.0.0", "1.9.9"),
           "semver order");
-    check(world::objectMethods().size() == 11 && world::objectMethods().at("objects.place") == "objects.control" &&
-              world::objectMethods().at("objects.catalog") == "state.read",
+    check(world::objectMethods().size() == 21 && world::objectMethods().at("objects.place") == "objects.control" &&
+              world::objectMethods().at("objects.catalog") == "state.read" && world::objectMethods().at("npcs.spawn") == "objects.control" &&
+              world::objectMethods().at("paths.list") == "state.read" && world::objectMethods().at("interaction.choose") == "world.control",
           "method grants");
 }
 void catalog(const fs::path &fixture, const fs::path &tmp) {

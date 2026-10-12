@@ -351,8 +351,18 @@ void Runtime::objectsSync() {
         info.scale = inst.authoredScale;
         info.areaId = areaAt(inst.position);
         // World 0.8 assets carry no traits, so authored objects stay render-only; the
-        // development switch HYPRUNE_GIZMO_OBJECTS stands in for the movable trait.
-        info.movable = gizmoObjects;
+        // development switch HYPRUNE_GIZMO_OBJECTS stands in for the movable trait. World 0.9
+        // assets say so themselves; characters are never movable (RFC-0011).
+        auto &traits = world->objectAssets[inst.asset].traits;
+        info.character = inst.character;
+        info.movable = !info.character && (gizmoObjects || (traits.is_object() && traits.contains("movable")));
+        if (traits.is_object() && traits.contains("movable") && traits["movable"].contains("scale"))
+            info.scaleMin = traits["movable"]["scale"][0], info.scaleMax = traits["movable"]["scale"][1];
+        else if (traits.is_object() && traits.contains("movable"))
+            info.scaleMin = info.scaleMax = inst.authoredScale;
+        for (auto &o : world->manifest.value("objects", Json::array()))
+            if (o["id"] == inst.id && o.value("locked", false))
+                info.locked = true;
         auto o = editor.override(world->id, inst.id);
         if (o.is_object()) {
             if (o.contains("pose")) {
@@ -363,7 +373,7 @@ void Runtime::objectsSync() {
                 info.scale = o["scale"];
             if (o.contains("areaId"))
                 info.areaId = o["areaId"];
-            info.locked = o.value("locked", false);
+            info.locked = info.locked || o.value("locked", false);
             if (o.value("hidden", false))
                 info.state = "hidden";
         }
@@ -397,8 +407,8 @@ void Runtime::objectsSync() {
             continue;
         }
         info.entry = e;
-        info.movable = true;
         info.character = e->has("character");
+        info.movable = !info.character;
         info.support = supportOf(*e);
         if (e->scale.is_array())
             info.scaleMin = e->scale[0], info.scaleMax = e->scale[1];
@@ -427,7 +437,16 @@ void Runtime::objectsSync() {
             inst.ambientUp = old->second.ambientUp, inst.ambientDown = old->second.ambientDown;
             inst.sun = old->second.sun, inst.sunVisibility = old->second.sunVisibility, inst.regions = old->second.regions;
         }
+        inst.character = info.character;
+        inst.bound = info.character && r.contains("path");
+        if (inst.character && r.value("disabled", false))
+            info.state = "hidden", inst.hidden = true;
         world->objectInstances.push_back(inst);
+        // Characters are checked by their route or standing spot (Npcs.inc), not as boxes.
+        if (info.character) {
+            infos.push_back(info);
+            continue;
+        }
         // Rechecked against the current geometry once per pose: at load, after a package
         // update or a catalog change. Never relocated: a failing one is blocked.
         auto key = poseKey(r);
@@ -998,7 +1017,26 @@ Json Runtime::objectsState() {
                              {"rule", i.rule.empty() ? Json(nullptr) : Json(i.rule)},
                              {"path", nullptr},
                              {"activity", nullptr},
-                             {"seat", nullptr}});
+                             {"seat", nullptr},
+                             {"character", i.character},
+                             {"accent", nullptr}});
+        // IPC 0.23: a character's route, what it is doing and the seat it holds.
+        if (!i.character || !world)
+            continue;
+        auto &rec = instances.back();
+        if (auto *n = npcRun(i.id)) {
+            rec["path"] = n->path.empty() ? Json(nullptr) : Json(n->path);
+            rec["activity"] = n->state == "suspended" ? "suspended" : n->agent.activity();
+            rec["seat"] = n->agent.seatRef().empty() ? Json(nullptr) : Json(n->agent.seatRef().substr(0, 192));
+            if (n->state == "suspended")
+                rec["state"] = "suspended";
+            if (n->accent)
+                rec["accent"] = {std::clamp(n->accent->x, 0.f, 1.f), std::clamp(n->accent->y, 0.f, 1.f), std::clamp(n->accent->z, 0.f, 1.f)};
+        } else {
+            Json config = i.source == "user" ? editor.placement(world->id, i.id) : Json(nullptr);
+            if (config.is_object() && config.contains("path"))
+                rec["path"] = config["path"];
+        }
     }
     uint64_t placements = 0, triangles = 0, gpu = 0, collision = 0;
     std::set<std::string> refs;
@@ -1039,6 +1077,8 @@ std::set<std::string> Runtime::objectWaived(int asset, const interaction::Transf
 // IPC 0.22 objects.* and libraries.* (RFC-0011 P1). Throws ipc::Error; nullopt defers the
 // reply (libraries.install completes from catalogTick).
 std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json &params) {
+    if (method.starts_with("npcs.") || method.starts_with("paths.") || method == "interaction.choose")
+        return npcsMethod(method, params);
     auto only = [&](std::initializer_list<const char *> required, std::initializer_list<const char *> optional = {}) {
         if (!params.is_object())
             throw ipc::Error(-32602, "params must be an object");
@@ -1156,6 +1196,8 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         auto *e = catalogEntry(params["ref"]);
         if (!e)
             throw ipc::Error(-32004, "unknown ref " + params["ref"].get<std::string>());
+        if (e->has("character"))
+            throw ipc::Error(-32005, "characters are protected: spawn them with npcs.spawn");
         if (!e->placeable)
             throw ipc::Error(-32005, e->reason.empty() ? "not placeable" : e->reason);
         if (pocketObjects.size() >= pocketObjectLimit)
@@ -1177,6 +1219,8 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         auto *e = catalogEntry(params["ref"]);
         if (!e)
             throw ipc::Error(-32004, "unknown ref " + params["ref"].get<std::string>());
+        if (e->has("character"))
+            throw ipc::Error(-32005, "characters are spawned on a route or a standing spot: use npcs.spawn");
         if (!e->placeable)
             throw ipc::Error(-32005, e->reason.empty() ? "not placeable" : e->reason);
         float scale = 1;
@@ -1299,7 +1343,7 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         auto &i = info();
         if (i.source != "authored")
             throw ipc::Error(-32005, "remove user objects instead of hiding them");
-        if (!i.movable)
+        if (!i.movable && !i.character)
             throw ipc::Error(-32005, i.name + " can't be hidden: the world may rely on it");
         auto before = record(i);
         Json after = before.is_object() ? before : Json{{"worldId", world->id}, {"objectId", i.id}, {"areaId", i.areaId}};

@@ -62,11 +62,11 @@ layout(location=1) in vec3 normal;
 layout(location=2) in vec2 uv0;
 layout(location=4) in vec4 joints;
 layout(location=5) in vec4 weights;
-uniform mat4 vp,model;uniform mat3 normalMatrix;
+uniform mat4 vp,model;uniform mat3 normalMatrix;uniform vec4 characterUp,characterDown;
 layout(std140) uniform Joints{mat4 joint[64];};
 out vec3 n;out vec3 worldPosition;out vec2 uv;out vec2 lightUV;flat out vec4 probeUp;flat out vec4 probeDown;flat out vec4 paint;flat out vec4 tint;
 void main(){paint=vec4(0);tint=vec4(0,1,1,1);mat4 skin=weights.x*joint[int(joints.x)]+weights.y*joint[int(joints.y)]+weights.z*joint[int(joints.z)]+weights.w*joint[int(joints.w)];
- vec4 pos=model*skin*vec4(position,1);gl_Position=vp*pos;n=normalMatrix*(mat3(skin)*normal);uv=uv0;lightUV=vec2(0);worldPosition=pos.xyz;probeUp=vec4(0);probeDown=vec4(0);}
+ vec4 pos=model*skin*vec4(position,1);gl_Position=vp*pos;n=normalMatrix*(mat3(skin)*normal);uv=uv0;lightUV=vec2(0);worldPosition=pos.xyz;probeUp=characterUp;probeDown=characterDown;}
 )";
 constexpr GLuint jointBinding = 1;
 // Per-material constants, one std140 range per material (MaterialStd140).
@@ -3384,6 +3384,11 @@ void Renderer::drawNpcs(const std::array<std::array<float, 4>, 6> &planes, int t
         glBindBuffer(GL_UNIFORM_BUFFER, jointUbo_);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, npc.skin.size() * sizeof(Mat4), npc.skin.data());
         auto normals = normalMatrix(npc.model);
+        // Probe light at the character's position (RFC-0011 "probe lighting along paths").
+        bool lit = std::any_of(npc.probe.begin(), npc.probe.end(), [](float v) { return v != 0; });
+        uniform(skinned_, "objectLit", int(lit));
+        glUniform4fv(location(skinned_, "characterUp"), 1, npc.probe.data());
+        glUniform4fv(location(skinned_, "characterDown"), 1, npc.probe.data() + 4);
         glUniformMatrix4fv(location(skinned_, "model"), 1, GL_FALSE, npc.model.v.data());
         glUniformMatrix3fv(location(skinned_, "normalMatrix"), 1, GL_FALSE, normals.data());
         for (auto &prim : gpu.primitives) {
@@ -3414,6 +3419,18 @@ void Renderer::drawNpcs(const std::array<std::array<float, 4>, 6> &planes, int t
     }
     glBindVertexArray(0);
     glDisable(GL_CULL_FACE);
+}
+bool Renderer::prepareCharacters() {
+    bool any = false;
+    for (auto &npc : npcs)
+        any = any || (npc.character && !characterGPU_.contains(npc.character.get()));
+    if (!any)
+        return false;
+    GLState state;
+    for (auto &npc : npcs)
+        if (npc.character)
+            characterGPU(*npc.character);
+    return true;
 }
 void Renderer::releaseCharacters() {
     for (auto &[character, gpu] : characterGPU_) {

@@ -117,10 +117,16 @@ class Renderer {
         std::vector<Mat4> skin;
         std::optional<Vec3> accent; // recolours the material named `accent`
         bool moving = false;        // animating: keeps frames coming while in view
+        // Probe light at its position (ambient up rgb, sun, ambient down rgb, sun visibility);
+        // all zero: the shader's default light.
+        std::array<float, 8> probe{};
     };
     std::vector<Npc> npcs;
     int npcsDrawn = 0;
     void releaseCharacters(); // GL context current
+    // Uploads the characters in `npcs` that have no GPU copy yet (in the tick, GL state
+    // saved and restored), so drawing never uploads inside the render pass. True if any.
+    bool prepareCharacters();
     struct Reticle {
         enum Style { CrossDot, TDot, CircleDot, Dot, Cross, Chevron };
         enum State { Neutral, Target, Valid, OutOfRange, Invalid, Holding, Typing };

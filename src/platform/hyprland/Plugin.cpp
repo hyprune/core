@@ -63,9 +63,12 @@ extern "C" {
 #include "ipc/Protocol.hpp"
 #include "ipc/Text.hpp"
 #include "offload/Client.hpp"
+#include "offload/Characters.hpp"
 #include "offload/Objects.hpp"
 #include "offload/Supervisor.hpp"
 #include "sim/Npc.hpp"
+#include "interaction/Walkability.hpp"
+#include "world/Paths.hpp"
 #include "world/Machines.hpp"
 #include "world/Character.hpp"
 #include "offload/Pci.hpp"
@@ -226,6 +229,10 @@ struct Runtime {
     bool pathsVisible() const;
     std::optional<Vec3> pathTarget();
     void pathTick();
+    bool routePath(const std::string &id) const;
+    bool walkablePoint(Vec3);
+    void refuseUnwalkable();
+    bool pathTargetWalkable = true; // tool 3: the point under the reticle suits the active route
     void pathEdit(const std::string &id, const Json &before);
     void pathPress();
     void pathRelease(bool cancel);
@@ -425,6 +432,9 @@ struct Runtime {
     void applyGraphics(const Json &patch) {
         auto next = interaction::configPatch(configured, {{"graphics", patch}});
         config["graphics"] = next["graphics"];
+        // graphics.npc_motion (IPC 0.23) wins over Lua npc.motion; null inherits it.
+        config["npc"]["motion"] = config["graphics"]["npc_motion"].is_string() ? config["graphics"]["npc_motion"]
+                                                                               : configured["npc"]["motion"];
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         renderer.applyGraphics(config["graphics"]);
         if (!renderer.profile.is_null() && !graphicsBaseProfile.is_null()) {
@@ -554,16 +564,82 @@ struct Runtime {
     sim::MotionStrategy *movement = &walk;
     sim::Climbing climbing;
     sim::ViewBob viewBob;
-    // NPCs (RFC-0010 prototype): one character, agents on routes from HYPRUNE_NPC_PROTOTYPE.
-    std::shared_ptr<world::Character> npcCharacter;
-    std::vector<sim::NpcAgent> npcAgents;
-    std::vector<std::optional<Vec3>> npcAccents;
-    std::string npcState = "off"; // animating, paused (reason), still, off
-    bool npcOnMains = true;
+    // NPCs (RFC-0010, RFC-0011 P2; Npcs.inc): an agent per active character instance.
+    struct NpcRun {
+        std::string id, name, signature, path, state = "active", activity, seat;
+        bool user = false;
+        unsigned asset = 0;
+        sim::NpcAgent agent;
+        std::shared_ptr<const world::Character> character;
+        std::optional<Vec3> accent;
+        Json interactions = Json::array();
+        std::vector<Mat4> skin;
+        world::Character::PoseInput posed;
+        bool stillPosed = false, lit = false;
+        Vec3 regionAt{1e9f, 1e9f, 1e9f}, lightAt{};
+        std::optional<std::future<world::ProbeLight>> light;
+        std::array<float, 8> probe{};
+        std::chrono::steady_clock::time_point published{};
+    };
+    std::vector<NpcRun> npcs;
+    std::string npcState = "none", npcReason, npcPower;
     std::chrono::steady_clock::time_point npcLastActive = std::chrono::steady_clock::now(), npcSupplyChecked{};
-    std::vector<std::vector<Mat4>> npcSkins;
-    void npcLoad();
+    std::array<uint64_t, 3> npcSynced{}; // instanceRevision, pathRevision, builtObjects agents were built from
+    uint64_t npcRevision = 0, pathRevision = 0, npcProtected = 0;
+    std::set<std::string> seatTaken;     // occupied seat anchors (refs)
+    std::map<const world::Character *, world::Character::SeatFit> seatFits;
+    struct Walkability {
+        bool walkable = true;
+        std::vector<std::string> problems;
+    };
+    std::map<std::string, Walkability> walkCache;
+    struct NpcDrawing {
+        std::string pathId, use;
+        Json spawn = nullptr;
+        std::string bind;
+    };
+    std::optional<NpcDrawing> npcDrawing;
+    struct NpcInteraction {
+        std::string objectId, interactionId, type, label, panel;
+        Json choices = Json::array(), lines = Json::array();
+        int line = 0;
+        std::chrono::steady_clock::time_point started{};
+    };
+    std::optional<NpcInteraction> npcInteraction;
+    Json npcAimed = nullptr;
+    Vec3 npcPlayer{};          // what the agents saw last tick (diagnostics)
+    bool npcPresent = false;
+    Json pathRecord(const std::string &ref) const;
+    interaction::PlacementScene npcScene();
+    const Walkability &routeWalkability(const Json &path, const interaction::Body &);
+    Json pathsList();
+    std::optional<sim::NpcSeat> resolveSeat(const std::string &ref, Vec3 near);
+    bool reserveSeat(const std::string &ref);
+    void npcSync();
+    NpcRun *npcRun(const std::string &id);
+    void npcWorldLoaded();
+    std::string npcPaused();
     void npcTick(float dt);
+    std::optional<std::pair<std::string, float>> characterAim();
+    bool protectCharacter(const std::string &what, const char *action);
+    Json interactionList(const NpcRun &) const;
+    void beginInteraction(const std::string &objectId, const std::string &interactionId);
+    void endInteraction();
+    bool interactUse();
+    void npcInteractionTick();
+    Json npcsState();
+    void npcPrompts();
+    Json characterRecord(const world::CatalogEntry &, const std::string &id, const std::string &path, Vec3 at, float yaw,
+                         const Json &settings);
+    void requireRoute(const std::string &ref, const interaction::Body &, const std::string &except = "");
+    interaction::Body bodyOf(const world::CatalogEntry &);
+    std::optional<std::pair<Vec3, float>> standingSpot(const interaction::Body &, const Json &pose);
+    std::string spawnCharacter(const std::string &ref, const std::string &path, const Json &pose, const Json &settings);
+    Json finishDrawing();
+    void bindCharacter(const std::string &id, const Json &patch);
+    std::optional<Json> npcsMethod(const std::string &method, const Json &params);
+    Json npcDiagnostics();
+    Json offloadCharacters() const;
     // Machines (RFC-0013 draft prototype): data-channel values drive placed objects
     // through HYPRUNE_MACHINES_PROTOTYPE's bindings. Applied in the tick only.
     world::Machines machines;
@@ -599,6 +675,7 @@ struct Runtime {
     std::shared_ptr<world::World> uploadingWorld;
     std::string pendingSpawn, pendingToggle, resolvedLocation;
     bool toggleAfterLoad = false;
+    const char *loadStep = "load"; // the finishLoad phase, for a failure's log line
     std::chrono::steady_clock::time_point loadDeadline;
     double accumulator = 0;
     // Motion follows presentation, as frames are shown: a tick runs right after each
@@ -664,6 +741,8 @@ struct Runtime {
     // can be on screen (set each tick; false on the desktop, output off or loading).
     bool animationFrames = false;
     uint64_t renderedKey = 0;
+    std::vector<uint64_t> frameParts;    // frameKey part hashes (diagnostics)
+    std::map<std::string, uint64_t> frameCauses; // first changed part per key change
     void focus(const std::string &, bool keyboard, bool enterUse = true);
     void load(const std::string &, const std::string &spawn = "");
     std::optional<Json> method(const std::string &, const Json &);
@@ -1275,8 +1354,13 @@ Json Runtime::performance() const {
         state["effective"]["offload_power_cap_w"] = offloadPolicy.value("capW", 0.);
     state["effective"]["offload"] = renderedOffload ? "on" : "off";
     state["workerTimings"] = offload.timings;
+    // npc_motion is a graphics setting on the wire but not a rendering control.
+    state["requested"].erase("npc_motion");
+    state["effective"].erase("npc_motion");
     state["controls"] = Json::object();
     for (auto &[key, value] : config["graphics"].items()) {
+        if (key == "npc_motion")
+            continue;
         std::string group = key == "bloom" || key == "bloom_strength" ? "bloom" :
                             (key == "outline" || key == "outline_quality" || key == "outline_width_px" || key == "outline_colour") ? "outline" : key == "sky" ? "sky" : key == "msaa" ? "msaa_resolve" :
                             key == "sharpen" || key == "upscaler" ? "upscale_sharpen" : key == "alpha_haze" ? "native_surfaces_geometry" :
@@ -1299,13 +1383,12 @@ static const std::string &compositorPci() {
 std::string Runtime::offloadLocalReason() const {
     if (machines.active())
         return "machines prototype uses local renderer";
-    if (npcCharacter && !npcAgents.empty())
-        return "NPC prototype uses local renderer";
     return "";
 }
 void Runtime::offloadTick() {
     if (renderPass.active()) throw std::runtime_error("offload lifecycle inside frame");
     auto g = config["graphics"];
+    g.erase("npc_motion"); // not a renderer setting: changing it never restarts the worker
     bool enabled = active && world && monitor && !loading && !locked() && g["offload"] != "off" &&
                    offloadLocalReason().empty();
     // Catalog objects decode in the worker too: it may read the object roots that exist
@@ -1369,7 +1452,8 @@ void Runtime::offloadPump() {
         auto objects = [&] {
             return Json{{"clock", renderer.animationSeconds()}, {"logicalScale", renderer.logicalScale},
                         {"objects", world ? offloadObjects.delta(*world, renderer.transforms, mergedAssets, packageAssets)
-                                          : Json(nullptr)}};
+                                          : Json(nullptr)},
+                        {"characters", offloadCharacters()}};
         };
         offload.tick(view, renderer.graphics, renderer.profile, offloadPolicy.value("targetFPS", 30), objects,
                      [&] { offloadObjects.commit(); });
@@ -1561,7 +1645,22 @@ void Runtime::publish() {
           {"selectedId", editor.selected.empty() ? Json(nullptr) : Json(editor.selected)},
           {"selectedKind", editor.kind == "object" && !editor.selected.starts_with("object:") ? "node" : editor.kind},
           {"gizmo", {{"space", editor.localAxes ? "local" : "world"}, {"pivot", editor.pivotBase ? "base" : "centre"}, {"snap", editor.snap}}},
-          {"paths", editor.paths},
+          {"paths",
+           [&] {
+               // IPC 0.23 path fields (older peers see them stripped): use, name, speed, stops.
+               Json paths = Json::array();
+               for (auto p : editor.paths) {
+                   p["use"] = p.value("use", "generic");
+                   if (!p.contains("name"))
+                       p["name"] = nullptr;
+                   if (!p.contains("speed"))
+                       p["speed"] = nullptr;
+                   if (!p.contains("stops"))
+                       p["stops"] = Json::array();
+                   paths.push_back(std::move(p));
+               }
+               return paths;
+           }()},
           {"objects", editor.objects},
           {"locked", Json::array()},
           {"debug", debug}}},
@@ -1599,6 +1698,7 @@ void Runtime::publish() {
         {"integrations", {{"sources", control.sources}}}};
     publication["markers"] = markers.stateKey();
     publication["objects"] = objectsState();
+    publication["npcs"] = npcsState();
     for (auto &e : capture.entries)
         if (world && editor.locked(world->id, e.instance))
             publication["editor"]["locked"].push_back(e.surface.id);
@@ -1641,8 +1741,13 @@ void Runtime::load(const std::string &id, const std::string &spawnId) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         return render::Renderer::compressedFormats();
     }();
-    pendingWorld = std::async(std::launch::async, [package, id] {
-        auto candidate = world::load(package, {formats});
+    // World 0.9 library references resolve against the installed libraries (RFC-0011).
+    world::LoadOptions options{formats};
+    options.libraryRoots.push_back(catalogRoots.userLibraries);
+    for (auto &root : catalogRoots.systemLibraries)
+        options.libraryRoots.push_back(root);
+    pendingWorld = std::async(std::launch::async, [package, id, options] {
+        auto candidate = world::load(package, options);
         if (candidate->id != id)
             throw std::runtime_error("installed ID mismatch");
         return candidate;
@@ -1676,8 +1781,11 @@ void Runtime::finishLoad() {
         renderer.profile = graphicsBaseProfile;
         applyGraphics(graphicsFile.current);
         world = std::move(candidate);
-        npcLoad();
+        loadStep = "characters";
+        npcWorldLoaded();
+        loadStep = "machines";
         machinesLoad();
+        loadStep = "layout";
         outsidePlayable = false;
         // Windows taken into the world keep the home they left across a world change; the
         // new world's capture gives them new surface IDs.
@@ -1700,7 +1808,9 @@ void Runtime::finishLoad() {
         objectModels.clear();
         renderer.transforms.clear();
         originalCollision = world->collision;
+        loadStep = "objects";
         objectsWorldLoaded();
+        loadStep = "control";
         hands.end();
         auto transition = control.location["transition"];
         control.reset(world.get());
@@ -1718,6 +1828,7 @@ void Runtime::finishLoad() {
         layout.desktop = nullptr;
         pendingArea.clear();
         movement = world->collision.empty() ? static_cast<sim::MotionStrategy *>(&fly) : &walk;
+        loadStep = "refresh";
         if (active) {
             // These are existing clients entering a different world, not newly mapped
             // windows. Resolve authored/durable mounts before enabling spawn placement.
@@ -1753,11 +1864,17 @@ void Runtime::finishLoad() {
         loading = false;
         control.endLoad(false, loadCancelled || locked());
         publish();
+        // A referenced library version that is not installed: the previous scene stays.
+        if (std::string(e.what()).starts_with("world.library.missing: "))
+            ipc->notify("runtime.notice", {{"level", "warning"}, {"code", "world.library.missing"},
+                                           {"message", ipc::boundedText(std::string(e.what()).substr(23), ipc::MessageLimit)}});
+        std::fprintf(stderr, "[hyprune] world load failed (%s): %s\n", loadStep, e.what());
         ipc->fail(-32602, e.what());
         error(e);
         toggleAfterLoad = false;
         pendingArea.clear();
     }
+    loadStep = "load";
 }
 
 void Runtime::returnToWorldWorkspace() {
@@ -2081,45 +2198,6 @@ void Runtime::focusWall(const std::string &id) {
     handover.elapsed = 0;
     handover.phase = 1;
 }
-void Runtime::npcLoad() {
-    // Prototype only (RFC-0010 draft): the world format has no NPCs yet. A JSON file names the
-    // world, the character and the routes: {"worldId", "character", "agents":[{"route":[[x,y,z],..],
-    // "idleSeconds", "accent":[r,g,b]}]}.
-    npcAgents.clear();
-    npcAccents.clear();
-    npcSkins.clear();
-    renderer.npcs.clear();
-    renderer.releaseCharacters();
-    npcCharacter.reset();
-    auto file = getenv("HYPRUNE_NPC_PROTOTYPE");
-    if (!file || !world)
-        return;
-    try {
-        auto spec = interaction::readJSON(file);
-        if (spec.value("worldId", "") != world->id)
-            return;
-        npcCharacter = std::make_shared<world::Character>(world::loadCharacter(spec.at("character").get<std::string>()));
-        for (auto &a : spec.at("agents")) {
-            sim::NpcAgent agent;
-            for (auto &p : a.at("route"))
-                agent.route.push_back({p[0], p[1], p[2]});
-            agent.idleSeconds = a.value("idleSeconds", 3.f);
-            if (auto walk = npcCharacter->clip("walk"); walk && walk->speed > 0)
-                agent.walkSpeed = walk->speed;
-            if (auto fidget = npcCharacter->clip("idle_fidget"))
-                agent.fidgetSeconds = fidget->duration;
-            agent.start();
-            npcAgents.push_back(agent);
-            npcAccents.push_back(a.contains("accent") ? std::optional<Vec3>(Vec3{a["accent"][0], a["accent"][1], a["accent"][2]})
-                                                      : std::nullopt);
-        }
-        npcSkins.resize(npcAgents.size());
-    } catch (const std::exception &e) {
-        lastError = std::string("npc prototype: ") + e.what();
-        npcAgents.clear();
-        npcCharacter.reset();
-    }
-}
 void Runtime::machinesLoad() {
     // Prototype only: the world format has no machines yet. The bindings file names the
     // world, the assets' object.json manifests (slots, machine trait) and per-instance
@@ -2152,61 +2230,6 @@ void Runtime::machinesTick(float dt) {
     renderer.objectStates = machines.states;
     renderer.objectExtras = machines.extras;
     renderer.worldLabels = machines.labels;
-}
-void Runtime::npcTick(float dt) {
-    if (!npcCharacter || npcAgents.empty()) {
-        npcState = "off";
-        renderer.npcs.clear();
-        return;
-    }
-    auto now = std::chrono::steady_clock::now();
-    if (motionSpeed > .05f || motionTurn > .05f || !keys.empty())
-        npcLastActive = now;
-    if (now - npcSupplyChecked > std::chrono::seconds(5)) { // sysfs, a few small reads
-        auto supply = offload::supply();
-        npcOnMains = supply.mains || (supply.ac && !supply.usb && !supply.discharging);
-        npcSupplyChecked = now;
-    }
-    std::string motion = config["npc"]["motion"];
-    bool reduced = config["graphics"]["reduced_motion"] == true;
-    // Animate only when someone is there to see it: ambient motion never costs frames while
-    // the player types, reads a wall, idles, or runs on battery / USB-C (auto).
-    std::string paused = motion == "off" || motion == "still" ? motion
-                         : reduced                            ? "reduced motion"
-                         : !active || loading                 ? "inactive"
-                         : motion == "always"                 ? ""
-                         : typing                             ? "typing"
-                         : !layout.desktop.is_null() || fullscreen.phase ? "focus"
-                         : layerCursor                        ? "free cursor"
-                         : now - npcLastActive > std::chrono::seconds(30) ? "idle"
-                         : !npcOnMains                        ? "battery"
-                                                              : "";
-    npcState = paused.empty() ? "animating" : paused == "off" || paused == "still" ? paused : "paused: " + paused;
-    if (motion == "off") {
-        renderer.npcs.clear();
-        return;
-    }
-    auto &c = *npcCharacter;
-    auto walk = c.clip("walk");
-    float clipSpeed = walk && walk->speed > 0 ? walk->speed : 1.3f;
-    bool animate = paused.empty();
-    renderer.npcs.resize(npcAgents.size());
-    for (size_t i = 0; i < npcAgents.size(); ++i) {
-        auto &agent = npcAgents[i];
-        if (animate)
-            agent.update(dt, camera.position, clipSpeed);
-        bool rest = motion == "still" || reduced;
-        if (animate || rest || npcSkins[i].empty()) {
-            if (rest)
-                c.pose(c.clip("idle"), 0, true, npcSkins[i]);
-            else
-                c.blend(c.clip(agent.previous), agent.previousTime, c.clip(agent.clip), agent.clipTime,
-                        agent.previous.empty() ? 1.f : agent.fade, npcSkins[i]);
-        }
-        // Moving NPCs in view keep frames coming through the world-object path
-        // (animationFrames); paused, still or out of view, they cost none.
-        renderer.npcs[i] = {npcCharacter, agent.model(), npcSkins[i], npcAccents[i], animate};
-    }
 }
 void Runtime::motionTick(float dt) {
     // Measured motion (not intent): walking into a wall neither bobs nor spreads the reticle.
@@ -2296,7 +2319,9 @@ void Runtime::reticleTick() {
                 next = {"invalid", "grab", o->second.distance, config["player"]["reach_grab"]};
             else
                 ranged(o->second.distance, "reach_grab", "grab");
-        } else
+        } else if (auto c = characterAim())
+            next = {"invalid", "grab", c->second, config["player"]["reach_grab"]}; // characters are protected
+        else
             next.state = "neutral";
     } else {
         next.state = "neutral";
@@ -2306,8 +2331,11 @@ void Runtime::reticleTick() {
             unplaced = nullptr;
         switch (editor.slot) {
         case 1:
-            if (auto h = aim(); h && !capture.workspace(h->first))
+            if (auto h = aim(); h && !capture.workspace(h->first) &&
+                (npcAimed.is_null() || !characterAim() || characterAim()->second > h->second.distance))
                 next = {"target", "click", h->second.distance, -1};
+            else if (!npcAimed.is_null())
+                next = {"valid", "interact", -1, input.config["useDistance"]};
             break;
         case 2:
             // The click's own order: a window under the reticle is (re)selected first.
@@ -2323,6 +2351,8 @@ void Runtime::reticleTick() {
         case 3:
             if (blocker)
                 ranged(blocker->distance, "reach_placement", "path");
+            if (blocker && !pathTargetWalkable)
+                next.state = "invalid"; // a route point off walkable floor
             break;
         case 4:
             // Position tool: a handle under the reticle, a drag (refused poses invalid),
@@ -2335,6 +2365,8 @@ void Runtime::reticleTick() {
                 next = {"valid", "select", h->second.distance, -1};
             else if (auto o = objectAim())
                 next = {"valid", "select", o->second.distance, -1};
+            else if (auto c = characterAim())
+                next = {"invalid", "select", c->second, -1};
             break;
         case 5:
             if (pocketSelected()) {
@@ -2370,7 +2402,8 @@ void Runtime::reticleTick() {
                     ranged(o->second.distance, "reach_placement", "pocket");
                 else
                     next = {"invalid", "pocket", o->second.distance, config["player"]["reach_placement"]};
-            }
+            } else if (auto c = characterAim())
+                next = {"invalid", "pocket", c->second, config["player"]["reach_placement"]};
             break;
         default:
             break;
@@ -3162,6 +3195,9 @@ void Runtime::action(interaction::Action a) {
                                           : config["input"]["resize_button"].get<uint32_t>();
         // Carry needs no particular tool for movable world objects (RFC-0011); scene nodes
         // that own collision stay tool 4 targets.
+        if (a.name == "carry" && a.pressed && a.edge && !aim() && !gizmo.dragging() && !instanceAim() &&
+            protectCharacter("Carry", "grab"))
+            return;
         if (a.name == "carry" && a.pressed && !aim() && !gizmo.dragging())
             if (auto object = editor.slot == 4 ? objectAim() : instanceAim()) {
                 if (auto *info = object->first.starts_with("object:") ? objectInfo(object->first.substr(7)) : nullptr) {
@@ -3281,6 +3317,15 @@ void Runtime::action(interaction::Action a) {
         markers.tap(std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now().time_since_epoch()).count());
     } else if (a.name == "use") {
+        // A character's interaction (RFC-0011): the aimed one, unless a window is nearer;
+        // E also advances a `say` and closes a choice list.
+        if (a.pressed && world && (npcInteraction || !npcAimed.is_null())) {
+            auto window = aim();
+            auto character = characterAim();
+            bool nearer = npcInteraction || (character && (!window || character->second < window->second.distance));
+            if (nearer && interactUse())
+                return;
+        }
         if (!world || noclip || movement != &walk ||
             !climbing.use(camera, world->climbables,
                           sim::climbMode(config["movement"]["climb_mode"].get<std::string>())))
@@ -3333,6 +3378,8 @@ void Runtime::action(interaction::Action a) {
         objectCarry = false;
         editor.slot = tool = std::stoi(a.name.substr(4));
         tagged.clear();
+        if (npcDrawing && editor.activePath == npcDrawing->pathId)
+            finishDrawing(); // leaving (or re-selecting) tool 3 finishes a drawn route
         editor.finishPath();
     }
     publish();
@@ -3391,12 +3438,15 @@ Vec3 objectOrigin(const world::World &w, const std::string &id) {
 #include "Gizmo.inc"
 #include "Objects.inc"
 #include "Paths.inc"
+#include "Npcs.inc"
 void Runtime::saveEditor() {
     if (session.playing) return;
     auto value = editor.saved();
     if (value == lastEditor)
         return;
     interaction::atomicJSON(editorFile, value);
+    if (!lastEditor.is_object() || value["paths"] != lastEditor["paths"])
+        ++pathRevision; // characters on edited routes rebuild (Npcs.inc)
     lastEditor = value;
 }
 // Only geometry that owns its collision may be selected, carried or transformed; a static
@@ -3693,6 +3743,10 @@ void Runtime::toolInput(const std::string &slot, interaction::Action event) {
             publish();
             return;
         }
+        if (!e && protectCharacter("Pocket", "pocket")) {
+            publish();
+            return;
+        }
         if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance) || tooFar(h->second.distance, "reach_placement", "pocket"))
             return;
         cancelGrab();
@@ -3876,7 +3930,8 @@ void Runtime::toolClick(const std::string &action) {
         editor.kind = "object";
         selectedTransform = objectPose(editor.selected);
         publish();
-    }
+    } else if (protectCharacter("Select", "select"))
+        publish();
 }
 void Runtime::toolsTick() {
     ctrlTick();
@@ -4171,6 +4226,10 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                 throw ipc::Error(-32602,"setting requires IPC 0.14");
             if (!ipc::protocol::atLeast(protocol, "0.16") && params["patch"].contains("upscaler"))
                 throw ipc::Error(-32602, "setting requires IPC 0.16");
+            if (!ipc::protocol::atLeast(protocol, "0.23") && params["patch"].contains("npc_motion"))
+                throw ipc::Error(-32602, "setting requires IPC 0.23");
+            if (params["patch"].contains("npc_motion") && !params["patch"]["npc_motion"].is_string())
+                throw ipc::Error(-32602, "npc_motion must be auto, always, still or off");
             if (!ipc::protocol::atLeast(protocol, "0.18")) {
                 auto &patch = params["patch"];
                 auto cap = patch.value("offload_power_cap_w", Json(50));
@@ -4200,6 +4259,16 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                       {"options", render::graphicsOptions()},
                       {"unsupported", {"ssr", "runtime_shadows", "contact_shadows"}},
                       {"timings", renderer.timings()}};
+        // npc_motion: the effective motion (Lua npc.motion when not set here); older peers see none.
+        for (auto section : {"config", "effective"})
+            response[section]["npc_motion"] = config["npc"]["motion"];
+        if (!ipc::protocol::atLeast(protocol, "0.23")) {
+            for (auto section : {"config", "effective", "overrides", "options"})
+                response[section].erase("npc_motion");
+            for (auto &preset : response["presets"])
+                preset.erase("npc_motion");
+        } else if (response["overrides"].contains("npc_motion") && response["overrides"]["npc_motion"].is_null())
+            response["overrides"].erase("npc_motion");
         if (!ipc::protocol::atLeast(protocol, "0.19")) // fov above 110 arrived with IPC 0.19
             for (auto section : {"config", "effective", "overrides"})
                 if (response[section].contains("fov") && response[section]["fov"].is_number())
@@ -5170,6 +5239,8 @@ std::vector<surfaces::Surface> Runtime::frameSurfaces() {
         prompt(camera.position + camera.forward() * 2,
                climbing.prompt(
                    sim::climbMode(config["movement"]["climb_mode"].get<std::string>())));
+    if (world && (!renderer.toolPrompt.is_object() || npcInteraction))
+        npcPrompts();
     renderer.renderScale = control.photoHeld() ? control.photoScale :
         (renderer.graphics["render_scale"] == "auto" ? 0.f : renderer.graphics["render_scale"].get<float>());
     renderer.dynamicResolution = !control.photoHeld() && renderer.graphics["dynamic_resolution"].get<bool>();
@@ -5221,9 +5292,12 @@ bool Runtime::frameForced() {
 }
 uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     FrameHash h;
+    std::vector<uint64_t> parts;
+    auto part = [&](const char *) { parts.push_back(h.value); };
     auto &r = renderer;
     h(reinterpret_cast<uintptr_t>(world.get()))(camera.position)(camera.yaw)(camera.pitch)(camera.roll)(camera.fov);
     h(camera.shiftX)(camera.shiftY)(camera.eyeHeight)(camera.climbBob);
+    part("camera");
     // NPCs: shown/hidden, placed and posed (a paused or still NPC keeps the key stable; an
     // animating one out of view doesn't change the image, and in view frames are forced).
     h(r.npcs.size());
@@ -5233,6 +5307,7 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
             if (!npc.skin.empty())
                 h.bytes(npc.skin.data(), npc.skin.size() * sizeof(Mat4));
         }
+    part("npcs");
     if (auto m = monitor.lock()) {
         h(m->m_pixelSize.x)(m->m_pixelSize.y)(m->m_scale);
         // Machines: a bound change renders a frame only while its instance is in view;
@@ -5242,11 +5317,13 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
             if (renderer.objectInView(k, camera, aspect))
                 h(k)(machines.states[k].revision);
     }
+    part("monitor");
     for (auto &s : surfaces) {
         h(s.id)(s.center)(s.width)(s.height)(s.yaw)(s.opacity)(s.texture)(s.focused)(s.pixelWidth)(s.pixelHeight);
         for (auto q : s.rotation)
             h(q);
     }
+    part("surfaces");
     // Client content: any commit, including hidden clients composed onto walls,
     // and wall layout (a tiled swap recomposes a wall without a commit).
     for (auto &e : capture.entries) {
@@ -5255,34 +5332,55 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
             if (auto box = w->logicalBox())
                 h(box->x)(box->y)(box->w)(box->h);
     }
+    part("clients");
     for (auto &c : capture.children)
         h(*c.commits);
     // Wall composites: a recomposition (stacking, layout) must reach the world frame.
     for (auto &f : capture.workspaces)
         h(f.key);
+    part("children");
     h(typing && !layerCursor)(r.debug)(r.showAreaMarkers)(r.showInteractionHints)(r.useDistance)(r.renderScale);
     h(r.logicalScale)(r.pointerX)(r.pointerY)(r.scopeVignette)(r.materialDetails)(r.effects)(r.worldOnly)(r.font);
+    part("flags");
     h(r.waypoint)(r.route)(r.toolPrompt)(r.overlayStyle)(r.graphics)(r.profile);
+    part("overlays");
     h(markers.frameHash(std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count()));
+    part("markers");
     for (auto &l : r.lines)
         h(l.a)(l.b)(l.color)(l.width);
+    part("lines");
     h(objectRevision)(r.gizmo.strokes.size())(r.gizmo.fills.size());
     for (auto &st : r.gizmo.strokes)
         h(st.a.x)(st.a.y)(st.b.x)(st.b.y)(st.color.r)(st.color.a)(st.width);
     for (auto &f : r.gizmo.fills)
         for (auto &p : f.points)
             h(p.x)(p.y)(f.color.r)(f.color.a);
+    part("gizmo");
     for (auto &l : r.readouts)
         h(l.text)(l.x)(l.y);
+    part("readouts");
+    // Characters' instances follow their agents every tick; their frames come from the NPC
+    // rule above (in view while animating), so they stay out of this part of the key.
     if (world)
         for (auto &inst : world->objectInstances)
-            h.bytes(inst.model.v.data(), sizeof inst.model.v);
+            if (!inst.character)
+                h.bytes(inst.model.v.data(), sizeof inst.model.v);
+    part("instances");
     for (auto &[node, m] : r.transforms) {
         h(node);
         for (auto v : m.v)
             h(v);
     }
+    part("transforms");
+    // Diagnostics: which parts changed since the previous key (counted per part).
+    static const char *names[] = {"camera", "npcs", "monitor", "surfaces", "clients", "children", "flags", "overlays", "markers",
+                                  "lines", "gizmo", "readouts", "instances", "transforms"};
+    if (frameParts.size() == parts.size())
+        for (size_t i = 0; i < parts.size(); ++i)
+            if (parts[i] != frameParts[i] && (i == 0 || parts[i - 1] == frameParts[i - 1]))
+                ++frameCauses[names[i]];
+    frameParts = std::move(parts);
     return h.value;
 }
 class Pass final : public IPassElement {
@@ -5471,6 +5569,7 @@ int luaCamera(lua_State *state) {
         {"pitch", runtime->camera.pitch},
         {"frames", runtime->renderer.frames},
         {"animationFrames", runtime->animationFrames},
+        {"frameCauses", runtime->frameCauses},
         {"offloadRequests", runtime->offloadChanges},
         {"offloadClient", runtime->offload.diagnostics()},
         {"offloadDraws", runtime->offloadDraws},
@@ -5505,22 +5604,10 @@ int luaCamera(lua_State *state) {
         {"viewBob", {runtime->camera.viewBob.x, runtime->camera.viewBob.y, runtime->camera.viewBob.z}},
         {"npcs",
          [] {
-             Json agents = Json::array();
-             for (auto &a : runtime->npcAgents)
-                 agents.push_back({{"position", {a.position.x, a.position.y, a.position.z}},
-                                   {"heading", a.heading},
-                                   {"clip", a.clip},
-                                   {"clipTime", a.clipTime},
-                                   {"walkSpeed", a.walkSpeed},
-                                   {"yielding", a.yielding}});
              // Frames forced by the shared animation path because a moving NPC is in view.
-             auto m = runtime->monitor.lock();
-             float aspect = m ? float(m->m_pixelSize.x) / std::max(1.f, float(m->m_pixelSize.y)) : 16 / 9.f;
-             return Json{{"state", runtime->npcState},
-                         {"forcesFrames", runtime->animationFrames &&
-                                              runtime->renderer.npcAnimationVisible(runtime->camera, aspect)},
-                         {"drawn", runtime->renderer.npcsDrawn},
-                         {"agents", agents}};
+             auto d = runtime->npcDiagnostics();
+             d["forcesFrames"] = runtime->animationFrames && d["animationVisible"].get<bool>();
+             return d;
          }()},
         {"machines",
          [] {

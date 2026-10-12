@@ -110,6 +110,15 @@ int main() {
             run(a, far, 10, [&] { return a.mode == Mode::Seated; });
             check(a.mode == Mode::Seated && reserved == 1, "reaches the seat and sits");
             check(std::abs(a.position.x - 1.2f) < .01f && std::abs(a.position.z - 3) < .01f, "on the anchor");
+            // With the sit clip's removed travel restored, the root ends that far behind the anchor.
+            {
+                auto b = agent(line({{0, 0, 0}, {0, 0, 3}, {0, 0, 8}}));
+                b.seats = a.seats;
+                b.stops = a.stops;
+                b.seatKnown = true, b.seatHeight = -.06f, b.seatSink = .1f, b.sitTravel = .38f;
+                run(b, far, 10, [&] { return b.mode == Mode::Seated; });
+                check(std::abs(b.position.x - 1.58f) < .01f && std::abs(b.position.z - 3) < .01f, std::format("sits back by the clip's travel ({})", b.position.x));
+            }
             check(std::abs(std::remainder(a.heading + 1.5708f, 6.2832f)) < .17f, "facing the anchor's yaw");
             check(std::abs(a.seatOffset - .36f) < .01f && a.pose.clip == "sit_idle", "root lifted by height - seatHeight, sit_idle");
             check(a.activity() == "sitting" && a.seatRef() == "bench/left", "reports sitting on the seat");

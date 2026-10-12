@@ -184,14 +184,21 @@ void inheritance(const std::string &runtime) {
                     {"workspaces", Json::object()},
                     {"mounts", mounts},
                     {"presentation", {{"fov", 10},{"profile",{{"outline",{{"enabled",true}}}}}}},
-                    {"interaction", {{"mode", "cursor"}, {"reticle", {{"state", "valid"}, {"action", "place"}}}}},
+                    {"interaction", {{"mode", "cursor"}, {"reticle", {{"state", "valid"}, {"action", "interact"}}}}},
                     {"apps", Json::array_t(17, Json::object())},
                     {"editor", {{"mode", "cursor"}, {"selectedKind", "node"}, {"submode", "universal"},
                                 {"gizmo", {{"space", "world"}, {"pivot", "base"}, {"snap", false}}},
                                 {"unplaced", {{"count", 2}, {"preview", true}, {"selectedId", "pocket-1"},
                                               {"windows", Json::array({Json{{"surfaceId", "app"}}})},
-                                              {"objects", Json::array({Json{{"itemId", "pocket-1"}}})}}}}},
-                    {"objects", {{"catalogRevision", 1}, {"instances", Json::array()}}},
+                                              {"objects", Json::array({Json{{"itemId", "pocket-1"}}})}}},
+                                {"paths", Json::array({Json{{"id", "path-1"}, {"worldId", "w"}, {"areaId", ""}, {"closed", false},
+                                                            {"points", Json::array()}, {"use", "route"}, {"name", nullptr},
+                                                            {"speed", nullptr}, {"stops", Json::array()}}})}}},
+                    {"objects", {{"catalogRevision", 1},
+                                 {"instances", Json::array({Json{{"id", "npc"}, {"state", "suspended"}, {"character", true},
+                                                                 {"accent", {1, 0, 0}}, {"path", "user/path-1"},
+                                                                 {"activity", "suspended"}, {"seat", nullptr}}})}}},
+                    {"npcs", {{"motion", "auto"}, {"state", "animating"}}},
                     {"keymap", {{"holds", Json::array({Json{{"action", "menu.open"}}})},
                                 {"config", {{"modes", {{"world", {{"menu", {"Tab[L]"}}, {"markers.reveal", {"Tab"}}}}}}}}}},
                     {"markers", {{"reveal", nullptr}, {"list", Json::array()}}},
@@ -304,6 +311,24 @@ void inheritance(const std::string &runtime) {
         for (auto m : {"markers.reveal", "quests.create", "focus.start", "guidance.get"})
             check(methodAvailable(version, m) == atLeast(version, "0.21"), "quest methods floor");
         check(state.contains("objects") == atLeast(version, "0.22"), "objects state version projection");
+        // IPC 0.23 (RFC-0011 P2): NPC state, character fields, path fields, the interact reticle.
+        bool npcs = atLeast(version, "0.23");
+        check(state.contains("npcs") == npcs, "npcs state version projection");
+        if (atLeast(version, "0.22")) {
+            auto &i = state["objects"]["instances"][0];
+            check(i.contains("character") == npcs && i.contains("accent") == npcs &&
+                      i["path"] == (npcs ? Json("user/path-1") : Json(nullptr)) && i["activity"] == (npcs ? Json("suspended") : Json(nullptr)) &&
+                      i["state"] == (npcs ? "suspended" : "active"),
+                  "character instance projection");
+        }
+        if (atLeast(version, "0.6"))
+            check(state["editor"]["paths"][0].contains("use") == npcs && state["editor"]["paths"][0].contains("stops") == npcs,
+                  "editor path projection");
+        if (atLeast(version, "0.19"))
+            check(state["interaction"]["reticle"]["action"] == (npcs ? "interact" : "click"), "interact reticle projection");
+        for (auto m : {"npcs.spawn", "npcs.bind", "npcs.disable", "npcs.remove", "paths.list", "paths.set", "paths.remove",
+                       "paths.draw", "paths.finish", "interaction.choose"})
+            check(methodAvailable(version, m) == npcs, "npcs methods floor");
         for (auto m : {"objects.catalog", "objects.place", "objects.configure", "libraries.install", "libraries.list"})
             check(methodAvailable(version, m) == atLeast(version, "0.22"), "objects methods floor");
         if (atLeast(version, "0.6")) {
