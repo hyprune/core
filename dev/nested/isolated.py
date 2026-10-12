@@ -14,7 +14,10 @@ Environment:
 Usage: isolated.py [session.py args] | isolated.py dev/nested/<script>.py [args]
 
   HYPRUNE_NESTED_GPU          auto (default), all, or a render node / PCI
-                              address / index from /sys/class/drm/renderD*
+                              address / index from /sys/class/drm/renderD*;
+                              all:<one of those> keeps every GPU visible but
+                              lists that one first, so the parent (and with it
+                              the nested compositor) renders on it
 
 GPU choice: with several render nodes and bwrap installed, auto gives each
 instance the GPU with the fewest live instances and runs the whole instance
@@ -63,10 +66,12 @@ def gpus():
 def choose_gpu(base):
     want=os.environ.get('HYPRUNE_NESTED_GPU','auto');found=gpus()
     if want=='all' or len(found)<2:return None
+    every=want.startswith('all:');want=want[4:] if every else want
     if want!='auto':
         match=[g for g in found if want in (g['node'],g['pci'],str(g['index']),'/dev/dri/'+g['node'])]
         if not match:raise RuntimeError(f'HYPRUNE_NESTED_GPU={want}: no such render node')
-        return match[0]
+        # Cross-GPU tests (offload): every render node stays, the chosen one first.
+        return {**match[0],'others':[g['node'] for g in found if g['node']!=match[0]['node']]} if every else match[0]
     if not shutil.which('bwrap'):return None
     live={g['node']:0 for g in found}
     for claim in pathlib.Path(base).glob('hn*/gpu'):
@@ -80,7 +85,9 @@ def sandbox(gpu,runtime):
     # then refuses to create X11 sockets there (no Xwayland). Each instance gets its own.
     x11=runtime/'x11';x11.mkdir(mode=0o1777,exist_ok=True)
     args=['bwrap','--dev-bind','/','/','--dev','/dev','--dev-bind','/dev/shm','/dev/shm','--bind',str(x11),'/tmp/.X11-unix','--die-with-parent']
-    nodes=['/dev/dri/'+gpu['node']]
+    # The mount namespace's /dev is a tmpfs, which lists the newest entry first: the chosen
+    # node is bound last so device enumeration (the parent's choice) finds it first.
+    nodes=['/dev/dri/'+n for n in gpu.get('others',[])]+['/dev/dri/'+gpu['node']]
     if gpu['nvidiaMinor'] is not None:
         # Only the render node steers EGL/GBM/the parent. Every /dev/nvidiaN stays:
         # NVENC (wf-recorder, ffmpeg) won't open an encode session without them all.
