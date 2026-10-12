@@ -1,0 +1,281 @@
+{
+ "formatVersion": "0.10",
+ "id": "mini-gauge",
+ "version": "1.0.0",
+ "name": "Mini gauge",
+ "category": "machines",
+ "scene": "object.gltf",
+ "license": "CC0-1.0",
+ "attribution": [
+  {
+   "path": ".",
+   "author": "Hyprune contributors",
+   "license": "CC0-1.0"
+  }
+ ],
+ "bounds": {
+  "min": [
+   -0.3,
+   0,
+   -0.3
+  ],
+  "max": [
+   0.42,
+   1.305,
+   0.3
+  ]
+ },
+ "traits": {
+  "movable": {
+   "surfaces": [
+    "floor"
+   ],
+   "upright": true
+  },
+  "machine": {
+   "primary": "level",
+   "inputs": [
+    {
+     "id": "value",
+     "type": "number",
+     "min": 0,
+     "max": 100,
+     "default": 0,
+     "label": "Value",
+     "explain": "Fill."
+    },
+    {
+     "id": "display",
+     "type": "text",
+     "maxLength": 12,
+     "label": "Display",
+     "explain": "Big text."
+    },
+    {
+     "id": "label",
+     "type": "text",
+     "maxLength": 16,
+     "label": "Label",
+     "explain": "Small text."
+    },
+    {
+     "id": "level",
+     "type": "enum",
+     "values": [
+      "ok",
+      "warn",
+      "fail"
+     ],
+     "default": "ok",
+     "label": "Level",
+     "explain": "Tint."
+    },
+    {
+     "id": "average",
+     "type": "number",
+     "min": 0,
+     "max": 100,
+     "label": "Average",
+     "explain": "Optional override."
+    }
+   ],
+   "drives": [
+    {
+     "input": "value",
+     "target": "level:liquid",
+     "map": {
+      "scale": {
+       "from": [
+        0,
+        100
+       ],
+       "to": [
+        0,
+        1
+       ]
+      }
+     }
+    },
+    {
+     "input": "value",
+     "target": "level:ring",
+     "map": {
+      "average": {
+       "windowS": 10,
+       "override": "average"
+      },
+      "scale": {
+       "from": [
+        0,
+        100
+       ],
+       "to": [
+        0,
+        1
+       ]
+      }
+     }
+    },
+    {
+     "input": "value",
+     "target": "count:beads",
+     "map": {
+      "scale": {
+       "from": [
+        0,
+        100
+       ],
+       "to": [
+        0,
+        100
+       ]
+      },
+      "round": "floor"
+     }
+    },
+    {
+     "input": "level",
+     "target": "state:fill"
+    },
+    {
+     "input": "label",
+     "target": "label:label"
+    },
+    {
+     "input": "display",
+     "target": "label:display"
+    }
+   ]
+  }
+ },
+ "slots": {
+  "states": [
+   {
+    "id": "fill",
+    "materials": [
+     "fill",
+     "surface"
+    ],
+    "palette": [
+     {
+      "id": "ok",
+      "colour": [
+       1,
+       0.62,
+       0.12
+      ],
+      "emission": 1.6
+     },
+     {
+      "id": "warn",
+      "colour": [
+       1,
+       0.36,
+       0.05
+      ],
+      "emission": 1.6
+     },
+     {
+      "id": "fail",
+      "colour": [
+       0.9,
+       0.07,
+       0.03
+      ],
+      "emission": 1.8
+     },
+     {
+      "id": "stale",
+      "colour": [
+       0.35,
+       0.33,
+       0.3
+      ],
+      "emission": 0.2
+     }
+    ]
+   }
+  ],
+  "labels": [
+   {
+    "id": "label",
+    "pose": {
+     "position": [
+      0,
+      0.22,
+      0.305
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ]
+    },
+    "size": [
+     0.4,
+     0.06
+    ],
+    "maxChars": 16
+   },
+   {
+    "id": "display",
+    "pose": {
+     "position": [
+      0,
+      0.1,
+      0.305
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ]
+    },
+    "size": [
+     0.4,
+     0.1
+    ],
+    "maxChars": 12
+   }
+  ],
+  "levels": [
+   {
+    "id": "liquid",
+    "node": "liquid",
+    "mode": "fill",
+    "length": 1,
+    "surface": "surface",
+    "settle": "spring"
+   },
+   {
+    "id": "ring",
+    "node": "ring",
+    "mode": "slide",
+    "length": 1
+   }
+  ],
+  "stacks": [
+   {
+    "id": "beads",
+    "node": "bead",
+    "cap": 100,
+    "rate": 40,
+    "layout": {
+     "grid": [
+      10,
+      10,
+      1
+     ],
+     "spacing": [
+      0.05,
+      0.05,
+      0
+     ],
+     "fill": "xyz"
+    }
+   }
+  ]
+ }
+}

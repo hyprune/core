@@ -4,7 +4,10 @@ prototype files, RFC-0013 draft): a small "mini-conveyor" machine asset with two
 palette lamps (a repeated input), a spinner, a value-driven lift (bob), an alarm
 toggle, a crate stack, a label panel, a track with a stop and a spawn, two effect
 anchors; a "token" item asset and a "spark" effect asset; two placed instances
-and the bindings file. No external assets or downloads."""
+and the bindings file. objects/mini-gauge/ is a library-style object directory (a
+machine with a filled level and its surface, a sliding ring, a bead stack with a
+rate and labels) for default bindings, averages and levels. No external assets or
+downloads."""
 import json, pathlib, struct
 root = pathlib.Path(__file__).with_suffix(''); root.mkdir(exist_ok=True); (root/'objects').mkdir(exist_ok=True)
 
@@ -51,6 +54,41 @@ s=Gltf()
 spark=s.node(name='spark',mesh=s.box((.05,.05,.05),0))
 s.write(root/'objects/spark.gltf',[spark],[{'name':'spark','pbrMetallicRoughness':{'baseColorFactor':[1,1,1,1]},'extensions':{'KHR_materials_unlit':{}}}],
         'Hyprune original CC0 machines fixture')
+
+# A gauge object directory (RFC-0011 object.json with the machine trait), front +Z.
+# Materials: 0 plinth, 1 fill (liquid and bead), 2 surface, 3 ring.
+(root/'objects/mini-gauge').mkdir(exist_ok=True)
+g=Gltf()
+plinth=g.node(name='plinth',mesh=g.box((.6,.3,.6),0,(0,.15,0)))
+liquid=g.node(name='liquid',mesh=g.box((.2,1,.2),1,(0,.5,0)),translation=[0,.3,0])   # origin at the column's foot
+surface=g.node(name='surface',mesh=g.box((.2,.01,.2),2),translation=[0,1.3,0])     # authored at the full level
+ring=g.node(name='ring',mesh=g.box((.4,.02,.4),3),translation=[0,.3,0])             # at level 0
+bead=g.node(name='bead',mesh=g.box((.04,.04,.04),1),translation=[.4,.4,0])
+g.write(root/'objects/mini-gauge/object.gltf',[plinth,liquid,surface,ring,bead],
+        [pbr('plinth',(.1,.1,.12)),pbr('fill',(1,.6,.1)),pbr('surface',(1,.7,.2)),pbr('ring',(1,1,1))],'Hyprune original CC0 machines fixture')
+fill_palette=[{'id':'ok','colour':[1,.62,.12],'emission':1.6},{'id':'warn','colour':[1,.36,.05],'emission':1.6},
+              {'id':'fail','colour':[.9,.07,.03],'emission':1.8},{'id':'stale','colour':[.35,.33,.3],'emission':.2}]
+gauge={'formatVersion':'0.10','id':'mini-gauge','version':'1.0.0','name':'Mini gauge','category':'machines','scene':'object.gltf',
+  'license':'CC0-1.0','attribution':[{'path':'.','author':'Hyprune contributors','license':'CC0-1.0'}],'bounds':{'min':[-.3,0,-.3],'max':[.42,1.305,.3]},
+  'traits':{'movable':{'surfaces':['floor'],'upright':True},'machine':{'primary':'level',
+    'inputs':[{'id':'value','type':'number','min':0,'max':100,'default':0,'label':'Value','explain':'Fill.'},
+              {'id':'display','type':'text','maxLength':12,'label':'Display','explain':'Big text.'},
+              {'id':'label','type':'text','maxLength':16,'label':'Label','explain':'Small text.'},
+              {'id':'level','type':'enum','values':['ok','warn','fail'],'default':'ok','label':'Level','explain':'Tint.'},
+              {'id':'average','type':'number','min':0,'max':100,'label':'Average','explain':'Optional override.'}],
+    'drives':[{'input':'value','target':'level:liquid','map':{'scale':{'from':[0,100],'to':[0,1]}}},
+              {'input':'value','target':'level:ring','map':{'average':{'windowS':10,'override':'average'},'scale':{'from':[0,100],'to':[0,1]}}},
+              {'input':'value','target':'count:beads','map':{'scale':{'from':[0,100],'to':[0,100]},'round':'floor'}},
+              {'input':'level','target':'state:fill'},
+              {'input':'label','target':'label:label'},
+              {'input':'display','target':'label:display'}]}},
+  'slots':{'states':[{'id':'fill','materials':['fill','surface'],'palette':fill_palette}],
+           'labels':[{'id':'label','pose':{'position':[0,.22,.305],'rotation':[0,0,0,1]},'size':[.4,.06],'maxChars':16},
+                     {'id':'display','pose':{'position':[0,.1,.305],'rotation':[0,0,0,1]},'size':[.4,.1],'maxChars':12}],
+           'levels':[{'id':'liquid','node':'liquid','mode':'fill','length':1,'surface':'surface','settle':'spring'},
+                     {'id':'ring','node':'ring','mode':'slide','length':1}],
+           'stacks':[{'id':'beads','node':'bead','cap':100,'rate':40,'layout':{'grid':[10,10,1],'spacing':[.05,.05,0],'fill':'xyz'}}]}}
+(root/'objects/mini-gauge/object.json').write_text(json.dumps(gauge,indent=1)+'\n')
 
 w=Gltf()
 floor=w.node(name='floor',mesh=w.box((30,.4,30),0,(0,-.2,0)))

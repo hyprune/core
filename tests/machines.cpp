@@ -3,9 +3,12 @@
 // palettes from a repeated input, phase-continuous speed easing, value-driven
 // poses, toggles, stacks, items (rate, spacing, stops, sink, overflow), effects,
 // labels, staleness, missing sources, still motion, coalescing, revisions and
-// load-time validation. GL drawing is covered by the nested --machines check.
+// load-time validation; the average modifier, levels (fill, slide, spring), stack
+// rates and paint, default and user bindings and state kept across a sync. GL drawing
+// is covered by the nested --machines and --gauges checks.
 #include "interaction/InputFile.hpp"
 #include "world/Machines.hpp"
+#include "world/Objects.hpp"
 #include "world/World.hpp"
 #include <filesystem>
 #include <fstream>
@@ -248,6 +251,157 @@ int main(int argc, char **argv) {
     run(fresh(values), .3, true);
     check(diag(a)["inputs"]["status"]["value"] == "ok" && !m.states[a].meshes[alarm].hidden == false, "still: states change");
     check(m.diagnostics()["pieces"] == 1, "still: a burst becomes one flash");
+    // Gauges (draft): the average modifier, levels, stack rate and paint, default and user
+    // bindings for library-style objects (objects/mini-gauge, merged like a catalog object).
+    {
+        check(Mapping::parse(Json::parse(R"({"average": {"windowS": 5}})")).average, "average alone is a mapping");
+        auto scaled = Mapping::parse(Json::parse(R"({"average": {"windowS": 5, "override": "average"}, "scale": {"from": [0, 100], "to": [0, 1]}})"));
+        check(scaled.average && scaled.kind == Mapping::Scale && scaled.override == "average" && near(scaled.windowS, 5), "average composes with scale");
+        check(throws([] { Mapping::parse(Json::parse(R"({"average": {}, "counter": true})")); }), "average does not combine with counter");
+        check(throws([] { Mapping::parse(Json::parse(R"({"average": {"windowS": 0}})")); }), "windowS 1-3600");
+        world::machines::Averager avg;
+        avg.feed(0, 0, 10);
+        check(*avg.mean(0, 10) == 0, "a first value is its own average");
+        avg.feed(100, 5000, 10);
+        check(near(*avg.mean(5000, 10), 0), "the previous value held until the change");
+        avg.feed(100, 10000, 10);
+        check(near(*avg.mean(10000, 10), 50), "time-weighted: 5 s of 0 and 5 s of 100");
+        avg.pause();
+        avg.feed(100, 30000, 10);
+        check(*avg.mean(30000, 10) == 100, "a stale gap is not counted; one value in the window is exact");
+        avg.feed(40, 31000, 10);
+        avg.feed(40, 32000, 10);
+        check(near(*avg.mean(32000, 10), 70), "1 s of 100 and 1 s of 40");
+        avg.reset();
+        check(!avg.mean(32000, 10), "reset: no average");
+    }
+    {
+        auto lab = world::load(fixture);
+        auto dir = fixture / "objects/mini-gauge";
+        auto manifest = interaction::readJSON(dir / "object.json");
+        auto scratch = world::loadObjectAsset(dir, manifest, {});
+        unsigned gaugeAsset = world::mergeObjectAsset(*lab, *scratch);
+        auto place = [&](const std::string &id, Vec3 p) {
+            world::ObjectInstance o;
+            o.id = id, o.asset = gaugeAsset, o.position = p;
+            o.model = world::instanceModel(p, {0, 0, 0, 1}, 1);
+            lab->objectInstances.push_back(o);
+        };
+        place("u-0a0b0c", {0, 0, 2});
+        world::Machines g;
+        world::Machines::Setup setup;
+        setup.worldId = lab->id;
+        g.sync(*lab, setup);
+        check(g.instances().size() == 1 && g.errors().empty(), "a placed machine object is bound without a bindings file (the mini-conveyor needs one)");
+        size_t k = g.instances()[0];
+        auto gd = [&] { return g.diagnostics()["instances"][0]; };
+        check(gd()["inputs"]["value"]["source"] == "com.hyprune.sources.u-0a0b0c" && gd()["inputs"]["value"]["key"] == "value",
+              "default binding: source com.hyprune.sources.<instance id>, key = input id");
+        check(g.fresh.size() == 1 && g.fresh[0].first == k, "a newly bound instance is reported once");
+        const auto &ga = lab->objectAssets[gaugeAsset];
+        auto meshNamed = [&](const std::string &node) {
+            for (size_t i = 0; i < ga.meshes.size(); ++i)
+                if (ga.nodeNames[ga.meshes[i].node] == node)
+                    return i;
+            return size_t(-1);
+        };
+        size_t liquidMesh = meshNamed("liquid"), ringMesh = meshNamed("ring"), beadMesh = meshNamed("bead");
+        int64_t t = 5000000;
+        auto publish = [&](Json values, const char *id = "com.hyprune.sources.u-0a0b0c") {
+            return Json::array({Json{{"sourceId", id}, {"values", values}, {"sequence", 1}, {"monotonicMs", t}, {"ttlMs", 60000}}});
+        };
+        auto go = [&](Json values, double seconds, const char *id = "com.hyprune.sources.u-0a0b0c") {
+            for (double s = 0; s < seconds - 1e-9; s += 1 / 60.)
+                t += 16, g.tick(1 / 60., publish(values, id), t, false);
+        };
+        go(Json::object(), .5);
+        check(g.states[k].meshes[liquidMesh].hidden && gd()["levels"]["liquid"]["level"] == 0.0, "no data: an empty fill draws nothing");
+        Json v{{"value", 50}, {"display", "50%"}, {"label", "RAM"}};
+        go(v, .3);
+        check(near(gd()["levels"]["liquid"]["target"].get<double>(), .5) && gd()["stacks"]["beads"] == 50, "value drives the fill and the count");
+        double shown = gd()["stacksShown"]["beads"];
+        check(shown > 0 && shown < 50, "the count moves at the stack's rate");
+        double peak = 0, tiltPeak = 0;
+        for (int i = 0; i < 120; ++i) {
+            go(v, 1 / 60.);
+            peak = std::max(peak, gd()["levels"]["liquid"]["level"].get<double>());
+            tiltPeak = std::max(tiltPeak, std::abs(gd()["levels"]["liquid"]["tilt"].get<double>()));
+        }
+        check(peak > .52 && peak < .7, "spring settle overshoots a little (sloshing)");
+        check(tiltPeak > .01 && tiltPeak <= .07, "the surface rocks while it sloshes");
+        go(v, 2);
+        check(gd()["levels"]["liquid"]["level"] == .5 && gd()["levels"]["liquid"]["tilt"] == 0.0 && gd()["stacksShown"]["beads"] == 50.0,
+              "the level and count settle exactly");
+        check(gd()["labels"]["label"] == "RAM" && gd()["labels"]["display"] == "50%", "label and display text");
+        size_t beads = 0, fills = 0;
+        const world::ObjectExtra *fillExtra = nullptr;
+        for (auto &e : g.extras) {
+            beads += e.owner == k && e.node == int(ga.meshes[beadMesh].node);
+            if (e.owner == k && e.node == int(ga.meshes[liquidMesh].node))
+                ++fills, fillExtra = &e;
+        }
+        check(beads == 50 && fills == 1, "50 bead copies and one fill extra");
+        check(fillExtra && near(fillExtra->model.v[5], .5f) && near(fillExtra->model.v[13], .3f * (1 - .5f)), "the fill scales about its node origin");
+        check(fillExtra && fillExtra->paint.painted && near(fillExtra->paint.colour.y, .62f), "fills take their states slot's paint (ok)");
+        // Average: 10 s window; the ring follows the running average and stops once it is constant.
+        go(v, 10);
+        check(near(gd()["levels"]["ring"]["level"].get<double>(), .5, 1e-3), "a constant value: the average equals it");
+        check(near(g.states[k].meshes[ringMesh].offset.y, .5f, 1e-3f), "a slide offsets its meshes by level x length");
+        v["value"] = 100;
+        go(v, 5);
+        double mid = gd()["levels"]["ring"]["target"];
+        check(mid > .7 && mid < .8, "5 s into a 10 s window after a step from 50 to 100: about 75");
+        go(v, 6);
+        check(gd()["levels"]["ring"]["target"] == 1.0, "after the window: exactly the new value");
+        go(v, 1);
+        auto settled = g.states[k].revision;
+        go(v, 2);
+        check(!g.states[k].moving && g.states[k].revision == settled, "values unchanged: no motion, no new revision (no frames)");
+        v["average"] = 20;
+        go(v, .5);
+        check(near(gd()["levels"]["ring"]["target"].get<double>(), .2), "a published average overrides the computed one");
+        v.erase("average");
+        v["level"] = "fail";
+        go(v, .5);
+        bool redBead = false;
+        for (auto &e : g.extras)
+            redBead |= e.owner == k && e.node == int(ga.meshes[beadMesh].node) && e.paint.painted && near(e.paint.colour.x, .9f) &&
+                       e.paintMeshes && !e.paintMeshes->empty();
+        check(redBead, "level tints the stacked copies");
+        // Sync keeps state for unchanged instances; a moved or new placement keeps or gets its own.
+        double before = gd()["levels"]["liquid"]["level"];
+        place("u-0d0e0f", {3, 0, 2});
+        g.sync(*lab, setup);
+        check(g.instances().size() == 2 && gd()["levels"]["liquid"]["level"] == before && gd()["labels"]["label"] == "RAM",
+              "a sync keeps the runtime state of unchanged instances");
+        check(g.fresh.size() == 1 && g.fresh[0].second == "mini-gauge", "only the new instance is fresh");
+        // User bindings file: another source and key, a per-instance window.
+        setup.user = Json::parse(R"({"instances": {"u-0a0b0c": {"source": "org.example.system", "inputs": {"value": {"key": "ram"}}, "averageWindowS": 2},
+                                                   "u-0d0e0f": {"worldId": "org.example.elsewhere", "source": "org.example.never"}}})");
+        g.sync(*lab, setup);
+        check(gd()["inputs"]["value"]["source"] == "org.example.system" && gd()["inputs"]["value"]["key"] == "ram" &&
+                  gd()["inputs"]["label"]["source"] == "org.example.system" && gd()["inputs"]["label"]["key"] == "label",
+              "machines.json: a source for every input, a key per input");
+        check(g.diagnostics()["instances"][1]["inputs"]["value"]["source"] == "com.hyprune.sources.u-0d0e0f", "an entry for another world is ignored");
+        go(Json{{"ram", 30}, {"label", "RAM"}}, 3, "org.example.system");
+        check(near(gd()["levels"]["ring"]["target"].get<double>(), .3), "averageWindowS replaces the asset's window");
+        setup.user = Json::parse(R"({"instances": {"u-0a0b0c": {"inputs": {"value": {"key": "x", "map": {"counter": true}}}}}})");
+        g.sync(*lab, setup);
+        check(g.instances().size() == 1 && g.errors().size() == 1 && g.errors()[0].find("u-0a0b0c") != std::string::npos,
+              "a broken user entry skips that instance and reports why");
+        // World-wide stack copy cap.
+        setup.user = nullptr;
+        for (int i = 0; i < 9; ++i)
+            place("u-1000" + std::to_string(i) + "0", {float(i), 0, 6});
+        g.sync(*lab, setup);
+        Json all = Json::array();
+        for (auto &o : lab->objectInstances)
+            if (o.asset == gaugeAsset)
+                all.push_back(Json{{"sourceId", "com.hyprune.sources." + o.id}, {"values", {{"value", 100}}}, {"sequence", 1}, {"monotonicMs", t}, {"ttlMs", 60000}});
+        for (int i = 0; i < 300; ++i)
+            t += 16, g.tick(1 / 60., all, t, true);
+        check(g.diagnostics()["stackCopies"] == 1024 && g.diagnostics()["stackCapped"] == 76, "1024 stacked copies per world, the rest skipped");
+    }
     // Validation at load.
     auto broken = [&](const std::function<void(Json &, Json &)> &edit) {
         auto manifest = interaction::readJSON(fixture / "objects/mini-conveyor.json");

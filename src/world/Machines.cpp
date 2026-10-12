@@ -39,6 +39,15 @@ Mat4 heading(Vec3 d, float scale = 1) {
     m.v[0] = c, m.v[2] = -s, m.v[8] = s, m.v[10] = c, m.v[5] = scale;
     return m;
 }
+// Scale by f along the unit axis a (I + (f - 1) a aᵀ), column-major.
+Mat4 axisScale(Vec3 a, float f) {
+    auto m = Mat4::identity();
+    float c[3]{a.x, a.y, a.z};
+    for (int col = 0; col < 3; ++col)
+        for (int row = 0; row < 3; ++row)
+            m.v[col * 4 + row] += (f - 1) * c[row] * c[col];
+    return m;
+}
 bool same(const Json &a, const Json &b) {
     if (a.is_number() && b.is_number())
         return a.get<double>() == b.get<double>();
@@ -93,6 +102,14 @@ Mapping Mapping::parse(const Json &j) {
     if (j.is_null() || (j.is_object() && j.empty()))
         return m;
     require(j.is_object(), "mapping must be an object");
+    if (j.contains("average")) {
+        const auto &a = j["average"];
+        require(a.is_object(), "average must be an object");
+        m.average = true;
+        m.windowS = a.value("windowS", 60.);
+        require(m.windowS >= 1 && m.windowS <= 3600, "average: windowS must be 1-3600");
+        m.override = a.value("override", "");
+    }
     if (j.contains("else"))
         m.otherwise = j["else"];
     if (j.contains("cases")) {
@@ -139,8 +156,9 @@ Mapping Mapping::parse(const Json &j) {
         m.from = j.value("from", Json(nullptr));
     } else if (j.contains("counter")) {
         m.kind = Counter;
-    } else
+    } else if (!m.average)
         throw std::runtime_error("unknown mapping " + j.dump());
+    require(!m.average || !m.event(), "average does not combine with becomes or counter");
     return m;
 }
 std::optional<Json> Mapping::apply(const Json &value) const {
@@ -206,6 +224,45 @@ int EventGate::feed(const Mapping &m, const Json &value) {
     if (n >= 1)
         counter = *counter + n;
     return int(std::min(n, 1e6));
+}
+void Averager::feed(double value, int64_t nowMs, double windowS) {
+    if (open && !spans.empty()) {
+        auto &last = spans.back();
+        last.end = std::max(last.end, nowMs); // the previous value held until now
+        if (last.value != value)
+            spans.push_back({nowMs, nowMs, value});
+    } else
+        spans.push_back({nowMs, nowMs, value});
+    open = true;
+    int64_t from = nowMs - int64_t(windowS * 1000);
+    while (spans.size() > 1 && spans.front().end < from)
+        spans.erase(spans.begin());
+    if (spans.size() > maxSpans) { // merge the two oldest (weighted), keeping their extent
+        auto &a = spans[0], &b = spans[1];
+        double wa = double(std::max<int64_t>(a.end - a.start, 1)), wb = double(std::max<int64_t>(b.end - b.start, 1));
+        b = {a.start, b.end, (a.value * wa + b.value * wb) / (wa + wb)};
+        spans.erase(spans.begin());
+    }
+}
+std::optional<double> Averager::mean(int64_t nowMs, double windowS) const {
+    int64_t from = nowMs - int64_t(windowS * 1000);
+    double sum = 0, weight = 0;
+    const Span *only = nullptr;
+    bool single = true;
+    for (auto &s : spans) {
+        if (s.end < from)
+            continue;
+        if (only && only->value != s.value)
+            single = false;
+        only = &s;
+        double w = double(std::max(s.end, from) - std::max(s.start, from));
+        sum += s.value * w, weight += w;
+    }
+    if (!only)
+        return std::nullopt;
+    if (single || weight <= 0)
+        return single ? only->value : spans.back().value;
+    return sum / weight;
 }
 Track Track::build(const std::vector<std::pair<Vec3, std::string>> &points, bool closed) {
     require(points.size() >= 2, "a track needs at least two points");
@@ -450,10 +507,56 @@ Machines::Definition Machines::define(unsigned asset, const Json &manifest) cons
                 where + ": stack fill must order x, y and z");
         for (int k = 0; k < 3; ++k)
             s.order[k] = fill[k] - 'x';
-        s.cap = std::clamp<size_t>(j.value("cap", 16), 1, 64);
+        s.cap = std::clamp<size_t>(j.value("cap", 16), 1, 100);
         s.cap = std::min<size_t>(s.cap, size_t(s.grid[0]) * s.grid[1] * s.grid[2]);
+        s.rate = j.value("rate", 0.);
+        require(s.rate >= 0 && s.rate <= 1000, where + ": stack " + s.id + " rate must be 0-1000");
         d.stacks.push_back(std::move(s));
     }
+    for (auto &j : kind("levels")) {
+        LevelSlot l;
+        l.id = j.at("id");
+        l.node = node(j.at("node"));
+        l.meshes = subtreeMeshes(asset, l.node);
+        require(!l.meshes.empty(), where + ": level " + l.id + " node draws nothing");
+        l.origin = a.nodeOrigins.at(l.node);
+        auto mode = j.value("mode", "fill");
+        require(mode == "fill" || mode == "slide", where + ": level " + l.id + " mode must be fill or slide");
+        l.fill = mode == "fill";
+        if (j.contains("axis"))
+            l.axis = vec3(j["axis"], where + " level axis");
+        require(hyprune::length(l.axis) > .5f, where + ": level " + l.id + " needs a unit axis");
+        l.axis = normalized(l.axis);
+        l.length = j.at("length");
+        require(l.length > 0 && l.length <= 10, where + ": level " + l.id + " length must be 0-10 m");
+        auto settle = j.value("settle", "ease");
+        require(settle == "ease" || settle == "spring", where + ": level " + l.id + " settle must be ease or spring");
+        l.spring = settle == "spring";
+        if (j.contains("surface")) {
+            require(l.fill, where + ": level " + l.id + " has a surface but does not fill");
+            l.surface = int(node(j["surface"]));
+            l.surfaceMeshes = subtreeMeshes(asset, unsigned(l.surface));
+            l.surfaceOrigin = a.nodeOrigins.at(size_t(l.surface));
+        }
+        for (auto m : l.meshes)
+            require(a.animationOf(a.meshes[m].node) < 0, where + ": level " + l.id + " node is animated");
+        d.levels.push_back(std::move(l));
+    }
+    // Copies and levels drawn as extras take the paint of a states slot's meshes.
+    auto paintedOf = [&](const std::vector<unsigned> &meshes) {
+        std::vector<unsigned> out;
+        for (auto m : meshes)
+            for (auto &p : d.palettes)
+                if (std::find(p.meshes.begin(), p.meshes.end(), m) != p.meshes.end()) {
+                    out.push_back(m);
+                    break;
+                }
+        return out;
+    };
+    for (auto &s : d.stacks)
+        s.painted = paintedOf(s.meshes);
+    for (auto &l : d.levels)
+        l.painted = paintedOf(l.meshes), l.surfacePainted = paintedOf(l.surfaceMeshes);
     for (auto &j : kind("toggles")) {
         std::set<unsigned> meshes;
         for (auto &name : j.at("nodes"))
@@ -554,8 +657,22 @@ Machines::Definition Machines::define(unsigned asset, const Json &manifest) cons
                 require(d.spawns[v.index].track >= 0, where + ": spawn " + name + " has no track");
             } else if (kindName == "effect")
                 v.target = Drive::Effect, v.index = slotIndex(d.effects, name, "effects");
+            else if (kindName == "level")
+                v.target = Drive::Level, v.index = slotIndex(d.levels, name, "levels");
             else
                 throw std::runtime_error(where + ": unknown target kind " + kindName);
+            if (v.map.average) {
+                auto type = d.inputs[v.input].type;
+                require(type == Input::Number || type == Input::Int || type == Input::Bool,
+                        where + ": average needs a numeric input, not " + in);
+                if (!v.map.override.empty()) {
+                    for (size_t i = 0; i < d.inputs.size(); ++i)
+                        if (d.inputs[i].id == v.map.override)
+                            v.override = int(i);
+                    require(v.override >= 0 && v.override != v.input && d.inputs[v.override].type != Input::Event,
+                            where + ": average override " + v.map.override + " must name another value input");
+                }
+            }
             bool eventTarget = v.target == Drive::Spawn || v.target == Drive::Effect;
             bool eventSource = d.inputs[v.input].type == Input::Event || v.map.event();
             require(eventTarget == eventSource, where + ": " + tg + (eventTarget ? " needs an event input or a becomes/counter map"
@@ -585,95 +702,239 @@ MeshPaint Machines::itemPaint(unsigned asset, const std::string &state) const {
         }
     return {};
 }
-void Machines::load(const Json &spec, const World &w, const std::filesystem::path &root) {
-    *this = Machines{};
-    world_ = &w;
-    staleMs_ = spec.value("staleMs", int64_t(8000));
-    require(staleMs_ >= 100, "staleMs must be at least 100");
+// Bindings for one instance from a spec {inputs: {<input>: {source, key, map}}}; an input
+// named by its base id binds every repeat when its key holds `{n}`.
+void Machines::bind(Instance &in, const Json &spec, const std::string &objectId) const {
+    const auto &d = *in.def;
+    size_t n = d.inputs.size();
+    in.bindings.assign(n, {});
+    for (auto &[inputId, b] : spec.value("inputs", Json::object()).items()) {
+        bool matched = false;
+        for (size_t i = 0; i < n; ++i) {
+            const auto &id = d.inputs[i].id;
+            std::string suffix;
+            if (id == inputId)
+                ;
+            else if (id.starts_with(inputId + ".") && b.at("key").get<std::string>().find("{n}") != std::string::npos)
+                suffix = id.substr(inputId.size() + 1);
+            else
+                continue;
+            auto &bind = in.bindings[i];
+            bind.source = b.at("source");
+            bind.key = b.at("key");
+            if (!suffix.empty())
+                for (size_t p; (p = bind.key.find("{n}")) != std::string::npos;)
+                    bind.key.replace(p, 3, suffix);
+            bind.map = Mapping::parse(b.value("map", Json::object()));
+            require(d.inputs[i].type != Input::Event || bind.map.event() || bind.map.kind == Mapping::Direct,
+                    "instances " + objectId + ": event input " + id + " needs a counter or becomes map");
+            require(d.inputs[i].type == Input::Event || !bind.map.event(),
+                    "instances " + objectId + ": counter and becomes maps are for event inputs, not " + id);
+            require(!bind.map.average || d.inputs[i].type == Input::Number || d.inputs[i].type == Input::Int,
+                    "instances " + objectId + ": average needs a numeric input, not " + id);
+            if (d.inputs[i].type == Input::Event && bind.map.kind == Mapping::Direct)
+                bind.map.kind = Mapping::Counter;
+            bind.bound = matched = true;
+        }
+        require(matched, "instances " + objectId + ": no input " + inputId);
+    }
+}
+// Runtime state at rest for a bound instance.
+void Machines::prepare(Instance &in, size_t object) const {
+    const auto &d = *in.def;
+    const auto &w = *world_;
+    const auto &asset = w.objectAssets[d.asset];
+    size_t n = d.inputs.size();
+    in.object = object;
+    in.gates.assign(n, {}), in.driveGates.assign(d.drives.size(), {});
+    in.inputAverages.assign(n, {}), in.driveAverages.assign(d.drives.size(), {});
+    in.raw.assign(n, nullptr), in.condition.assign(n, Condition::Missing);
+    in.age.assign(n, -1), in.fired.assign(n, 0), in.seenSequence.assign(n, 0);
+    in.value.clear();
+    for (size_t i = 0; i < n; ++i)
+        in.value.push_back(d.inputs[i].fallback);
+    in.paletteEntry.assign(d.palettes.size(), 0), in.emission.assign(d.palettes.size(), 1.f);
+    in.paletteStale.assign(d.palettes.size(), false);
+    in.labelText.assign(d.labels.size(), "");
+    in.labelStale.assign(d.labels.size(), false);
+    in.toggleHidden.assign(d.toggles.size(), false);
+    in.stackCount.assign(d.stacks.size(), 0), in.stackShown.assign(d.stacks.size(), 0);
+    size_t levels = d.levels.size();
+    in.levelTarget.assign(levels, 0), in.level.assign(levels, 0), in.levelSpeed.assign(levels, 0);
+    in.tilt.assign(levels, 0), in.tiltSpeed.assign(levels, 0);
+    size_t animations = asset.animations.size();
+    in.speedTarget.assign(animations, 0), in.speed.assign(animations, 0), in.turns.assign(animations, 0);
+    in.positionTarget.assign(animations, 0), in.position.assign(animations, 0);
+    in.easeFrom.assign(animations, 0), in.easeTo.assign(animations, 0), in.easeTime.assign(animations, 0);
+    const auto &o = w.objectInstances[object];
+    for (size_t k = 0; k < animations; ++k) {
+        in.turns[k] = asset.animations[k].phase + o.phase;
+        if (!d.driven[k])
+            in.speed[k] = in.speedTarget[k] = in.easeTo[k] = o.speed; // undriven: as authored
+    }
+    in.items.assign(d.tracks.size(), {});
+    in.backlog.assign(d.spawns.size(), 0), in.rateClock.assign(d.spawns.size(), 0);
+    in.spawned.assign(d.spawns.size(), 0), in.dropped.assign(d.spawns.size(), 0);
+}
+void Machines::sync(const World &w, const Setup &setup) {
+    Machines next;
+    next.world_ = &w;
+    next.seed_ = seed_, next.nextEffect_ = nextEffect_;
+    const Json &dev = setup.dev.is_object() ? setup.dev : Json::object();
+    auto fail = [&](const std::string &why) {
+        if (setup.strict)
+            throw std::runtime_error(why);
+        if (next.errors_.size() < 16)
+            next.errors_.push_back(why);
+    };
+    next.staleMs_ = dev.value("staleMs", int64_t(8000));
+    require(next.staleMs_ >= 100, "staleMs must be at least 100");
     std::map<std::string, unsigned> assets;
     for (unsigned i = 0; i < w.objectAssets.size(); ++i)
-        assets[w.objectAssets[i].id] = i;
-    for (auto &[id, file] : spec.value("manifests", Json::object()).items()) {
-        require(assets.contains(id), "manifests: no object asset " + id);
-        auto path = root / file.get<std::string>();
-        require(path.lexically_normal().string().starts_with(root.lexically_normal().string()), "manifests: path outside the package");
-        auto manifest = interaction::readJSON(path, 1 << 20);
-        items_[id] = {assets[id], manifest};
-        if (manifest.value("traits", Json::object()).contains("machine"))
-            definitions_[id] = define(assets[id], manifest);
-    }
-    if (spec.contains("effectAsset")) {
-        require(assets.contains(spec["effectAsset"]), "effectAsset is not in objectAssets");
-        effectAsset_ = int(assets[spec["effectAsset"]]);
-    }
-    states.assign(w.objectInstances.size(), {});
-    auto instancesSpec = spec.value("instances", Json::object());
-    require(instancesSpec.size() <= 64, "at most 64 bound instances");
-    for (auto &[objectId, data] : instancesSpec.items()) {
-        size_t object = w.objectInstances.size();
-        for (size_t i = 0; i < w.objectInstances.size(); ++i)
-            if (w.objectInstances[i].id == objectId)
-                object = i;
-        require(object < w.objectInstances.size(), "instances: no object " + objectId);
-        const auto &asset = w.objectAssets[w.objectInstances[object].asset];
-        require(definitions_.contains(asset.id), "instances: " + objectId + "'s asset " + asset.id + " has no machine manifest");
-        Instance in;
-        in.object = object;
-        in.def = &definitions_.at(asset.id);
-        const auto &d = *in.def;
-        size_t n = d.inputs.size();
-        in.bindings.resize(n), in.gates.resize(n), in.driveGates.resize(in.def->drives.size()), in.raw.assign(n, nullptr), in.condition.assign(n, Condition::Missing);
-        in.age.assign(n, -1), in.fired.assign(n, 0), in.seenSequence.assign(n, 0);
-        for (size_t i = 0; i < n; ++i)
-            in.value.push_back(d.inputs[i].fallback);
-        for (auto &[inputId, b] : data.value("inputs", Json::object()).items()) {
-            bool matched = false;
-            for (size_t i = 0; i < n; ++i) {
-                const auto &id = d.inputs[i].id;
-                std::string suffix;
-                if (id == inputId)
-                    ;
-                else if (id.starts_with(inputId + ".") && b.at("key").get<std::string>().find("{n}") != std::string::npos)
-                    suffix = id.substr(inputId.size() + 1);
-                else
-                    continue;
-                auto &bind = in.bindings[i];
-                bind.source = b.at("source");
-                bind.key = b.at("key");
-                if (!suffix.empty())
-                    for (size_t p; (p = bind.key.find("{n}")) != std::string::npos;)
-                        bind.key.replace(p, 3, suffix);
-                bind.map = Mapping::parse(b.value("map", Json::object()));
-                require(d.inputs[i].type != Input::Event || bind.map.event() || bind.map.kind == Mapping::Direct,
-                        "instances " + objectId + ": event input " + id + " needs a counter or becomes map");
-                if (d.inputs[i].type == Input::Event && bind.map.kind == Mapping::Direct)
-                    bind.map.kind = Mapping::Counter;
-                bind.bound = matched = true;
+        assets.emplace(w.objectAssets[i].id, i); // the package's asset wins over a merged one of the same id
+    // Definitions: the development file's manifests, then every asset whose own object.json
+    // (library and user objects) has the machine trait.
+    for (auto &[id, file] : dev.value("manifests", Json::object()).items()) {
+        try {
+            require(assets.contains(id), "manifests: no object asset " + id);
+            auto root = setup.devRoot.lexically_normal().string();
+            auto path = (setup.devRoot / file.get<std::string>()).lexically_normal();
+            require(path.string().starts_with(root), "manifests: path outside the package");
+            auto manifest = interaction::readJSON(path, 1 << 20);
+            next.items_[id] = {assets[id], manifest};
+            if (manifest.value("traits", Json::object()).contains("machine")) {
+                auto d = next.define(assets[id], manifest);
+                d.dev = true, d.digest = std::hash<std::string>{}(manifest.dump());
+                next.definitions_[assets[id]] = std::move(d);
             }
-            require(matched, "instances " + objectId + ": no input " + inputId);
+        } catch (const std::exception &e) {
+            fail(e.what());
         }
-        in.paletteEntry.assign(d.palettes.size(), 0), in.emission.assign(d.palettes.size(), 1.f);
-        in.paletteStale.assign(d.palettes.size(), false);
-        in.labelText.assign(d.labels.size(), "");
-        in.labelStale.assign(d.labels.size(), false);
-        in.toggleHidden.assign(d.toggles.size(), false);
-        in.stackCount.assign(d.stacks.size(), 0);
-        size_t animations = asset.animations.size();
-        in.speedTarget.assign(animations, 0), in.speed.assign(animations, 0), in.turns.assign(animations, 0);
-        in.positionTarget.assign(animations, 0), in.position.assign(animations, 0);
-        in.easeFrom.assign(animations, 0), in.easeTo.assign(animations, 0), in.easeTime.assign(animations, 0);
-        const auto &o = w.objectInstances[object];
-        for (size_t k = 0; k < animations; ++k) {
-            in.turns[k] = asset.animations[k].phase + o.phase;
-            if (!d.driven[k])
-                in.speed[k] = in.speedTarget[k] = in.easeTo[k] = o.speed; // undriven: as authored
-        }
-        in.items.resize(d.tracks.size());
-        in.backlog.assign(d.spawns.size(), 0), in.rateClock.assign(d.spawns.size(), 0);
-        in.spawned.assign(d.spawns.size(), 0), in.dropped.assign(d.spawns.size(), 0);
-        states[object].bound = true;
-        instances_.push_back(std::move(in));
     }
+    for (unsigned i = 0; i < w.objectAssets.size(); ++i) {
+        const auto &a = w.objectAssets[i];
+        if (next.definitions_.contains(i) || !a.manifest.is_object() || a.character ||
+            !a.manifest.value("traits", Json::object()).contains("machine"))
+            continue;
+        try {
+            auto d = next.define(i, a.manifest);
+            d.digest = std::hash<std::string>{}(a.manifest.dump());
+            next.definitions_[i] = std::move(d);
+        } catch (const std::exception &e) {
+            fail(e.what());
+        }
+    }
+    if (dev.contains("effectAsset")) {
+        if (assets.contains(dev["effectAsset"]))
+            next.effectAsset_ = int(assets[dev["effectAsset"]]);
+        else
+            fail("effectAsset is not in objectAssets");
+    }
+    next.states.assign(w.objectInstances.size(), {});
+    // Development bindings name instances that must exist.
+    auto devInstances = dev.value("instances", Json::object());
+    for (auto &[objectId, unused] : devInstances.items()) {
+        (void)unused;
+        bool found = std::any_of(w.objectInstances.begin(), w.objectInstances.end(), [&](auto &o) { return o.id == objectId; });
+        if (!found)
+            fail("instances: no object " + objectId);
+    }
+    const Json &user = setup.user.is_object() ? setup.user.value("instances", Json::object()) : Json::object();
+    std::map<std::string, const Instance *> previous;
+    for (auto &in : instances_)
+        previous[in.id] = &in;
+    for (size_t k = 0; k < w.objectInstances.size(); ++k) {
+        const auto &o = w.objectInstances[k];
+        auto def = next.definitions_.find(o.asset);
+        bool listed = devInstances.contains(o.id);
+        if (def == next.definitions_.end()) {
+            if (listed)
+                fail("instances: " + o.id + "'s asset " + w.objectAssets[o.asset].id + " has no machine manifest");
+            continue;
+        }
+        if (o.character || (def->second.dev && !listed)) // development machines: listed instances only
+            continue;
+        if (next.instances_.size() >= size_t(maxInstances)) {
+            fail("at most 64 bound instances; " + o.id + " is not bound");
+            continue;
+        }
+        Instance in;
+        in.id = o.id;
+        in.def = &def->second;
+        Json spec;
+        if (listed)
+            spec = devInstances[o.id];
+        else {
+            // Default bindings, then the user's entry for this instance.
+            Json entry = user.contains(o.id) ? user[o.id] : Json::object();
+            if (!entry.is_object() || (entry.contains("worldId") && entry["worldId"] != setup.worldId))
+                entry = Json::object();
+            auto source = entry.value("source", std::string(defaultClient) + "." + o.id);
+            spec = {{"inputs", Json::object()}};
+            for (auto &input : def->second.inputs)
+                spec["inputs"][input.id] = {{"source", source}, {"key", input.id}};
+            for (auto &[inputId, b] : entry.value("inputs", Json::object()).items()) {
+                if (!b.is_object()) {
+                    fail("machines.json " + o.id + ": input " + inputId + " must be an object");
+                    continue;
+                }
+                auto &target = spec["inputs"][inputId];
+                if (!target.is_object())
+                    target = {{"source", source}, {"key", inputId}};
+                for (auto &[field, value] : b.items())
+                    target[field] = value;
+            }
+            if (entry.contains("averageWindowS"))
+                spec["averageWindowS"] = entry["averageWindowS"];
+        }
+        if (spec.contains("averageWindowS")) {
+            double windowS = spec["averageWindowS"].is_number() ? spec["averageWindowS"].get<double>() : -1;
+            if (windowS < 1 || windowS > 3600) {
+                fail("instances " + o.id + ": averageWindowS must be 1-3600");
+                continue;
+            }
+            in.averageWindowS = windowS;
+        }
+        in.spec = spec.dump();
+        try {
+            next.bind(in, spec, o.id);
+        } catch (const std::exception &e) {
+            fail(e.what());
+            continue;
+        }
+        // Unchanged asset, manifest and bindings: keep the runtime state.
+        auto old = previous.find(o.id);
+        if (old != previous.end() && old->second->def->asset == o.asset && old->second->def->digest == def->second.digest &&
+            old->second->spec == in.spec) {
+            auto kept = *old->second;
+            kept.def = in.def, kept.object = k;
+            in = std::move(kept);
+        } else {
+            next.prepare(in, k);
+            if (!listed && old == previous.end())
+                next.fresh.push_back({k, in.def->id});
+        }
+        next.states[k].bound = true;
+        if (old != previous.end() && old->second->object < states.size()) // a new frame, never an old revision
+            next.states[k].revision = states[old->second->object].revision + 1;
+        next.instances_.push_back(std::move(in));
+    }
+    // Effect pieces follow their instance by ID.
+    for (auto p : pieces_) {
+        auto from = std::find_if(instances_.begin(), instances_.end(), [&](auto &in) { return in.object == p.instance; });
+        if (from == instances_.end())
+            continue;
+        auto to = std::find_if(next.instances_.begin(), next.instances_.end(), [&](auto &in) { return in.id == from->id; });
+        if (to != next.instances_.end())
+            p.instance = to->object, next.pieces_.push_back(p);
+    }
+    *this = std::move(next);
+}
+void Machines::load(const Json &spec, const World &w, const std::filesystem::path &root) {
+    *this = Machines{};
+    Setup setup;
+    setup.dev = spec, setup.devRoot = root, setup.worldId = w.id, setup.strict = true;
+    sync(w, setup);
 }
 std::vector<size_t> Machines::instances() const {
     std::vector<size_t> out;
@@ -701,6 +962,7 @@ void Machines::evaluate(Instance &in, const Json &sources, int64_t nowMs, bool s
             // Missing: the source expired (ttlMs) or never published this key.
             in.condition[i] = Condition::Missing, in.raw[i] = nullptr, in.value[i] = input.fallback, in.age[i] = -1;
             in.gates[i].rebaseline();
+            in.inputAverages[i].reset();
             continue;
         }
         in.raw[i] = *raw;
@@ -715,7 +977,18 @@ void Machines::evaluate(Instance &in, const Json &sources, int64_t nowMs, bool s
                 in.gates[i].rebaseline();
             continue;
         }
-        auto mapped = bind.map.apply(*raw);
+        Json averaged = *raw;
+        if (bind.map.average) {
+            auto &avg = in.inputAverages[i];
+            double windowS = window(in, bind.map), x = machines::number(*raw, NAN);
+            if (in.condition[i] == Condition::Fresh && std::isfinite(x))
+                avg.feed(x, nowMs, windowS);
+            else
+                avg.pause();
+            if (auto mean = avg.mean(nowMs, windowS))
+                averaged = *mean;
+        }
+        auto mapped = bind.map.apply(averaged);
         Json v = mapped ? *mapped : Json(nullptr);
         bool fits = false;
         switch (input.type) {
@@ -751,13 +1024,32 @@ void Machines::evaluate(Instance &in, const Json &sources, int64_t nowMs, bool s
     for (size_t k = 0; k < d.drives.size(); ++k)
         apply(in, k, still);
 }
+double Machines::window(const Instance &in, const Mapping &map) const {
+    return in.averageWindowS > 0 ? in.averageWindowS : map.windowS;
+}
 void Machines::apply(Instance &in, size_t index, bool still) {
     const auto &d = *in.def;
     const auto &drive = d.drives[index];
     auto condition = in.condition[drive.input];
     bool stale = condition == Condition::Stale || condition == Condition::Error, missing = condition == Condition::Missing,
          fresh = condition == Condition::Fresh;
-    const auto &value = in.value[drive.input];
+    Json value = in.value[drive.input];
+    if (drive.map.average) {
+        // The running average of the input's value (fresh time only); an overriding
+        // input with a value replaces it.
+        auto &avg = in.driveAverages[index];
+        double windowS = window(in, drive.map);
+        if (fresh)
+            avg.feed(machines::number(value), now_, windowS);
+        else if (missing)
+            avg.reset();
+        else
+            avg.pause();
+        if (auto mean = avg.mean(now_, windowS))
+            value = *mean;
+        if (drive.override >= 0 && in.bindings[drive.override].bound && in.condition[drive.override] != Condition::Missing)
+            value = in.value[drive.override];
+    }
     int fired = in.fired[drive.input];
     if (drive.map.kind == Mapping::Becomes && d.inputs[drive.input].type != Input::Event) {
         auto &gate = in.driveGates[index];
@@ -818,6 +1110,9 @@ void Machines::apply(Instance &in, size_t index, bool still) {
     case Drive::Count:
         in.stackCount[drive.index] = size_t(std::clamp(std::floor(machines::number(*out)), 0., double(d.stacks[drive.index].cap)));
         break;
+    case Drive::Level:
+        in.levelTarget[drive.index] = std::clamp(machines::number(*out), 0., 1.);
+        break;
     default:
         break;
     }
@@ -857,12 +1152,48 @@ void Machines::fire(Instance &in, const EffectSlot &e, bool still) {
         pieces_.push_back(p);
     }
 }
+// Levels follow their target as springs: `ease` critically damped (about 0.3 s, no
+// overshoot, smooth when the target keeps moving, as an average does), `spring`
+// underdamped (overshoots and settles in about 2 s). A fill's surface rocks with the
+// level's acceleration. Still: snaps.
+void Machines::settle(Instance &in, double dt, bool still, bool &moving) {
+    const auto &d = *in.def;
+    for (size_t l = 0; l < d.levels.size(); ++l) {
+        const auto &slot = d.levels[l];
+        double &x = in.level[l], &v = in.levelSpeed[l], &tilt = in.tilt[l], &spin = in.tiltSpeed[l];
+        double target = in.levelTarget[l];
+        if (still) {
+            x = target, v = tilt = spin = 0;
+            continue;
+        }
+        if (x == target && v == 0 && tilt == 0 && spin == 0)
+            continue;
+        double omega = slot.spring ? 5.4 : 14, zeta = slot.spring ? .42 : 1;
+        constexpr double rock = 8.2, rockDamping = .16, rockGain = .18;
+        int steps = std::max(1, int(std::ceil(dt * 240)));
+        double h = dt / steps;
+        for (int i = 0; i < steps; ++i) {
+            double a = omega * omega * (target - x) - 2 * zeta * omega * v;
+            v += a * h, x += v * h;
+            double drive = slot.spring && slot.surface >= 0 ? rockGain * a : 0;
+            spin += (-rock * rock * tilt - 2 * rockDamping * rock * spin + drive) * h;
+            tilt = std::clamp(tilt + spin * h, -.07, .07);
+        }
+        if (std::abs(x - target) < 1e-4 && std::abs(v) < 1e-3)
+            x = target, v = 0;
+        if (std::abs(tilt) < 2e-4 && std::abs(spin) < 2e-3)
+            tilt = spin = 0;
+        moving |= x != target || v != 0 || tilt != 0;
+    }
+}
 void Machines::tick(double dt, const Json &sources, int64_t nowMs, bool still) {
     if (!world_)
         return;
     dt = std::clamp(dt, 0., .25);
+    now_ = nowMs;
     extras.clear();
     labels.clear();
+    stackCopies_ = stackCapped_ = 0;
     for (auto &in : instances_) {
         const auto &d = *in.def;
         const auto &o = world_->objectInstances[in.object];
@@ -907,6 +1238,18 @@ void Machines::tick(double dt, const Json &sources, int64_t nowMs, bool still) {
             if (current > 0 && !still) {
                 in.turns[k] += dt * current / an.period;
                 in.turns[k] -= std::floor(in.turns[k]);
+                moving = true;
+            }
+        }
+        settle(in, dt, still, moving);
+        // Stacks: the shown count moves towards the target at the slot's rate.
+        for (size_t s = 0; s < d.stacks.size(); ++s) {
+            double target = double(in.stackCount[s]), &shown = in.stackShown[s];
+            if (still || d.stacks[s].rate <= 0)
+                shown = target;
+            else if (shown != target) {
+                double step = d.stacks[s].rate * dt;
+                shown = shown < target ? std::min(target, shown + step) : std::max(target, shown - step);
                 moving = true;
             }
         }
@@ -988,11 +1331,27 @@ void Machines::tick(double dt, const Json &sources, int64_t nowMs, bool still) {
             if (in.toggleHidden[t])
                 for (auto m : d.toggles[t].second)
                     state.meshes[m].hidden = true;
+        // Paint of a slot's painted meshes for its extras (a copy is never hidden or offset).
+        auto paintOf = [&](const std::vector<unsigned> &painted) {
+            MeshPaint paint;
+            if (!painted.empty())
+                paint = state.meshes[painted[0]], paint.hidden = false, paint.offset = {};
+            return paint;
+        };
         for (size_t s = 0; s < d.stacks.size(); ++s) {
             const auto &stack = d.stacks[s];
             for (auto m : stack.meshes)
                 state.meshes[m].hidden = true; // drawn as copies only
-            for (size_t i = 0; i < in.stackCount[s]; ++i) {
+            // A count on its way changes once it has fully passed a whole copy.
+            double shown = in.stackShown[s];
+            size_t count = size_t(shown < double(in.stackCount[s]) ? std::floor(shown) : std::ceil(shown));
+            auto paint = paintOf(stack.painted);
+            for (size_t i = 0; i < count; ++i) {
+                if (stackCopies_ >= maxStackCopies) {
+                    ++stackCapped_;
+                    continue;
+                }
+                ++stackCopies_;
                 int cell[3]{}, rest = int(i);
                 for (int k = 0; k < 3; ++k) {
                     int axis = stack.order[k];
@@ -1003,9 +1362,47 @@ void Machines::tick(double dt, const Json &sources, int64_t nowMs, bool still) {
                 e.asset = d.asset, e.node = int(stack.node), e.owner = in.object;
                 e.model = o.model * translation({cell[0] * stack.spacing.x, cell[1] * stack.spacing.y, cell[2] * stack.spacing.z});
                 e.scale = o.scale;
+                e.paint = paint;
+                e.paintMeshes = stack.painted.empty() ? nullptr : &stack.painted;
                 e.saturation = state.saturation, e.brightness = state.brightness;
                 extras.push_back(e);
             }
+        }
+        // Levels: a slide offsets its meshes; a fill (and its surface) is drawn as an extra.
+        for (size_t l = 0; l < d.levels.size(); ++l) {
+            const auto &slot = d.levels[l];
+            float f = float(std::clamp(in.level[l], 0., 1.));
+            if (!slot.fill) {
+                for (auto m : slot.meshes)
+                    state.meshes[m].offset = state.meshes[m].offset + slot.axis * (f * slot.length);
+                continue;
+            }
+            for (auto m : slot.meshes)
+                state.meshes[m].hidden = true;
+            for (auto m : slot.surfaceMeshes)
+                state.meshes[m].hidden = true;
+            if (f < .002f) // empty: nothing drawn
+                continue;
+            ObjectExtra e;
+            e.asset = d.asset, e.node = int(slot.node), e.owner = in.object, e.scale = o.scale;
+            e.model = o.model * translation(slot.origin) * axisScale(slot.axis, f) * translation(slot.origin * -1.f);
+            e.paint = paintOf(slot.painted);
+            e.paintMeshes = slot.painted.empty() ? nullptr : &slot.painted;
+            e.saturation = state.saturation, e.brightness = state.brightness;
+            extras.push_back(e);
+            if (slot.surface < 0)
+                continue;
+            Vec3 side = cross(slot.axis, Vec3{1, 0, 0});
+            if (hyprune::length(side) < .1f)
+                side = cross(slot.axis, Vec3{0, 0, 1});
+            Vec3 top = slot.surfaceOrigin + slot.axis * ((f - 1) * slot.length);
+            ObjectExtra surface = e;
+            surface.node = slot.surface;
+            surface.model = o.model * translation(top) * animation::rotation(normalized(side), in.tilt[l]) *
+                            translation(slot.surfaceOrigin * -1.f);
+            surface.paint = paintOf(slot.surfacePainted);
+            surface.paintMeshes = slot.surfacePainted.empty() ? nullptr : &slot.surfacePainted;
+            extras.push_back(surface);
         }
         for (size_t s = 0; s < d.spawns.size(); ++s) {
             if (d.spawns[s].track < 0)
@@ -1049,6 +1446,10 @@ void Machines::tick(double dt, const Json &sources, int64_t nowMs, bool still) {
             h = mix(h, b);
         for (auto c : in.stackCount)
             h = mix(h, c);
+        for (auto c : in.stackShown)
+            h = mix(h, uint64_t(std::floor(c)));
+        for (size_t l = 0; l < in.level.size(); ++l)
+            h = mix(mix(h, uint64_t(int64_t(in.level[l] * 1e4))), uint64_t(int64_t(in.tilt[l] * 1e4)));
         for (size_t l = 0; l < d.labels.size(); ++l)
             h = mix(mix(h, in.labelText[l]), in.labelStale[l]);
         h = mix(h, uint64_t(in.look * 1000));
@@ -1116,18 +1517,22 @@ Json Machines::diagnostics() const {
         Json labelTexts = Json::object();
         for (size_t l = 0; l < d.labels.size(); ++l)
             labelTexts[d.labels[l].id] = in.labelText[l];
-        Json stacks = Json::object();
+        Json stacks = Json::object(), shown = Json::object(), levels = Json::object();
         for (size_t s = 0; s < d.stacks.size(); ++s)
-            stacks[d.stacks[s].id] = in.stackCount[s];
+            stacks[d.stacks[s].id] = in.stackCount[s], shown[d.stacks[s].id] = in.stackShown[s];
+        for (size_t l = 0; l < d.levels.size(); ++l)
+            levels[d.levels[l].id] = {{"level", in.level[l]}, {"target", in.levelTarget[l]}, {"tilt", in.tilt[l]}};
         Json toggles = Json::object();
         for (size_t t = 0; t < d.toggles.size(); ++t)
             toggles[d.toggles[t].first] = !in.toggleHidden[t];
         const auto &state = states[in.object];
         out.push_back({{"id", world_->objectInstances[in.object].id}, {"asset", d.id}, {"inputs", inputs},
                        {"states", palettes}, {"animations", speeds}, {"labels", labelTexts}, {"stacks", stacks},
+                       {"stacksShown", shown}, {"levels", levels},
                        {"toggles", toggles}, {"tracks", tracks}, {"stale", in.anyStale}, {"look", in.look},
                        {"moving", state.moving}, {"revision", state.revision}});
     }
-    return {{"instances", out}, {"pieces", pieces_.size()}, {"extras", extras.size()}, {"labels", labels.size()}};
+    return {{"instances", out}, {"pieces", pieces_.size()}, {"extras", extras.size()}, {"labels", labels.size()},
+            {"stackCopies", stackCopies_}, {"stackCapped", stackCapped_}, {"errors", errors_}};
 }
 } // namespace hyprune::world
