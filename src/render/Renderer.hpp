@@ -219,7 +219,9 @@ class Renderer {
     GLuint instanceVbo_ = 0; // per-frame instance records (model, probe lighting, paint, tint)
     static constexpr GLuint recordFloats = 32;
     size_t objectInstancesVisible_ = 0, objectDrawCalls_ = 0, objectInstancesDrawn_ = 0;
-    bool npcVisible(const Npc &, const std::array<std::array<float, 4>, 6> &planes) const;
+    // Frustum and, with `regions`, visibility areas: a character shares the areas of the
+    // scene around its current position, like a placed object (RFC-0010).
+    bool npcVisible(const Npc &, const std::array<std::array<float, 4>, 6> &planes, const std::vector<bool> &areas, bool regions) const;
     bool instanceVisible(const world::ObjectInstance &, const std::array<std::array<float, 4>, 6> &planes,
                          const std::vector<bool> &areas, bool regions) const;
     // textures_/colorTextures_ name the same texture unless an image needs two
@@ -242,7 +244,7 @@ class Renderer {
     std::map<const world::Character *, CharacterGPU> characterGPU_;
     GLuint skinned_ = 0, jointUbo_ = 0;
     CharacterGPU &characterGPU(const world::Character &);
-    void drawNpcs(const std::array<std::array<float, 4>, 6> &planes, int tone, float exposure);
+    void drawNpcs(const std::array<std::array<float, 4>, 6> &planes, const std::vector<bool> &areas, bool regions, int tone, float exposure);
     GLuint scene_ = 0, tone_ = 0, reticle_ = 0, quadVao_ = 0, quadVbo_ = 0, screenVao_ = 0, repeat_ = 0, clamp_ = 0, mipClamp_ = 0;
     GLuint environment_ = 0, bloom_ = 0, sky_ = 0, native_ = 0, depthProgram_ = 0;
     GLuint inkComposite_ = 0, inkNormals_ = 0, inkProgram_ = 0, inkFbo_ = 0, inkNormal_ = 0, inkDepth_ = 0;

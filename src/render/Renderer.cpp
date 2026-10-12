@@ -6,6 +6,7 @@
 #include "Fsr.hpp"
 #include "world/Environment.hpp"
 #include "world/Mounts.hpp"
+#include "world/Objects.hpp"
 #include "world/Visibility.hpp"
 #include <fontconfig/fontconfig.h>
 #include <ft2build.h>
@@ -656,7 +657,8 @@ bool Renderer::instanceVisible(const world::ObjectInstance &o, const std::array<
     return true;
 }
 // NPC culling: rest bounds grown by 0.6 m for limbs in motion, then placed by the model.
-bool Renderer::npcVisible(const Npc &npc, const std::array<std::array<float, 4>, 6> &planes) const {
+bool Renderer::npcVisible(const Npc &npc, const std::array<std::array<float, 4>, 6> &planes, const std::vector<bool> &areas,
+                          bool regions) const {
     auto &c = *npc.character;
     Vec3 lo = c.lo - Vec3{.6f, .6f, .6f}, hi = c.hi + Vec3{.6f, .6f, .6f}, a = npc.model.point(lo), b = a;
     for (int corner = 1; corner < 8; ++corner) {
@@ -667,14 +669,21 @@ bool Renderer::npcVisible(const Npc &npc, const std::array<std::array<float, 4>,
     for (auto &p : planes)
         if (p[0] * (p[0] > 0 ? b.x : a.x) + p[1] * (p[1] > 0 ? b.y : a.y) + p[2] * (p[2] > 0 ? b.z : a.z) + p[3] < 0)
             return false;
+    if (regions && world_ && !world_->visibility.empty()) {
+        auto owners = world::regionsNear(*world_, (a + b) * .5f, length(b - a) * .5f);
+        if (!owners.empty() && std::none_of(owners.begin(), owners.end(), [&](int r) { return size_t(r) < areas.size() && areas[r]; }))
+            return false;
+    }
     return true;
 }
 bool Renderer::npcAnimationVisible(const sim::Camera &camera, float aspect) const {
     if (pending_)
         return false;
     auto planes = frustumPlanes(camera.projection(aspect) * camera.view());
+    auto areas = world_ ? world::visibleAreas(*world_, camera.position) : std::vector<bool>{};
+    bool regions = graphics.value("visibility_culling", true);
     for (const auto &npc : npcs)
-        if (npc.moving && npc.character && npcVisible(npc, planes))
+        if (npc.moving && npc.character && npcVisible(npc, planes, areas, regions))
             return true;
     return false;
 }
@@ -2081,7 +2090,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     npcsDrawn = 0;
     if (!externalWorldFbo && !npcs.empty()) {
         passUniforms(skinned_);
-        drawNpcs(planes, tone, exposure);
+        drawNpcs(planes, visible, regions, tone, exposure);
     }
     worldLabelsDrawn = 0;
     if (!externalWorldFbo && !worldLabels.empty())
@@ -3358,7 +3367,8 @@ Renderer::CharacterGPU &Renderer::characterGPU(const world::Character &c) {
     }
     return gpu;
 }
-void Renderer::drawNpcs(const std::array<std::array<float, 4>, 6> &planes, int tone, float exposure) {
+void Renderer::drawNpcs(const std::array<std::array<float, 4>, 6> &planes, const std::vector<bool> &areas, bool regions, int tone,
+                        float exposure) {
     if (!skinned_)
         return;
     if (!jointUbo_) {
@@ -3378,7 +3388,7 @@ void Renderer::drawNpcs(const std::array<std::array<float, 4>, 6> &planes, int t
         if (!npc.character || npc.skin.size() > 64)
             continue;
         auto &c = *npc.character;
-        if (!npcVisible(npc, planes))
+        if (!npcVisible(npc, planes, areas, regions))
             continue;
         auto &gpu = characterGPU(c);
         glBindBuffer(GL_UNIFORM_BUFFER, jointUbo_);

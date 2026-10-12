@@ -238,6 +238,17 @@ RFC-0006 tool table, Path row:
 - Path edits (add, insert, move, remove) are undo steps: Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y in
   tools 3 and 4. Escape cancels a point drag. The Primary hint reads "Add / drag point".
 
+## Character visibility (no wire change)
+
+RFC-0010 runtime rules ("region visibility follows its current position"):
+
+- Characters are culled by visibility regions as well as the view frustum, with the rule
+  placed objects use: a character shares the areas owning scene geometry near its current
+  pose. A walking character in a region that is not visible from the camera's region is
+  neither drawn nor keeps frames coming (`npcs.drawn`, `animationVisible` in the camera
+  diagnostics). Before, any character inside the frustum counted, including ones in other
+  areas behind walls.
+
 ## Window placement behaviour (no wire change)
 
 RFC-0005 "Amendment: reachable spawns, home windows and world switches":

@@ -211,9 +211,14 @@ int main(int argc, char **argv) {
     if (auto owned = accepts("visibility of the geometry around an object", [&](auto &j) {
             j["visibility"] = {{"areas", {cell, {{"id", "owner-floor"}, {"bounds", {{"min", {50, 50, 50}}, {"max", {51, 51, 51}}}},
                                                  {"nodes", {0}}, {"visibleFrom", {"cell-west"}}}}}};
-        }))
+        })) {
         for (auto &o : owned->objectInstances)
             check(o.regions == std::vector<int>{1}, o.id + ": takes the floor's owner area, not the camera cell");
+        // Characters use the same rule at their current position (Renderer::npcVisible).
+        auto &o = owned->objectInstances[0];
+        check(world::regionsNear(*owned, o.center, o.radius) == std::vector<int>{1}, "regionsNear: a character there shares the floor's area");
+        check(world::regionsNear(*owned, {500, 500, 500}, 1).empty(), "regionsNear: no owner far from the scene");
+    }
     if (auto cells = accepts("camera cells alone", [&](auto &j) { j["visibility"] = {{"areas", {cell}}}; }))
         for (auto &o : cells->objectInstances)
             check(o.regions.empty(), o.id + ": a cell owning nothing leaves the object to the frustum");

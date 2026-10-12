@@ -22,6 +22,9 @@ struct ProbeLight {
 };
 void prepareLighting(World &);
 void objectRegions(World &, std::optional<size_t> only = {});
+// The visibility areas owning scene meshes within `radius` of `center` (what an object
+// there shares); empty when none do or the mesh bounds are not built yet.
+std::vector<int> regionsNear(const World &, Vec3 center, float radius);
 ProbeLight probeLight(const World &, const ObjectInstance &);
 void applyProbeLight(ObjectInstance &, const ProbeLight &);
 // One object asset (a glTF in asset space) loaded into w's shared materials and images.

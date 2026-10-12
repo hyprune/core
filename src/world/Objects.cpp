@@ -385,24 +385,27 @@ void objectRegions(World &w, std::optional<size_t> only) {
     // owning scene meshes its swept sphere overlaps. Bounds alone say nothing:
     // derived regions are camera cells that own no nodes and are visible from
     // nowhere, so an object placed by position in one was never drawn.
+    for (auto &o : w.objectInstances)
+        if (!skip(o))
+            o.regions = regionsNear(w, o.center, o.radius);
+}
+std::vector<int> regionsNear(const World &w, Vec3 center, float radius) {
     const auto &bounds = w.meshBounds;
-    for (auto &o : w.objectInstances) {
-        if (skip(o))
+    std::set<int> owners;
+    if (bounds.size() != w.meshes.size())
+        return {};
+    for (size_t m = 0; m < w.meshes.size(); ++m) {
+        unsigned node = w.meshes[m].node;
+        int owner = node < w.nodeVisibility.size() ? w.nodeVisibility[node] : -1;
+        if (owner < 0 || owners.contains(owner))
             continue;
-        std::set<int> owners;
-        for (size_t m = 0; m < w.meshes.size(); ++m) {
-            unsigned node = w.meshes[m].node;
-            int owner = node < w.nodeVisibility.size() ? w.nodeVisibility[node] : -1;
-            if (owner < 0 || owners.contains(owner))
-                continue;
-            auto &[lo, hi] = bounds[m];
-            float dx = std::max({lo.x - o.center.x, 0.f, o.center.x - hi.x}), dy = std::max({lo.y - o.center.y, 0.f, o.center.y - hi.y}),
-                  dz = std::max({lo.z - o.center.z, 0.f, o.center.z - hi.z});
-            if (dx * dx + dy * dy + dz * dz <= o.radius * o.radius)
-                owners.insert(owner);
-        }
-        o.regions.assign(owners.begin(), owners.end());
+        auto &[lo, hi] = bounds[m];
+        float dx = std::max({lo.x - center.x, 0.f, center.x - hi.x}), dy = std::max({lo.y - center.y, 0.f, center.y - hi.y}),
+              dz = std::max({lo.z - center.z, 0.f, center.z - hi.z});
+        if (dx * dx + dy * dy + dz * dz <= radius * radius)
+            owners.insert(owner);
     }
+    return {owners.begin(), owners.end()};
 }
 ProbeLight probeLight(const World &w, const ObjectInstance &o) {
     const auto &source = w.visualSource; // prepareLighting built it
