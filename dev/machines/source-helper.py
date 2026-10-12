@@ -17,6 +17,7 @@ import pathlib
 import queue
 import random
 import re
+import select
 import selectors
 import signal
 import socket
@@ -57,6 +58,8 @@ RECONNECT_CAP_S = 60.0
 FIELD_TYPES = {"string", "number", "int", "bool", "counter"}
 OUTPUTS = {"json", "number", "text", "lines"}
 TOKEN_RE = re.compile(r"[a-f0-9]{64}")
+TOKEN_READ_TIMEOUT_S = 10.0
+CONFIG_CHECK_S = 1.0  # how often the config file's mtime is checked
 
 
 class ConfigError(Exception):
@@ -876,14 +879,63 @@ class Connection:
 
 
 class TokenSource:
-    """Launch tokens are one-use: a reconnect needs a fresh one (a rewritten token file)."""
+    """Launch tokens are one-use: a reconnect needs a fresh one.
 
-    def __init__(self, file=None, value=None):
+    From a file (re-read on each connection), a value, or an inherited descriptor. A
+    descriptor carries one token line per connection. With `refresh` (a supervisor that
+    renews grants, like the shell's launcher), every connection after the first writes
+    `renew\\n` to the descriptor and reads the next token line."""
+
+    def __init__(self, file=None, value=None, fd=None, refresh=False, read_timeout=TOKEN_READ_TIMEOUT_S):
         self.file, self.value, self.used = file, value, set()
+        self.fd, self.refresh, self.read_timeout = fd, refresh, read_timeout
+        self.buffer, self.reads, self.outstanding, self.closed = b"", 0, 0, False
+
+    def _line(self):
+        """The next token line from the descriptor, or None (timeout, EOF)."""
+        if self.closed:
+            return None
+        if self.refresh and self.reads > 0 and not self.outstanding:
+            try:
+                os.write(self.fd, b"renew\n")
+                self.outstanding += 1
+            except OSError as error:
+                log.error("token channel closed (%s); cannot renew the grant", error.strerror)
+                self.closed = True
+                return None
+        self.reads += 1
+        deadline = time.monotonic() + self.read_timeout
+        while b"\n" not in self.buffer:
+            remaining = deadline - time.monotonic()
+            readable = select.select([self.fd], [], [], max(0.0, remaining))[0] if remaining > 0 else []
+            if not readable:
+                log.warning("no token from the supervisor within %g s", self.read_timeout)
+                return None
+            try:
+                data = os.read(self.fd, 256)
+            except OSError:
+                data = b""
+            if not data:
+                self.closed = True
+                if self.buffer.strip():  # a last token without a newline
+                    line, self.buffer = self.buffer, b""
+                    return line.decode("ascii", "replace").strip()
+                log.error("token channel closed; reconnecting needs a restart of the helper")
+                return None
+            self.buffer += data
+            if len(self.buffer) > 1024:
+                log.error("token channel sent an over-long line; ignoring it")
+                self.closed = True
+                return None
+        line, self.buffer = self.buffer.split(b"\n", 1)
+        self.outstanding = max(0, self.outstanding - 1)
+        return line.decode("ascii", "replace").strip()
 
     def get(self):
         token = self.value
-        if self.file:
+        if self.fd is not None:
+            token = self._line()
+        elif self.file:
             try:
                 token = pathlib.Path(self.file).read_text().strip()
             except OSError as error:
@@ -911,13 +963,14 @@ class Publisher:
     def connect(self, now):
         if self.connection or now < self.reconnect_at:
             return False
-        token = self.tokens.get() if self.tokens else None
         params = {"protocols": [self.protocol], "client": dict(self.client), "capabilities": ["data.publish"]}
-        if token:
-            params["token"] = token
-        connection = None
+        connection = token = None
         try:
             connection = Connection(self.path)
+            # Only once the socket is reachable: a token (or a renewal) per real attempt.
+            token = self.tokens.get() if self.tokens else None
+            if token:
+                params["token"] = token
             result = connection.call("session.hello", params)
             if token:
                 self.tokens.used.add(token)
@@ -981,19 +1034,27 @@ class Publisher:
             log.error("%s: data.publish refused: %s", label, error)
         return False
 
+    def remove(self, source):
+        """data.remove for a source published on this connection. False when the connection broke."""
+        if not self.connection or source.published is None:
+            return True
+        try:
+            self.connection.call("data.remove", {"sourceId": source.spec.source_id})
+            log.info("removed %s", source.spec.source_id)
+        except RpcError as error:
+            log.warning("data.remove %s: %s", source.spec.source_id, error)
+        except (OSError, EOFError, ValueError) as error:
+            log.warning("data.remove %s: %s", source.spec.source_id, error)
+            return False
+        source.reset_connection()
+        return True
+
     def remove_all(self, sources):
         if not self.connection:
             return
         for source in sources:
-            if source.published is None:
-                continue
-            try:
-                self.connection.call("data.remove", {"sourceId": source.spec.source_id})
-                log.info("removed %s", source.spec.source_id)
-            except (RpcError, OSError, EOFError, ValueError) as error:
-                log.warning("data.remove %s: %s", source.spec.source_id, error)
-                if not isinstance(error, RpcError):
-                    break
+            if not self.remove(source):
+                break
         self.connection.close()
         self.connection = None
 
@@ -1019,25 +1080,114 @@ class DryRunPublisher:
         source.mark_published(values, now)
         return True
 
+    def remove(self, source):
+        if source.published is not None:
+            self.stream.write(json.dumps({"remove": source.spec.source_id}) + "\n")
+            self.stream.flush()
+            source.reset_connection()
+        return True
+
     def remove_all(self, sources):
         for source in sources:
-            if source.published is not None:
-                self.stream.write(json.dumps({"remove": source.spec.source_id}) + "\n")
+            self.remove(source)
         self.stream.flush()
 
 
 # --- scheduling ------------------------------------------------------------------------
 
+def _file_signature(path):
+    """What identifies a version of the config file: (inode, size, mtime), or None."""
+    try:
+        info = os.stat(path)
+    except OSError:
+        return None
+    return (info.st_ino, info.st_size, info.st_mtime_ns)
+
+
+class ConfigWatcher:
+    """Re-reads the config file when it changes (checked about once a second)."""
+
+    def __init__(self, path, config, dev=False, clock=time.monotonic):
+        self.path, self.dev, self.clock = path, dev, clock
+        self.client, self.protocol = config["client"], config["protocol"]
+        self.signature = _file_signature(path)
+        self.check_at = clock() + CONFIG_CHECK_S
+
+    def changed(self, now):
+        """A newly loaded config when the file changed and is valid, else None."""
+        if now < self.check_at:
+            return None
+        self.check_at = now + CONFIG_CHECK_S
+        signature = _file_signature(self.path)
+        if signature is None or signature == self.signature:
+            return None  # a missing file (mid-save, or removed) keeps the running sources
+        self.signature = signature
+        try:
+            config = load_config(self.path, self.dev)
+        except ConfigError as error:
+            log.error("config not reloaded, keeping the running sources: %s", error)
+            return None
+        if config["client"]["id"] != self.client["id"] or config["protocol"] != self.protocol:
+            log.warning("client id and protocol changes apply after a restart")
+        return config
+
+
 class Runner:
-    def __init__(self, sources, publisher):
+    def __init__(self, sources, publisher, watcher=None):
         self.sources = sources
         self.publisher = publisher
+        self.watcher = watcher
         self.results = queue.Queue()
         self.jobs = queue.Queue()
         self.stopping = threading.Event()
         self.was_connected = False
-        for _ in range(min(CONCURRENCY, max(1, len(sources)))):
+        self.retired = []  # removed sources still to be withdrawn with data.remove
+        for _ in range(CONCURRENCY if watcher else min(CONCURRENCY, max(1, len(sources)))):
             threading.Thread(target=self._worker, daemon=True).start()
+
+    def apply(self, specs):
+        """Switch to a new list of source specs: added sources start, removed ones are
+        withdrawn (data.remove), changed ones restart. Unchanged sources keep running."""
+        current = {source.spec.source_id: source for source in self.sources}
+        wanted = {spec.source_id for spec in specs}
+        sources, added, changed = [], [], []
+        for spec in specs:
+            old = current.get(spec.source_id)
+            if old is not None and old.spec.spec == spec.spec:
+                sources.append(old)
+                continue
+            source = Source(spec)
+            if old is not None:
+                source.sequence.floor(old.sequence.last)
+                source.published, source.published_at = old.published, old.published_at
+                changed.append(spec.slug)
+            else:
+                added.append(spec.slug)
+            sources.append(source)
+        removed = [source for sid, source in current.items() if sid not in wanted]
+        self.retired += removed
+        self.sources = sources
+        if added or changed or removed:
+            log.info("config reloaded: %s", "; ".join(part for part in (
+                "added " + ", ".join(added) if added else "",
+                "changed " + ", ".join(changed) if changed else "",
+                "removed " + ", ".join(s.spec.slug for s in removed) if removed else "") if part))
+        else:
+            log.info("config reloaded: no source changes")
+
+    def _withdraw(self):
+        if not self.retired:
+            return
+        if not self.publisher.connected():
+            self.retired = []  # core already dropped this connection's sources
+            return
+        while self.retired:
+            if not self.publisher.remove(self.retired[0]):
+                self.publisher.drop(time.monotonic(), "data.remove failed")
+                self.was_connected = False
+                self.retired = []
+                return
+            self.retired.pop(0)
 
     def _worker(self):
         while True:
@@ -1067,6 +1217,10 @@ class Runner:
 
     def step(self, now):
         """Dispatch due fetches and publications; returns the next wake time."""
+        if self.watcher:
+            config = self.watcher.changed(now)
+            if config is not None:
+                self.apply(config["sources"])
         for source in self.sources:
             if not source.running and now >= source.next_due:
                 if source.spec.kind == "timer":  # no I/O: computed inline
@@ -1081,6 +1235,8 @@ class Runner:
             for source in self.sources:
                 source.reset_connection()
         self.was_connected = connected
+        self._withdraw()
+        connected = self.publisher.connected()
         if connected:
             for source in self.sources:
                 values = source.due_publication(now)
@@ -1094,6 +1250,8 @@ class Runner:
             wake = min([wake] + [s.next_publish_time() for s in self.sources])
         else:
             wake = min(wake, getattr(self.publisher, "reconnect_at", wake))
+        if self.watcher:
+            wake = min(wake, self.watcher.check_at)
         return wake
 
     def run(self):
@@ -1112,7 +1270,7 @@ class Runner:
                 except queue.Empty:
                     break
         PROCESSES.kill_all()
-        self.publisher.remove_all(self.sources)
+        self.publisher.remove_all(self.retired + self.sources)
 
 
 def run_once(sources, stream=sys.stdout):
@@ -1130,14 +1288,25 @@ def run_once(sources, stream=sys.stdout):
     return 1 if failed else 0
 
 
+def default_config_path():
+    """$XDG_CONFIG_HOME/hyprune/sources.json (~/.config when unset)."""
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "hyprune", "sources.json")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Publish command, HTTP and timer sources to core with data.publish.")
-    parser.add_argument("--config", required=True, help="sources JSON file")
+    parser.add_argument("--config", default=None,
+                        help="sources JSON file (default $XDG_CONFIG_HOME/hyprune/sources.json); re-read on change")
     parser.add_argument("--socket", default=os.environ.get("HYPRUNE_SOCKET"),
                         help="core IPC socket (default $HYPRUNE_SOCKET); required unless --once/--dry-run")
     tokens = parser.add_mutually_exclusive_group()
     tokens.add_argument("--token-file", help="file holding the launch token (re-read on each connect)")
-    tokens.add_argument("--token-fd", type=int, help="inherited descriptor to read the launch token from")
+    tokens.add_argument("--token-fd", type=int, help="inherited descriptor to read launch token lines from")
+    parser.add_argument("--token-refresh", action="store_true",
+                        default=os.environ.get("HYPRUNE_TOKEN_REFRESH") == "1",
+                        help="with --token-fd: write 'renew' to the descriptor for each reconnection's token "
+                             "(default from HYPRUNE_TOKEN_REFRESH=1)")
     parser.add_argument("--protocol", help=f"IPC protocol to offer (default: config, else {DEFAULT_PROTOCOL})")
     parser.add_argument("--dev", action="store_true",
                         help="prototype only: allow 1 s intervals (same as devFastIntervals)")
@@ -1145,6 +1314,9 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true", help="run the loop but print publications")
     parser.add_argument("-v", "--verbose", action="store_true", help="log one line per publication")
     args = parser.parse_args(argv)
+    if args.token_refresh and args.token_fd is None:
+        parser.error("--token-refresh needs --token-fd")
+    args.config = args.config or default_config_path()
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG if args.verbose else logging.INFO,
                         format="source-helper: %(levelname)s %(message)s")
     try:
@@ -1158,21 +1330,23 @@ def main(argv=None):
         return run_once(config["sources"])
     token = None
     if args.token_fd is not None:
-        with os.fdopen(args.token_fd) as stream:
-            token = stream.read().strip()
+        os.set_inheritable(args.token_fd, False)  # never passed on to commands
     elif not args.token_file:
         token = os.environ.get("HYPRUNE_SOURCES_TOKEN") or os.environ.get("HYPRUNE_MACHINES_TOKEN")
+    for name in ("HYPRUNE_SOURCES_TOKEN", "HYPRUNE_MACHINES_TOKEN", "HYPRUNE_TOKEN_REFRESH"):
+        os.environ.pop(name, None)  # commands inherit the environment: keep tokens out of it
     if args.dry_run:
         publisher = DryRunPublisher()
     else:
         if not args.socket:
             log.error("no socket: pass --socket or set HYPRUNE_SOCKET (there is deliberately no default)")
             return 2
-        if not (token or args.token_file):
+        if not (token or args.token_file or args.token_fd is not None):
             log.warning("no launch token: core will not grant data.publish")
-        publisher = Publisher(args.socket, TokenSource(args.token_file, token), config["client"],
-                              args.protocol or config["protocol"])
-    runner = Runner([Source(spec) for spec in config["sources"]], publisher)
+        publisher = Publisher(args.socket, TokenSource(args.token_file, token, args.token_fd, args.token_refresh),
+                              config["client"], args.protocol or config["protocol"])
+    watcher = ConfigWatcher(args.config, config, args.dev)
+    runner = Runner([Source(spec) for spec in config["sources"]], publisher, watcher)
     for number in (signal.SIGTERM, signal.SIGINT):
         signal.signal(number, lambda *_: runner.stop())
     try:

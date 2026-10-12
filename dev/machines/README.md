@@ -34,10 +34,11 @@ dev/machines/source-helper.py --config dev/machines/sources.example.json \
 
 | Option | Meaning |
 | --- | --- |
-| `--config FILE` | Sources configuration (below). Relative paths in it resolve against its directory. |
+| `--config FILE` | Sources configuration (below). Relative paths in it resolve against its directory. Default `$XDG_CONFIG_HOME/hyprune/sources.json` (`~/.config/hyprune/sources.json`). Re-read when it changes (below). |
 | `--socket PATH` | Core's IPC socket, `$XDG_RUNTIME_DIR/hyprune/<instance>/control.sock`. Default `$HYPRUNE_SOCKET`. There is deliberately no other default, so the helper never attaches to a session by accident. |
 | `--token-file FILE` | File holding the launch token. Re-read on every connection attempt. |
-| `--token-fd N` | Read the token once from an inherited descriptor. |
+| `--token-fd N` | Read token lines from an inherited descriptor: one line per connection. |
+| `--token-refresh` | With `--token-fd`: renew the grant for each reconnection (below). Default on when `HYPRUNE_TOKEN_REFRESH=1`. |
 | (neither) | `$HYPRUNE_SOURCES_TOKEN` (or `$HYPRUNE_MACHINES_TOKEN`). |
 | `--protocol V` | Protocol to offer in `session.hello` (default: config `protocol`, else `0.2`, the first with `data.publish`). |
 | `--dev` | Same as `"devFastIntervals": true` (below). |
@@ -53,6 +54,23 @@ in its launch manifest. Initial launch tokens are **one-use and expire 30 s afte
 starts**: start the helper promptly, and to reconnect after a dropped connection write a
 fresh token into the token file. Without the grant the helper logs
 `no data.publish grant` and retries with back-off.
+
+With `--token-fd N --token-refresh` the helper follows the same renewal protocol as the
+shell's bridge: the supervisor writes the launch token as the first line; for every later
+connection the helper writes `renew\n` to the descriptor and reads the next token line
+(waiting at most 10 s, with at most one request outstanding). The supervised live launcher
+(`dev/live`) starts the helper this way; see "Gauges: wire a script" below. The descriptor
+is not passed on to commands, and token variables are removed from their environment.
+Tokens are never logged.
+
+### Reloading the configuration
+
+The helper checks the configuration file about once a second and re-reads it when it
+changes (any edit, or an atomic replace). Added sources start, removed or disabled ones
+are withdrawn with `data.remove`, and changed ones restart; unchanged sources keep running.
+An invalid file is logged (`config not reloaded`) and the running sources stay as they
+were; a missing file (for example mid-save) is ignored. Changes to `client` or `protocol`
+need a restart.
 
 ### Against a nested session
 

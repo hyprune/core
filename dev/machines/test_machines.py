@@ -18,6 +18,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 
 HERE = pathlib.Path(__file__).resolve().parent
 SIMS = HERE / "sims"
@@ -678,11 +679,13 @@ class FakeCore:
     """A Unix socket speaking core's framing: 4-byte big-endian length + JSON-RPC 2.0."""
 
     def __init__(self, path, token, refuse_first_publish=False):
-        self.path, self.token, self.refuse = path, token, refuse_first_publish
+        # Launch tokens are one-use, like core's.
+        self.path, self.refuse = path, refuse_first_publish
+        self.tokens = {token} if isinstance(token, str) else set(token)
         self.listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.listener.bind(path)
         self.listener.listen(4)
-        self.requests, self.problems = [], []
+        self.requests, self.problems, self.connections = [], [], []
         self.lock = threading.Lock()
         threading.Thread(target=self.serve, daemon=True).start()
 
@@ -692,7 +695,23 @@ class FakeCore:
                 connection, _ = self.listener.accept()
             except OSError:
                 return
+            with self.lock:
+                self.connections.append(connection)
             threading.Thread(target=self.session, args=(connection,), daemon=True).start()
+
+    def grant(self, token):
+        with self.lock:
+            self.tokens.add(token)
+
+    def kick(self):
+        """Drop every open connection (the helper must reconnect with a fresh token)."""
+        with self.lock:
+            connections, self.connections = self.connections, []
+        for connection in connections:
+            try:
+                connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
 
     def session(self, connection):
         ids, hello = set(), False
@@ -721,7 +740,9 @@ class FakeCore:
                     if method != "session.hello":
                         self.problems.append("hello required")
                     hello = True
-                    granted = params.get("token") == self.token
+                    with self.lock:
+                        granted = params.get("token") in self.tokens
+                        self.tokens.discard(params.get("token"))
                     result = {"protocol": params["protocols"][0], "sessionId": "s",
                               "capabilities": ["data.publish"] if granted else [],
                               "methods": ["session.hello", "session.ping"] + (["data.publish", "data.remove"] if granted else []),
@@ -838,6 +859,161 @@ class HelperAgainstFakeCore(unittest.TestCase):
             self.assertGreaterEqual(len(core.methods("session.hello")), 2)
             self.assertIn("no data.publish grant", err)
             self.assertEqual(process.returncode, 0)
+
+
+class Tokens(unittest.TestCase):
+    def test_default_config_path(self):
+        with unittest.mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": "/config/home"}):
+            self.assertEqual(helper.default_config_path(), "/config/home/hyprune/sources.json")
+        with unittest.mock.patch.dict(os.environ, {"HOME": "/home/someone"}):
+            os.environ.pop("XDG_CONFIG_HOME", None)
+            self.assertEqual(helper.default_config_path(), "/home/someone/.config/hyprune/sources.json")
+
+    def test_fd_renews_after_the_first_connection(self):
+        a, b = socket.socketpair()
+        with a, b:
+            b.sendall(b"aa" * 32 + b"\n")
+            tokens = helper.TokenSource(fd=a.fileno(), refresh=True, read_timeout=1)
+            self.assertEqual(tokens.get(), "aa" * 32)
+            b.setblocking(False)
+            with self.assertRaises(BlockingIOError):
+                b.recv(16)  # the first token is the launch grant: no renewal asked
+            b.setblocking(True)
+            for token in ("bb" * 32, "cc" * 32):
+                b.sendall(token.encode() + b"\n")
+                self.assertEqual(tokens.get(), token)
+                self.assertEqual(b.recv(16), b"renew\n")
+
+    def test_fd_timeout_does_not_pile_up_renewals(self):
+        a, b = socket.socketpair()
+        with a, b:
+            b.sendall(b"aa" * 32 + b"\n")
+            tokens = helper.TokenSource(fd=a.fileno(), refresh=True, read_timeout=0.1)
+            tokens.get()
+            self.assertIsNone(tokens.get())  # the supervisor did not answer in time
+            self.assertIsNone(tokens.get())
+            b.settimeout(1)
+            self.assertEqual(b.recv(64), b"renew\n")  # one request outstanding, not two
+            b.sendall(b"bb" * 32 + b"\n")
+            self.assertEqual(tokens.get(), "bb" * 32)  # the late answer is used
+            b.setblocking(False)
+            with self.assertRaises(BlockingIOError):
+                b.recv(16)
+
+    def test_fd_without_refresh_and_eof(self):
+        read, write = os.pipe()
+        os.write(write, b"dd" * 32)  # no newline, then EOF
+        os.close(write)
+        try:
+            tokens = helper.TokenSource(fd=read, read_timeout=1)
+            self.assertEqual(tokens.get(), "dd" * 32)
+            self.assertIsNone(tokens.get())
+            self.assertTrue(tokens.closed)
+        finally:
+            os.close(read)
+
+    def test_bad_token_line_is_ignored(self):
+        a, b = socket.socketpair()
+        with a, b:
+            b.sendall(b"not-a-token\n")
+            self.assertIsNone(helper.TokenSource(fd=a.fileno(), read_timeout=1).get())
+
+
+def wait_for(test, seconds=15):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if test():
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def write_atomic(path, data):
+    temp = path.with_suffix(".tmp")
+    temp.write_text(json.dumps(data))
+    os.replace(temp, path)
+
+
+class HelperRenewalAndReload(unittest.TestCase):
+    def published(self, core, slug, key=None):
+        return [r["params"] for r in core.methods("data.publish")
+                if r["params"]["sourceId"] == f"com.hyprune.sources.{slug}" and (key is None or key in r["params"]["values"])]
+
+    def test_renews_the_grant_over_the_token_fd(self):
+        first, second = "12" * 32, "34" * 32
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            core = FakeCore(str(tmp / "control.sock"), first)
+            config = tmp / "sources.json"
+            config.write_text(json.dumps({"sources": [{"id": "tick", "kind": "timer", "timer": "pulse", "everyS": 1}]}))
+            supervisor, child = socket.socketpair()
+            supervisor.sendall(first.encode() + b"\n")
+            process = subprocess.Popen([PY, str(HERE / "source-helper.py"), "--config", str(config),
+                                        "--socket", str(tmp / "control.sock"), "--token-fd", str(child.fileno()),
+                                        "--token-refresh", "-v"],
+                                       pass_fds=(child.fileno(),), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            child.close()
+            try:
+                self.assertTrue(wait_for(lambda: self.published(core, "tick")))
+                supervisor.settimeout(1)
+                with self.assertRaises(socket.timeout):
+                    supervisor.recv(16)  # connected with the launch token alone
+                core.kick()
+                supervisor.settimeout(10)
+                self.assertEqual(supervisor.recv(16), b"renew\n")
+                core.grant(second)
+                supervisor.sendall(second.encode() + b"\n")
+                count = len(core.methods("data.publish"))
+                self.assertTrue(wait_for(lambda: len(core.methods("session.hello")) >= 2
+                                         and len(core.methods("data.publish")) > count))
+                process.send_signal(signal.SIGTERM)
+                _, err = process.communicate(timeout=10)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                supervisor.close()
+                core.close()
+            self.assertEqual(process.returncode, 0, err)
+            self.assertEqual([h["params"].get("token") for h in core.methods("session.hello")], [first, second])
+            self.assertNotIn(first, err)
+            self.assertNotIn(second, err)
+
+    def test_reloads_the_config_on_change(self):
+        token = "56" * 32
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            core = FakeCore(str(tmp / "control.sock"), token)
+            config = tmp / "sources.json"
+            pulse = {"kind": "timer", "timer": "pulse", "everyS": 1}
+            write_atomic(config, {"sources": [{"id": "a", **pulse}, {"id": "b", **pulse}]})
+            (tmp / "token").write_text(token)
+            process = subprocess.Popen([PY, str(HERE / "source-helper.py"), "--config", str(config),
+                                        "--socket", str(tmp / "control.sock"), "--token-file", str(tmp / "token")],
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                self.assertTrue(wait_for(lambda: self.published(core, "a") and self.published(core, "b")))
+                write_atomic(config, {"sources": [{"id": "b", **pulse, "key": "beats"}, {"id": "c", **pulse},
+                                                  {"id": "a", **pulse, "enabled": False}]})
+                self.assertTrue(wait_for(lambda: self.published(core, "c") and self.published(core, "b", "beats")
+                                         and core.methods("data.remove")))
+                removed = [r["params"]["sourceId"] for r in core.methods("data.remove")]
+                self.assertEqual(removed, ["com.hyprune.sources.a"])
+                count = len(self.published(core, "a"))
+                write_atomic(config, {"sources": "not a list"})  # invalid: keeps running sources
+                time.sleep(2.5)
+                self.assertEqual(len(self.published(core, "a")), count)
+                self.assertTrue(len(self.published(core, "c")) >= 2)
+                process.send_signal(signal.SIGTERM)
+                _, err = process.communicate(timeout=10)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                core.close()
+            self.assertEqual(process.returncode, 0, err)
+            self.assertIn("config not reloaded", err)
+            self.assertIn("added c; changed b; removed a", err)
+            removed = sorted(r["params"]["sourceId"] for r in core.methods("data.remove"))
+            self.assertEqual(removed, [f"com.hyprune.sources.{n}" for n in "abc"])
 
 
 if __name__ == "__main__":
