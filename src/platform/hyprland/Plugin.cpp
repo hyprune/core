@@ -13,6 +13,10 @@
 #include "sim/ViewBob.hpp"
 #include "world/Mounts.hpp"
 #include "world/Objects.hpp"
+#include "world/Catalog.hpp"
+#include <regex>
+#include <sys/inotify.h>
+#include <sys/random.h>
 #include "world/Spatial.hpp"
 #include "quests/Markers.hpp"
 #include <hyprland/src/Compositor.hpp>
@@ -214,6 +218,98 @@ struct Runtime {
     void gizmoDraw();
     Json gizmoDiagnostics();
     void projectCursor();
+    // RFC-0011 P1 objects (Objects.inc): the catalog (world package, libraries, user
+    // folder), user placements and authored overrides as world object instances, pocket
+    // items for tool 5 and the IPC 0.22 methods.
+    world::CatalogRoots catalogRoots;
+    world::ScanCache scanCache;
+    std::shared_ptr<const world::CatalogSnapshot> catalog = std::make_shared<world::CatalogSnapshot>();
+    std::vector<world::CatalogEntry> packageCatalog;
+    uint64_t catalogRevision = 0;
+    std::future<world::CatalogSnapshot> catalogScan;
+    bool catalogDirty = true;
+    std::chrono::steady_clock::time_point catalogQuiet{};
+    int catalogWatch = -1;
+    std::map<int, std::filesystem::path> catalogWatches;
+    struct LibraryJob {
+        world::InstallResult installed;
+        world::CatalogSnapshot snapshot;
+    };
+    std::future<LibraryJob> libraryInstall;
+    struct AssetSlot {
+        std::string error;
+        int index = -1; // world->objectAssets index once merged
+        world::CatalogEntry entry;
+        std::future<std::shared_ptr<world::World>> load;
+    };
+    std::map<std::string, AssetSlot> assetSlots; // by ref, for the loaded world
+    unsigned compressedFormats = 0;
+    bool compressedKnown = false;
+    size_t authoredInstances = 0, sceneCollision = 0;
+    std::vector<unsigned> originalCollisionNodes;
+    struct ObjectInfo {
+        std::string id, source, ref, name, areaId, state = "active", rule, support;
+        bool movable = false, locked = false, character = false;
+        float scaleMin = .01f, scaleMax = 100;
+        int index = -1; // world->objectInstances index, -1 when not instanced (missing, loading)
+        Vec3 position{};
+        std::array<float, 4> rotation{0, 0, 0, 1};
+        float scale = 1;
+        const world::CatalogEntry *entry = nullptr; // resolved catalog entry (user placements)
+    };
+    std::vector<ObjectInfo> objectInfos; // authored instances, then this world's user placements
+    std::map<std::string, std::string> objectVerified; // placement id -> pose key checked at load
+    std::set<std::string> objectNotices;              // one-shot notices (blocked, substituted, missing)
+    struct PocketObject {
+        std::string itemId, ref, name;
+    };
+    std::vector<PocketObject> pocketObjects;
+    uint64_t pocketSerial = 0;
+    bool objectsDirty = true;
+    uint64_t builtObjects = ~0ull, instanceRevision = 0; // collision follows instanceRevision
+    struct ObjectGhost {
+        bool active = false, valid = false, surface = false;
+        std::string ref, rule, message;
+        int asset = -1;
+        interaction::Transform pose;
+        float distance = -1;
+    } objectGhost;
+    std::chrono::steady_clock::time_point protectedNotice{};
+    void catalogInit();
+    void catalogTick();
+    void catalogWatchDirs();
+    const world::CatalogEntry *catalogEntry(const std::string &ref, std::string *substitute = nullptr);
+    Json catalogEntries();
+    void objectsTick();
+    void objectsSync();
+    void objectsWorldLoaded();
+    ObjectInfo *objectInfo(const std::string &id);
+    ObjectInfo *selectedInfo();
+    interaction::Transform objectPose(const std::string &id);
+    int assetFor(const world::CatalogEntry &);
+    interaction::PlacementVerdict objectVerdict(int asset, const interaction::Transform &, const std::string &support,
+                                                std::optional<size_t> self, const std::set<std::string> &waived = {},
+                                                bool player = true);
+    std::optional<std::string> budgetRefusal(const world::CatalogEntry &, const std::string &exceptId = "");
+    std::set<std::string> objectWaived(int asset, const interaction::Transform &start, std::optional<size_t> self);
+    std::optional<interaction::Transform> placeAhead(const world::CatalogEntry &, int asset, bool surface, float *distance,
+                                                     std::string *why);
+    Json objectsState();
+    Json pocketObjectsJson() const;
+    std::optional<Json> objectsMethod(const std::string &method, const Json &params);
+    std::string newPlacementId() const;
+    std::string areaAt(Vec3) const;
+    Json placementRecord(const ObjectInfo &, const interaction::Transform &);
+    void objectEdit(const std::string &plainId, Json before, Json after);
+    void objectRefused(const std::string &what, const interaction::PlacementVerdict &);
+    void objectNotice(const std::string &code, const std::string &message, const std::string &once = "");
+    bool pocketSelected() const;
+    void placeFromPocket(bool surface);
+    void pocketAimedObject();
+    void objectGhostTick();
+    void objectGhostDraw(interaction::GizmoFrame &, const interaction::GizmoView &);
+    void scaleObject(const std::string &id, float steps);
+    void resetObject(const std::string &id);
 
     Json config = interaction::defaultConfig(), configured = config;
     std::set<std::string> graphicsOverrides;
@@ -1279,7 +1375,8 @@ void Runtime::publish() {
           {"tool", editor.slot},
           {"submode", editor.submode()},
           {"selectedId", editor.selected.empty() ? Json(nullptr) : Json(editor.selected)},
-          {"selectedKind", editor.kind},
+          {"selectedKind", editor.kind == "object" && !editor.selected.starts_with("object:") ? "node" : editor.kind},
+          {"gizmo", {{"space", editor.localAxes ? "local" : "world"}, {"pivot", editor.pivotBase ? "base" : "centre"}, {"snap", editor.snap}}},
           {"paths", editor.paths},
           {"objects", editor.objects},
           {"locked", Json::array()},
@@ -1317,6 +1414,7 @@ void Runtime::publish() {
         {"location", control.location},
         {"integrations", {{"sources", control.sources}}}};
     publication["markers"] = markers.stateKey();
+    publication["objects"] = objectsState();
     for (auto &e : capture.entries)
         if (world && editor.locked(world->id, e.instance))
             publication["editor"]["locked"].push_back(e.surface.id);
@@ -1412,6 +1510,7 @@ void Runtime::finishLoad() {
         objectModels.clear();
         renderer.transforms.clear();
         originalCollision = world->collision;
+        objectsWorldLoaded();
         hands.end();
         auto transition = control.location["transition"];
         control.reset(world.get());
@@ -2000,6 +2099,13 @@ void Runtime::reticleTick() {
                 next = {"invalid", "grab", h->second.distance, config["player"]["reach_grab"]};
             else
                 next.state = "neutral";
+        } else if (auto o = instanceAim()) {
+            // Movable world objects: grab in reach; a locked one is refused.
+            auto *info = objectInfo(o->first.substr(7));
+            if (info && info->locked)
+                next = {"invalid", "grab", o->second.distance, config["player"]["reach_grab"]};
+            else
+                ranged(o->second.distance, "reach_grab", "grab");
         } else
             next.state = "neutral";
     } else {
@@ -2041,7 +2147,14 @@ void Runtime::reticleTick() {
                 next = {"valid", "select", o->second.distance, -1};
             break;
         case 5:
-            if (unplaced) {
+            if (pocketSelected()) {
+                // The object ghost's verdict: placeable here, out of reach, or refused.
+                if (objectGhost.active && objectGhost.asset >= 0 && !objectGhost.message.empty() && objectGhost.rule == "support")
+                    next = {"invalid", "place", objectGhost.distance, config["player"]["reach_placement"]};
+                else if (objectGhost.active && objectGhost.asset >= 0)
+                    next = {objectGhost.valid ? "valid" : objectGhost.rule == "reach" ? "out_of_range" : "invalid", "place",
+                            objectGhost.distance, config["player"]["reach_placement"]};
+            } else if (unplaced) {
                 if (mountTarget(*unplaced))
                     next = {"valid", "mount", -1, config["player"]["reach_mount"]};
                 else if (blocker) {
@@ -2061,6 +2174,12 @@ void Runtime::reticleTick() {
                     ranged(h->second.distance, "reach_placement", "pocket");
                 else
                     next = {"invalid", "pocket", h->second.distance, config["player"]["reach_placement"]};
+            } else if (auto o = instanceAim()) {
+                auto *info = objectInfo(o->first.substr(7));
+                if (info && info->source == "user" && !info->locked)
+                    ranged(o->second.distance, "reach_placement", "pocket");
+                else
+                    next = {"invalid", "pocket", o->second.distance, config["player"]["reach_placement"]};
             }
             break;
         default:
@@ -2791,9 +2910,6 @@ void Runtime::debugCapture() {
     // IPC 0.17 shells offer a note prompt; the capture never waits for it.
     ipc->notify("capture.taken", {{"captureId", captureId}, {"timestampMs", stamp}, {"mode", captureMode}});
 }
-namespace {
-interaction::Transform objectTransform(const interaction::Tools &, const world::World &, const std::string &);
-}
 void Runtime::action(interaction::Action a) {
     if (control.photoHeld() && a.name != "capture" && a.name != "debug" && a.name != "record.toggle" && a.name != "world.toggle") return;
     if (a.name == "record.toggle") {
@@ -2852,15 +2968,27 @@ void Runtime::action(interaction::Action a) {
     } else if (a.name == "carry" || a.name == "resize") {
         uint32_t code = a.name == "carry" ? config["input"]["carry_button"].get<uint32_t>()
                                           : config["input"]["resize_button"].get<uint32_t>();
-        if (a.name == "carry" && a.pressed && editor.slot == 4 && !aim() && !gizmo.dragging())
-            if (auto object = objectAim()) {
+        // Carry needs no particular tool for movable world objects (RFC-0011); scene nodes
+        // that own collision stay tool 4 targets.
+        if (a.name == "carry" && a.pressed && !aim() && !gizmo.dragging())
+            if (auto object = editor.slot == 4 ? objectAim() : instanceAim()) {
+                if (auto *info = object->first.starts_with("object:") ? objectInfo(object->first.substr(7)) : nullptr) {
+                    if (info->locked) {
+                        objectNotice("object.locked", info->name + " is locked");
+                        reticleFlash = {"invalid", "grab", object->second.distance, config["player"]["reach_grab"]};
+                        reticleFlashUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(700);
+                        return;
+                    }
+                    if (tooFar(object->second.distance, "reach_grab", "grab"))
+                        return;
+                }
                 if (editor.selected != object->first)
                     gizmo.resetFlips();
                 editor.selected = object->first;
                 editor.kind = "object";
                 objectCarry = true;
                 objectDistance = object->second.distance;
-                dragStart = selectedTransform = objectTransform(editor, *world, editor.selected);
+                dragStart = selectedTransform = objectPose(editor.selected);
                 dragPoint = object->second.point - dragStart.position;
                 editBefore = currentRecord(world->id, editor.selected);
                 preview = {};
@@ -2889,11 +3017,16 @@ void Runtime::action(interaction::Action a) {
             auto object = objectCarry ? std::optional<std::pair<std::string, interaction::WorldHit>>{} : objectAim();
             if (objectCarry || object) {
                 if (object) {
+                    if (auto *info = object->first.starts_with("object:") ? objectInfo(object->first.substr(7)) : nullptr;
+                        info && info->locked) {
+                        objectNotice("object.locked", info->name + " is locked");
+                        return;
+                    }
                     editor.selected = object->first;
                     editor.kind = "object";
-                    selectedTransform = objectTransform(editor, *world, editor.selected);
+                    selectedTransform = objectPose(editor.selected);
                 } else
-                    selectedTransform = objectTransform(editor, *world, editor.selected);
+                    selectedTransform = objectPose(editor.selected);
                 if (a.name == "distance") {
                     if (objectCarry)
                         objectDistance = std::clamp(objectDistance * std::pow(1.12f, a.value), .3f, 30.f);
@@ -3062,25 +3195,9 @@ Vec3 objectOrigin(const world::World &w, const std::string &id) {
             }
     return found ? (lo + hi) * .5f : Vec3{};
 }
-interaction::Transform objectTransform(const interaction::Tools &editor, const world::World &w, const std::string &id) {
-    interaction::Transform t;
-    t.position = objectOrigin(w, id);
-    if (auto k = instanceIndex(w, id)) {
-        auto &inst = w.objectInstances[*k];
-        t.rotation = inst.rotation;
-        t.scale = {inst.authoredScale, inst.authoredScale, inst.authoredScale};
-    }
-    for (auto &o : editor.objects)
-        if (o["worldId"] == w.id && o["objectId"] == id) {
-            t.position = {o["position"][0], o["position"][1], o["position"][2]};
-            t.rotation = o["rotation"].get<std::array<float, 4>>();
-            t.scale = {o["scale"][0], o["scale"][1], o["scale"][2]};
-            break;
-        }
-    return t;
-}
 } // namespace
 #include "Gizmo.inc"
+#include "Objects.inc"
 void Runtime::saveEditor() {
     if (session.playing) return;
     auto value = editor.saved();
@@ -3154,14 +3271,18 @@ Json Runtime::unplacedState() {
         };
         return rank(a) < rank(b);
     });
-    if (!windows.empty() &&
-        std::none_of(windows.begin(), windows.end(), [&](auto &v) { return v["surfaceId"] == unplacedSelected; }))
-        unplacedSelected = windows[0]["surfaceId"];
-    if (windows.empty())
-        unplacedSelected.clear();
-    return {{"preview", active && editor.slot == 5 && !freeCursor && !windows.empty()},
-            {"count", windows.size()},
+    // RFC-0011: the pocket queue holds windows and objects; the selection is either.
+    bool selected = std::any_of(windows.begin(), windows.end(), [&](auto &v) { return v["surfaceId"] == unplacedSelected; }) ||
+                    pocketSelected();
+    if (!selected)
+        unplacedSelected = !windows.empty() ? windows[0]["surfaceId"].get<std::string>()
+                           : !pocketObjects.empty() ? pocketObjects.back().itemId
+                                                    : "";
+    bool any = !windows.empty() || !pocketObjects.empty();
+    return {{"preview", active && editor.slot == 5 && !freeCursor && any},
+            {"count", windows.size() + pocketObjects.size()},
             {"windows", windows},
+            {"objects", pocketObjectsJson()},
             {"selectedId", unplacedSelected.empty() ? Json(nullptr) : Json(unplacedSelected)}};
 }
 std::optional<std::pair<const Json *, surfaces::Surface>> Runtime::mountTarget(const Capture::Entry &e) {
@@ -3226,6 +3347,21 @@ void Runtime::contentScale(bool reset, float steps) {
     auto e = hands.gesture != interaction::Gesture::None ? capture.find(hands.pose.id)
              : hit                                       ? capture.find(hit->first)
                                                          : nullptr;
+    if (!e && hands.gesture == interaction::Gesture::None && !objectCarry) {
+        // On a movable world object: content.scale scales it by 1.12 per step within its
+        // movable.scale range; window.reset resets it (RFC-0011 "Tools on objects").
+        if (auto o = instanceAim()) {
+            auto id = o->first.substr(7);
+            if (reset)
+                resetObject(id);
+            else
+                scaleObject(id, steps);
+            if (editor.kind == "object" && editor.selected == o->first)
+                selectedTransform = objectPose(editor.selected);
+            publish();
+        }
+        return;
+    }
     if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance) || !e->window || !e->window->m_target)
         return;
     auto w = e->window.lock();
@@ -3329,6 +3465,11 @@ void Runtime::toolInput(const std::string &slot, interaction::Action event) {
     if (action == "placement.pocket") {
         auto h = aim();
         auto e = h ? capture.find(h->first) : nullptr;
+        if (!e && instanceAim()) {
+            pocketAimedObject();
+            publish();
+            return;
+        }
         if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance) || tooFar(h->second.distance, "reach_placement", "pocket"))
             return;
         cancelGrab();
@@ -3338,14 +3479,19 @@ void Runtime::toolInput(const std::string &slot, interaction::Action event) {
                     {{"level", "info"}, {"code", "placement.pocketed"}, {"message", "Pocketed " + e->instance.title}});
         refresh();
     } else if (action == "placement.cycle") {
-        auto list = unplacedState()["windows"];
+        auto state = unplacedState();
+        std::vector<std::string> list;
+        for (auto &w : state["windows"])
+            list.push_back(w["surfaceId"]);
+        for (auto &o : pocketObjects)
+            list.push_back(o.itemId);
         if (!list.empty()) {
             int at = 0;
             for (size_t i = 0; i < list.size(); ++i)
-                if (list[i]["surfaceId"] == unplacedSelected)
+                if (list[i] == unplacedSelected)
                     at = int(i);
             at = (at + int(list.size()) + (event.value > 0 ? 1 : -1)) % int(list.size());
-            unplacedSelected = list[at]["surfaceId"];
+            unplacedSelected = list[at];
         }
     } else if (action == "tool.cycle") {
         editor.wheel(event.value > 0 ? 1 : -1);
@@ -3376,6 +3522,11 @@ void Runtime::toolInput(const std::string &slot, interaction::Action event) {
 void Runtime::toolClick(const std::string &action) {
     if (!world)
         return;
+    if ((action == "placement.ahead" || action == "placement.surface") && pocketSelected()) {
+        placeFromPocket(action == "placement.surface");
+        publish();
+        return;
+    }
     if (action == "placement.ahead" || action == "placement.surface") {
         auto preview = placementPreview();
         if (!preview)
@@ -3484,7 +3635,7 @@ void Runtime::toolClick(const std::string &action) {
                     return;
             }
         if (editor.kind == "object")
-            selectedTransform = objectTransform(editor, *world, editor.selected);
+            selectedTransform = objectPose(editor.selected);
         if (gizmoBegin())
             return;
     }
@@ -3506,7 +3657,7 @@ void Runtime::toolClick(const std::string &action) {
             gizmo.resetFlips();
         editor.selected = h->first;
         editor.kind = "object";
-        selectedTransform = objectTransform(editor, *world, editor.selected);
+        selectedTransform = objectPose(editor.selected);
         publish();
     }
 }
@@ -3519,7 +3670,7 @@ void Runtime::toolsTick() {
     // Object carry (Super+LMB, tool 4) previews like a gizmo drag; release commits
     // the last valid pose (RFC-0011 placement rules).
     if (objectCarry && editor.kind == "object") {
-        auto candidate = preview.active ? preview.pose : objectTransform(editor, *world, editor.selected);
+        auto candidate = preview.active ? preview.pose : objectPose(editor.selected);
         candidate.position = camera.position + pointerRay() * objectDistance - dragPoint;
         previewObject(candidate, true);
     }
@@ -3565,6 +3716,8 @@ void Runtime::toolsTick() {
     // Records of world objects stay (dormant while their instance is absent, RFC-0011).
     Json kept = Json::array();
     for (auto &o : editor.objects) {
+        if (!o.contains("objectId") || !o["objectId"].is_string())
+            continue; // not a scene-node record: dropped
         std::string id = o["objectId"];
         bool mine = o["worldId"] == world->id, instance = id.starts_with("object:");
         auto node = mine && !instance ? editorNode(*world, id) : std::optional<unsigned>{0};
@@ -3593,13 +3746,15 @@ void Runtime::toolsTick() {
             auto node = instanceIndex(*world, id) ? std::nullopt : editorNode(*world, id);
             if (!node)
                 continue;
-            auto matrix = objectTransform(editor, *world, id).matrix(objectOrigin(*world, id));
+            auto matrix = objectPose(id).matrix(objectOrigin(*world, id));
             for (size_t n = 0; n < world->nodeParents.size(); n++)
                 if (belongs(*world, n, *node))
                     committed[n] = matrix;
         }
+    objectGhostTick();
     auto instances = applyInstanceModels();
-    if (committed != objectModels || instances != instanceOverrides) {
+    if (committed != objectModels || instances != instanceOverrides || builtObjects != instanceRevision) {
+        builtObjects = instanceRevision;
         std::set<size_t> relight;
         for (auto &[k, m] : instances)
             if (!instanceOverrides.contains(k) || !(instanceOverrides.at(k) == m))
@@ -3609,9 +3764,13 @@ void Runtime::toolsTick() {
                 relight.insert(k);
         objectModels = committed;
         instanceOverrides = instances;
-        world->collision = originalCollision;
+        // Scene collision (moved with committed node transforms), then every drawn
+        // instance's proxy at its committed pose; hidden and blocked ones have none.
+        size_t scene = std::min({sceneCollision, originalCollision.size(), originalCollisionNodes.size()});
+        world->collision.assign(originalCollision.begin(), originalCollision.begin() + scene);
+        world->collisionNodes.assign(originalCollisionNodes.begin(), originalCollisionNodes.begin() + scene);
         for (size_t i = 0; i < world->collision.size(); i++)
-            if (i < world->collisionNodes.size() && committed.contains(world->collisionNodes[i])) {
+            if (committed.contains(world->collisionNodes[i])) {
                 auto m = committed.at(world->collisionNodes[i]);
                 auto &t = world->collision[i];
                 t = {m.point(t.a), m.point(t.b), m.point(t.c)};
@@ -3619,11 +3778,15 @@ void Runtime::toolsTick() {
         for (auto &[k, m] : instances) {
             auto &inst = world->objectInstances[k];
             auto &asset = world->objectAssets[inst.asset];
-            for (size_t j = 0; j < inst.collisionCount && j < asset.collision.size(); ++j)
-                if (inst.collisionFirst + j < world->collision.size()) {
-                    auto &t = asset.collision[j];
-                    world->collision[inst.collisionFirst + j] = {m.point(t.a), m.point(t.b), m.point(t.c)};
-                }
+            inst.collisionFirst = world->collision.size();
+            inst.collisionCount = 0;
+            if (inst.hidden)
+                continue;
+            for (auto &t : asset.collision) {
+                world->collision.push_back({m.point(t.a), m.point(t.b), m.point(t.c)});
+                world->collisionNodes.push_back(world::objectCollisionNode);
+                ++inst.collisionCount;
+            }
         }
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         layout.invalidateCollision();
@@ -3702,7 +3865,7 @@ void Runtime::toolsTick() {
             } else
                 editor.selected.clear();
         } else
-            selectedTransform = objectTransform(editor, *world, editor.selected);
+            selectedTransform = objectPose(editor.selected);
     }
     gizmoDraw();
 }
@@ -4005,6 +4168,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     }
     if (locked())
         throw ipc::Error(-32005, "session locked");
+    if (world::objectMethods().contains(method))
+        return objectsMethod(method, params);
     if (method == "workspace.bind") {
         if (params.size() != 3 || !params.at("id").is_number_integer())
             throw ipc::Error(-32602, "invalid area binding");
@@ -4387,6 +4552,7 @@ void Runtime::tick() {
     // This also lets a newer location cancel an in-flight mapping request.
     safe([&] { workspaceLocation(); });
     finishLoad();
+    objectsTick();
     if (locked() && active)
         exit();
     if (auto m = monitor.lock(); m && presentedMonitor != monitor) {
@@ -5120,6 +5286,29 @@ int luaCamera(lua_State *state) {
         j["presentLog"].push_back(Json(p));
     runtime->renderer.presentLog.clear();
     j["collisionChecksum"] = collisionSum;
+    // RFC-0011 objects: the tool 5 ghost, instance draw state and asset uploads.
+    {
+        auto &g = runtime->objectGhost;
+        Json instances = Json::array();
+        if (runtime->world)
+            for (auto &inst : runtime->world->objectInstances)
+                instances.push_back({{"id", inst.id}, {"asset", inst.asset}, {"hidden", inst.hidden},
+                                     {"collision", {inst.collisionFirst, inst.collisionCount}},
+                                     {"center", {inst.center.x, inst.center.y, inst.center.z}}, {"radius", inst.radius}});
+        Json slots = Json::object();
+        for (auto &[ref, slot] : runtime->assetSlots)
+            slots[ref] = {{"index", slot.index}, {"error", slot.error}, {"loading", slot.load.valid()}};
+        j["objects"] = {{"ghost", {{"active", g.active}, {"valid", g.valid}, {"asset", g.asset}, {"rule", g.rule}, {"message", g.message},
+                                   {"distance", g.distance}, {"position", {g.pose.position.x, g.pose.position.y, g.pose.position.z}},
+                                   {"rotation", g.pose.rotation}}},
+                        {"instances", instances},
+                        {"assets", slots},
+                        {"uploading", runtime->renderer.objectAssetsPending()},
+                        {"worldAssets", runtime->world ? runtime->world->objectAssets.size() : 0},
+                        {"unplacedSelected", runtime->unplacedSelected},
+                        {"catalogScanning", runtime->catalogScan.valid()},
+                        {"selected", runtime->editor.selected}};
+    }
     j["markers"] = {{"mode", runtime->markers.mode},
                     {"state", runtime->markers.stateKey()},
                     {"layout", runtime->renderer.markerDiagnostics},
@@ -5179,7 +5368,17 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         runtime->editorFile = std::filesystem::path(getenv("HOME")) / ".local/state/hyprune/editor.json";
     if (std::filesystem::exists(runtime->editorFile))
         runtime->editor.restore(interaction::readJSON(runtime->editorFile));
+    if (runtime->editor.migrated) {
+        // Version 1 kept world-object transforms in objects; keep the old file once.
+        std::error_code ec;
+        auto backup = runtime->editorFile;
+        backup += ".v1";
+        if (!std::filesystem::exists(backup, ec))
+            std::filesystem::copy_file(runtime->editorFile, backup, ec);
+        interaction::atomicJSON(runtime->editorFile, runtime->editor.saved());
+    }
     runtime->lastEditor = runtime->editor.saved();
+    runtime->catalogInit();
     const char *installed = getenv("HYPRUNE_WORLD_DIR");
     runtime->installed = installed ? installed : std::string(getenv("HOME")) + "/.local/share/hyprune/worlds";
     const char *dir = getenv("XDG_RUNTIME_DIR");
@@ -5242,6 +5441,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     {"input.capture.cancel", "input.control"},
                     {"movement.set", "movement.control"},
                     {"runtime.exit", "runtime.control"}});
+    for (auto &[name, grant] : hyprune::world::objectMethods())
+        methods.insert({name, grant});
     runtime->ipc->advertise(std::move(methods));
     runtime->deferInput([] {
         runtime->applyGraphics(runtime->graphicsFile.current);
@@ -5280,7 +5481,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     HyprlandAPI::addLuaFunction(handle, "hyprune", "gizmo_probe", [](lua_State *state) {
         Json j = nullptr;
         if (runtime && runtime->world && runtime->editor.kind == "object" && !runtime->editor.selected.empty()) {
-            auto t = objectTransform(runtime->editor, *runtime->world, runtime->editor.selected);
+            auto t = runtime->objectPose(runtime->editor.selected);
             auto box = runtime->selectionBox(t);
             Vec3 target{float(luaL_checknumber(state, 1)), float(luaL_checknumber(state, 2)), float(luaL_checknumber(state, 3))};
             t.position += target - box.centre; // (x, y, z) is the bounds centre

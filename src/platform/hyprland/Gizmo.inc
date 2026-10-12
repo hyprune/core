@@ -132,6 +132,8 @@ interaction::PlacementScene Runtime::placementScene() {
         auto &o = world->objectInstances[*instance];
         size_t first = o.collisionFirst, count = o.collisionCount;
         s.ignore = [first, count](unsigned id) { return id >= first && id < first + count; };
+        if (auto *i = selectedInfo())
+            s.support = i->support; // rule 3 per movable.surfaces (advisory for world 0.8 objects)
     } else if (node) {
         auto w = world;
         unsigned root = *node;
@@ -213,6 +215,8 @@ std::set<std::string> Runtime::waivedRules(const interaction::Transform &t) {
     return interaction::brokenSoftRules(scene, selectionBox(t), selectionTriangles(t));
 }
 Json Runtime::objectRecord(const interaction::Transform &t) {
+    if (auto *i = selectedInfo())
+        return placementRecord(*i, t); // a world object instance: its override or placement record
     auto b = layout.binding(monitor && monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
     auto scale = instanceIndex(*world, editor.selected) ? Vec3{t.scale.x, t.scale.x, t.scale.x} : t.scale;
     return {{"worldId", world->id},
@@ -223,12 +227,36 @@ Json Runtime::objectRecord(const interaction::Transform &t) {
             {"scale", array3(scale)}};
 }
 Json Runtime::currentRecord(const std::string &worldId, const std::string &id) {
+    if (id.starts_with("object:")) {
+        auto plain = id.substr(7);
+        auto o = editor.override(worldId, plain);
+        return o.is_null() ? editor.placement(worldId, plain) : o;
+    }
     for (auto &o : editor.objects)
         if (o["worldId"] == worldId && o["objectId"] == id)
             return o;
     return nullptr;
 }
 void Runtime::writeObjectRecord(const std::string &worldId, const std::string &id, const Json &record) {
+    if (id.starts_with("object:")) {
+        // World object instances live in the RFC-0011 overlay: an authored instance's
+        // override or a user placement record.
+        auto plain = id.substr(7);
+        bool authored = !editor.override(worldId, plain).is_null() || (record.is_object() && record.contains("objectId"));
+        if (world && worldId == world->id)
+            authored = std::any_of(world->objectInstances.begin(),
+                                   world->objectInstances.begin() + std::min(authoredInstances, world->objectInstances.size()),
+                                   [&](auto &i) { return i.id == plain; });
+        if (authored)
+            editor.setOverride(worldId, plain, record);
+        else
+            editor.setPlacement(worldId, plain, record);
+        ++objectRevision;
+        objectsSync();
+        return;
+    }
+    if (id.empty())
+        return;
     auto it = std::find_if(editor.objects.begin(), editor.objects.end(),
                            [&](auto &o) { return o["worldId"] == worldId && o["objectId"] == id; });
     if (record.is_null()) {
@@ -244,14 +272,19 @@ void Runtime::writeObjectRecord(const std::string &worldId, const std::string &i
 }
 // Commits an object pose (outside a drag): refused when it breaks a placement rule.
 bool Runtime::commitObject(const interaction::Transform &t, const std::string &what) {
-    auto verdict = placementCheck(t, waivedRules(objectTransform(editor, *world, editor.selected)));
+    if (auto *i = selectedInfo(); i && (i->locked || !i->movable || i->character)) {
+        objectNotice(i->character ? "object.protected" : "object.locked", what + " refused: " + i->name + (i->character ? " is protected" : " is locked"));
+        return false;
+    }
+    auto verdict = placementCheck(t, waivedRules(objectPose(editor.selected)));
     if (!verdict.ok) {
         ipc->notify("runtime.notice", {{"level", "info"}, {"code", "placement.blocked"}, {"message", what + " refused: " + verdict.message}});
         return false;
     }
-    auto before = currentRecord(world->id, editor.selected), after = objectRecord(t);
-    writeObjectRecord(world->id, editor.selected, after);
-    editor.recordEdit("object", world->id, editor.selected, before, after);
+    auto id = editor.selected;
+    auto before = currentRecord(world->id, id), after = objectRecord(t);
+    editor.recordEdit("object", world->id, id, before, after);
+    writeObjectRecord(world->id, id, after);
     selectedTransform = t;
     saveEditor();
     return true;
@@ -304,12 +337,17 @@ void Runtime::applyUndo(bool redo) {
         return;
     }
     auto &value = redo ? edit->after : edit->before;
+    if (edit->kind == "object" && (!world || edit->worldId != world->id)) {
+        ipc->notify("runtime.notice", {{"level", "info"}, {"code", redo ? "editor.redo" : "editor.undo"},
+                                       {"message", "Skipped an object edit in another world"}});
+        return;
+    }
     if (edit->kind == "object")
         writeObjectRecord(edit->worldId, edit->id, value);
     else if (auto e = capture.find(edit->id))
         applyWindowPose(*e, value);
     if (editor.kind == "object" && editor.selected == edit->id && world)
-        selectedTransform = objectTransform(editor, *world, editor.selected);
+        selectedTransform = objectPose(editor.selected);
     saveEditor();
     ipc->notify("runtime.notice", {{"level", "info"}, {"code", redo ? "editor.redo" : "editor.undo"},
                                    {"message", std::string(redo ? "Redid " : "Undid ") + (edit->kind == "object" ? "object" : "window") + " transform"}});
@@ -321,7 +359,7 @@ void Runtime::dropSelection(bool align) {
         ipc->notify("runtime.notice", {{"level", "info"}, {"code", "gizmo.drop"}, {"message", "Select an object first"}});
         return;
     }
-    auto t = objectTransform(editor, *world, editor.selected);
+    auto t = objectPose(editor.selected);
     auto scene = placementScene();
     auto box = selectionBox(t);
     if (!align) {
@@ -357,14 +395,20 @@ void Runtime::dropSelection(bool align) {
     t.position += point - (b.centre - normal * b.extent(normal));
     commitObject(t, "Align to surface");
 }
-// World 0.8 placed objects under the pointer (HYPRUNE_GIZMO_OBJECTS=1): swept
-// sphere, then the asset's rest-pose triangles at the instance pose.
+// Movable world object instances under the pointer: swept sphere, then the asset's
+// rest-pose triangles at the instance pose (node animation is ignored).
 std::optional<std::pair<std::string, interaction::WorldHit>> Runtime::instanceAim() {
-    if (!gizmoObjects || !world)
+    if (!world)
         return {};
     auto o = pointerCamera().position, d = pointerRay();
     std::optional<std::pair<std::string, interaction::WorldHit>> best;
-    for (auto &inst : world->objectInstances) {
+    // Movable instances only (the movable trait; locked ones too, they show the lock);
+    // characters are never targets (RFC-0011 "Characters are protected").
+    for (auto &info : objectInfos) {
+        if (info.index < 0 || info.state != "active" || !info.movable || info.character ||
+            size_t(info.index) >= world->objectInstances.size())
+            continue;
+        auto &inst = world->objectInstances[info.index];
         auto &asset = world->objectAssets[inst.asset];
         auto to = inst.center - o;
         float along = dot(to, d);
@@ -381,8 +425,8 @@ std::optional<std::pair<std::string, interaction::WorldHit>> Runtime::instanceAi
     }
     return best;
 }
-// Instance models: committed overlay records, then the live preview (render only).
-// Returns the committed overrides (for collision and relighting on change).
+// Instance models: committed poses, then the live preview (render only). Returns the
+// committed models (collision and relighting follow their changes).
 std::map<size_t, Mat4> Runtime::applyInstanceModels() {
     std::map<size_t, Mat4> committed;
     if (!world)
@@ -391,11 +435,9 @@ std::map<size_t, Mat4> Runtime::applyInstanceModels() {
         auto &inst = world->objectInstances[k];
         auto &asset = world->objectAssets[inst.asset];
         auto id = "object:" + inst.id;
-        auto pose = objectTransform(editor, *world, id);
+        auto pose = objectPose(id);
         auto model = world::instanceModel(pose.position, pose.rotation, pose.scale.x);
-        bool overridden = !currentRecord(world->id, id).is_null();
-        if (overridden)
-            committed[k] = model;
+        committed[k] = model;
         float scale = pose.scale.x;
         if (preview.active && editor.kind == "object" && editor.selected == id) {
             model = world::instanceModel(preview.pose.position, preview.pose.rotation, preview.pose.scale.x);
@@ -432,8 +474,9 @@ void Runtime::commitPreview() {
                    length(preview.pose.scale - start.scale) > 1e-5f;
     if (changed) {
         auto after = objectRecord(preview.pose);
-        writeObjectRecord(world->id, editor.selected, after);
-        editor.recordEdit("object", world->id, editor.selected, before, after);
+        auto id = editor.selected; // writing syncs the instances, which may change the selection
+        editor.recordEdit("object", world->id, id, before, after);
+        writeObjectRecord(world->id, id, after);
     }
     if (!preview.valid)
         ipc->notify("runtime.notice", {{"level", "info"}, {"code", "placement.blocked"},
@@ -469,6 +512,10 @@ bool Runtime::gizmoBegin() {
     auto part = gizmo.pick(x, y);
     if (part == interaction::Part::None)
         return false;
+    if (auto *i = selectedInfo(); i && (i->locked || !i->movable)) {
+        objectNotice("object.locked", i->name + " is locked");
+        return true; // handles shown, edits refused
+    }
     dragStart = selectedTransform;
     dragPivot = selectionPivot(dragStart);
     if (!gizmo.begin(part, x, y, {dragPivot, dragStart.rotation, dragStart.scale}, view))
@@ -508,6 +555,10 @@ interaction::Transform Runtime::gizmoTransform(const interaction::Gizmo::Result 
         t.position = dragPivot + rotate(dragStart.rotation, local);
     }
     t.scale = {std::clamp(t.scale.x, .01f, 100.f), std::clamp(t.scale.y, .01f, 100.f), std::clamp(t.scale.z, .01f, 100.f)};
+    if (auto *i = selectedInfo()) { // uniform, within the asset's movable.scale range
+        float s = std::clamp(t.scale.x, i->scaleMin, i->scaleMax);
+        t.scale = {s, s, s};
+    }
     return t;
 }
 void Runtime::gizmoUpdate() {
@@ -660,6 +711,20 @@ void Runtime::gizmoDraw() {
     renderer.gizmo = {};
     renderer.readouts.clear();
     gizmoHover = interaction::Part::None;
+    if (world && editor.slot == 5 && objectGhost.active && !freeCursor && !control.uiVisible()) {
+        // Tool 5 with an object in the pocket: its placement ghost and what it says.
+        auto view = gizmoView();
+        interaction::GizmoFrame frame;
+        objectGhostDraw(frame, view);
+        renderer.gizmo = std::move(frame);
+        auto item = std::find_if(pocketObjects.begin(), pocketObjects.end(), [&](auto &p) { return p.itemId == unplacedSelected; });
+        std::string text = item == pocketObjects.end() ? "" : item->name;
+        if (!objectGhost.valid && !objectGhost.message.empty())
+            text += "   BLOCKED: " + objectGhost.message;
+        if (!text.empty())
+            renderer.readouts.push_back({.5f + 22.f / view.width, .5f + 26.f / view.height, text,
+                                         objectGhost.valid ? Vec3{.875f, .74f, .41f} : Vec3{1, .45f, .4f}});
+    }
     if (!world || editor.slot != 4 || editor.selected.empty() || freeCursor || control.uiVisible()) {
         if (gizmo.dragging())
             gizmoRelease(true);
