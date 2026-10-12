@@ -43,6 +43,10 @@ int main(int argc, char **argv) {
         Json summary{{"file", file},          {"bones", c.joints.size()},       {"triangles", c.triangles},
                      {"materials", c.materialNames}, {"height", c.hi.y - c.lo.y}, {"clips", clips},
                      {"problems", list},      {"ok", errors == 0}};
+        // The sit clip's seat height (RFC-0011 clips.sit.seatHeight), measured as core does.
+        auto seat = c.measureSeat();
+        summary["seatHeight"] = seat.valid ? Json(std::round(seat.seatHeight * 1000) / 1000) : Json(nullptr);
+        summary["sitSink"] = seat.valid ? Json(std::round(seat.sink * 1000) / 1000) : Json(nullptr);
         if (json)
             std::cout << summary.dump(2) << '\n';
         else {
@@ -51,6 +55,9 @@ int main(int argc, char **argv) {
             for (auto &clip : c.clips)
                 std::cout << ' ' << clip.name;
             std::cout << '\n';
+            if (seat.valid)
+                std::cout << "  sit: seat height " << std::format("{:.3f}", seat.seatHeight) << " m, ankles sink "
+                          << std::format("{:.3f}", seat.sink) << " m below idle\n";
             for (auto &p : list)
                 std::cout << "  " << p["level"].get<std::string>() << ": " << p["message"].get<std::string>() << '\n';
             std::cout << (errors ? std::format("FAIL: {} error(s)", errors) : std::string("OK: meets the NPC character spec")) << '\n';

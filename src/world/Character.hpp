@@ -57,6 +57,26 @@ struct Character {
     void pose(const Clip *clip, float t, bool loop, std::vector<Mat4> &out) const;
     // Crossfade: clip a at ta blended towards clip b at tb by weight wb (0..1), both looping.
     void blend(const Clip *a, float ta, const Clip *b, float tb, float wb, std::vector<Mat4> &out) const;
+    // The runtime pose (RFC-0010): `from` crossfading into `to` by weight (0..1), each looping or
+    // clamped, then the head (and neck) turned by lookYaw/lookPitch radians in character space
+    // (+yaw to the character's left, +pitch up). The plugin and the offload worker both pose
+    // characters with this, so they draw the same skeleton.
+    struct PoseInput {
+        const Clip *from = nullptr, *to = nullptr;
+        float fromTime = 0, toTime = 0, weight = 1;
+        bool fromLoop = true, toLoop = true;
+        float lookYaw = 0, lookPitch = 0;
+    };
+    void evaluate(const PoseInput &, std::vector<Mat4> &out) const;
+    // What the `sit` clip was authored for, measured in its final pose: seatHeight is the lowest
+    // thigh vertex above the root (RFC-0011 `seatHeight`); sink is how far the ankles end below
+    // their `idle` height (a clip that sinks into the floor; >= 0). valid: the character has
+    // `sit` and thigh bones.
+    struct SeatFit {
+        bool valid = false;
+        float seatHeight = 0, sink = 0;
+    };
+    SeatFit measureSeat() const;
 };
 struct CharacterProblem {
     enum Level { Error, Warning, Info } level;

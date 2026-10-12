@@ -137,14 +137,41 @@ Locals locals(const Character &ch, const Character::Clip *c, float t, bool loop)
     }
     return l;
 }
-void skin(const Character &ch, const Locals &l, std::vector<Mat4> &out) {
+Mat4 rotation(Vec3 axis, float angle) {
+    float h = angle * .5f, sn = std::sin(h);
+    return trs({}, {axis.x * sn, axis.y * sn, axis.z * sn, std::cos(h)}, {1, 1, 1});
+}
+Mat4 translation(Vec3 t) {
+    auto m = Mat4::identity();
+    m.v[12] = t.x, m.v[13] = t.y, m.v[14] = t.z;
+    return m;
+}
+// Joint world matrices (character space); look turns the neck (40%) and head (the rest) about
+// character-space axes through each joint, so their children (eyes, head top) follow.
+std::vector<Mat4> globals(const Character &ch, const Locals &l, float lookYaw = 0, float lookPitch = 0) {
     std::vector<Mat4> global(ch.joints.size());
-    out.resize(ch.joints.size());
+    bool looking = lookYaw != 0 || lookPitch != 0;
+    int neck = looking ? ch.role("neck") : -1, head = looking ? ch.role("head") : -1;
     for (size_t i = 0; i < ch.joints.size(); ++i) { // parents precede children (sorted at load)
         auto local = trs(l.T[i], l.R[i], l.S[i]);
         global[i] = ch.joints[i].parent < 0 ? ch.armature * local : global[ch.joints[i].parent] * local;
-        out[i] = global[i] * ch.joints[i].inverseBind;
+        float share = int(i) == neck ? .4f : int(i) == head ? (neck >= 0 ? .6f : 1.f) : 0;
+        if (share > 0) {
+            Vec3 at{global[i].v[12], global[i].v[13], global[i].v[14]};
+            // Yaw about character up, then pitch about the turned head's right axis (+X is the
+            // character's left, so +pitch up is a negative turn about +X).
+            Vec3 right{std::cos(lookYaw * share), 0, -std::sin(lookYaw * share)};
+            auto turn = rotation(right, -lookPitch * share) * rotation({0, 1, 0}, lookYaw * share);
+            global[i] = translation(at) * turn * translation(at * -1.f) * global[i];
+        }
     }
+    return global;
+}
+void skin(const Character &ch, const Locals &l, std::vector<Mat4> &out, float lookYaw = 0, float lookPitch = 0) {
+    auto global = globals(ch, l, lookYaw, lookPitch);
+    out.resize(ch.joints.size());
+    for (size_t i = 0; i < ch.joints.size(); ++i)
+        out[i] = global[i] * ch.joints[i].inverseBind;
 }
 } // namespace
 void Character::pose(const Clip *c, float t, bool loop, std::vector<Mat4> &out) const { skin(*this, locals(*this, c, t, loop), out); }
@@ -160,6 +187,62 @@ void Character::blend(const Clip *a, float ta, const Clip *b, float tb, float wb
         la.R[i] = nlerp(la.R[i], lb.R[i], wb);
     }
     skin(*this, la, out);
+}
+void Character::evaluate(const PoseInput &in, std::vector<Mat4> &out) const {
+    auto lb = locals(*this, in.to, in.toTime, in.toLoop);
+    if (in.from && in.weight < 1) {
+        auto la = locals(*this, in.from, in.fromTime, in.fromLoop);
+        float w = std::clamp(in.weight, 0.f, 1.f);
+        for (size_t i = 0; i < joints.size(); ++i) {
+            lb.T[i] = la.T[i] + (lb.T[i] - la.T[i]) * w;
+            lb.S[i] = la.S[i] + (lb.S[i] - la.S[i]) * w;
+            lb.R[i] = nlerp(la.R[i], lb.R[i], w);
+        }
+    }
+    skin(*this, lb, out, in.lookYaw, in.lookPitch);
+}
+Character::SeatFit Character::measureSeat() const {
+    SeatFit fit;
+    auto *sit = clip("sit");
+    int left = role("leftupleg"), right = role("rightupleg");
+    if (!sit || (left < 0 && right < 0))
+        return fit;
+    auto at = [&](const Clip *c, float t, bool loop) { return globals(*this, locals(*this, c, t, loop)); };
+    auto sat = at(sit, sit->duration, false);
+    std::vector<Mat4> m(joints.size());
+    for (size_t i = 0; i < joints.size(); ++i)
+        m[i] = sat[i] * joints[i].inverseBind;
+    float lowest = 1e30f;
+    for (auto &p : primitives)
+        for (auto &v : p.vertices) {
+            int best = -1; // vertices bound mostly to a thigh bone
+            float weight = 0;
+            for (int k = 0; k < 4; ++k)
+                if (v.weights[k] > weight)
+                    weight = v.weights[k], best = int(v.joints[k]);
+            if ((best != left && best != right) || weight < .5f)
+                continue;
+            Vec3 q{};
+            for (int k = 0; k < 4; ++k)
+                if (v.weights[k] > 0 && size_t(v.joints[k]) < m.size())
+                    q = q + m[size_t(v.joints[k])].point(v.position) * v.weights[k];
+            lowest = std::min(lowest, q.y);
+        }
+    if (lowest > 1e29f)
+        return fit;
+    fit.valid = true;
+    fit.seatHeight = lowest;
+    // Ankle heights: idle (t = 0) against the final sit pose.
+    auto stand = at(clip("idle"), 0, true);
+    float drop = 0;
+    int feet = 0;
+    for (auto name : {"leftfoot", "rightfoot"})
+        if (int j = role(name); j >= 0) {
+            drop += stand[j].v[13] - sat[j].v[13];
+            ++feet;
+        }
+    fit.sink = feet ? std::max(0.f, drop / feet) : 0;
+    return fit;
 }
 Character loadCharacter(const std::filesystem::path &path) {
     cgltf_options opts{};
