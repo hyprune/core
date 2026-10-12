@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, json, math, os, pathlib, secrets, shutil, signal, socket, struct, subprocess, sys, time
+import argparse, json, math, os, pathlib, re, secrets, shutil, signal, socket, struct, subprocess, sys, time
 HERE=pathlib.Path(__file__).resolve().parent;ROOT=HERE.parent.parent
 # Isolated instances (isolated.py) keep every .*-state dir under their own root.
 STATE_ROOT=pathlib.Path(os.environ.get('HYPRUNE_NESTED_STATE_ROOT',str(HERE)));STATE=STATE_ROOT/'.state'
@@ -60,6 +60,14 @@ def library_of(archive,fallback):
             if m.name.count('/')==1 and m.name.endswith('/library.json'):
                 j=json.load(t.extractfile(m));return f"{j['id']}@{j['version']}"
     return fallback
+
+def starter_archive(env):
+    """The starter library .tar.zst: $env if set, else the newest tools/library-pack output in the
+    worlds checkout (build/libraries); a missing path the caller reports."""
+    if os.environ.get(env):return pathlib.Path(os.environ[env])
+    built=sorted((ROOT.parent/'worlds/build/libraries').glob('com.hyprune.starter-*.tar.zst'),
+                 key=lambda a:[int(n) for n in re.findall(r'\d+',a.name.rsplit('-',1)[1])])
+    return built[-1] if built else ROOT.parent/'worlds/build/libraries/com.hyprune.starter-<version>.tar.zst'
 
 def library_object_count(archive,fallback):
     """How many objects a library .tar.zst's library.json lists (fallback if the archive is missing)."""

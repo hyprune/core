@@ -3,7 +3,8 @@
 Nested only (isolated harness on headless hosts). A test world built from Switchyard
 (HYPRUNE_SWITCHYARD_PACKAGE, else the worlds checkout's dist package) as world format 0.9:
 two starter-kit residents referenced from the starter library (HYPRUNE_NPCS_LIBRARY, a
-com.hyprune.starter .tar.zst) on authored routes, a bench with a seat anchor at a stop.
+com.hyprune.starter .tar.zst, else the worlds checkout's tools/library-pack
+output) on authored routes, a bench with a seat anchor at a stop.
 Checks:
  1. A world referencing a library that is not installed fails with world.library.missing;
     libraries.install, then it loads: 0.23 hello, the npcs state key, both agents walk at
@@ -36,7 +37,7 @@ import session as s
 from m2 import wait, keys, pose
 
 WORLD = 'org.hyprune.npc-yard'
-ARCHIVE = pathlib.Path(os.environ.get('HYPRUNE_NPCS_LIBRARY', str(pathlib.Path.home() / 'npc-p2/dl/starter/com.hyprune.starter-0.1.0.tar.zst')))
+ARCHIVE = s.starter_archive('HYPRUNE_NPCS_LIBRARY')
 LIBRARY = s.library_of(ARCHIVE, 'com.hyprune.starter@0.1.0')  # the archive's own id@version
 EMBER = f'library/{LIBRARY}/resident-ember'
 LOOP = [[-12, 9.5], [2, 9.5], [2, 3], [-12, 3]]       # clear Switchyard floor (dev: the walkability grid)

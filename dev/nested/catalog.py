@@ -2,7 +2,7 @@
 
 Nested only (isolated harness on headless hosts). Lumen Reach (HYPRUNE_CATALOG_WORLD,
 else the worlds checkout's dist package), a library archive (HYPRUNE_CATALOG_LIBRARY,
-else the starter library dry run) and the CC0 objects of tests/fixtures/catalog.py.
+else the worlds checkout's tools/library-pack output) and the CC0 objects of tests/fixtures/catalog.py.
 HYPRUNE_GIZMO_OBJECTS=1 stands in for world 0.9's movable authored objects.
 Checks:
 1. Contract: 0.22 hello with objects.control, the objects state key, the new methods.
@@ -27,7 +27,7 @@ import session as s
 from m2 import wait, keys
 
 WORLD = 'com.hyprune.lumen-reach'
-ARCHIVE = pathlib.Path(os.environ.get('HYPRUNE_CATALOG_LIBRARY', str(pathlib.Path.home() / 'objects-p1/library-dry-run/com.hyprune.starter-0.1.0.tar.zst')))
+ARCHIVE = s.starter_archive('HYPRUNE_CATALOG_LIBRARY')
 LIBRARY = s.library_of(ARCHIVE, 'com.hyprune.starter@0.1.0')  # the archive's own id@version
 OBJECTS = s.library_object_count(ARCHIVE, 11)  # the archive's own object count
 VERSION = LIBRARY.split('@')[1]
