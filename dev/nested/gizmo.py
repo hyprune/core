@@ -122,7 +122,16 @@ def acceptance(client, children, args, shell_token, socketpath):
         return g
 
     def record(id_=OBJECT):
-        return next((o for o in editor()['objects'] if o['objectId'] == id_), None)
+        """The object's overlay record. World objects are RFC-0011 overrides in editor.json
+        (IPC 0.22 publishes them in the objects key); scene nodes stay in editor.objects."""
+        nodes = editor()['objects']  # also reads pending notices off the socket
+        if not id_.startswith('object:'):
+            return next((o for o in nodes if o['objectId'] == id_), None)
+        path = s.STATE / 'editor.json'
+        overrides = json.loads(path.read_text()).get('overrides', []) if path.exists() else []
+        o = next((r for r in overrides if r['objectId'] == id_.split(':', 1)[1] and 'pose' in r), None)
+        return o and {'objectId': id_, 'position': o['pose']['position'], 'rotation': o['pose']['rotation'],
+                      'scale': [o.get('scale', 1)] * 3}
 
     def transform():
         return gizmo()['transform']
