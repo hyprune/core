@@ -262,7 +262,8 @@ RFC-0006 tool table, Path row:
   0.3 m of the eye or the character (or inside its bounds grown by 0.3 m) leaves the ray
   clear. The test re-runs when
   the eye or the character moves; the runtime decides, so the offload worker draws the
-  same characters. With `visibility_culling` off nothing is hidden. The agent diagnostics
+  same characters. A resident outside the view going behind or out from walls renders
+  nothing (only drawn characters change the frame). With `visibility_culling` off nothing is hidden. The agent diagnostics
   report `occluded`. Measured in nested Lumen Reach 0.11.0 at 4K: facing the Rime Vault
   console 60.8 fps at rest becomes 0; facing the Sun Court wall the Array Hall resident is
   in view through the open vestibule and still renders (the resident behind walls no longer
