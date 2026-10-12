@@ -1,0 +1,293 @@
+{
+ "nestedOnly": true,
+ "world": "com.hyprune.lumen-reach",
+ "checks": [
+  {
+   "name": "path mode shows paths",
+   "evidence": {
+    "dragging": null,
+    "hover": null,
+    "showAll": false,
+    "visible": true
+   }
+  },
+  {
+   "name": "clicks add three points",
+   "evidence": [
+    {
+     "areaId": "",
+     "closed": false,
+     "id": "path-151032650277058",
+     "points": [
+      {
+       "position": [
+        -2.5,
+        0.030000118538737297,
+        7.499999523162842
+       ],
+       "type": "line"
+      },
+      {
+       "position": [
+        1.1920928955078125e-07,
+        0.030000118538737297,
+        6.0
+       ],
+       "type": "line"
+      },
+      {
+       "position": [
+        2.500000476837158,
+        0.029999999329447746,
+        7.499999523162842
+       ],
+       "type": "line"
+      }
+     ],
+     "worldId": "com.hyprune.lumen-reach"
+    }
+   ]
+  },
+  {
+   "name": "paths hide outside path mode",
+   "evidence": {
+    "dragging": null,
+    "hover": null,
+    "showAll": false,
+    "visible": false
+   }
+  },
+  {
+   "name": "the point under the reticle highlights",
+   "evidence": {
+    "dragging": null,
+    "hover": {
+     "at": [
+      1.1920928955078125e-07,
+      0.030000118538737297,
+      6.0
+     ],
+     "path": "path-151032650277058",
+     "point": 1,
+     "segment": -1
+    },
+    "showAll": false,
+    "visible": true
+   }
+  },
+  {
+   "name": "press and drag moves the hovered point",
+   "evidence": {
+    "point": [
+     0.0,
+     0.029999999329447746,
+     4.499999046325684
+    ],
+    "goal": [
+     0.0,
+     0.0,
+     4.5
+    ]
+   }
+  },
+  {
+   "name": "the drag kept the path otherwise",
+   "evidence": [
+    {
+     "position": [
+      -2.5,
+      0.030000118538737297,
+      7.499999523162842
+     ],
+     "type": "line"
+    },
+    {
+     "position": [
+      0.0,
+      0.029999999329447746,
+      4.499999046325684
+     ],
+     "type": "line"
+    },
+    {
+     "position": [
+      2.500000476837158,
+      0.029999999329447746,
+      7.499999523162842
+     ],
+     "type": "line"
+    }
+   ]
+  },
+  {
+   "name": "Ctrl+Z undoes the move",
+   "evidence": {
+    "position": [
+     1.1920928955078125e-07,
+     0.030000118538737297,
+     6.0
+    ],
+    "type": "line"
+   }
+  },
+  {
+   "name": "Ctrl+Shift+Z redoes it",
+   "evidence": {
+    "position": [
+     0.0,
+     0.029999999329447746,
+     4.499999046325684
+    ],
+    "type": "line"
+   }
+  },
+  {
+   "name": "Ctrl in path mode does not move the player",
+   "evidence": [
+    -1.399999976158142,
+    1.7000000476837158,
+    12.699999809265137
+   ]
+  },
+  {
+   "name": "Escape cancels a drag",
+   "evidence": {
+    "position": [
+     0.0,
+     0.029999999329447746,
+     4.499999046325684
+    ],
+    "type": "line"
+   }
+  },
+  {
+   "name": "Shift snaps the drag to 0.1 m",
+   "evidence": [
+    0.5,
+    0.029999999329447746,
+    4.200000286102295
+   ]
+  },
+  {
+   "name": "a click on a segment inserts a point",
+   "evidence": [
+    {
+     "position": [
+      -2.5,
+      0.030000118538737297,
+      7.499999523162842
+     ],
+     "type": "line"
+    },
+    {
+     "position": [
+      0.5,
+      0.029999999329447746,
+      4.200000286102295
+     ],
+     "type": "line"
+    },
+    {
+     "position": [
+      1.500000238418579,
+      0.029999999329447746,
+      5.849999904632568
+     ],
+     "type": "line"
+    },
+    {
+     "position": [
+      2.500000476837158,
+      0.029999999329447746,
+      7.499999523162842
+     ],
+     "type": "line"
+    }
+   ]
+  },
+  {
+   "name": "secondary deletes the hovered point",
+   "evidence": [
+    {
+     "position": [
+      0.5,
+      0.029999999329447746,
+      4.200000286102295
+     ],
+     "type": "line"
+    },
+    {
+     "position": [
+      1.500000238418579,
+      0.029999999329447746,
+      5.849999904632568
+     ],
+     "type": "line"
+    },
+    {
+     "position": [
+      2.500000476837158,
+      0.029999999329447746,
+      7.499999523162842
+     ],
+     "type": "line"
+    }
+   ]
+  },
+  {
+   "name": "Ctrl+Z restores the deleted point",
+   "evidence": [
+    {
+     "position": [
+      -2.5,
+      0.030000118538737297,
+      7.499999523162842
+     ],
+     "type": "line"
+    },
+    {
+     "position": [
+      0.5,
+      0.029999999329447746,
+      4.200000286102295
+     ],
+     "type": "line"
+    },
+    {
+     "position": [
+      1.500000238418579,
+      0.029999999329447746,
+      5.849999904632568
+     ],
+     "type": "line"
+    },
+    {
+     "position": [
+      2.500000476837158,
+      0.029999999329447746,
+      7.499999523162842
+     ],
+     "type": "line"
+    }
+   ]
+  },
+  {
+   "name": "period shows all paths outside path mode",
+   "evidence": {
+    "dragging": null,
+    "hover": null,
+    "showAll": true,
+    "visible": true
+   }
+  },
+  {
+   "name": "and hides them again",
+   "evidence": {
+    "dragging": null,
+    "hover": null,
+    "showAll": false,
+    "visible": false
+   }
+  }
+ ]
+}
