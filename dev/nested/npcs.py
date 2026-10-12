@@ -15,13 +15,16 @@ Checks:
     pocket / place on characters are refused (object.protected).
  5. Glance: a player 2.5 m in front-left gets looked at (head yaw clamped, eased).
  6. Step aside: a player standing on the route ahead is passed, not walked through.
- 7. Frames: animating in view renders frames; out of view (and paused, still) none.
+ 7. Frames: animating in view (followed 5 m behind on its walk) renders frames; out of view
+    (and paused, still) none.
  8. A seat: the authored resident sits on the bench at its stop (root lifted by the seat
     fit). Asked to guide while seated, it stands up and steps off its seat (core 0.5.0
     refused: "can't walk there"); the player walking off cancels it and it sits down again.
     Then it stands and walks on.
  9. Interactions: aimed resident shows the prompt (reticle interact), E opens the choice
-    list; say lines advance with E; waypoint sets the waypoint.
+    list; say lines advance with E (a 150-character line wraps); waypoint sets the waypoint.
+    Occlusion: a resident behind opaque geometry is not drawn and requests no frames, from
+    the tool 3 spot and from the yard's side behind the research dock wall; in the open, drawn.
 10. Disable/remove: authored characters disable (and enable), never remove; user ones remove.
 11. Persistence: a world reload keeps the user character on its route and a disabled one off.
 12. Offload parity (HYPRUNE_NPCS_OFFLOAD != 0): characters posed still, stills with offload
@@ -284,15 +287,16 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('steps aside instead of walking into the player', closest > .55 and widest > .3,
           {'closest': closest, 'widest': widest, 'stand': stand, 'samples': samples})
 
-    # 7. Frames: in view vs out of view.
-    a = agent('crimson-walker'); look([a['position'][0], 3, a['position'][2] + 7], a['position'])
-    look_fps = fps()
+    # 7. Frames: in view vs out of view. The eye follows 5 m behind on the walk, in the open
+    # wherever the walker is (from the yard's side the dock walls hide most of the walk).
+    facing('crimson-walker', -5., height=2.2)
+    look_fps = fps(); followed = agent('crimson-walker')
     camera([0, 1.7, -14.3], 0, 0)  # at the north wall, facing it: every character behind
     causes0 = s.camera()['frameCauses']; away = fps(); causes1 = s.camera()['frameCauses']
     print('frame causes out of view:', {k: v - causes0.get(k, 0) for k, v in causes1.items() if v != causes0.get(k, 0)}, flush=True)
     check('animating characters in view render frames; out of view, none', look_fps > 20 and away < 2,
-          {'inView': look_fps, 'outOfView': away, 'forcesFrames': s.camera()['npcs']['forcesFrames']})
-    motion('still'); look([a['position'][0], 3, a['position'][2] + 7], a['position']); still_fps = fps()
+          {'inView': look_fps, 'occluded': followed['occluded'], 'outOfView': away, 'forcesFrames': s.camera()['npcs']['forcesFrames']})
+    motion('still'); facing('crimson-walker', -5., height=2.2); still_fps = fps()
     check('still characters cost no frames', still_fps < 2 and state()['npcs']['state'] == 'still', {'fps': still_fps})
     client.call('graphics.set', {'patch': {'npc_motion': 'always', 'reduced_motion': True}}); time.sleep(.3)
     reduced = fps()
@@ -377,6 +381,19 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('in the open it is drawn and keeps frames coming again',
           seen and open_['drawn'] == 1 and open_['animationVisible'], {'agent': seen, 'drawn': open_['drawn'], 'animationVisible': open_['animationVisible'],
                                                                        'hiddenFps': hidden_fps})
+    # From the yard's side (7 m south of the walk, 3 m up), the walker behind the research
+    # dock wall is hidden by it (only the wall in view); past the wall's end it is drawn.
+    def from_south(lo, hi, occluded, name):
+        wait(lambda: (lambda b: b if b and lo <= b['position'][0] <= hi else None)(agent('crimson-walker')), timeout=90)
+        motion('still'); b = agent('crimson-walker')
+        look([b['position'][0], 3, b['position'][2] + 7], b['position'])
+        b = wait(lambda: (lambda b: b if b['occluded'] == occluded else None)(agent('crimson-walker')), timeout=5)
+        time.sleep(.3); d = diag(); shot(name); motion('always')
+        return {'agent': b and {k: b[k] for k in ('position', 'occluded')}, 'drawn': d['drawn'], 'animationVisible': d['animationVisible']}
+    behind = from_south(.5, 3.5, True, 'npcs-6e-dock-wall.png')
+    check('from the yard, behind the dock wall: hidden by the wall', behind['agent'] and behind['drawn'] == 0, behind)
+    past = from_south(6, 9, False, 'npcs-6f-past-dock-wall.png')
+    check('the same view past the wall\'s end: drawn', past['agent'] and past['drawn'] == 1, past)
     for other in ('blue-walker', user_id):
         client.call('npcs.disable', {'id': other, 'disabled': False})
     time.sleep(.3)
