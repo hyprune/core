@@ -353,3 +353,24 @@ map SVG and its affine frame) and, since IPC 0.20, `com.hyprune.blueprint` 0.1
 (1–6 per-level blueprint SVGs in that frame, at most 64 KiB each and 256 KiB in
 total, with drawing roles named by a `class` vocabulary). Older cores ignore the
 blueprint extension.
+
+## Machines prototype: placed gauges and script feeds (no wire change)
+
+RFC-0013 draft, object manifest 0.10 draft (no version bump):
+- Every placed instance of an object whose `object.json` has the `machine` trait now runs
+  as a machine; `HYPRUNE_MACHINES_PROTOTYPE` is no longer needed and stays a development
+  override. By default input `<id>` reads key `<id>` of source
+  `com.hyprune.sources.<instance id>`, which the source helper publishes for a
+  `sources.json` entry with that `id`. `$XDG_CONFIG_HOME/hyprune/machines.json`
+  (`HYPRUNE_MACHINES_FILE`) can name another source, keys, maps and `averageWindowS`
+  per instance; it is re-read on change. New `runtime.notice` codes:
+  `machine.source` (once per newly placed machine: the source it reads) and
+  `machine.invalid` (a binding or manifest problem; that instance is skipped).
+- Mapping modifier `average` (`windowS` 1–3600, optional `override` input): the
+  time-weighted running average of fresh data, before the mapping's value form.
+- Slot kind `levels` (`fill` about the node origin, or `slide`; `axis`, `length`,
+  `surface`, `settle` `ease`/`spring`) and drive target `level:<id>` (0–1).
+- Stacks: `cap` up to 100, `rate` (copies per second), signed `spacing`, copies take
+  their states slot's paint; at most 1024 stacked copies per world.
+- Machine draw state is in-process only: while machines are active the world renders
+  locally rather than in the offload worker.

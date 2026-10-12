@@ -88,11 +88,15 @@
         "labels": {
           "sign": "\u2014"
         },
+        "levels": {},
         "look": 0.0,
         "moving": false,
         "revision": 1,
         "stacks": {
           "waiting": 0
+        },
+        "stacksShown": {
+          "waiting": 0.0
         },
         "stale": false,
         "states": {
@@ -148,7 +152,7 @@
       "name": "published values reach the inputs through the binding maps",
       "evidence": {
         "name": {
-          "ageMs": 832,
+          "ageMs": 968,
           "condition": "fresh",
           "key": "lastJob",
           "raw": "main #1432",
@@ -156,7 +160,7 @@
           "value": "main #1432"
         },
         "progress": {
-          "ageMs": 832,
+          "ageMs": 968,
           "condition": "fresh",
           "key": "progress",
           "raw": 0.8,
@@ -164,7 +168,7 @@
           "value": 0.8
         },
         "queued": {
-          "ageMs": 832,
+          "ageMs": 968,
           "condition": "fresh",
           "key": "depth",
           "raw": 70,
@@ -172,7 +176,7 @@
           "value": 4.0
         },
         "stage.1": {
-          "ageMs": 832,
+          "ageMs": 968,
           "condition": "fresh",
           "key": "stage.1",
           "raw": "running",
@@ -180,7 +184,7 @@
           "value": "running"
         },
         "stage.2": {
-          "ageMs": 832,
+          "ageMs": 968,
           "condition": "fresh",
           "key": "stage.2",
           "raw": "failed",
@@ -188,7 +192,7 @@
           "value": "fail"
         },
         "started": {
-          "ageMs": 832,
+          "ageMs": 968,
           "condition": "fresh",
           "key": "jobsStarted",
           "raw": 500,
@@ -196,7 +200,7 @@
           "value": null
         },
         "status": {
-          "ageMs": 832,
+          "ageMs": 968,
           "condition": "fresh",
           "key": "status",
           "raw": "running",
@@ -217,7 +221,7 @@
         "inView": true,
         "inputs": {
           "name": {
-            "ageMs": 832,
+            "ageMs": 968,
             "condition": "fresh",
             "key": "lastJob",
             "raw": "main #1432",
@@ -225,7 +229,7 @@
             "value": "main #1432"
           },
           "progress": {
-            "ageMs": 832,
+            "ageMs": 968,
             "condition": "fresh",
             "key": "progress",
             "raw": 0.8,
@@ -233,7 +237,7 @@
             "value": 0.8
           },
           "queued": {
-            "ageMs": 832,
+            "ageMs": 968,
             "condition": "fresh",
             "key": "depth",
             "raw": 70,
@@ -241,7 +245,7 @@
             "value": 4.0
           },
           "stage.1": {
-            "ageMs": 832,
+            "ageMs": 968,
             "condition": "fresh",
             "key": "stage.1",
             "raw": "running",
@@ -249,7 +253,7 @@
             "value": "running"
           },
           "stage.2": {
-            "ageMs": 832,
+            "ageMs": 968,
             "condition": "fresh",
             "key": "stage.2",
             "raw": "failed",
@@ -257,7 +261,7 @@
             "value": "fail"
           },
           "started": {
-            "ageMs": 832,
+            "ageMs": 968,
             "condition": "fresh",
             "key": "jobsStarted",
             "raw": 500,
@@ -265,7 +269,7 @@
             "value": null
           },
           "status": {
-            "ageMs": 832,
+            "ageMs": 968,
             "condition": "fresh",
             "key": "status",
             "raw": "running",
@@ -276,11 +280,15 @@
         "labels": {
           "sign": "main #1432"
         },
+        "levels": {},
         "look": 0.0,
         "moving": true,
         "revision": 19,
         "stacks": {
           "waiting": 4
+        },
+        "stacksShown": {
+          "waiting": 4.0
         },
         "stale": false,
         "states": {
@@ -305,15 +313,15 @@
     {
       "name": "a spinning machine in view keeps frames coming",
       "evidence": {
-        "perSecond": 60.2,
-        "frames": 123,
+        "perSecond": 59.6,
+        "frames": 121,
         "animationFrames": true
       }
     },
     {
       "name": "the change is drawn (lamps, crates, label, lift)",
       "evidence": {
-        "changedFraction": 0.01538
+        "changedFraction": 0.01497
       }
     },
     {
@@ -377,7 +385,7 @@
         "inView": true,
         "inputs": {
           "name": {
-            "ageMs": 465,
+            "ageMs": 977,
             "condition": "fresh",
             "key": "lastJob",
             "raw": "main #1432",
@@ -385,7 +393,7 @@
             "value": "main #1432"
           },
           "progress": {
-            "ageMs": 465,
+            "ageMs": 977,
             "condition": "fresh",
             "key": "progress",
             "raw": 0.8,
@@ -393,7 +401,7 @@
             "value": 0.8
           },
           "queued": {
-            "ageMs": 465,
+            "ageMs": 977,
             "condition": "fresh",
             "key": "depth",
             "raw": 70,
@@ -401,7 +409,7 @@
             "value": 4.0
           },
           "stage.1": {
-            "ageMs": 465,
+            "ageMs": 977,
             "condition": "fresh",
             "key": "stage.1",
             "raw": "success",
@@ -409,7 +417,7 @@
             "value": "ok"
           },
           "stage.2": {
-            "ageMs": 465,
+            "ageMs": 977,
             "condition": "fresh",
             "key": "stage.2",
             "raw": "failed",
@@ -417,7 +425,7 @@
             "value": "fail"
           },
           "started": {
-            "ageMs": 465,
+            "ageMs": 977,
             "condition": "fresh",
             "key": "jobsStarted",
             "raw": 503,
@@ -425,7 +433,7 @@
             "value": null
           },
           "status": {
-            "ageMs": 465,
+            "ageMs": 977,
             "condition": "fresh",
             "key": "status",
             "raw": "success",
@@ -436,11 +444,15 @@
         "labels": {
           "sign": "main #1432"
         },
+        "levels": {},
         "look": 0.0,
         "moving": false,
         "revision": 20,
         "stacks": {
           "waiting": 4
+        },
+        "stacksShown": {
+          "waiting": 4.0
         },
         "stale": false,
         "states": {
@@ -488,7 +500,7 @@
         "inView": true,
         "inputs": {
           "name": {
-            "ageMs": 4328,
+            "ageMs": 4203,
             "condition": "stale",
             "key": "lastJob",
             "raw": "main #1432",
@@ -496,7 +508,7 @@
             "value": "main #1432"
           },
           "progress": {
-            "ageMs": 4328,
+            "ageMs": 4203,
             "condition": "stale",
             "key": "progress",
             "raw": 0.8,
@@ -504,7 +516,7 @@
             "value": 0.8
           },
           "queued": {
-            "ageMs": 4328,
+            "ageMs": 4203,
             "condition": "stale",
             "key": "depth",
             "raw": 70,
@@ -512,7 +524,7 @@
             "value": 4.0
           },
           "stage.1": {
-            "ageMs": 4328,
+            "ageMs": 4203,
             "condition": "stale",
             "key": "stage.1",
             "raw": "success",
@@ -520,7 +532,7 @@
             "value": "ok"
           },
           "stage.2": {
-            "ageMs": 4328,
+            "ageMs": 4203,
             "condition": "stale",
             "key": "stage.2",
             "raw": "failed",
@@ -528,7 +540,7 @@
             "value": "fail"
           },
           "started": {
-            "ageMs": 4328,
+            "ageMs": 4203,
             "condition": "stale",
             "key": "jobsStarted",
             "raw": 503,
@@ -536,7 +548,7 @@
             "value": null
           },
           "status": {
-            "ageMs": 4328,
+            "ageMs": 4203,
             "condition": "stale",
             "key": "status",
             "raw": "failed",
@@ -547,11 +559,15 @@
         "labels": {
           "sign": "main #1432"
         },
+        "levels": {},
         "look": 1.0,
         "moving": false,
         "revision": 52,
         "stacks": {
           "waiting": 4
+        },
+        "stacksShown": {
+          "waiting": 4.0
         },
         "stale": true,
         "states": {
@@ -650,11 +666,15 @@
         "labels": {
           "sign": "\u2014"
         },
+        "levels": {},
         "look": 0.0,
         "moving": false,
         "revision": 83,
         "stacks": {
           "waiting": 0
+        },
+        "stacksShown": {
+          "waiting": 0.0
         },
         "stale": false,
         "states": {
@@ -689,7 +709,7 @@
           "inView": true,
           "inputs": {
             "name": {
-              "ageMs": 980,
+              "ageMs": 192,
               "condition": "fresh",
               "key": "lastJob",
               "raw": "main #1432",
@@ -697,7 +717,7 @@
               "value": "main #1432"
             },
             "progress": {
-              "ageMs": 980,
+              "ageMs": 192,
               "condition": "fresh",
               "key": "progress",
               "raw": 0.8,
@@ -705,7 +725,7 @@
               "value": 0.8
             },
             "queued": {
-              "ageMs": 980,
+              "ageMs": 192,
               "condition": "fresh",
               "key": "depth",
               "raw": 70,
@@ -713,7 +733,7 @@
               "value": 4.0
             },
             "stage.1": {
-              "ageMs": 980,
+              "ageMs": 192,
               "condition": "fresh",
               "key": "stage.1",
               "raw": "success",
@@ -721,7 +741,7 @@
               "value": "ok"
             },
             "stage.2": {
-              "ageMs": 980,
+              "ageMs": 192,
               "condition": "fresh",
               "key": "stage.2",
               "raw": "success",
@@ -729,7 +749,7 @@
               "value": "ok"
             },
             "started": {
-              "ageMs": 980,
+              "ageMs": 192,
               "condition": "fresh",
               "key": "jobsStarted",
               "raw": 604,
@@ -737,7 +757,7 @@
               "value": null
             },
             "status": {
-              "ageMs": 980,
+              "ageMs": 192,
               "condition": "fresh",
               "key": "status",
               "raw": "running",
@@ -748,11 +768,15 @@
           "labels": {
             "sign": "main #1432"
           },
+          "levels": {},
           "look": 0.0,
           "moving": false,
           "revision": 103,
           "stacks": {
             "waiting": 4
+          },
+          "stacksShown": {
+            "waiting": 4.0
           },
           "stale": false,
           "states": {
@@ -783,12 +807,12 @@
     {
       "name": "the source helper publishes with its own grant and machine-b follows build-sim",
       "evidence": {
-        "ageMs": 232,
+        "ageMs": 969,
         "condition": "fresh",
         "key": "status",
-        "raw": "idle",
+        "raw": "running",
         "source": "com.hyprune.sources.build",
-        "value": "idle"
+        "value": "running"
       }
     },
     {

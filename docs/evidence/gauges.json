@@ -1,0 +1,299 @@
+{
+  "nestedOnly": true,
+  "world": "com.hyprune.lumen-reach",
+  "library": "com.hyprune.starter@0.2.0",
+  "stills": [
+    "gauges-3m.png",
+    "gauges-3m-held.png",
+    "gauge-tube-close.png",
+    "gauge-abacus-close.png",
+    "gauge-cube-close.png"
+  ],
+  "checks": [
+    {
+      "name": "the library brings three placeable gauges with the machine trait",
+      "evidence": {
+        "library/com.hyprune.starter@0.2.0/gauge-tube": {
+          "state": "ready",
+          "placeable": true,
+          "traits": [
+            "collidable",
+            "machine",
+            "movable"
+          ],
+          "triangles": 2860
+        },
+        "library/com.hyprune.starter@0.2.0/gauge-abacus": {
+          "state": "ready",
+          "placeable": true,
+          "traits": [
+            "collidable",
+            "machine",
+            "movable"
+          ],
+          "triangles": 2168
+        },
+        "library/com.hyprune.starter@0.2.0/gauge-cube": {
+          "state": "ready",
+          "placeable": true,
+          "traits": [
+            "collidable",
+            "machine",
+            "movable"
+          ],
+          "triangles": 2174
+        }
+      }
+    },
+    {
+      "name": "three placed gauges run as machines without a bindings file, each on com.hyprune.sources.<id>",
+      "evidence": {
+        "gauge-tube": {
+          "id": "u-ca67a8",
+          "source": "com.hyprune.sources.u-ca67a8"
+        },
+        "gauge-abacus": {
+          "id": "u-55fc2c",
+          "source": "com.hyprune.sources.u-55fc2c"
+        },
+        "gauge-cube": {
+          "id": "u-759083",
+          "source": "com.hyprune.sources.u-759083"
+        }
+      }
+    },
+    {
+      "name": "a notice names the data source each new gauge reads",
+      "evidence": [
+        "Machine u-ca67a8 reads data source com.hyprune.sources.u-ca67a8: add an entry with id \"u-ca67a8\" to sources.json",
+        "Machine u-55fc2c reads data source com.hyprune.sources.u-55fc2c: add an entry with id \"u-55fc2c\" to sources.json",
+        "Machine u-759083 reads data source com.hyprune.sources.u-759083: add an entry with id \"u-759083\" to sources.json"
+      ]
+    },
+    {
+      "name": "unfed gauges: labels show a dash and, once placed, nothing moves",
+      "evidence": {
+        "gauge-tube": {
+          "labels": {
+            "display": "\u2014",
+            "label": "\u2014"
+          },
+          "moving": false,
+          "stacks": {}
+        },
+        "gauge-abacus": {
+          "labels": {
+            "display": "\u2014",
+            "label": "\u2014"
+          },
+          "moving": false,
+          "stacks": {
+            "pushed": 0.0,
+            "rest": 100.0
+          }
+        },
+        "gauge-cube": {
+          "labels": {
+            "display": "\u2014",
+            "label": "\u2014"
+          },
+          "moving": false,
+          "stacks": {
+            "voxels": 0.0
+          }
+        }
+      }
+    },
+    {
+      "name": "every gauge followed the script: fill level, pushed/rest beads and voxels match each published value",
+      "evidence": {
+        "gauge-tube": {
+          "seen": [
+            22.5,
+            23.9,
+            60.7,
+            72.8,
+            96.8
+          ],
+          "published": [
+            22.5,
+            23.9,
+            60.7,
+            72.8,
+            96.8
+          ]
+        },
+        "gauge-abacus": {
+          "seen": [
+            70.8,
+            71.8,
+            80.8,
+            83.0,
+            93.6
+          ],
+          "published": [
+            70.8,
+            71.8,
+            80.8,
+            83.0,
+            93.6
+          ]
+        },
+        "gauge-cube": {
+          "seen": [
+            11.7,
+            20.8,
+            40.4,
+            66.3,
+            79.8
+          ],
+          "published": [
+            11.7,
+            20.8,
+            40.4,
+            66.3,
+            79.8
+          ]
+        }
+      }
+    },
+    {
+      "name": "label and display show the script's text",
+      "evidence": {
+        "labels": {
+          "gauge-tube": {
+            "display": "23%",
+            "label": "CPU"
+          },
+          "gauge-abacus": {
+            "display": "83 GB",
+            "label": "RAM"
+          },
+          "gauge-cube": {
+            "display": "12 GB",
+            "label": "VRAM"
+          }
+        },
+        "finals": {
+          "gauge-tube": {
+            "value": 22.5,
+            "display": "23%",
+            "label": "CPU",
+            "level": "ok"
+          },
+          "gauge-abacus": {
+            "value": 83.0,
+            "display": "83 GB",
+            "label": "RAM",
+            "level": "warn"
+          },
+          "gauge-cube": {
+            "value": 11.7,
+            "display": "12 GB",
+            "label": "VRAM",
+            "level": "ok"
+          }
+        }
+      }
+    },
+    {
+      "name": "the average ring moves, within the range of the published values",
+      "evidence": {
+        "gauge-tube": [
+          0.25,
+          0.275,
+          0.3,
+          0.324,
+          0.349,
+          0.366,
+          0.413,
+          0.462,
+          0.511,
+          0.56,
+          0.607,
+          0.638
+        ],
+        "gauge-abacus": [
+          0.739,
+          0.745,
+          0.75,
+          0.752,
+          0.757,
+          0.759,
+          0.765,
+          0.767,
+          0.772,
+          0.781,
+          0.796,
+          0.808
+        ],
+        "gauge-cube": [
+          0.208,
+          0.226,
+          0.272,
+          0.275,
+          0.304,
+          0.308,
+          0.338,
+          0.348,
+          0.364,
+          0.386,
+          0.392,
+          0.399
+        ]
+      }
+    },
+    {
+      "name": "after the window the ring sits exactly at the held value",
+      "evidence": {
+        "gauge-tube": {
+          "level": 0.225,
+          "target": 0.225,
+          "tilt": 0.0
+        },
+        "gauge-abacus": {
+          "level": 0.83,
+          "target": 0.83,
+          "tilt": 0.0
+        },
+        "gauge-cube": {
+          "level": 0.11699999999999999,
+          "target": 0.11699999999999999,
+          "tilt": 0.0
+        }
+      }
+    },
+    {
+      "name": "values held: the gauges stop (no motion, no new revision in view), so they force no frames",
+      "evidence": {
+        "gauges": {
+          "u-ca67a8": {
+            "moving": false,
+            "inView": true,
+            "revision": 1590
+          },
+          "u-55fc2c": {
+            "moving": false,
+            "inView": true,
+            "revision": 1722
+          },
+          "u-759083": {
+            "moving": false,
+            "inView": true,
+            "revision": 1638
+          }
+        },
+        "frames in this view (other world animation included)": {
+          "perSecond": 60.1,
+          "frames": 182,
+          "animationFrames": true
+        },
+        "npcsForceFrames": false
+      }
+    },
+    {
+      "name": "no render pass leaked",
+      "evidence": 0
+    }
+  ]
+}

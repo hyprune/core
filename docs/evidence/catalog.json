@@ -70,11 +70,11 @@
       "evidence": {
         "install": {
           "id": "com.hyprune.starter",
-          "revision": 19,
+          "revision": 11,
           "version": "0.1.0"
         },
         "library": {
-          "digest": "04d0beac1b454e7a7e8ae0dfe5ef707be24e0c4bd5b7400c937b3836c12fcb4e",
+          "digest": "721a1e37a8a8a83e880d63f4b3f5f600b2981968fe29800b2c9be4d07b7c30a7",
           "errors": [],
           "formatVersion": "0.10",
           "id": "com.hyprune.starter",
@@ -91,10 +91,6 @@
       "evidence": {
         "entries": 12,
         "reasons": {
-          "resident-blue": "character: user characters arrive with routes (RFC-0011 P2)",
-          "resident-crimson": "character: user characters arrive with routes (RFC-0011 P2)",
-          "resident-desert": "character: user characters arrive with routes (RFC-0011 P2)",
-          "resident-ember": "character: user characters arrive with routes (RFC-0011 P2)",
           "job-token": "mover: tracks and items need world format 0.10 (RFC-0011 P3)"
         }
       }
@@ -160,7 +156,7 @@
           "message": "",
           "position": [
             -8.0,
-            0.004999995231628418,
+            0.005222201347351074,
             3.3428292274475098
           ],
           "rotation": [
@@ -188,7 +184,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-431283",
+        "id": "u-497441",
         "locked": false,
         "movable": true,
         "name": "Server rack",
@@ -196,7 +192,7 @@
         "pose": {
           "position": [
             -8.0,
-            0.004999995231628418,
+            0.005222201347351074,
             3.3428292274475098
           ],
           "rotation": [
@@ -220,7 +216,7 @@
         "asset": 1,
         "center": [
           -8.0,
-          1.0850000381469727,
+          1.0852222442626953,
           3.3428292274475098
         ],
         "collision": [
@@ -228,7 +224,7 @@
           24
         ],
         "hidden": false,
-        "id": "u-431283",
+        "id": "u-497441",
         "radius": 1.3823989629745483
       }
     },
@@ -242,7 +238,7 @@
           "message": "Inside a window zone",
           "position": [
             2.340665340423584,
-            0.004999935626983643,
+            0.005222141742706299,
             2.3124380111694336
           ],
           "rotation": [
@@ -277,7 +273,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-86e38a",
+        "id": "u-696e75",
         "locked": false,
         "movable": true,
         "name": "Floor lamp",
@@ -285,7 +281,7 @@
         "pose": {
           "position": [
             -4.5,
-            0.004999935626983643,
+            0.005222141742706299,
             3.3428292274475098
           ],
           "rotation": [
@@ -305,19 +301,19 @@
     },
     {
       "name": "tool 4 selects the user object",
-      "evidence": "object:u-431283"
+      "evidence": "object:u-497441"
     },
     {
       "name": "a move-handle drag moves the rack along x; the overlay records it",
       "evidence": {
         "from": [
           -8.0,
-          0.004999995231628418,
+          0.005222201347351074,
           3.3428292274475098
         ],
         "to": [
           -8.75777530670166,
-          0.004999995231628418,
+          0.005222201347351074,
           3.3428292274475098
         ]
       }
@@ -327,7 +323,7 @@
       "evidence": {
         "position": [
           -8.0,
-          0.004999995231628418,
+          0.005222201347351074,
           3.3428292274475098
         ],
         "rotation": [
@@ -356,14 +352,14 @@
     },
     {
       "name": "objects.remove deletes a user placement and its record",
-      "evidence": "u-28d92b"
+      "evidence": "u-6802f7"
     },
     {
       "name": "undo restores the removed object",
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-28d92b",
+        "id": "u-6802f7",
         "locked": false,
         "movable": true,
         "name": "Floor lamp",
@@ -371,7 +367,7 @@
         "pose": {
           "position": [
             -8.0,
-            0.004999935626983643,
+            0.005222141742706299,
             3.3428292274475098
           ],
           "rotation": [
@@ -475,10 +471,10 @@
       }
     },
     {
-      "name": "characters are never pocketed or placed (P2): -32005 with the reason",
+      "name": "characters are never pocketed or placed (spawned with npcs.spawn from IPC 0.23): -32005",
       "evidence": {
         "code": -32005,
-        "message": "character: user characters arrive with routes (RFC-0011 P2)"
+        "message": "characters are protected: spawn them with npcs.spawn"
       }
     },
     {
@@ -502,10 +498,10 @@
     {
       "name": "a world reload keeps every placement and pose; the pocket is dropped",
       "evidence": {
-        "u-431283": {
+        "u-497441": {
           "position": [
             -8.75777530670166,
-            0.004999995231628418,
+            0.005222201347351074,
             3.3428292274475098
           ],
           "rotation": [
@@ -515,10 +511,10 @@
             1.0
           ]
         },
-        "u-28d92b": {
+        "u-6802f7": {
           "position": [
             -8.0,
-            0.004999935626983643,
+            0.005222141742706299,
             3.3428292274475098
           ],
           "rotation": [
@@ -535,7 +531,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-431283",
+        "id": "u-497441",
         "locked": false,
         "movable": false,
         "name": "server-rack",
@@ -543,7 +539,7 @@
         "pose": {
           "position": [
             -8.75777530670166,
-            0.004999995231628418,
+            0.005222201347351074,
             3.3428292274475098
           ],
           "rotation": [
@@ -566,7 +562,7 @@
       "evidence": {
         "activity": null,
         "areaId": "sun-court",
-        "id": "u-431283",
+        "id": "u-497441",
         "locked": false,
         "movable": true,
         "name": "Server rack",
@@ -574,7 +570,7 @@
         "pose": {
           "position": [
             -8.75777530670166,
-            0.004999995231628418,
+            0.005222201347351074,
             3.3428292274475098
           ],
           "rotation": [
