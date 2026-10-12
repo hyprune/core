@@ -139,11 +139,11 @@ class Tests(unittest.TestCase):
         with patch.dict(live.os.environ,{'WAYLAND_DISPLAY':'missing'}),patch.object(live,'instances',return_value=[]):
             with self.assertRaises(RuntimeError):live.select(types.SimpleNamespace(instance=None))
 
-    def test_sources_grant_only_with_a_sources_file(self):
+    def test_sources_config_path_even_without_the_file(self):
+        # The helper always starts, idle until sources.json appears.
         with tempfile.TemporaryDirectory() as d,patch.dict(live.os.environ,{'XDG_CONFIG_HOME':d}):
-            self.assertIsNone(live.sources_config())
-            (pathlib.Path(d)/'hyprune').mkdir();(pathlib.Path(d)/'hyprune/sources.json').write_text('{"sources":[]}')
             self.assertEqual(live.sources_config(),pathlib.Path(d)/'hyprune/sources.json')
+            self.assertFalse(live.sources_config().exists())
         grants=live.launch_grants({'org.hyprune.live':'a'*64,'com.hyprune.shell':'b'*64,'com.hyprune.sources':'c'*64})
         self.assertEqual([g['client'] for g in grants],['org.hyprune.live','com.hyprune.shell','com.hyprune.sources'])
         self.assertEqual(grants[2],{'token':'c'*64,'client':'com.hyprune.sources','capabilities':['data.publish']})

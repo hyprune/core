@@ -387,10 +387,10 @@ class RPC:
 
 
 def sources_config():
-    """The user's sources file ($XDG_CONFIG_HOME/hyprune/sources.json) when it exists, else None."""
+    """The user's sources file, $XDG_CONFIG_HOME/hyprune/sources.json, whether or not it exists:
+    the helper always runs and idles until the file appears (the Director writes it)."""
     base=os.environ.get('XDG_CONFIG_HOME') or str(pathlib.Path.home()/'.config')
-    config=pathlib.Path(base)/'hyprune/sources.json'
-    return config if config.is_file() else None
+    return pathlib.Path(base)/'hyprune/sources.json'
 
 
 def launch_grants(tokens):
@@ -433,9 +433,8 @@ class SourcesSupervisor:
 def bootstrap(args,path):
     from credentials import CredentialBroker
     state=json.loads(path.read_text());s=state['session']; root=pathlib.Path(s['runtime'])/'hyprune-live'/s['signature'];runroot=pathlib.Path(state['runroot'])
-    sources=sources_config()
-    if sources and SOURCE_HELPER is None:
-        print('sources.json found but this build has no source helper; not starting it',flush=True);sources=None
+    sources=sources_config() if SOURCE_HELPER else None
+    if not sources:print('This build has no source helper: machines get no data',flush=True)
     tokens={name:secrets.token_hex(32) for name in ['org.hyprune.live','com.hyprune.shell']+([SOURCES_CLIENT] if sources else [])}
     server=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);sockpath=root/'grants.sock';sockpath.unlink(missing_ok=True);server.bind(str(sockpath));os.chmod(sockpath,0o600);server.listen(1);server.settimeout(20)
     try:

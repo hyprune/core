@@ -29,7 +29,7 @@ installs of core use the same layout under their prefix:
 | `bin/hyprune-system-gauges` | a link to the gauge script, for `argv` in `sources.json` |
 
 Both are standard-library Python and need nothing else from the checkout. A session
-launcher runs the helper with its Python as `python3 <prefix>/libexec/hyprune/source-helper`
+launcher always starts the helper (see "Gauges: wire a script", step 5); it runs the helper with its Python as `python3 <prefix>/libexec/hyprune/source-helper`
 and puts `<prefix>/bin` first on the helper's `PATH`, so `sources.json` can name the
 gauge script as `hyprune-system-gauges` on any install. The release archive's live
 launcher (`live/dev/live/live.py`) finds the helper at `../libexec/hyprune/source-helper`;
@@ -371,13 +371,13 @@ whose `id` is the instance id publishes them to that gauge.
    `sources.json`. `sources.gauges.example.json` shows four system gauges (its ids,
    `u-000001` to `u-000004`, are placeholders: use your gauges' ids).
 5. Start Hyprune with the live launcher (`dev/live/up`, also in the release archive).
-   When `sources.json` exists, the launcher grants `data.publish` to
-   `com.hyprune.sources`, starts this helper with the grant (renewed over a private
-   descriptor) and logs it to `source-helper.log` in the live state directory; `down`
-   stops it. The starter session (`hyprune-session`, in the hyprune/hyprune repository)
-   does the same from the installed path, with a one-use grant: see its documentation.
-   Edits to `sources.json` apply while it runs: no restart (a new `sources.json` needs
-   the next start).
+   The launcher always grants `data.publish` to `com.hyprune.sources` and starts this
+   helper with `--config $XDG_CONFIG_HOME/hyprune/sources.json` (passed even while the
+   file does not exist: the helper idles until it appears) and a grant renewed over a
+   private descriptor; it logs to `source-helper.log` in the live state directory, and
+   `down` stops it. The starter session (`hyprune-session`, in the hyprune/hyprune
+   repository) does the same from the installed path. Edits to `sources.json`, and a new
+   `sources.json`, apply while it runs: no restart.
 
 Optional: `$XDG_CONFIG_HOME/hyprune/machines.json` binds a gauge to another source or
 other keys (for example one script publishing several values, or a longer averaging
