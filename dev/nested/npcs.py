@@ -8,7 +8,7 @@ Checks:
  1. A world referencing a library that is not installed fails with world.library.missing;
     libraries.install, then it loads: 0.23 hello, the npcs state key, both agents walk at
     their walk clip's speed, drawn.
- 2. paths.list: both authored routes walkable; tool 3 refuses a route point off walkable floor.
+ 2. paths.list: the authored routes walkable; tool 3 refuses a route point off walkable floor.
  3. A user resident on a freshly drawn route: paths.draw (tool 3), points clicked on the
     floor, paths.finish spawns it; it walks the user route.
  4. Protection: carry (Super+LMB), tool 4 select, tool 5 pocket and objects.transform /
@@ -17,7 +17,9 @@ Checks:
  6. Step aside: a player standing on the route ahead is passed, not walked through.
  7. Frames: animating in view renders frames; out of view (and paused, still) none.
  8. A seat: the authored resident sits on the bench at its stop (root lifted by the seat
-    fit), then stands and walks on.
+    fit). Asked to guide while seated, it stands up and steps off its seat (core 0.5.0
+    refused: "can't walk there"); the player walking off cancels it and it sits down again.
+    Then it stands and walks on.
  9. Interactions: aimed resident shows the prompt (reticle interact), E opens the choice
     list; say lines advance with E; waypoint sets the waypoint.
 10. Disable/remove: authored characters disable (and enable), never remove; user ones remove.
@@ -36,6 +38,7 @@ ARCHIVE = pathlib.Path(os.environ.get('HYPRUNE_NPCS_LIBRARY', str(pathlib.Path.h
 EMBER = f'library/{LIBRARY}/resident-ember'
 LOOP = [[-12, 9.5], [2, 9.5], [2, 3], [-12, 3]]       # clear Switchyard floor (dev: the walkability grid)
 NORTH = [[-12, -12.5], [12, -12.5]]
+SOUTH = [[2, 3], [-10, 3]]                             # the loop's south edge: the guide's path, clear from the bench
 USER = [[6, 0, 0], [11, 0, 0], [11, 0, 4]]             # drawn with tool 3
 BENCH = {'position': [3.6, 0, 3], 'rotation': [0, -.7071068, 0, .7071068]}
 
@@ -72,12 +75,13 @@ def prepare(installed):
                                                           {'id': 'right', 'position': [.4, 0, .6], 'yaw': 0, 'height': .3}]}}}],
         'paths': [{'id': 'yard-loop', 'name': 'Yard loop', 'use': 'route', 'closed': True, 'points': [pt(p) for p in LOOP],
                    'stops': [{'point': 2, 'seconds': 6, 'seat': 'bench-1/left'}, {'point': 0, 'seconds': 2, 'clip': 'wave'}]},
-                  {'id': 'north-walk', 'use': 'route', 'points': [pt(p) for p in NORTH]}],
+                  {'id': 'north-walk', 'use': 'route', 'points': [pt(p) for p in NORTH]},
+                  {'id': 'south-walk', 'use': 'route', 'points': [pt(p) for p in SOUTH]}],
         'keepClear': [{'id': 'arrival', 'min': [-1, 0, 10.5], 'max': [1, 2.2, 11.2]}],
         'objects': [{'id': 'blue-walker', 'asset': 'blue', 'path': 'yard-loop', 'phase': .55, 'accent': [.2, .5, .95],
                      'interactions': [{'id': 'talk', 'label': 'Talk', 'action': {'type': 'say', 'lines': talk}},
                                       {'id': 'mark', 'label': 'Mark the north walk', 'action': {'type': 'waypoint', 'target': {'position': [0, 0, -12.5]}}},
-                                      {'id': 'show', 'label': 'Show me the north walk', 'prompt': 'Follow me', 'action': {'type': 'guide', 'path': 'north-walk'}}]},
+                                      {'id': 'show', 'label': 'Show me the south walk', 'prompt': 'Follow me', 'action': {'type': 'guide', 'path': 'south-walk'}}]},
                     {'id': 'crimson-walker', 'asset': 'crimson', 'path': 'north-walk', 'phase': .2},
                     {'id': 'bench-1', 'asset': 'bench', 'pose': BENCH}]})
     (target / 'world.json').write_text(json.dumps(w, indent=1))
@@ -198,7 +202,7 @@ def acceptance(client, children, args, shell_token, socketpath):
 
     # 2. Paths: authored routes walkable; tool 3 refuses a route point on a wall.
     paths = client.call('paths.list', {})['paths']
-    check('paths.list: authored routes, walkable', {p['id']: p['walkable'] for p in paths} == {'yard-loop': True, 'north-walk': True}, paths)
+    check('paths.list: authored routes, walkable', {p['id']: p['walkable'] for p in paths} == {'yard-loop': True, 'north-walk': True, 'south-walk': True}, paths)
 
     # 3. A user resident on a freshly drawn route.
     drawn = client.call('paths.draw', {'use': 'route', 'spawn': {'ref': EMBER, 'accent': [.95, .55, .15]}})
@@ -297,6 +301,24 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('sits on the bench seat (root lifted by the seat fit)', seated['seat'] == 'bench-1/left' and seated['clip'] == 'sit_idle' and
           seated['seatOffset'] > .2 and instance('blue-walker')['seat'] == 'bench-1/left', seated)
     look([1.2, 1.4, 1.2], [3.2, .6, 2.7]); shot('npcs-4-seated.png')
+    # 8b. Guide from the seat: stand up (the stand clip), step off to the seat's approach point,
+    # join the guide path. The player walking 30 m off cancels it: back to the seat, seated again.
+    seat_at = seated['position']
+    try:
+        client.call('interaction.choose', {'objectId': 'blue-walker', 'interactionId': 'show'}); refusal = None
+    except Exception as e:  # noqa: BLE001 - the refusal is the evidence
+        refusal = str(e)
+    check('asked to guide while seated, it accepts (no "can\'t walk there")', refusal is None, refusal)
+    off = wait(lambda: (lambda b: b if b and b['activity'] == 'guiding' and abs(b['seatOffset']) < .01 and
+                        math.dist(b['position'][::2], seat_at[::2]) > .3 else None)(agent('blue-walker')), timeout=10)
+    check('it stands up and steps off its seat to guide; the seat stays reserved',
+          off and 'bench-1/left' in diag()['seatsTaken'], {'agent': off, 'seatsTaken': diag()['seatsTaken']})
+    shot('npcs-4b-guide-from-seat.png')
+    camera([-40, 1.7, 40], 0)  # the player walks off: a guide ends 30 m away
+    back = wait(lambda: (lambda b: b if b and b['activity'] == 'sitting' and b['clip'] == 'sit_idle' else None)(agent('blue-walker')), timeout=60)
+    check('cancelled, it walks back and sits on its seat again',
+          back['seat'] == 'bench-1/left' and back['seatOffset'] > .2 and math.dist(back['position'][::2], seat_at[::2]) < .1, back)
+    look([0, 6, 9], [3, 0, 3])
     up = wait(lambda: (lambda b: b if b and b['activity'] == 'walking' and 'bench-1/left' not in diag()['seatsTaken'] else None)(agent('blue-walker')),
               timeout=40)
     check('stands up and walks on', abs(up['seatOffset']) < .01 and 'bench-1/left' not in diag()['seatsTaken'], up)

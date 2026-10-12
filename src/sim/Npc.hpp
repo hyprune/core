@@ -92,8 +92,9 @@ struct NpcAgent {
     std::optional<Vec3> interactWith;
     Route guide;
     float guideS = 0, guideIdle = 0, guideBest = 0;
-    int guidePhase = 0;              // 0 joining, 1 out, 2 waving, 3 back along, 4 returning
+    int guidePhase = 0; // -1 standing up, 0 joining, 1 out, 2 waving, 3 back along, 4 returning
     Vec3 guideFrom{};
+    int guideSeat = -1; // the seat a guide stood up from; it sits there again after
     bool guideCancelled = false;
     static constexpr float turnRate = 3.1416f, alignSeconds = .25f, fadeSeconds = .25f;
     // Root lift for an anchor, if the character fits it.
@@ -226,16 +227,37 @@ struct NpcAgent {
         if (mode == Mode::Walk && route.empty())
             mode = Mode::Idle;
     }
+    // Where a guide's join leg starts: a seated character first stands and steps off its seat
+    // to the seat's approach point (the runtime checks the leg from there).
+    Vec3 guideStart() const {
+        if (mode == Mode::Seated && seat >= 0 && seat < int(seats.size()))
+            return seats[seat].position + seats[seat].forward() * seats[seat].approach;
+        return position;
+    }
     // Guide: leave the route, walk to the guide path's start and along it ahead of the player,
     // wave at the end, walk it back and return to where it left. The runtime checked the legs.
+    // From a seat: stand up (the stand clip), step off to the approach point, guide, then walk
+    // back there and sit down again (the seat stays reserved).
     void beginGuide(Route path) {
         if (path.empty())
             return;
         endInteract();
         guide = std::move(path);
-        guideFrom = position;
         guideS = 0, guideIdle = 0, guideBest = 0, guidePhase = 0, guideCancelled = false;
-        legs = {guide.at(0)};
+        guideSeat = -1;
+        if (mode == Mode::Seated && seat >= 0 && seat < int(seats.size())) {
+            guideSeat = seat;
+            guideFrom = guideStart();
+            guidePhase = -1;
+            seatOffsetFrom = seatOffset;
+            if (has("stand"))
+                play("stand", false);
+            else
+                play("sit", false, -1, duration("sit")); // sit reversed
+        } else {
+            guideFrom = position;
+            legs = {guide.at(0)};
+        }
         resume = mode == Mode::Guide ? resume : mode;
         mode = Mode::Guide;
     }
@@ -589,7 +611,25 @@ struct NpcAgent {
             pose.loop = true;
         };
         switch (guidePhase) {
-        case 0: // join the guide path
+        case -1: { // stand up from the seat (as standTick), then step off and join
+            float d = std::max(1e-3f, duration(pose.clip));
+            float u = clipRate >= 0 ? pose.clipTime / d : 1 - pose.clipTime / d;
+            seatOffset = seatOffsetFrom * (1 - std::clamp(u, 0.f, 1.f));
+            sitBack(1 - u);
+            if (!clipDone())
+                return;
+            seatOffset = 0;
+            // Cancelled while standing (the player left): step off and sit down again.
+            legs = guideCancelled ? std::vector<Vec3>{guideFrom} : std::vector<Vec3>{guideFrom, guide.at(0)};
+            guidePhase = guideCancelled ? 4 : 0;
+            return;
+        }
+        case 0: // join the guide path; cancelled on the way (the player left): straight back
+            if (guideCancelled) {
+                guidePhase = 4;
+                legs = {guideFrom};
+                return;
+            }
             if (walkLegs(dt, walkSpeed))
                 guidePhase = 1;
             return;
@@ -653,6 +693,13 @@ struct NpcAgent {
         default: // back to where it left its route
             if (!walkLegs(dt, walkSpeed))
                 return;
+            if (guideSeat >= 0) { // back at the seat's approach point: sit down again
+                seat = guideSeat;
+                guideSeat = -1;
+                legs = {seats[seat].position};
+                mode = Mode::ToSeat;
+                return;
+            }
             mode = resume == Mode::Guide || resume == Mode::Interact ? (route.empty() ? Mode::Idle : Mode::Walk) : resume;
             if (mode == Mode::Stop)
                 mode = Mode::Walk;

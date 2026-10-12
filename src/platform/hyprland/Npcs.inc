@@ -619,7 +619,7 @@ void Runtime::beginInteraction(const std::string &objectId, const std::string &i
         auto scene = npcScene();
         interaction::Body body{n->agent.radius, n->agent.height};
         if (!routeWalkability(path, body).walkable ||
-            !interaction::checkLeg(scene, n->agent.position, route.at(0), body, 1).empty()) {
+            !interaction::checkLeg(scene, n->agent.guideStart(), route.at(0), body, 1).empty()) {
             n->agent.endInteract();
             throw ipc::Error(-32007, n->name + " can't walk there", Json{{"retryable", false}, {"rule", "walkable"}});
         }

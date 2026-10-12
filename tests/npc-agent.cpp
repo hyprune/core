@@ -218,6 +218,59 @@ int main() {
             run(b, lag, 1);
             check(b.guidePhase >= 3, "gives up when the player is 30 m away");
         }
+        // Guide from a seat (a standing character on its permanent seat): stand up with the
+        // stand clip, step off to the seat's approach point, join and guide, then walk back
+        // and sit down on the same seat. Its join leg starts at the approach point, not the seat.
+        {
+            sim::NpcAgent a;
+            a.walkSpeed = 1;
+            a.clips = {{"idle", 2}, {"walk", 1},     {"wave", 1},   {"nod", .5f},
+                       {"sit", 1},  {"sit_idle", 3}, {"stand", .8f}};
+            a.seatKnown = true, a.seatHeight = -.06f, a.seatSink = .1f, a.sitTravel = .3f;
+            a.seats = {{"ledge-seat", {0, 0, 0}, 0, .3f, .6f}}; // faces +z, 0.6 m approach
+            a.homeSeat = 0;
+            a.start();
+            check(a.mode == Mode::Seated && a.seat == 0 && a.seatOffset > 0, "starts seated on its home seat");
+            Vec3 approach{0, 0, .6f};
+            check(length(a.guideStart() - approach) < 1e-4f,
+                  "a seated guide's join leg starts at the seat's approach point");
+            a.beginInteract({0, 1.7f, 3});
+            a.beginGuide(line({{3, 0, 2}, {8, 0, 2}}));
+            check(a.mode == Mode::Guide && a.guidePhase == -1 && a.pose.clip == "stand",
+                  "stands up first (the stand clip)");
+            Vec3 seated = a.position;
+            auto w = far;
+            w.player = {1, 1.7f, 3}; // the player who asked, close by (30 m away cancels a guide)
+            run(a, w, .4f);
+            check(a.guidePhase == -1 && length(a.position - seated) < .35f && a.seatOffset < a.seatOffsetFrom,
+                  "rises in place while the stand clip plays");
+            bool passedApproach = false;
+            float t = run(a, w, 30, [&] {
+                passedApproach = passedApproach || (a.guidePhase == 0 && length(a.position - approach) < .05f);
+                w.player = a.position + Vec3{-1.5f, 1.7f, 0};
+                return a.guidePhase == 2;
+            });
+            check(passedApproach, "steps off to the approach point before joining");
+            check(a.seatOffset == 0, "stands fully up");
+            check(a.guidePhase == 2 && std::abs(a.position.x - 8) < .01f,
+                  std::format("guides from the seat to the end ({} s)", t));
+            check(a.seat == 0, "the seat stays reserved while guiding");
+            run(a, w, 40, [&] { return a.mode == Mode::Seated; });
+            check(a.mode == Mode::Seated && a.seat == 0 && std::hypot(a.position.x, a.position.z - (-.3f)) < .05f &&
+                      a.seatOffset > 0,
+                  "walks back and sits on its seat again");
+            // Cancelled while standing up (the player is 30 m away): it does not set out, it
+            // steps off and sits down again.
+            auto b = a;
+            b.beginGuide(line({{3, 0, 2}, {8, 0, 2}}));
+            float reached = 9;
+            run(b, far, 20, [&] {
+                reached = std::min(reached, std::hypot(b.position.x - 3, b.position.z - 2));
+                return b.mode == Mode::Seated;
+            });
+            check(b.mode == Mode::Seated && b.seat == 0 && reached > 2,
+                  "a guide cancelled while standing up goes back to its seat");
+        }
         // Suspended (route unwalkable): idles where it stands.
         {
             auto a = agent(line({{0, 0, 0}, {0, 0, 10}}));
@@ -231,5 +284,6 @@ int main() {
         std::cerr << "FAIL " << e.what() << '\n';
         return 1;
     }
-    std::cout << "PASS NPC agent: route by arc length, stops, fidget, seats, glance, step aside, interaction, guide, suspend\n";
+    std::cout << "PASS NPC agent: route by arc length, stops, fidget, seats, glance, step aside, interaction, guide "
+                 "(also from a seat), suspend\n";
 }
