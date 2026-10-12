@@ -39,7 +39,12 @@ EMBER = f'library/{LIBRARY}/resident-ember'
 LOOP = [[-12, 9.5], [2, 9.5], [2, 3], [-12, 3]]       # clear Switchyard floor (dev: the walkability grid)
 NORTH = [[-12, -12.5], [12, -12.5]]
 SOUTH = [[2, 3], [-10, 3]]                             # the loop's south edge: the guide's path, clear from the bench
-USER = [[6, 0, 0], [11, 0, 0], [11, 0, 4]]             # drawn with tool 3
+USER = [[6, 0, 0], [11, 0, 0], [11, 0, 4]]
+LONG_LINE = ('The loop takes about a minute. Mind the step by the signal box, and wait for me at the bench '
+             'where the yard lamps stand; the north walk is near gates.')
+# A spot where the yard's opaque geometry hides the north walk from x 2 to 10 (and shows it
+# from about -6 to 0): the walking resident there is occluded on every ray.
+HIDE_EYE = [-8, 1.7, 4]             # drawn with tool 3
 BENCH = {'position': [3.6, 0, 3], 'rotation': [0, -.7071068, 0, .7071068]}
 
 
@@ -65,7 +70,8 @@ def prepare(installed):
     shutil.copy2(s.ROOT / 'tests/fixtures/npcs/objects/bench.bin', target / 'objects/bench.bin')
     w = json.loads((target / 'world.json').read_text())
     pt = lambda p, t='line': {'position': [p[0], 0, p[1]], 'type': t}
-    talk = ['Welcome to the yard.', 'The loop takes about a minute.']
+    # The second line is 150 characters: a caption wraps (up to four lines), never cut.
+    talk = ['Welcome to the yard.', LONG_LINE]
     w.update({
         'formatVersion': '0.9', 'id': WORLD, 'name': 'NPC yard',
         'objectAssets': [{'id': 'blue', 'library': LIBRARY, 'object': 'resident-blue'},
@@ -339,12 +345,41 @@ def acceptance(client, children, args, shell_token, socketpath):
     shot('npcs-6-say.png')
     keys('-k', 'e'); time.sleep(.3)
     check('E advances the line', state()['npcs']['interaction']['lineIndex'] == 1, state()['npcs']['interaction'])
+    time.sleep(.3)
+    caption = next((l for l in s.camera()['overlays']['labels'] if l.get('lines')), None)
+    check('a 150-character line wraps over the resident: every word drawn, no ellipsis',
+          len(LONG_LINE) == 150 and caption and 2 <= len(caption['lines']) <= 4 and not caption['truncated'] and
+          not any('...' in l or '\u2026' in l for l in caption['lines']) and ' '.join(caption['lines']) == LONG_LINE, caption)
+    shot('npcs-6b-say-wrapped.png')
     keys('-k', 'e'); time.sleep(.3)
     check('and ends it after the last', state()['npcs']['interaction'] is None, state()['npcs'])
     client.call('interaction.choose', {'objectId': 'blue-walker', 'interactionId': 'mark'}); time.sleep(.4)
     wp = state()['location']['waypoint']
     check('waypoint sets the waypoint', wp is not None, wp)
     motion('always')
+
+    # 9b. Occlusion: alone on its walk (the others disabled), the resident behind the yard's
+    # opaque geometry is not drawn and keeps no frames coming; in the open again it is both.
+    for other in ('blue-walker', user_id):
+        client.call('npcs.disable', {'id': other, 'disabled': True})
+    time.sleep(.3)
+    look(HIDE_EYE, [0, 1, -12.5])
+    hid = wait(lambda: (lambda b: b if b and 3 <= b['position'][0] <= 9 and b['occluded'] else None)(agent('crimson-walker')), timeout=90)
+    time.sleep(.3)
+    hidden = diag()
+    check('a resident behind opaque geometry is occluded: not drawn, no frames requested',
+          hid and hidden['drawn'] == 0 and not hidden['animationVisible'], {'agent': hid, 'drawn': hidden['drawn'], 'animationVisible': hidden['animationVisible']})
+    hidden_fps = fps(2)
+    shot('npcs-6c-occluded.png')
+    seen = wait(lambda: (lambda b: b if b and -5 <= b['position'][0] <= -1 and not b['occluded'] else None)(agent('crimson-walker')), timeout=90)
+    time.sleep(.3)
+    open_ = diag()
+    check('in the open it is drawn and keeps frames coming again',
+          seen and open_['drawn'] == 1 and open_['animationVisible'], {'agent': seen, 'drawn': open_['drawn'], 'animationVisible': open_['animationVisible'],
+                                                                       'hiddenFps': hidden_fps})
+    for other in ('blue-walker', user_id):
+        client.call('npcs.disable', {'id': other, 'disabled': False})
+    time.sleep(.3)
 
     # 10. Disable and remove.
     client.call('npcs.disable', {'id': 'crimson-walker', 'disabled': True}); time.sleep(.3)
