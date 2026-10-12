@@ -1414,6 +1414,8 @@ class HelperControl(unittest.TestCase):
         self.assertEqual(control(sock, {"op": "restart", "id": "slow", "resetAverage": True}), {"ok": True})
         self.assertTrue(wait_for(lambda: self.published("slow")[-1].get("_reset") == 2, 10))
         values = self.published("slow")
+        # _reset moves with a fresh run's values, never with the values from before the restart.
+        self.assertEqual([(v["run"], v["_reset"]) for v in values if v["_reset"] == 2], [(4, 2)])
         self.assertTrue(all(v["_status"] == "ok" and "_reset" in v for v in values), values)  # the kill never published
         self.assertEqual(control(sock, {"op": "restart", "id": "slow", "resetAverage": "yes"})["ok"], False)
         self.stop()

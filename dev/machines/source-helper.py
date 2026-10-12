@@ -827,7 +827,9 @@ class Source:
         self.slot = ProcessSlot()    # the running command, for a restart
         self.discard = False         # a restart killed the running fetch: ignore its result
         self.rerun = False           # a restart came while an uninterruptible fetch ran
-        self.resets = 0              # resetAverage requests, published as _reset when > 0
+        self.resets = 0              # resetAverage requests
+        self.published_resets = 0    # _reset as published: it moves with the next run's values,
+                                     # so core restarts the average on fresh data, never stale
         self.last_run = None         # the last finished fetch, for the control channel's status
 
     def interval(self, rnd=random):
@@ -855,6 +857,7 @@ class Source:
         else:
             meta = {"_status": "ok", **meta}
         self.values, self.meta, self.has_data = clean, meta, True
+        self.published_resets = self.resets
         if self.failures:
             log.info("%s: recovered after %d failure(s)", label, self.failures)
         self.failures = 0
@@ -865,6 +868,7 @@ class Source:
         message = sanitize_error(str(error), self.spec.secrets)
         self.meta = {"_status": "error", "_error": message, **getattr(error, "meta", {})}
         self.has_data = True  # an error is published too: last good values plus metadata
+        self.published_resets = self.resets
         delay = backoff_delay(self.spec.interval, self.failures, rnd)
         if getattr(error, "retry_after", None):
             delay = max(delay, min(error.retry_after, 3600.0))
@@ -873,8 +877,8 @@ class Source:
 
     def publication(self):
         values = {**self.values, **self.meta}
-        if self.resets:
-            values["_reset"] = self.resets
+        if self.published_resets:
+            values["_reset"] = self.published_resets
         return values
 
     def record_run(self, duration_ms):
@@ -1318,7 +1322,7 @@ class Runner:
             if old is not None:
                 source.sequence.floor(old.sequence.last)
                 source.published, source.published_at = old.published, old.published_at
-                source.resets = old.resets
+                source.resets, source.published_resets = old.resets, old.published_resets
                 changed.append(spec.slug)
             else:
                 added.append(spec.slug)
@@ -1550,7 +1554,7 @@ class Runner:
             source, old = Source(spec), previous.get(spec.source_id)
             if old is not None:
                 source.sequence.floor(old.sequence.last)
-                source.resets = old.resets
+                source.resets, source.published_resets = old.resets, old.published_resets
             sources.append(source)
         self.sources = sources
         self.publisher.reset_backoff()
