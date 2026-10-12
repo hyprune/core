@@ -1,5 +1,4 @@
 name: Release build
-# Staged here; the active copy belongs at .github/workflows/release.yml.
 # Prebuilt plugin and helpers for one Hyprland ABI, built in an Arch container
 # pinned to an Arch Linux Archive snapshot (same Hyprland package as the target).
 # Tags v* publish a GitHub Release with the archive and its sha256; other pushes
@@ -10,7 +9,6 @@ on:
     tags: ['v*']
     paths:
       - .github/workflows/release.yml
-      - dev/release/release.yml
       - dev/release/**
   workflow_dispatch:
 permissions:
