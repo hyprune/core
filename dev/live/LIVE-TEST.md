@@ -311,3 +311,17 @@ cursor and a headless output, so check on the real session:
 - [ ] Start a short focus session on a workspace from the Quests page: the HUD timer
   counts down; typing in that workspace's window on the desktop credits; pause, skip and
   stop work from the HUD/Director.
+
+## Deferred input runs at the start of the world tick (replay determinism)
+
+Input that the compositor's handlers defer (button actions, free-cursor and Use
+transitions, captures) now also runs at the start of the next world tick, still from an
+idle callback outside the render pass, in arrival order; before, a tick queued earlier
+could run first. Nested has a software cursor, so check on the real session:
+
+- [ ] Super+Tab (free cursor) in and out several times while walking, and Back to return:
+  the hardware cursor shows and hides once per toggle, no flicker, no crash.
+- [ ] E (use) into a window and Super+Tab out, quickly and repeatedly: typing lands in the
+  window, the cursor transition is clean.
+- [ ] Hold W, tap D, release both: movement starts and stops on the frame you expect (no
+  lag or extra step), and LMB/RMB tool actions respond on the press.

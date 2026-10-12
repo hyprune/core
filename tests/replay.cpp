@@ -1,5 +1,8 @@
+#include "interaction/InputQueue.hpp"
 #include "replay/Session.hpp"
 #include <cassert>
+#include <deque>
+#include <functional>
 #include <iostream>
 using namespace hyprune;
 using Json = world::Json;
@@ -74,6 +77,55 @@ int main() {
     session.stopRecording();
     session.load(session.path, "input", 0, Json::object());
     assert(session.events[0][0]["key"] == "a");
+    // An input recorded for frame N takes effect in frame N, as a replay applies it. Live, the
+    // compositor queues the frame's tick before the input's own idle callback; unless the tick
+    // runs queued input first, the press steps a frame late and the replay drifts a frame.
+    for (bool tickRunsQueuedInput : {true, false}) {
+        interaction::InputQueue queue;
+        std::deque<std::function<void()>> idle; // the event loop's doLater callbacks, in order
+        bool held = false;
+        float position = 0;
+        std::vector<float> live, replayed;
+        session.startRecording({{"initial", initial}}, true);
+        auto tick = [&] {
+            if (tickRunsQueuedInput)
+                queue.run(queue.last());
+            position += held ? 1.f : 0.f;
+            live.push_back(position);
+            session.recordFrame(initial);
+        };
+        auto key = [&](bool down) { // recorded now, applied through the deferred queue
+            session.event({{"type", "key"}, {"key", "w"}, {"mods", 0}, {"down", down}, {"value", 0}}, false);
+            auto upTo = queue.push([&held, down] { held = down; });
+            idle.push_back([&queue, upTo] { queue.run(upTo); });
+        };
+        for (int frame = 0; frame < 6; ++frame) {
+            idle.push_back(tick); // presentation feedback queues this frame's tick
+            if (frame == 1)
+                key(true);
+            if (frame == 3)
+                key(false);
+            while (!idle.empty()) {
+                auto next = std::move(idle.front());
+                idle.pop_front();
+                next();
+            }
+        }
+        session.stopRecording();
+        session.load(session.path, "input", 0, Json::object());
+        held = false;
+        position = 0;
+        for (size_t frame = 0; frame < session.frames.size(); ++frame) {
+            for (auto &e : session.events[frame])
+                held = e.at("down");
+            position += held ? 1.f : 0.f;
+            replayed.push_back(position);
+        }
+        assert((live == replayed) == tickRunsQueuedInput);
+        if (tickRunsQueuedInput)
+            assert((live == std::vector<float>{0, 1, 2, 2, 2, 2}));
+    }
     std::filesystem::remove_all(root);
-    std::cout << "PASS recording redaction/opt-in, atomic ownership, fixed frames, smoothing, assertions, truncation\n";
+    std::cout << "PASS recording redaction/opt-in, atomic ownership, fixed frames, smoothing, assertions, truncation, "
+                 "input in its recorded frame\n";
 }

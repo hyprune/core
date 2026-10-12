@@ -1,9 +1,10 @@
 #include "control/Control.hpp"
+#include "interaction/CaptureNotes.hpp"
 #include "interaction/Config.hpp"
 #include "interaction/Content.hpp"
-#include "interaction/CaptureNotes.hpp"
 #include "interaction/Hands.hpp"
 #include "interaction/InputFile.hpp"
+#include "interaction/InputQueue.hpp"
 #ifdef HYPRUNE_LIVE_BUILD
 #include "../../../dev/live/Bootstrap.hpp"
 #endif
@@ -547,6 +548,9 @@ struct Runtime {
     std::optional<bool> pendingCursorHide;
     uint64_t deferred = 0, tickDeferred = 0;
     std::vector<uint64_t> inputDeferred;
+    interaction::InputQueue inputQueue;
+    void runInput(uint64_t upTo);
+    void scheduleInput(uint64_t upTo);
     void deferInput(std::function<void()>);
     // The workspace each output showed last, so a switch knows what it leaves.
     std::map<const void *, int> shownWorkspaces;
@@ -835,17 +839,24 @@ void Runtime::settleWorkspaceSwitch(const PHLWORKSPACE &to) {
         settle();
 }
 void Runtime::deferInput(std::function<void()> operation) {
+    scheduleInput(inputQueue.push([operation = std::move(operation)] { safe(operation); }));
+}
+// Runs queued input up to `upTo`, oldest first; inside a render pass it waits for an idle
+// callback. The tick runs everything queued before it steps.
+void Runtime::runInput(uint64_t upTo) {
+    settleRenderPass(); // an idle callback never runs inside renderMonitor
+    if (renderPass.active())
+        scheduleInput(upTo);
+    else
+        inputQueue.run(upTo);
+}
+void Runtime::scheduleInput(uint64_t upTo) {
     auto id = std::make_shared<uint64_t>(0);
-    *id = g_pEventLoopManager->doLater([id, operation = std::move(operation)] {
+    *id = g_pEventLoopManager->doLater([id, upTo] {
         if (!runtime)
             return;
         std::erase(runtime->inputDeferred, *id);
-        runtime->settleRenderPass(); // an idle callback never runs inside renderMonitor
-        if (runtime->renderPass.active()) {
-            runtime->deferInput(std::move(operation));
-            return;
-        }
-        safe(operation);
+        runtime->runInput(upTo);
     });
     inputDeferred.push_back(*id);
 }
@@ -4516,6 +4527,9 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
 void Runtime::tick() {
     if (renderPass.active())
         throw std::runtime_error("deferred work inside compositor render pass");
+    // Input that arrived since the last tick takes effect in this frame: its idle callback can
+    // come after this tick, a frame late, where a replay applies it on time.
+    runInput(inputQueue.last());
     auto updateStarted = std::chrono::steady_clock::now();
     if (capturePending) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
@@ -6036,6 +6050,7 @@ APICALL EXPORT void PLUGIN_EXIT() {
     for (auto id : runtime->inputDeferred)
         g_pEventLoopManager->removeDoLater(id);
     runtime->inputDeferred.clear();
+    runtime->inputQueue.clear();
     runtime->listeners.clear();
     if (runtime->timer)
         g_pEventLoopManager->removeTimer(runtime->timer);
