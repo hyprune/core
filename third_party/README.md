@@ -43,3 +43,10 @@ verifies them and that `src/world/SchemaData.hpp` is regenerated.
 World format 0.8's schema (placed world objects) is vendored the same way under
 `hyprune-schema/v0.8` (`world.schema.json`, `common.schema.json`, beside the
 IPC 0.8 file) with its own `WORLD-SOURCE.json`.
+
+SPDX identifier lists under `spdx/` (object and library licence checks, RFC-0011):
+`license-ids.json` and `license-ids-deprecated.json` from spdx-license-ids 3.0.24
+(https://github.com/jslicense/spdx-license-ids, CC0-1.0) and `exceptions.json` from
+spdx-exceptions 2.5.0 (https://github.com/jslicense/spdx-exceptions.json, CC-BY-3.0,
+data from the SPDX project). `dev/embed-spdx.py` generates `src/world/SpdxData.hpp`;
+CTest `schema-pin` checks that it is current.
