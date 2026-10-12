@@ -660,6 +660,8 @@ bool Renderer::instanceVisible(const world::ObjectInstance &o, const std::array<
 // NPC culling: rest bounds grown by 0.6 m for limbs in motion, then placed by the model.
 bool Renderer::npcVisible(const Npc &npc, const std::array<std::array<float, 4>, 6> &planes, const std::vector<bool> &areas,
                           bool regions) const {
+    if (npc.occluded)
+        return false;
     auto &c = *npc.character;
     Vec3 lo = c.lo - Vec3{.6f, .6f, .6f}, hi = c.hi + Vec3{.6f, .6f, .6f}, a = npc.model.point(lo), b = a;
     for (int corner = 1; corner < 8; ++corner) {

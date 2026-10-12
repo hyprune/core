@@ -123,6 +123,9 @@ class Renderer {
         // Probe light at its position (ambient up rgb, sun, ambient down rgb, sun visibility);
         // all zero: the shader's default light.
         std::array<float, 8> probe{};
+        // Hidden behind opaque scene geometry from the eye (decided by the runtime, so the
+        // in-process and offload renderers agree): not drawn, keeps no frames coming.
+        bool occluded = false;
     };
     std::vector<Npc> npcs;
     int npcsDrawn = 0;

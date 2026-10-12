@@ -16,6 +16,7 @@
 #include "surfaces/Stacking.hpp"
 #include "world/Mounts.hpp"
 #include "world/Objects.hpp"
+#include "world/Occlusion.hpp"
 #include "world/Catalog.hpp"
 #include <regex>
 #include <sys/inotify.h>
@@ -580,6 +581,10 @@ struct Runtime {
         world::Character::PoseInput posed;
         bool stillPosed = false, lit = false;
         Vec3 regionAt{1e9f, 1e9f, 1e9f}, lightAt{};
+        // Hidden behind opaque geometry from the eye (world::characterOccluded), re-checked
+        // when the eye or the character moves: no frames requested, not drawn.
+        bool occluded = false;
+        Vec3 occludedEye{1e9f, 1e9f, 1e9f}, occludedAt{1e9f, 1e9f, 1e9f};
         std::optional<std::future<world::ProbeLight>> light;
         std::array<float, 8> probe{};
         std::chrono::steady_clock::time_point published{};
@@ -4139,6 +4144,7 @@ void Runtime::toolsTick() {
                                                       matrix.point(mesh.vertices[i + 2].position)});
             }
             world->visualIndex.rebuild(world->visualTriangles);
+            world::buildOccluders(*world, committed);
         }
         // A moved object takes the visibility and probe light of its new place.
         {
@@ -5359,6 +5365,10 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     // NPCs: shown/hidden, placed and posed (a paused or still NPC keeps the key stable; an
     // animating one out of view doesn't change the image, and in view frames are forced).
     h(r.npcs.size());
+    // Occlusion changes once per crossing: the frame after a character goes fully behind a
+    // wall draws it gone, instead of leaving its last frame at the wall's edge.
+    for (auto &npc : r.npcs)
+        h(npc.occluded);
     if (npcState != "animating")
         for (auto &npc : r.npcs) {
             h.bytes(npc.model.v.data(), sizeof npc.model.v);

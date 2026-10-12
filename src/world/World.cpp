@@ -4,6 +4,7 @@
 #include "Gltf.hpp"
 #include "Mounts.hpp"
 #include "Objects.hpp"
+#include "Occlusion.hpp"
 #include "Paths.hpp"
 #include "Schema.hpp"
 #include "Spatial.hpp"
@@ -717,6 +718,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions optio
             result->visualTriangles.push_back(
                 {mesh.vertices[i].position, mesh.vertices[i + 1].position, mesh.vertices[i + 2].position});
     result->visualIndex.rebuild(result->visualTriangles);
+    buildOccluders(*result);
     // Object probe lighting samples the static world (baked light, sky), so it runs last.
     lightObjects(*result);
     markCollisionOwners(*result);

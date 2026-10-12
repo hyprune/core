@@ -140,6 +140,9 @@ struct World {
     std::vector<Mesh> meshes;
     std::vector<Triangle> collision, visualTriangles;
     sim::TriangleIndex collisionIndex, visualIndex;
+    // Opaque scene geometry only (Occlusion.hpp): what can hide a character.
+    std::vector<Triangle> occluderTriangles;
+    sim::TriangleIndex occluderIndex;
     std::vector<Material> materials;
     std::vector<Image> images;
     std::vector<Sampler> samplers;

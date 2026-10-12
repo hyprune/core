@@ -10,7 +10,8 @@
 #include <json.hpp>
 namespace hyprune::offload {
 inline nlohmann::json characterRecord(unsigned asset, const Mat4 &model, const world::Character::PoseInput &in,
-                                      const std::optional<Vec3> &accent, const std::array<float, 8> &probe, bool moving) {
+                                      const std::optional<Vec3> &accent, const std::array<float, 8> &probe, bool moving,
+                                      bool occluded = false) {
     using Json = nlohmann::json;
     auto name = [](const world::Character::Clip *c) { return c ? Json(c->name) : Json(nullptr); };
     return Json{{"asset", asset},
@@ -25,7 +26,8 @@ inline nlohmann::json characterRecord(unsigned asset, const Mat4 &model, const w
                 {"look", {in.lookYaw, in.lookPitch}},
                 {"accent", accent ? Json{accent->x, accent->y, accent->z} : Json(nullptr)},
                 {"probe", probe},
-                {"moving", moving}};
+                {"moving", moving},
+                {"occluded", occluded}};
 }
 // Worker side: the renderer's character list from a pose's records (unknown assets and
 // clips are skipped).
@@ -56,6 +58,7 @@ inline void applyCharacters(const nlohmann::json &records, const world::World &w
             npc.accent = Vec3{c["accent"][0], c["accent"][1], c["accent"][2]};
         npc.probe = c.at("probe").get<std::array<float, 8>>();
         npc.moving = c.at("moving");
+        npc.occluded = c.value("occluded", false);
         r.npcs.push_back(std::move(npc));
     }
 }

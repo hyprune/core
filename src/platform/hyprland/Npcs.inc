@@ -485,7 +485,15 @@ void Runtime::npcTick(float dt) {
                 moved = true;
             }
         }
-        renderer.npcs[i] = {n.character, model, n.skin, n.accent, animate && n.state == "active", n.probe};
+        // Occlusion: a few rays to its bounds against opaque scene geometry, only when the eye
+        // or the character moved. With visibility culling off nothing is hidden.
+        if (!renderer.graphics.value("visibility_culling", true))
+            n.occluded = false, n.occludedEye = n.occludedAt = {1e9f, 1e9f, 1e9f};
+        else if (length(camera.position - n.occludedEye) > .05f || length(a.position - n.occludedAt) > .05f) {
+            n.occludedEye = camera.position, n.occludedAt = a.position;
+            n.occluded = world::characterOccluded(*world, camera.position, model, c.lo, c.hi);
+        }
+        renderer.npcs[i] = {n.character, model, n.skin, n.accent, animate && n.state == "active", n.probe, n.occluded};
     }
     // New characters upload here, never in the render pass.
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
@@ -1258,6 +1266,7 @@ Json Runtime::npcDiagnostics() {
                           {"look", {a.pose.lookYaw, a.pose.lookPitch}},
                           {"lateral", a.lateral},
                           {"yielding", a.yielding},
+                          {"occluded", n.occluded},
                           {"seat", a.seatRef()},
                           {"seatOffset", a.seatOffset},
                           {"seatFit", {{"known", a.seatKnown}, {"seatHeight", a.seatHeight}, {"sink", a.seatSink}}},
@@ -1288,7 +1297,8 @@ Json Runtime::offloadCharacters() const {
         auto &draw = renderer.npcs[i];
         if (!draw.character)
             continue;
-        out.push_back(offload::characterRecord(n.asset, draw.model, n.posed, draw.accent, draw.probe, draw.moving));
+        out.push_back(offload::characterRecord(n.asset, draw.model, n.posed, draw.accent, draw.probe, draw.moving,
+                                               draw.occluded));
     }
     return out;
 }
