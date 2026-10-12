@@ -12,6 +12,7 @@ bool opaqueMesh(const World &, const Mesh &);
 void buildOccluders(World &, const std::map<unsigned, Mat4> &transforms = {});
 // True when every ray from `eye` to the character's sample points (centre, head, feet and
 // the sides at mid height, of its rest bounds grown by `margin` for limbs, placed by `model`)
-// hits opaque geometry well before the point. False without occluders.
+// hits opaque geometry well before the point: hits within 0.3 m of the eye or the point, or
+// inside the bounds grown by 0.3 m, leave the ray clear. False without occluders.
 bool characterOccluded(const World &, Vec3 eye, const Mat4 &model, Vec3 lo, Vec3 hi, float margin = .3f);
 } // namespace hyprune::world

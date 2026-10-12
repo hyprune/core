@@ -57,9 +57,19 @@ int main() {
         check(!world::characterOccluded(w, eye, at(0, -10), lo, hi), "the wall moved away: visible again");
         check(world::characterOccluded(w, {20, 1.7f, 0}, at(20, -10), lo, hi),
               "and hides what is behind its new place");
+        // Hits near the eye or the character never hide it (if in doubt, draw).
+        world::World near;
+        near.materials.resize(1);
+        near.meshes = {quad(-3, 3, -1, 5, -.2f, 0),   // a wall 0.2 m in front of the eye
+                       quad(17, 23, -1, 5, -9.6f, 0)}; // a wall the character stands against
+        world::buildOccluders(near);
+        check(!world::characterOccluded(near, eye, at(0, -10), lo, hi), "a wall at the eye (near plane): drawn");
+        check(!world::characterOccluded(near, {20, 1.7f, 0}, at(20, -10), lo, hi),
+              "a wall within 0.3 m of the character: drawn");
+        check(world::characterOccluded(near, {20, 1.7f, 0}, at(20, -10.8f), lo, hi), "a step further back it hides");
     } catch (const std::exception &e) {
         std::cerr << "FAIL " << e.what() << '\n';
         return 1;
     }
-    std::cout << "PASS character occlusion: opaque occluders, all rays blocked, glass, low walls, edges, moved nodes\n";
+    std::cout << "PASS character occlusion: opaque occluders, all rays blocked, glass, low walls, edges, moved nodes, near hits\n";
 }

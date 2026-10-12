@@ -38,14 +38,20 @@ bool characterOccluded(const World &w, Vec3 eye, const Mat4 &model, Vec3 lo, Vec
     float half = std::max(b.x - a.x, b.z - a.z) * .5f + margin;
     std::array<Vec3, 5> points{centre, Vec3{centre.x, b.y + margin * .5f, centre.z},
                                Vec3{centre.x, a.y + .1f, centre.z}, centre + side * half, centre - side * half};
+    // Hits this close to the eye or the character, or inside its bounds grown by as much, are
+    // not trusted to hide it (the near plane, a surface it touches, its own floor).
+    constexpr float near = .3f;
+    Vec3 ga = a - Vec3{near, near, near}, gb = b + Vec3{near, near, near};
+    auto inside = [&](Vec3 p) {
+        return p.x >= ga.x && p.x <= gb.x && p.y >= ga.y && p.y <= gb.y && p.z >= ga.z && p.z <= gb.z;
+    };
     for (auto p : points) {
         Vec3 d = p - eye;
         float distance = length(d);
-        if (distance < .3f)
+        if (distance < 2 * near)
             return false;
         auto hit = interaction::raycast(eye, d * (1 / distance), w.occluderTriangles, &w.occluderIndex);
-        // A hit near the point is the floor under the feet or a surface it touches: not hidden.
-        if (!hit || hit->distance > distance - .25f)
+        if (!hit || hit->distance < near || hit->distance > distance - near || inside(hit->point))
             return false;
     }
     return true;
