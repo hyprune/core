@@ -1,0 +1,596 @@
+{
+  "nestedOnly": true,
+  "world": "com.hyprune.lumen-reach",
+  "protocol": "0.22",
+  "library": "com.hyprune.starter-0.1.0.tar.zst",
+  "stills": [
+    "tool5-ghost.png",
+    "rack-placed.png",
+    "tool5-refused.png",
+    "rack-tool4.png",
+    "armillary-hidden.png",
+    "after-reload.png"
+  ],
+  "checks": [
+    {
+      "name": "IPC 0.22 with objects.control and the object and library methods",
+      "evidence": {
+        "protocol": "0.22"
+      }
+    },
+    {
+      "name": "state carries objects: the authored armillary, empty pocket, usage and limits",
+      "evidence": {
+        "armillary": {
+          "activity": null,
+          "areaId": "sun-court",
+          "id": "sun-court-armillary",
+          "locked": false,
+          "movable": true,
+          "name": "armillary",
+          "path": null,
+          "pose": {
+            "position": [
+              -7.0,
+              4.179999828338623,
+              -10.0
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "ref": "package/armillary",
+          "rule": null,
+          "scale": 1.0,
+          "seat": null,
+          "source": "authored",
+          "state": "active"
+        },
+        "limits": {
+          "assets": 32,
+          "collisionTriangles": 10000,
+          "gpuBytes": 201326592,
+          "placements": 128,
+          "triangles": 400000
+        }
+      }
+    },
+    {
+      "name": "libraries.install checks the archive hash first",
+      "evidence": {
+        "code": -32602,
+        "message": "archive sha256 mismatch"
+      }
+    },
+    {
+      "name": "the starter library installs (and again, idempotently) and lists ready",
+      "evidence": {
+        "install": {
+          "id": "com.hyprune.starter",
+          "revision": 20,
+          "version": "0.1.0"
+        },
+        "library": {
+          "digest": "04d0beac1b454e7a7e8ae0dfe5ef707be24e0c4bd5b7400c937b3836c12fcb4e",
+          "errors": [],
+          "formatVersion": "0.10",
+          "id": "com.hyprune.starter",
+          "name": "Hyprune starter kit",
+          "objects": 11,
+          "root": "user",
+          "state": "ready",
+          "version": "0.1.0"
+        }
+      }
+    },
+    {
+      "name": "catalog: library objects with placeability, characters and movers refused with a reason",
+      "evidence": {
+        "entries": 12,
+        "reasons": {
+          "resident-blue": "character: user characters arrive with routes (RFC-0011 P2)",
+          "resident-crimson": "character: user characters arrive with routes (RFC-0011 P2)",
+          "resident-desert": "character: user characters arrive with routes (RFC-0011 P2)",
+          "resident-ember": "character: user characters arrive with routes (RFC-0011 P2)",
+          "job-token": "mover: tracks and items need world format 0.10 (RFC-0011 P3)"
+        }
+      }
+    },
+    {
+      "name": "catalog estimates are the SDK's: server rack triangles, GPU bytes, proxy triangles",
+      "evidence": {
+        "triangles": 2818,
+        "gpuBytes": 448238,
+        "collisionTriangles": 24,
+        "bounds": {
+          "max": [
+            0.62,
+            2.16,
+            0.65
+          ],
+          "min": [
+            -0.62,
+            0.0,
+            -0.65
+          ]
+        }
+      }
+    },
+    {
+      "name": "a dropped user object is validated and listed ready; an invalid one with its errors",
+      "evidence": {
+        "lamp": {
+          "ref": "user/lamp",
+          "state": "ready",
+          "triangles": 36,
+          "gpuBytes": 1296
+        },
+        "broken": [
+          "bounds: min y must be 0 (the base at the origin), is 0.2",
+          "bounds: min y 0.2 does not match the scene (0)"
+        ]
+      }
+    },
+    {
+      "name": "objects.pocket selects tool 5 and the pocket item",
+      "evidence": {
+        "count": 1,
+        "objects": [
+          {
+            "itemId": "pocket-1",
+            "name": "Server rack",
+            "ref": "library/com.hyprune.starter@0.1.0/server-rack"
+          }
+        ],
+        "preview": true,
+        "selectedId": "pocket-1",
+        "windows": []
+      }
+    },
+    {
+      "name": "the ghost follows the aim, upright, on open floor, valid",
+      "evidence": {
+        "ghost": {
+          "active": true,
+          "asset": 1,
+          "distance": 4.957745552062988,
+          "message": "",
+          "position": [
+            -8.0,
+            0.004999995231628418,
+            3.3428292274475098
+          ],
+          "rotation": [
+            0.0,
+            -0.0,
+            0.0,
+            1.0
+          ],
+          "rule": "",
+          "valid": true
+        },
+        "camera": [
+          [
+            -8,
+            1.7,
+            8
+          ],
+          0,
+          -0.35
+        ]
+      }
+    },
+    {
+      "name": "Primary places the rack where the ghost was; the pocket item is consumed",
+      "evidence": {
+        "activity": null,
+        "areaId": "sun-court",
+        "id": "u-88c5c1",
+        "locked": false,
+        "movable": true,
+        "name": "Server rack",
+        "path": null,
+        "pose": {
+          "position": [
+            -8.0,
+            0.004999995231628418,
+            3.3428292274475098
+          ],
+          "rotation": [
+            0.0,
+            -0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "ref": "library/com.hyprune.starter@0.1.0/server-rack",
+        "rule": null,
+        "scale": 1.0,
+        "seat": null,
+        "source": "user",
+        "state": "active"
+      }
+    },
+    {
+      "name": "the rack has collision at its pose",
+      "evidence": {
+        "asset": 1,
+        "center": [
+          -8.0,
+          1.0850000381469727,
+          3.3428292274475098
+        ],
+        "collision": [
+          6014,
+          24
+        ],
+        "hidden": false,
+        "id": "u-88c5c1",
+        "radius": 1.3823989629745483
+      }
+    },
+    {
+      "name": "tool 5 refuses a blocked pose: nothing placed, the rule said",
+      "evidence": {
+        "ghost": {
+          "active": true,
+          "asset": 2,
+          "distance": 4.957745552062988,
+          "message": "Inside a window zone",
+          "position": [
+            2.340665340423584,
+            0.004999935626983643,
+            2.3124380111694336
+          ],
+          "rotation": [
+            0.0,
+            -0.5646424889564514,
+            0.0,
+            0.8253356218338013
+          ],
+          "rule": "zone",
+          "valid": false
+        },
+        "notice": {
+          "code": "placement.blocked",
+          "level": "info",
+          "message": "Not placed: Inside a window zone"
+        }
+      }
+    },
+    {
+      "name": "objects.place inside a wall: -32007 naming the rule in error data",
+      "evidence": {
+        "code": -32007,
+        "data": {
+          "retryable": false,
+          "rule": "walls"
+        },
+        "message": "Not placed: Inside a wall"
+      }
+    },
+    {
+      "name": "the user lamp places from the pocket",
+      "evidence": {
+        "activity": null,
+        "areaId": "sun-court",
+        "id": "u-0645b7",
+        "locked": false,
+        "movable": true,
+        "name": "Floor lamp",
+        "path": null,
+        "pose": {
+          "position": [
+            -4.5,
+            0.004999935626983643,
+            3.3428292274475098
+          ],
+          "rotation": [
+            0.0,
+            -0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "ref": "user/lamp",
+        "rule": null,
+        "scale": 1.0,
+        "seat": null,
+        "source": "user",
+        "state": "active"
+      }
+    },
+    {
+      "name": "tool 4 selects the user object",
+      "evidence": "object:u-88c5c1"
+    },
+    {
+      "name": "a move-handle drag moves the rack along x; the overlay records it",
+      "evidence": {
+        "from": [
+          -8.0,
+          0.004999995231628418,
+          3.3428292274475098
+        ],
+        "to": [
+          -8.75777530670166,
+          0.004999995231628418,
+          3.3428292274475098
+        ]
+      }
+    },
+    {
+      "name": "undo returns the rack",
+      "evidence": {
+        "position": [
+          -8.0,
+          0.004999995231628418,
+          3.3428292274475098
+        ],
+        "rotation": [
+          0.0,
+          -0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "tool 5 Alternate pockets a user object: it leaves the world, the pocket selects it",
+      "evidence": {
+        "count": 1,
+        "objects": [
+          {
+            "itemId": "pocket-3",
+            "name": "Floor lamp",
+            "ref": "user/lamp"
+          }
+        ],
+        "preview": true,
+        "selectedId": "pocket-3",
+        "windows": []
+      }
+    },
+    {
+      "name": "objects.remove deletes a user placement and its record",
+      "evidence": "u-a81d4d"
+    },
+    {
+      "name": "undo restores the removed object",
+      "evidence": {
+        "activity": null,
+        "areaId": "sun-court",
+        "id": "u-a81d4d",
+        "locked": false,
+        "movable": true,
+        "name": "Floor lamp",
+        "path": null,
+        "pose": {
+          "position": [
+            -8.0,
+            0.004999935626983643,
+            3.3428292274475098
+          ],
+          "rotation": [
+            0.0,
+            -0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "ref": "user/lamp",
+        "rule": null,
+        "scale": 1.0,
+        "seat": null,
+        "source": "user",
+        "state": "active"
+      }
+    },
+    {
+      "name": "objects.transform moves an authored object into an override",
+      "evidence": {
+        "areaId": "sun-court",
+        "objectId": "sun-court-armillary",
+        "pose": {
+          "position": [
+            -6.5,
+            4.179999828338623,
+            -10.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "scale": 1.0,
+        "worldId": "com.hyprune.lumen-reach"
+      }
+    },
+    {
+      "name": "a hidden authored object is not drawn and has no collision",
+      "evidence": {
+        "asset": 0,
+        "center": [
+          -6.5,
+          4.179999828338623,
+          -10.0
+        ],
+        "collision": [
+          6014,
+          0
+        ],
+        "hidden": true,
+        "id": "sun-court-armillary",
+        "radius": 2.1770002841949463
+      }
+    },
+    {
+      "name": "objects.reset clears the override: authored pose, shown",
+      "evidence": {
+        "activity": null,
+        "areaId": "sun-court",
+        "id": "sun-court-armillary",
+        "locked": false,
+        "movable": true,
+        "name": "armillary",
+        "path": null,
+        "pose": {
+          "position": [
+            -7.0,
+            4.179999828338623,
+            -10.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "ref": "package/armillary",
+        "rule": null,
+        "scale": 1.0,
+        "seat": null,
+        "source": "authored",
+        "state": "active"
+      }
+    },
+    {
+      "name": "user objects are removed, not hidden",
+      "evidence": {
+        "code": -32005,
+        "message": "remove user objects instead of hiding them"
+      }
+    },
+    {
+      "name": "a locked object refuses transforms (-32005); the state says so",
+      "evidence": {
+        "code": -32005,
+        "message": "Server rack is locked"
+      }
+    },
+    {
+      "name": "characters are never pocketed or placed (P2): -32005 with the reason",
+      "evidence": {
+        "code": -32005,
+        "message": "character: user characters arrive with routes (RFC-0011 P2)"
+      }
+    },
+    {
+      "name": "the pocket holds 16 objects: the 17th is a budget refusal (-32008)",
+      "evidence": {
+        "code": -32008,
+        "data": {
+          "retryable": false,
+          "rule": "budget"
+        },
+        "message": "Object budget: pocket items (16)"
+      }
+    },
+    {
+      "name": "unknown ids are -32004",
+      "evidence": {
+        "code": -32004,
+        "message": "unknown object u-000000"
+      }
+    },
+    {
+      "name": "a world reload keeps every placement and pose; the pocket is dropped",
+      "evidence": {
+        "u-88c5c1": {
+          "position": [
+            -8.75777530670166,
+            0.004999995231628418,
+            3.3428292274475098
+          ],
+          "rotation": [
+            0.0,
+            -0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "u-a81d4d": {
+          "position": [
+            -8.0,
+            0.004999935626983643,
+            3.3428292274475098
+          ],
+          "rotation": [
+            0.0,
+            -0.0,
+            0.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "name": "removing the library makes its placements missing (record kept)",
+      "evidence": {
+        "activity": null,
+        "areaId": "sun-court",
+        "id": "u-88c5c1",
+        "locked": false,
+        "movable": false,
+        "name": "server-rack",
+        "path": null,
+        "pose": {
+          "position": [
+            -8.75777530670166,
+            0.004999995231628418,
+            3.3428292274475098
+          ],
+          "rotation": [
+            0.0,
+            -0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "ref": "library/com.hyprune.starter@0.1.0/server-rack",
+        "rule": null,
+        "scale": 1.0,
+        "seat": null,
+        "source": "user",
+        "state": "missing"
+      }
+    },
+    {
+      "name": "reinstalling restores them",
+      "evidence": {
+        "activity": null,
+        "areaId": "sun-court",
+        "id": "u-88c5c1",
+        "locked": false,
+        "movable": true,
+        "name": "Server rack",
+        "path": null,
+        "pose": {
+          "position": [
+            -8.75777530670166,
+            0.004999995231628418,
+            3.3428292274475098
+          ],
+          "rotation": [
+            0.0,
+            -0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "ref": "library/com.hyprune.starter@0.1.0/server-rack",
+        "rule": null,
+        "scale": 1.0,
+        "seat": null,
+        "source": "user",
+        "state": "active"
+      }
+    }
+  ]
+}
