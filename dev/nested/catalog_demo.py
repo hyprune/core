@@ -4,7 +4,9 @@ Lumen Reach with the real shell (HYPRUNE_SHELL_DIR): the Director's Objects tab,
 puts the server rack and then the armillary in the pocket, tool 5 places them with the
 ghost, tool 4 moves and turns the rack, a refused placement, and Remove from the Placed
 list. CATALOG_VIDEO names the output (default <state>/catalog/demo.mp4); a timeline and
-a still of the Objects tab are written beside it.
+a still of the Objects tab are written beside it. CATALOG_FPS sets the recording rate
+(default 30). CATALOG_OFFLOAD=on records with the offload renderer drawing the world
+(RFC-0009); the timeline records the active renderer at each step.
 """
 import builtins, hashlib, json, math, os, pathlib, signal, subprocess, time
 import session as s
@@ -109,6 +111,11 @@ def run(client, children, shell_token, socketpath, archive, world):
     time.sleep(2)
     client.call('movement.set', {'modeId': 'com.hyprune.fly'})
     keys('-k', '1'); time.sleep(.3)
+    perf = lambda: client.call('graphics.get', {})['performance']
+    offload = os.environ.get('CATALOG_OFFLOAD')
+    if offload:
+        client.call('graphics.set', {'patch': {'offload': offload}})
+        wait(lambda: perf()['activeRenderer'] == 'offload', 30)
 
     def director():
         keys('-P', 'Tab', '-s', '1100', '-p', 'Tab')  # a TAB hold opens the Director
@@ -117,7 +124,8 @@ def run(client, children, shell_token, socketpath, archive, world):
     timeline, t0 = [], [0.]
 
     def mark(text):
-        timeline.append({'time': round(time.monotonic() - t0[0], 2), 'monotonicMs': round(time.monotonic() * 1000, 1), 'action': text})
+        timeline.append({'time': round(time.monotonic() - t0[0], 2), 'monotonicMs': round(time.monotonic() * 1000, 1), 'action': text,
+                         'renderer': perf()['activeRenderer']})
         print('demo', timeline[-1], flush=True)
 
     def add(ref, name):
@@ -140,7 +148,7 @@ def run(client, children, shell_token, socketpath, archive, world):
     children.append(recorder); time.sleep(1.0); t0[0] = time.monotonic()
     still = None
     try:
-        mark('Sun Court, Lumen Reach')
+        mark('Sun Court, Lumen Reach' + (' (offload renderer: ' + str((perf().get('device') or {}).get('name')) + ')' if offload else ''))
         glide([-9, 2.6, 11], .1, -.15, 1.6)
         director(); time.sleep(.4)
         ui('tabNamed', 'objects'); time.sleep(.8)
