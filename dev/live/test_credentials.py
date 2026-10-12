@@ -19,6 +19,15 @@ class Tests(unittest.TestCase):
             for token,request in zip(tokens,requests):
                 self.assertRegex(token.decode(),r'^[a-f0-9]{64}$')
                 self.assertEqual(request,{'client':'com.hyprune.shell','pid':os.getpid(),'token':token.decode()})
+    def test_client_identity_is_a_parameter(self):
+        a,b=socket.socketpair();h,d=socket.socketpair(socket.AF_UNIX,socket.SOCK_SEQPACKET)
+        with a,b,h,d:
+            broker=CredentialBroker(a,h,os.getpid(),'com.hyprune.sources')
+            b.sendall(b'renew\n')
+            thread=threading.Thread(target=lambda:(requests.append(json.loads(d.recv(1024))),d.send(b'{"ok":true}')));requests=[]
+            thread.start();self.assertTrue(broker.poll(.5));thread.join(2)
+            token=b.recv(128).strip().decode()
+            self.assertEqual(requests,[{'client':'com.hyprune.sources','pid':os.getpid(),'token':token}])
     def test_only_actual_launched_process_can_request(self):
         a,b=socket.socketpair();h,d=socket.socketpair(socket.AF_UNIX,socket.SOCK_SEQPACKET)
         with a,b,h,d:

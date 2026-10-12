@@ -7,6 +7,8 @@ HERE = ROOT / 'dev/live'
 BUILD = pathlib.Path(os.environ.get('HYPRUNE_LIVE_BUILD_DIR', ROOT / 'build/live'))
 SHELL = pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR', ROOT.parent / 'shell'))
 DEFAULT_WORLD_ID = 'com.hyprune.lumen-reach'
+SOURCE_HELPER = ROOT / 'dev/machines/source-helper.py'
+SOURCES_CLIENT = 'com.hyprune.sources'
 GRANTS = ['state.read', 'world.control', 'surface.control', 'movement.control', 'shell.control', 'runtime.control', 'input.control', 'quest.control', 'objects.control']
 sys.path.insert(0, str(ROOT / 'dev'))
 import devenv
@@ -368,17 +370,63 @@ class RPC:
             return response['result']
 
 
+def sources_config():
+    """The user's sources file ($XDG_CONFIG_HOME/hyprune/sources.json) when it exists, else None."""
+    base=os.environ.get('XDG_CONFIG_HOME') or str(pathlib.Path.home()/'.config')
+    config=pathlib.Path(base)/'hyprune/sources.json'
+    return config if config.is_file() else None
+
+
+def launch_grants(tokens):
+    """Launch manifest: the live launcher and shell get GRANTS; the source helper only data.publish."""
+    return [{'token':token,'client':name,'capabilities':['data.publish'] if name==SOURCES_CLIENT else GRANTS} for name,token in tokens.items()]
+
+
+def start_sources(config,sock,token,env,logs,grants,helper=SOURCE_HELPER):
+    """Start the source helper with its launch token as the first line of a private socket; later
+    lines are renewals it asks for (CredentialBroker for SOURCES_CLIENT). Token never in argv/env/logs."""
+    from credentials import CredentialBroker
+    channel,recipient=socket.socketpair(socket.AF_UNIX,socket.SOCK_STREAM)
+    channel.setsockopt(socket.SOL_SOCKET,socket.SO_PASSCRED,1)
+    channel.sendall((token+'\n').encode())
+    env={k:v for k,v in env.items() if k not in ('HYPRUNE_TOKEN_FD','HYPRUNE_TOKEN_REFRESH','HYPRUNE_SOURCES_TOKEN','HYPRUNE_MACHINES_TOKEN')}
+    with open(pathlib.Path(logs)/'source-helper.log','a') as log:
+        child=subprocess.Popen([sys.executable,str(helper),'--config',str(config),'--socket',str(sock),'--token-fd',str(recipient.fileno()),'--token-refresh'],
+                               env=env,pass_fds=(recipient.fileno(),),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT)
+    recipient.close()
+    return child,CredentialBroker(channel,grants,child.pid,SOURCES_CLIENT)
+
+
+class SourcesSupervisor:
+    """Renews the source helper's grant. Its failure never stops the shell's renewal."""
+    def __init__(self,child,broker):self.child,self.broker=child,broker
+    def poll(self,timeout=.05):
+        if self.broker is None:return
+        try:ok=self.broker.poll(timeout) and self.child.poll() is None
+        except Exception:ok=False
+        if not ok:
+            print('Source helper stopped renewing (exited or channel closed); see source-helper.log',flush=True)
+            self.close()
+    def close(self):
+        if self.broker is not None:
+            with contextlib.suppress(OSError):self.broker.channel.close()
+        self.broker=None
+
+
 def bootstrap(args,path):
     from credentials import CredentialBroker
     state=json.loads(path.read_text());s=state['session']; root=pathlib.Path(s['runtime'])/'hyprune-live'/s['signature'];runroot=pathlib.Path(state['runroot'])
-    tokens={name:secrets.token_hex(32) for name in ['org.hyprune.live','com.hyprune.shell']}
+    sources=sources_config()
+    if sources and not SOURCE_HELPER.is_file():
+        print('sources.json found but this build has no source helper; not starting it',flush=True);sources=None
+    tokens={name:secrets.token_hex(32) for name in ['org.hyprune.live','com.hyprune.shell']+([SOURCES_CLIENT] if sources else [])}
     server=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET);sockpath=root/'grants.sock';sockpath.unlink(missing_ok=True);server.bind(str(sockpath));os.chmod(sockpath,0o600);server.listen(1);server.settimeout(20)
     try:
         conn,_=server.accept()
         pid,uid,_=struct.unpack('3i',conn.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))
         parent=int(pathlib.Path(f'/proc/{pid}/stat').read_text().rsplit(')',1)[1].split()[1])
         if uid!=os.getuid() or parent!=s['pid']:raise RuntimeError('Grant recipient is not this compositor helper')
-        conn.send(json.dumps([{'token':token,'client':name,'capabilities':GRANTS} for name,token in tokens.items()]).encode())
+        conn.send(json.dumps(launch_grants(tokens)).encode())
     finally:server.close();sockpath.unlink(missing_ok=True)
     sock=pathlib.Path(s['runtime'])/'hyprune'/s['signature']/'control.sock';wait(sock.is_socket)
     rpc=RPC(sock,tokens['org.hyprune.live']);rpc.call('world.load',{'worldId':state['worlds'][0]['id']})
@@ -392,10 +440,21 @@ def bootstrap(args,path):
     log_start=log.tell()
     child=subprocess.Popen([sys.executable,str(SHELL/'bridge/launch.py'),'--protocol',protocol,*shell_world_args(state['worlds'])],env=env,pass_fds=(read,),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT);recipient.close()
     broker=CredentialBroker(renew,conn,child.pid)
+    records=[{'record':process(child.pid),'group':True}]
+    # The source helper's launch token expires 30 s after core starts: start it now.
+    feeds=SourcesSupervisor(None,None)
+    if sources:
+        try:
+            helper,helper_broker=start_sources(sources,sock,tokens[SOURCES_CLIENT],env_for(s),path.parent,conn)
+            feeds=SourcesSupervisor(helper,helper_broker)
+            records.append({'record':process(helper.pid),'group':True})
+            print('Source helper started for',sources,flush=True)
+        except OSError as error:print('Source helper not started:',error,flush=True)
     # Persist identity immediately: down can recover even before ready.
-    atomic(runroot/'processes.json',[{'record':process(child.pid),'group':True}])
+    atomic(runroot/'processes.json',records)
     def shell_ready():
         if not broker.poll(.05):raise RuntimeError('Shell credential channel closed')
+        feeds.poll()
         if child.poll() is not None:raise RuntimeError('Hyprune shell exited; see shell.log')
         # Inactive shells intentionally hold no output lease. Verify this launch's
         # authenticated subscription and presentation connection without entering.
@@ -410,9 +469,9 @@ def bootstrap(args,path):
     atomic(runroot/'ready.json',{'processes':procs});rpc.s.close()
     print('Bootstrap ready; authenticated shell and presentation verified',flush=True)
     try:
-        while child.poll() is None and broker.poll():pass
+        while child.poll() is None and broker.poll(.2 if feeds.broker is None else .1):feeds.poll()
     finally:
-        renew.close();conn.close()
+        feeds.close();renew.close();conn.close()
         print('Credential supervisor stopped',flush=True)
 
 

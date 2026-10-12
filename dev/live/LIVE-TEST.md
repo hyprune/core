@@ -40,7 +40,12 @@ running. `down` restores exactly what `up` replaced. Core loads from a unique co
 and detached shell at the newest common IPC version, then loads the first selected world (Lumen Reach by default)
 without activating it. A Hyprland notification names the actual toggle chord;
 press it to enter when ready.
-Tokens stay in memory/pipes; logs are `launcher.log`, `hypruned.log`, `shell.log`.
+When `$XDG_CONFIG_HOME/hyprune/sources.json` exists, `up` also grants `data.publish` to
+`com.hyprune.sources` and starts `dev/machines/source-helper.py` right after the shell
+(within the launch token's 30 s), renewing its grant like the shell's; it feeds placed
+gauges (see `dev/machines/README.md`, "Gauges: wire a script") and `down` stops it.
+Tokens stay in memory/pipes; logs are `launcher.log`, `hypruned.log`, `shell.log` and,
+with sources, `source-helper.log`.
 Default input/editor/layout state belongs to this test's private runtime directory;
 Settings edits only that copy. Bootstrap environment is restored before init returns.
 

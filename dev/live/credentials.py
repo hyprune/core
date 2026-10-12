@@ -2,8 +2,9 @@
 import json,os,secrets,select,socket,struct,time
 
 class CredentialBroker:
-    def __init__(self,channel,helper,child_pid):
-        self.channel=channel;self.helper=helper;self.child_pid=child_pid
+    def __init__(self,channel,helper,child_pid,client='com.hyprune.shell'):
+        # client: the launch identity renewed for this child (com.hyprune.shell, com.hyprune.sources).
+        self.channel=channel;self.helper=helper;self.child_pid=child_pid;self.client=client
         self.buffer=b'';self.count=0;self.window=time.monotonic();self.burst=0
         channel.setsockopt(socket.SOL_SOCKET,socket.SO_PASSCRED,1)
         helper.settimeout(3)
@@ -25,7 +26,7 @@ class CredentialBroker:
             if line!=b'renew' or self.count>=4096 or self.burst>=8:return False
             self.count+=1;self.burst+=1
             token=secrets.token_hex(32)
-            self.helper.send(json.dumps({'client':'com.hyprune.shell','pid':self.child_pid,'token':token}).encode())
+            self.helper.send(json.dumps({'client':self.client,'pid':self.child_pid,'token':token}).encode())
             if json.loads(self.helper.recv(1024))!={'ok':True}:return False
             self.channel.sendall((token+'\n').encode())
         return True

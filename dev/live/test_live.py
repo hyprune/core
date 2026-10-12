@@ -1,5 +1,5 @@
 """Pure selection/recovery tests; no real-session calls."""
-import importlib.util, pathlib, tempfile, types, unittest
+import hashlib, importlib.util, pathlib, tempfile, threading, types, unittest
 from unittest.mock import patch
 spec=importlib.util.spec_from_file_location('live',pathlib.Path(__file__).with_name('live.py'));live=importlib.util.module_from_spec(spec);spec.loader.exec_module(live)
 
@@ -138,5 +138,58 @@ class Tests(unittest.TestCase):
     def test_ambiguous_or_missing_socket_refuses(self):
         with patch.dict(live.os.environ,{'WAYLAND_DISPLAY':'missing'}),patch.object(live,'instances',return_value=[]):
             with self.assertRaises(RuntimeError):live.select(types.SimpleNamespace(instance=None))
+
+    def test_sources_grant_only_with_a_sources_file(self):
+        with tempfile.TemporaryDirectory() as d,patch.dict(live.os.environ,{'XDG_CONFIG_HOME':d}):
+            self.assertIsNone(live.sources_config())
+            (pathlib.Path(d)/'hyprune').mkdir();(pathlib.Path(d)/'hyprune/sources.json').write_text('{"sources":[]}')
+            self.assertEqual(live.sources_config(),pathlib.Path(d)/'hyprune/sources.json')
+        grants=live.launch_grants({'org.hyprune.live':'a'*64,'com.hyprune.shell':'b'*64,'com.hyprune.sources':'c'*64})
+        self.assertEqual([g['client'] for g in grants],['org.hyprune.live','com.hyprune.shell','com.hyprune.sources'])
+        self.assertEqual(grants[2],{'token':'c'*64,'client':'com.hyprune.sources','capabilities':['data.publish']})
+        self.assertEqual(grants[1]['capabilities'],live.GRANTS)
+        self.assertTrue(live.SOURCE_HELPER.is_file())
+
+    def test_source_helper_gets_its_token_and_renewals_privately(self):
+        fake='\n'.join(['import hashlib,os,sys',
+            'args=sys.argv[1:];fd=int(args[args.index("--token-fd")+1])',
+            'def line():',
+            '    b=b""',
+            '    while not b.endswith(b"\\n"):',
+            '        c=os.read(fd,1)',
+            '        if not c:sys.exit(3)',
+            '        b+=c',
+            '    return hashlib.sha256(b.strip()).hexdigest()',
+            'first=line();os.write(fd,b"renew\\n");second=line()',
+            'print("args",args,"fd-env","HYPRUNE_TOKEN_FD" in os.environ,"first",first,"second",second,flush=True)'])
+        with tempfile.TemporaryDirectory() as d:
+            d=pathlib.Path(d);(d/'fake-helper.py').write_text(fake)
+            grants,daemon=live.socket.socketpair(live.socket.AF_UNIX,live.socket.SOCK_SEQPACKET)
+            token='ab'*32;requests=[]
+            def issuer():
+                requests.append(live.json.loads(daemon.recv(1024)));daemon.send(b'{"ok":true}')
+            thread=threading.Thread(target=issuer);thread.start()
+            with grants,daemon:
+                child,broker=live.start_sources(d/'sources.json',d/'control.sock',token,{'PATH':live.os.environ.get('PATH',''),'HYPRUNE_TOKEN_FD':'9'},d,grants,helper=d/'fake-helper.py')
+                deadline=live.time.monotonic()+10
+                while child.poll() is None and live.time.monotonic()<deadline:broker.poll(.1)
+                child.wait(5);thread.join(5);broker.channel.close()
+            log=(d/'source-helper.log').read_text()
+            self.assertEqual(child.returncode,0,log)
+            self.assertNotIn(token,log)
+            self.assertIn('first '+hashlib.sha256(token.encode()).hexdigest(),log)
+            self.assertEqual(len(requests),1)
+            self.assertEqual({k:requests[0][k] for k in ('client','pid')},{'client':'com.hyprune.sources','pid':child.pid})
+            self.assertIn('second '+hashlib.sha256(requests[0]['token'].encode()).hexdigest(),log)
+            self.assertIn("'--token-refresh'",log);self.assertIn("'--socket', '"+str(d/'control.sock')+"'",log)
+            self.assertIn('fd-env False',log)
+
+    def test_source_helper_failure_leaves_the_shell_alone(self):
+        class Broken:
+            channel=types.SimpleNamespace(close=lambda:None)
+            def poll(self,timeout):raise OSError('daemon gone')
+        feeds=live.SourcesSupervisor(types.SimpleNamespace(poll=lambda:None),Broken())
+        with patch('builtins.print'):feeds.poll()
+        self.assertIsNone(feeds.broker);feeds.poll();feeds.close()
 
 if __name__=='__main__':unittest.main()
