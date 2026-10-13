@@ -11,7 +11,9 @@ def demo(client,children,state,pointer,ui,status,sid):
  client.call('world.load',{'worldId':'org.hyprune.m3b'});client.call('workspace.bind',{'id':10,'worldId':'org.hyprune.m3b','areaId':'sun-court'});client.call('movement.set',{'modeId':'com.hyprune.fly'});time.sleep(.4)
  # Surface identities are connection/capture scoped and change after world loads.
  sid=wait(lambda:next((x['surfaceId'] for x in state()['apps'] if x['appClass']=='hyprune-m3b-terminal'),None))
- defaults=json.loads((s.ROOT/'config/input.default.json').read_text());client.call('input.set',{'config':defaults});keys('-k','1')
+ defaults=json.loads((s.ROOT/'config/input.default.json').read_text())
+ for actions in defaults['modes'].values():actions.pop('record.toggle',None)  # unbound by default; needs IPC 0.12 (this session is older)
+ client.call('input.set',{'config':defaults});keys('-k','1')
  def cap():return next(x for x in s.camera()['captures'] if x['id']==sid)
  def target():
   p=cap()['position'];pose(client,[p[0],p[1],p[2]+3]);time.sleep(.3)

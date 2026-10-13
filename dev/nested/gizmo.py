@@ -12,6 +12,7 @@ stills of each mode from three angles (one near edge-on) for the demo sheet.
 """
 import json, math, os, pathlib, shutil, subprocess, time
 import session as s
+import cinema
 from m2 import wait, keys
 
 WORLD = 'com.hyprune.lumen-reach'
@@ -229,18 +230,12 @@ def acceptance(client, children, args, shell_token, socketpath):
         def mark(text):
             timeline.append({'time': round(time.monotonic() - t0[0], 2), 'action': text})
 
+        cam = cinema.Cinema(s)
+
         def glide(eye, target, seconds=1.0):
-            cam = diag()
-            p0 = cam['position']; y0, q0 = cam['yaw'], cam['pitch']
-            d = [target[i] - eye[i] for i in range(3)]
-            y1, q1 = math.atan2(d[0], -d[2]), math.atan2(d[1], math.hypot(d[0], d[2]))
-            while y1 - y0 > math.pi: y1 -= 2 * math.pi
-            while y1 - y0 < -math.pi: y1 += 2 * math.pi
-            n = max(2, int(seconds * 9))  # each camera step is a compositor round trip
-            for k in range(1, n + 1):
-                a = (1 - math.cos(math.pi * k / n)) / 2
-                pos_ = [p0[i] + (eye[i] - p0[i]) * a for i in range(3)]
-                s.ctl('eval', f'hl.plugin.hyprune.camera({pos_[0]},{pos_[1]},{pos_[2]},{y0 + (y1 - y0) * a},{q0 + (q1 - q0) * a})')
+            # An eased move made by core per presented frame; released after (look() and aim() set the camera).
+            cam.move_to(eye, target=target, seconds=seconds)
+            cam.stop()
 
         def slow(dx, dy, seconds=1.2, shift_=False, release=True):
             hold = None
@@ -261,10 +256,9 @@ def acceptance(client, children, args, shell_token, socketpath):
         c = [-7.0, 4.83, -10.0]
         view = [c[0] + 3.6, c[1] + 1.8, c[2] + 4.2]
         look(view, [c[0], c[1] - .3, c[2]]); time.sleep(1.5)
-        log = open(s.STATE / 'recorder.log', 'w')
-        recorder = s.envrun('wf-recorder', '-o', 'HEADLESS-1', '-r', '30', '-D', '--no-dmabuf', '-c', 'h264_nvenc', '-x', 'bgr0',
-                            '-p', 'preset=p4', '-p', 'rc=constqp', '-p', 'qp=16', '-f', out, stdout=log, stderr=subprocess.STDOUT)
-        children.append(recorder); time.sleep(1.0); t0[0] = time.monotonic()
+        clip = pathlib.Path(out).with_suffix('.capture.mkv')
+        recorder = cam.recording(clip)
+        t0[0] = recorder.__enter__()
         try:
             mark('Tool 4 on a world 0.8 object: select the armillary')
             pointer('button', 272); time.sleep(.15); pointer('button', 272, 0)
@@ -341,17 +335,22 @@ def acceptance(client, children, args, shell_token, socketpath):
             pointer('button', 272); time.sleep(.15); pointer('button', 272, 0)
             wait(lambda: editor()['selectedId'] == OBJECT, 5)
             mode('universal'); time.sleep(.5)
-            for k in range(1, 31):  # orbit: axes flip to the visible side, none collapses
-                a = .9 * k / 30
+            orbit = []  # orbit: axes flip to the visible side, none collapses
+            for k in range(7):
+                a = .9 * k / 6
                 eye = [c[0] + 5.1 * math.sin(.75 - a), c[1] + 1.6, c[2] + 5.1 * math.cos(.75 - a)]
                 d = [c[i] - eye[i] for i in range(3)]
-                s.ctl('eval', f'hl.plugin.hyprune.camera({eye[0]},{eye[1]},{eye[2]},{math.atan2(d[0], -d[2]) + .12},{math.atan2(d[1], math.hypot(d[0], d[2]))})')
+                orbit.append({'t': k * .7, 'eye': eye, 'yaw': math.atan2(d[0], -d[2]) + .12, 'pitch': math.atan2(d[1], math.hypot(d[0], d[2]))})
+            orbit[0]['ease'] = 'in'; orbit[-2]['ease'] = 'out'
+            cam.run(orbit, blend_ms=400); cam.stop()
             time.sleep(1.0)
             elapsed = time.monotonic() - t0[0]
             if elapsed < 46:
                 time.sleep(46 - elapsed)
         finally:
-            recorder.send_signal(signal.SIGINT); recorder.wait(timeout=30); log.close()
+            recorder.__exit__(None, None, None)
+        cinema.encode([clip], out, trim=.5)
+        print('gizmo demo:', cinema.gate_summary(cinema.gate(out)), flush=True)
         pathlib.Path(out).with_suffix('.timeline.json').write_text(json.dumps(timeline, indent=2))
         print('PASS gizmo: demo recorded', round(time.monotonic() - t0[0], 1), 's', flush=True)
 

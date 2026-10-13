@@ -5,17 +5,20 @@
   HYPRUNE_MACHINES_SHOTS=<shots.json> HYPRUNE_MACHINES_OUT=<out.mkv> dev/nested/run.sh --machines
 
 The session loads the package with its bindings and runs the source helper with every
-simulator. This flies the camera along the shots file's keyframes (Catmull-Rom through
-positions, eased yaw and pitch) at the High preset while wf-recorder captures HEADLESS-1
-(NVENC constant QP; HYPRUNE_MACHINES_CODEC=libx264 for CPU). Every 0.25 s it logs the
-machines diagnostics, so a cut can be chosen around events afterwards (<out>.json).
+simulator. Core flies the camera along the shots file's keyframes per presented frame
+(cinema.py: centripetal Catmull-Rom through positions timed by arc length; a key's
+"target" is looked at, else its yaw and pitch) at the High preset, and every presented
+frame of HEADLESS-1 is exported (NVENC constant QP; HYPRUNE_MACHINES_CODEC=libx264 for
+CPU; HYPRUNE_MACHINES_FPS, default 30 at 4K and 60 otherwise). Every 0.25 s it logs the
+machines diagnostics, so a cut can be chosen around events afterwards (<out>.json), with
+the smoothness gate.
 
 shots.json: {"warmup": 8, "keys": [{"t": 0, "position": [x, y, z], "yaw": rad, "pitch": rad}, ...],
              "holdUntil": {"machine": id, "input": id, "value": v, "timeout": s}  (optional, before recording)}
 HYPRUNE_MACHINES_STILLS=<dir> with "stills": [{"name", "position", "yaw", "pitch", "publish"?: {...}}]
 takes stills instead of a film.
 """
-import json, math, os, pathlib, signal, subprocess, time
+import json, math, os, pathlib, subprocess, sys, time
 
 
 def catmull(p0, p1, p2, p3, u):
@@ -45,6 +48,21 @@ def pose_at(keys, t):
     yaw = a['yaw'] + math.remainder(b['yaw'] - a['yaw'], 2 * math.pi) * e
     pitch = a['pitch'] + (b['pitch'] - a['pitch']) * e
     return position, yaw, pitch
+
+
+def track(keys):
+    """Shots keys as a core camera track: positions, and targets or yaw/pitch."""
+    out = []
+    for k in keys:
+        key = {'t': k['t'], 'eye': k['position']}
+        if 'target' in k:
+            key['target'] = k['target']
+        else:
+            key.update(yaw=k['yaw'], pitch=k['pitch'])
+        if 'ease' in k:
+            key['ease'] = k['ease']
+        out.append(key)
+    return out
 
 
 def run(client, s, source):
@@ -79,21 +97,24 @@ def run(client, s, source):
             print(f'MACHINES DEMO: {late:.1f} s late for RECORD_AT', flush=True)
         time.sleep(max(0, record_at - 1 - time.time()))
     out = pathlib.Path(os.environ['HYPRUNE_MACHINES_OUT'])
+    sys.path.insert(0, str(s.HERE))
+    import cinema
     codec = os.environ.get('HYPRUNE_MACHINES_CODEC', 'h264_nvenc')
-    quality = ['-x', 'bgr0', '-p', 'preset=p5', '-p', 'rc=constqp', '-p', 'qp=14'] if 'nvenc' in codec else \
-              ['-x', 'yuv420p', '-p', 'preset=ultrafast', '-p', 'crf=12']
-    log = open(s.STATE / 'recorder.log', 'w')
-    recorder = s.envrun('wf-recorder', '-o', 'HEADLESS-1', '-r', '30', '-D', '--no-dmabuf', '-c', codec, *quality,
-                        '-f', str(out), stdout=log, stderr=subprocess.STDOUT)
-    time.sleep(1)
-    started = time.monotonic(); timeline = []; last = -1
+    encoder = ['-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'constqp', '-qp', '14'] if 'nvenc' in codec else \
+              ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '12', '-pix_fmt', 'yuv420p']
+    width = next(m for m in json.loads(s.ctl('monitors', '-j')) if m['name'] == 'HEADLESS-1')['width']
+    fps = int(os.environ.get('HYPRUNE_MACHINES_FPS', '30' if width > 1920 else '60'))
+    cam = cinema.Cinema(s)
+    cam.hold(keys[0]['position'], keys[0].get('target'), keys[0].get('yaw'), keys[0].get('pitch', 0.))
+    recorder = cam.recording(out, encoder=encoder, out_fps=fps if fps != 60 else None)
+    started = recorder.__enter__(); timeline = []; last = -1
     duration = keys[-1]['t']
+    cam.path(track(keys))
     try:
         while True:
             t = time.monotonic() - started
             if t > duration + .5:
                 break
-            camera(*pose_at(keys, t))
             if t - last >= .25:
                 last = t
                 m = machines()
@@ -101,16 +122,19 @@ def run(client, s, source):
                     x['id']: {'states': x['states'], 'inputs': {k: v['value'] for k, v in x['inputs'].items()},
                               'tracks': [{'live': tr['live'], 'spawned': tr['spawned']} for tr in x['tracks']],
                               'stale': x['stale'], 'inView': x['inView']} for x in m['instances']}})
-            time.sleep(1 / 60)
+            time.sleep(.05)
     finally:
-        recorder.send_signal(signal.SIGINT); recorder.wait(timeout=60); log.close()
+        recorder.__exit__(None, None, None)
+        cam.stop()
     probe = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-count_frames', '-select_streams', 'v:0', '-show_entries',
                                                 'stream=nb_read_frames,width,height', '-of', 'json', str(out)]))['streams'][0]
     report = {'output': str(out), 'seconds': round(time.monotonic() - started, 1), 'frames': int(probe['nb_read_frames']),
               'size': [probe['width'], probe['height']], 'codec': codec,
-              'graphics': client.call('graphics.get', {}).get('performance', {}).get('effective'), 'timeline': timeline}
+              'graphics': client.call('graphics.get', {}).get('performance', {}).get('effective'), 'timeline': timeline,
+              'export': cam.last_export, 'smoothness': cinema.gate(out)}
     out.with_suffix('.json').write_text(json.dumps(report) + '\n')
-    print('MACHINES DEMO', json.dumps({k: report[k] for k in ('output', 'seconds', 'frames', 'size')}), flush=True)
+    print('MACHINES DEMO', json.dumps({k: report[k] for k in ('output', 'seconds', 'frames', 'size')}),
+          cinema.gate_summary(report['smoothness']), flush=True)
 
 
 def stills(client, s, shots, camera, machines):

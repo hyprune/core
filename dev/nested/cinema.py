@@ -282,7 +282,7 @@ class Cinema:
             if (st.get('done') and not st.get('blending')) or st.get('mode') == 'idle':
                 return st
             time.sleep(.1)
-        raise TimeoutError('cinema path did not finish')
+        raise TimeoutError(f'cinema path did not finish: {json.dumps(st)}')
 
     def run(self, keys, blend_ms=0):
         """Play a path to its end."""

@@ -4,6 +4,8 @@
 import json, os, pathlib, signal, subprocess, time
 from session import HERE, ROOT, STATE, ctl, envrun, camera, video_dir
 from ctl import verified
+import cinema
+import session
 
 def keys(*args): subprocess.run([str(HERE/'ctl.py'),'env','wtype',*args],check=True)
 def map_click_research():
@@ -175,13 +177,11 @@ def showcase(client,state,ui,status,pos):
     def pose(position,yaw=0,pitch=0):
         sy=math.sin(-yaw/2);cy=math.cos(-yaw/2);sp=math.sin(pitch/2);cp=math.cos(pitch/2)
         client.call('camera.set',{'position':position,'orientation':[cy*sp,sy*cp,-sy*sp,cy*cp]})
+    cam=cinema.Cinema(session)
     def glide(start,end,seconds,yaw_start=0,yaw_end=0,pitch=0):
-        begun=time.monotonic()
-        while True:
-            progress=min(1,(time.monotonic()-begun)/seconds);e=progress*progress*(3-2*progress)
-            pose([a+(b-a)*e for a,b in zip(start,end)],yaw_start+(yaw_end-yaw_start)*e,pitch)
-            if progress>=1:break
-            time.sleep(.028)
+        # Moved by core per presented frame; released after, so walking and camera.set work.
+        cam.run([{'t':0,'eye':start,'yaw':yaw_start,'pitch':pitch,'ease':'inout'},{'t':seconds,'eye':end,'yaw':yaw_end,'pitch':pitch}],blend_ms=300)
+        cam.stop()
     research=next(i for i,p in enumerate(status()['places']) if p['id']=='research')
     # Prepare the docked terminal before capture; it stays a live interactive app.
     windows=state()['surfaces'];work=next(s for s in windows if 'Build terminal' in s['title'])
@@ -189,9 +189,8 @@ def showcase(client,state,ui,status,pos):
     pose([workpos[0],2.25,workpos[2]+4]);client.call('surface.focus',{'surfaceId':work['id'],'intent':'keyboard'})
     keys('clear');keys('-k','Return');keys("printf '\\033[1;36mHYPRUNE / SWITCHYARD\\033[0m\\n\\nA live terminal, docked in a world.\\n\\n'");keys('-k','Return');keys('-k','Escape')
     pose([0,1.7,10]);pause(1.5)
-    log=open(STATE/'first-session-recorder.log','w')
-    recorder=envrun('wf-recorder','-o','HEADLESS-1','-r','30','-D','--no-dmabuf','-c','libx264','-p','preset=ultrafast','-p','crf=19','-x','yuv420p','-f',str(raw),stdout=log,stderr=subprocess.STDOUT)
-    started=time.monotonic()
+    recorder=cam.recording(raw,crf=19,preset='ultrafast')
+    started=recorder.__enter__()
     try:
         # Arrival and a real walk along the concourse. No mock/backdrop renderer.
         client.call('world.load',{'worldId':'com.hyprune.switchyard'});pause(3)
@@ -224,8 +223,8 @@ def showcase(client,state,ui,status,pos):
         pause(max(1,61-(time.monotonic()-started)))
         shot('showcase-return.png')
     finally:
-        recorder.send_signal(signal.SIGINT);recorder.wait(timeout=15);log.close()
-    subprocess.run(['ffmpeg','-y','-loglevel','error','-i',str(raw),'-an','-vf','scale=1920:1080:flags=lanczos:in_range=pc:out_range=tv','-r','30','-c:v','libx264','-preset','medium','-crf','22','-maxrate','6500k','-bufsize','13000k','-pix_fmt','yuv420p','-color_range','tv','-movflags','+faststart',str(output)],check=True)
+        recorder.__exit__(None,None,None)
+    subprocess.run(['ffmpeg','-y','-loglevel','error','-i',str(raw),'-an','-vf','scale=1920:1080:flags=lanczos:in_range=tv:out_range=tv','-r','60','-c:v','libx264','-preset','medium','-crf','22','-maxrate','6500k','-bufsize','13000k','-pix_fmt','yuv420p','-color_range','tv','-movflags','+faststart',str(output)],check=True)
     probe=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(output)]));stream=probe['streams'][0]
     assert stream['codec_name']=='h264' and stream['pix_fmt']=='yuv420p' and stream['width']==1920 and stream['height']==1080
     assert 45<=float(probe['format']['duration'])<=75 and output.stat().st_size<60_000_000,probe['format']
