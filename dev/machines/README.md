@@ -27,6 +27,8 @@ installs of core use the same layout under their prefix:
 | `libexec/hyprune/source-helper` | `source-helper.py` |
 | `share/hyprune/machines/system-gauges.py` | `scripts/system-gauges.py` |
 | `bin/hyprune-system-gauges` | a link to the gauge script, for `argv` in `sources.json` |
+| `share/hyprune/machines/demo-source.py` | `scripts/demo-source.py` |
+| `bin/hyprune-demo-source` | a link to the demo script: the source a newly placed machine starts with |
 
 Both are standard-library Python and need nothing else from the checkout. A session
 launcher always starts the helper (see "Gauges: wire a script"); it runs the helper with its Python as `python3 <prefix>/libexec/hyprune/source-helper`
@@ -551,6 +553,32 @@ from the epoch.
 | `--period S` | Seconds per step (default 6). |
 | `--steps N` | Steps in the sequence, then it repeats (default 0: endless). |
 | `--hold` | After `--steps` steps keep the last value for good (a gauge settles and stops drawing new frames). |
+
+## Demo source: what a new machine starts with
+
+`scripts/demo-source.py` (installed as `hyprune-demo-source`) prints made-up but plausible
+values for a machine's inputs, so a newly placed machine shows something live before it is
+wired to a real system. When a machine (or gauge) is placed and `sources.json` has no entry
+for its instance id, the shell adds one that runs this script with one argument per input
+(repeats expanded), every 5 s; it shows in Director → Objects → Placed → Data source like any
+other command source, where it can be edited or removed. An entry the user wrote is never
+replaced.
+
+    hyprune-demo-source cpu=number:0:100 jobs=int:0:40 'state=enum:ok|warn|fail' \
+        online=bool build=text:12 deployed=event
+
+| Spec | Value |
+| --- | --- |
+| `KEY=number:MIN:MAX` | a number in the range (one decimal; two for ranges under 10) |
+| `KEY=int:MIN:MAX` | a whole number in the range |
+| `KEY=enum:A\|B\|C` | one of the values, mostly the first |
+| `KEY=bool` | `true` most of the time |
+| `KEY=text[:N]` | a short label of at most N characters (default 64) |
+| `KEY=event` | a counter that goes up every 20-45 s (each increase is an event) |
+
+Values drift smoothly with the clock (two sine waves per key, seeded by the key), so nothing
+is remembered between runs; `DEMO_SOURCE_TIME` fixes the clock for tests. A spec it can't
+read becomes an `_error` key; it always exits 0.
 
 ## Tests
 

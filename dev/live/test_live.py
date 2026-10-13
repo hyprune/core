@@ -160,7 +160,9 @@ class Tests(unittest.TestCase):
             self.assertEqual(live.find_source_helper(archive/'live'),helper)
             self.assertEqual(live.helper_path(helper,'/usr/bin'),f'{archive}/bin:/usr/bin')
             self.assertEqual(live.helper_path(helper,''),f'{archive}/bin')
-        self.assertEqual(live.helper_path(live.ROOT/'dev/machines/source-helper.py','/usr/bin'),'/usr/bin')
+        links=live.ROOT/'build/bin'
+        self.assertEqual(live.helper_path(live.ROOT/'dev/machines/source-helper.py','/usr/bin'),
+                         f'{links}:/usr/bin' if links.is_dir() else '/usr/bin')
 
     def test_source_helper_gets_its_token_and_renewals_privately(self):
         fake='\n'.join(['import hashlib,os,sys',

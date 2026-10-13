@@ -1556,3 +1556,46 @@ class ControlSocket(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DemoSource(unittest.TestCase):
+    """scripts/demo-source.py: plausible values for every input type, in range, smooth in time."""
+    SPECS = ["cpu=number:0:100", "temp=number:0:1", "jobs=int:0:40", "state=enum:ok|warn|fail", "online=bool",
+             "build=text:8", "deployed=event"]
+
+    def run_at(self, t, specs=None):
+        env = dict(os.environ, DEMO_SOURCE_TIME=str(t))
+        result = subprocess.run([sys.executable, str(SCRIPTS / "demo-source.py"), *(specs or self.SPECS)],
+                                capture_output=True, text=True, env=env, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_types_and_ranges(self):
+        for t in range(1_700_000_000, 1_700_000_600, 37):
+            v = self.run_at(t)
+            self.assertTrue(0 <= v["cpu"] <= 100 and 0 <= v["temp"] <= 1, v)
+            self.assertTrue(isinstance(v["jobs"], int) and 0 <= v["jobs"] <= 40, v)
+            self.assertIn(v["state"], ["ok", "warn", "fail"])
+            self.assertIsInstance(v["online"], bool)
+            self.assertTrue(isinstance(v["build"], str) and 0 < len(v["build"]) <= 8, v)
+            self.assertIsInstance(v["deployed"], int)
+            self.assertNotIn("_error", v)
+
+    def test_smooth_and_deterministic(self):
+        a, b, c = self.run_at(1_700_000_000), self.run_at(1_700_000_000), self.run_at(1_700_000_005)
+        self.assertEqual(a, b)
+        self.assertLess(abs(a["cpu"] - c["cpu"]), 25)  # 5 s later: drifted, not jumped
+
+    def test_events_count_up(self):
+        values = [self.run_at(1_700_000_000 + 10 * k)["deployed"] for k in range(12)]
+        self.assertEqual(values, sorted(values))
+        self.assertGreater(values[-1], values[0])
+
+    def test_mostly_normal(self):
+        states = [self.run_at(1_700_000_000 + 13 * k, ["state=enum:ok|warn|fail"])["state"] for k in range(40)]
+        self.assertGreater(states.count("ok"), len(states) // 2)
+
+    def test_bad_specs_are_reported_not_fatal(self):
+        v = self.run_at(1_700_000_000, ["cpu=number:0:100", "x=colour", "=int"])
+        self.assertIn("cpu", v)
+        self.assertIn("_error", v)

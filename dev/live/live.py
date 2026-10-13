@@ -20,10 +20,14 @@ def find_source_helper(root=ROOT):
 
 
 def helper_path(helper, path):
-    """PATH for the helper's commands: an installed prefix's bin/ (hyprune-system-gauges) first."""
+    """PATH for the helper's commands: an installed prefix's bin/ (hyprune-system-gauges,
+    hyprune-demo-source) first; in a checkout its build/bin (the same names, linked by CMake)."""
     helper=pathlib.Path(helper)
     if helper.parent.name=='hyprune' and helper.parent.parent.name=='libexec':
         return os.pathsep.join([str(helper.parent.parent.parent/'bin')]+([path] if path else []))
+    links=helper.parent.parent.parent/'build/bin'
+    if helper.parent.name=='machines' and helper.parent.parent.name=='dev' and links.is_dir():
+        return os.pathsep.join([str(links)]+([path] if path else []))
     return path
 
 

@@ -39,6 +39,12 @@ target_compile_definitions(hyprune_runtime PUBLIC BASISD_SUPPORT_KTX2=1 BASISD_S
 add_library(hyprune-core SHARED src/platform/hyprland/Plugin.cpp src/platform/hyprland/Capture.cpp src/render/FrameExport.cpp src/render/Renderer.cpp src/render/MarkerOverlay.cpp)
 set_target_properties(hyprune-core PROPERTIES PREFIX "")
 target_link_libraries(hyprune-core PRIVATE hyprune_runtime PkgConfig::HYPRLAND PkgConfig::PLATFORM GLESv2 EGL)
+# The machine scripts under their installed command names (build/bin), so a checkout's
+# source helper finds hyprune-system-gauges and hyprune-demo-source like an install does.
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
+foreach(script system-gauges demo-source)
+  file(CREATE_LINK ${CMAKE_CURRENT_SOURCE_DIR}/dev/machines/scripts/${script}.py ${CMAKE_CURRENT_BINARY_DIR}/bin/hyprune-${script} SYMBOLIC)
+endforeach()
 add_executable(hypruned src/daemon/Main.cpp)
 target_link_libraries(hypruned PRIVATE hyprune_runtime dl)
 pkg_check_modules(OFFLOAD REQUIRED IMPORTED_TARGET vulkan gbm)

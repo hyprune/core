@@ -15,9 +15,11 @@
 #   lib/hyprune-core.so          session plugin
 #   bin/                         hypruned, hyprune-renderer, hyprune-world-check
 #   bin/hyprune-system-gauges    -> share/hyprune/machines/system-gauges.py
+#   bin/hyprune-demo-source      -> share/hyprune/machines/demo-source.py
 #   libexec/hyprune/source-helper  data.publish source helper (dev/machines)
 #   share/hyprune/input.default.json
-#   share/hyprune/machines/      system-gauges.py (CPU/RAM/GPU/VRAM gauge script)
+#   share/hyprune/machines/      system-gauges.py (CPU/RAM/GPU/VRAM gauge script),
+#                                demo-source.py (made-up values a new machine starts with)
 #   live/                        dev/live launcher, its build/live binaries and
 #                                src/ipc/Protocol.hpp (the protocol inventory); it
 #                                finds the source helper in ../libexec/hyprune
@@ -54,6 +56,8 @@ install -m644 "$root/config/input.default.json" "$pkg/share/hyprune/"
 install -m755 "$root/dev/machines/source-helper.py" "$pkg/libexec/hyprune/source-helper"
 install -m755 "$root/dev/machines/scripts/system-gauges.py" "$pkg/share/hyprune/machines/"
 ln -s ../share/hyprune/machines/system-gauges.py "$pkg/bin/hyprune-system-gauges"
+install -m755 "$root/dev/machines/scripts/demo-source.py" "$pkg/share/hyprune/machines/"
+ln -s ../share/hyprune/machines/demo-source.py "$pkg/bin/hyprune-demo-source"
 install -m755 "$root"/dev/live/{live.py,credentials.py,daemon,preflight,up,down,status} "$pkg/live/dev/live/"
 install -m644 "$root/dev/live/LIVE-TEST.md" "$pkg/live/dev/live/"
 install -m644 "$root/dev/devenv.py" "$pkg/live/dev/"
