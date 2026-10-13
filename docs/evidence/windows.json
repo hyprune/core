@@ -1,0 +1,231 @@
+{
+  "nestedOnly": true,
+  "world": {
+    "id": "com.hyprune.lumen-reach",
+    "spawnId": "arrival"
+  },
+  "homes": "21:6,22:3,23:1,24:6",
+  "steps": [
+    {
+      "step": "entered with 18 clients on 20-24",
+      "counts": {
+        "clients": 18,
+        "records": 18,
+        "room": 2,
+        "drawn": 0,
+        "pocketed": 2
+      },
+      "mismatches": []
+    },
+    {
+      "step": "spawned 4 facing Sun Court",
+      "counts": {
+        "clients": 22,
+        "records": 22,
+        "room": 6,
+        "drawn": 4,
+        "pocketed": 2
+      },
+      "mismatches": []
+    },
+    {
+      "step": "spawned 2 facing away",
+      "counts": {
+        "clients": 24,
+        "records": 24,
+        "room": 8,
+        "drawn": 6,
+        "pocketed": 2
+      },
+      "mismatches": []
+    },
+    {
+      "step": "recall all",
+      "counts": {
+        "clients": 24,
+        "records": 24,
+        "room": 8,
+        "drawn": 8,
+        "pocketed": 0
+      },
+      "mismatches": []
+    },
+    {
+      "step": "pocket each listed room window",
+      "results": [
+        {
+          "id": "surface-17",
+          "title": "Room-17",
+          "pocket": "ok"
+        },
+        {
+          "id": "surface-18",
+          "title": "Room-18",
+          "pocket": "ok"
+        },
+        {
+          "id": "surface-19",
+          "title": "Spawn-19",
+          "pocket": "ok"
+        },
+        {
+          "id": "surface-20",
+          "title": "Spawn-20",
+          "pocket": "ok"
+        },
+        {
+          "id": "surface-21",
+          "title": "Spawn-21",
+          "pocket": "ok"
+        },
+        {
+          "id": "surface-22",
+          "title": "Spawn-22",
+          "pocket": "ok"
+        },
+        {
+          "id": "surface-23",
+          "title": "Spawn-23",
+          "pocket": "ok"
+        },
+        {
+          "id": "surface-24",
+          "title": "Spawn-24",
+          "pocket": "ok"
+        }
+      ]
+    },
+    {
+      "step": "all room windows pocketed",
+      "counts": {
+        "clients": 24,
+        "records": 24,
+        "room": 8,
+        "drawn": 0,
+        "pocketed": 8
+      },
+      "mismatches": []
+    },
+    {
+      "step": "taken out of the pocket",
+      "counts": {
+        "clients": 24,
+        "records": 24,
+        "room": 8,
+        "drawn": 4,
+        "pocketed": 4
+      },
+      "mismatches": []
+    },
+    {
+      "step": "place ahead with the Placement tool",
+      "pocketed": [
+        8,
+        7
+      ]
+    },
+    {
+      "step": "placed with the Placement tool",
+      "counts": {
+        "clients": 24,
+        "records": 24,
+        "room": 8,
+        "drawn": 1,
+        "pocketed": 7
+      },
+      "mismatches": []
+    },
+    {
+      "step": "rest taken out of the pocket",
+      "counts": {
+        "clients": 24,
+        "records": 24,
+        "room": 8,
+        "drawn": 4,
+        "pocketed": 4
+      },
+      "mismatches": []
+    },
+    {
+      "step": "F",
+      "target": "surface-17",
+      "aimed": true,
+      "kept": true
+    },
+    {
+      "step": "F on Room-17",
+      "counts": {
+        "clients": 24,
+        "records": 24,
+        "room": 8,
+        "drawn": 4,
+        "pocketed": 4
+      },
+      "mismatches": []
+    },
+    {
+      "step": "closed a room window during F focus",
+      "counts": {
+        "clients": 23,
+        "records": 23,
+        "room": 7,
+        "drawn": 3,
+        "pocketed": 4
+      },
+      "mismatches": []
+    },
+    {
+      "step": "left focus",
+      "counts": {
+        "clients": 23,
+        "records": 23,
+        "room": 7,
+        "drawn": 3,
+        "pocketed": 4
+      },
+      "mismatches": []
+    },
+    {
+      "step": "moved clients between workspaces",
+      "counts": {
+        "clients": 23,
+        "records": 23,
+        "room": 7,
+        "drawn": 3,
+        "pocketed": 4
+      },
+      "mismatches": []
+    },
+    {
+      "step": "closed 3 clients",
+      "counts": {
+        "clients": 20,
+        "records": 20,
+        "room": 4,
+        "drawn": 3,
+        "pocketed": 1
+      },
+      "mismatches": []
+    },
+    {
+      "step": "world reloaded",
+      "counts": {
+        "clients": 20,
+        "records": 20,
+        "room": 4,
+        "drawn": 1,
+        "pocketed": 3
+      },
+      "mismatches": []
+    }
+  ],
+  "failures": [],
+  "stills": [
+    "windows-spawn-sun-court.png",
+    "windows-recall.png",
+    "windows-unpocketed.png",
+    "windows-placed.png",
+    "windows-focus.png",
+    "windows-reloaded.png"
+  ]
+}
