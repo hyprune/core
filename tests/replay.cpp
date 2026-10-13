@@ -125,7 +125,38 @@ int main() {
         if (tickRunsQueuedInput)
             assert((live == std::vector<float>{0, 1, 2, 2, 2, 2}));
     }
+    {
+        // Every current tool records and loads: placement (5), the debug tool (9) with its
+        // layer, the universal position mode. Recordings from before (no debugLayer) load as
+        // they did; a tool that doesn't exist or a layer out of range is refused.
+        Json state = initial;
+        state.erase("debugLayer");
+        replay::validateState(state); // an old recording's frame
+        for (auto [tool, layer, position] : {std::tuple{5, 0, 0}, {9, 3, 0}, {4, 0, 3}, {1, 0, 0}}) {
+            state["tool"] = tool, state["debugLayer"] = layer, state["positionMode"] = position;
+            replay::validateState(state);
+        }
+        session.startRecording({{"initial", initial}}, false);
+        for (int tool : {5, 9}) {
+            state["tool"] = tool, state["debugLayer"] = tool == 9 ? 2 : 0;
+            session.recordFrame(state);
+        }
+        session.stopRecording();
+        session.load(session.path, "input", 0, Json::object());
+        assert(session.frames.size() == 2 && session.frames[0]["tool"] == 5 && session.frames[1]["tool"] == 9 &&
+               session.frames[1]["debugLayer"] == 2);
+        for (auto [tool, layer, position] : {std::tuple{6, 0, 0}, {0, 0, 0}, {9, 64, 0}, {4, 0, 4}}) {
+            state["tool"] = tool, state["debugLayer"] = layer, state["positionMode"] = position;
+            bool refused = false;
+            try {
+                replay::validateState(state);
+            } catch (const std::runtime_error &) {
+                refused = true;
+            }
+            assert(refused);
+        }
+    }
     std::filesystem::remove_all(root);
     std::cout << "PASS recording redaction/opt-in, atomic ownership, fixed frames, smoothing, assertions, truncation, "
-                 "input in its recorded frame\n";
+                 "input in its recorded frame, every current tool\n";
 }

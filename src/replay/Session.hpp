@@ -69,9 +69,14 @@ inline void validateState(const Json &state) {
         std::abs(c.yaw) > 1e6 || std::abs(c.pitch) > 1.571f || std::abs(c.roll) > 3.142f || std::abs(c.shiftX)>2 || std::abs(c.shiftY)>2 || c.fov < 3 || c.fov > 175 || c.eyeHeight < .5 ||
         c.eyeHeight > 2 || std::abs(c.verticalSpeed) > 10000)
         throw std::runtime_error("recorded camera out of range");
-    if (state.at("tool") < 1 || state.at("tool") > 4 || state.at("windowMode") < 0 || state.at("windowMode") > 1 ||
+    // Tools 1-5 and 9 (the debug tool, with its shown layer), the universal position mode.
+    // Recordings from before (tools 1-4, no debugLayer) read the same.
+    int tool = state.at("tool");
+    if (tool < 1 || (tool > 5 && tool != 9) || state.at("windowMode") < 0 || state.at("windowMode") > 1 ||
         state.at("pathMode") < 0 || state.at("pathMode") > 5 || state.at("positionMode") < 0 ||
-        state.at("positionMode") > 2)
+        state.at("positionMode") > 3 ||
+        (state.contains("debugLayer") && (!state["debugLayer"].is_number_integer() || state["debugLayer"] < 0 ||
+                                          state["debugLayer"] > 63)))
         throw std::runtime_error("recorded tool out of range");
     std::string mode = state.at("mode"), move = state.at("movement");
     if ((mode != "world" && mode != "menu" && mode != "focus" && mode != "interactive" && mode != "cursor") ||

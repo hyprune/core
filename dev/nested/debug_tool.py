@@ -261,6 +261,27 @@ def acceptance(client, children, args, shell_token, socketpath):
     st = state()
     check('IPC 0.26: editor.debugTool is null in another tool', st['editor']['tool'] == 1 and st['editor']['debugTool'] is None,
           {'tool': st['editor']['tool'], 'debugTool': st['editor']['debugTool']})
+    # A recording made with tool 9 (on its third layer) and tool 5 out loads and replays
+    # (recordings once took tools 1-4 only); the replay brings the layer back. The 0.25 peer
+    # holds input.control here.
+    old.call('recording.start', {})
+    keys('-k', '9'); time.sleep(.3)
+    for _ in range(2):
+        pointer('scroll', -1); time.sleep(.3)
+    layer = state()['editor']['debugTool']
+    keys('-k', '5'); time.sleep(.4); keys('-k', '9'); time.sleep(.4)
+    clip = old.call('recording.stop', {})
+    keys('-k', '1'); time.sleep(.3)
+    old.call('replay.start', {'path': clip['path'], 'mode': 'camera'})
+    seen = set()
+    def finished():
+        v = old.call('replay.status', {})
+        seen.add(state()['editor']['tool'])
+        return v if not v['playing'] else None
+    done = wait(finished, 30)
+    check('a recording with tools 9 and 5 out loads and replays', not done['failures'] and {5, 9} <= seen,
+          {'path': clip['path'], 'frames': clip.get('frames'), 'toolsSeen': sorted(seen), 'layer': layer, 'failures': done['failures']})
+    keys('-k', '1'); time.sleep(.3)
     old.close()
     stills = os.environ.get('DEBUG_TOOL_STILLS')
     if stills:

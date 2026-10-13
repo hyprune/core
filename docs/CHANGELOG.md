@@ -268,6 +268,14 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Input recordings take every current tool (no wire change)
+
+- Session recordings (`hyprune.session` version 1, core's own file format) record and
+  load with tool 5 or 9 out and the universal position mode; frames gain an optional
+  `debugLayer` (tool 9's shown layer), which a replay restores. Recordings from before
+  load unchanged. `replay.start` mark assertions keep `tool` 1-4 as IPC 0.26 specifies
+  (schema `replayAssertions`); asserting tool 5 or 9 needs the next protocol version.
+
 ## Recall spreads windows out (no wire change)
 
 - `surfaces.recall` gives every recalled window its own free spot ahead of the player,

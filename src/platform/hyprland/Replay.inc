@@ -7,6 +7,7 @@ Json Runtime::sessionState() const {
             {"windowMode", editor.windowMode},
             {"pathMode", editor.pathMode},
             {"positionMode", editor.positionMode},
+            {"debugLayer", editor.debugLayer},
             {"movement", movement == &walk ? "walk" : "fly"},
             {"noclip", noclip},
             {"scope", zoomHeld}};
@@ -29,6 +30,7 @@ void Runtime::restoreSession(const Json &j) {
     editor.windowMode = j.at("windowMode");
     editor.pathMode = j.at("pathMode");
     editor.positionMode = j.at("positionMode");
+    editor.debugLayer = std::clamp(j.value("debugLayer", 0), 0, interaction::debugLayerCount - 1);
     editor.restore(j.at("editor"));
     editor.selected.clear();
     editor.activeHandle = -1;
@@ -260,6 +262,7 @@ void Runtime::replayAfterTick() {
             editor.windowMode = frame.at("windowMode");
             editor.pathMode = frame.at("pathMode");
             editor.positionMode = frame.at("positionMode");
+            editor.debugLayer = std::clamp(frame.value("debugLayer", 0), 0, interaction::debugLayerCount - 1);
         }
         if (session.finishFrame(sessionState()))
             stopReplay();
