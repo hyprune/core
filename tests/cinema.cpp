@@ -224,6 +224,37 @@ void follow() {
     s.position = {100, 0, 0};
     auto cut = f.step(s, 1.f / 60, 60);
     check(near(cut.eye, f.goal(s.position, s.heading).first, 1e-3f), "a teleport cuts");
+    // World frame: a fixed offset in world axes, whatever the heading.
+    FollowParams wp;
+    wp.frame = FollowParams::Frame::World;
+    wp.offset = {-.8f, 2.1f, 2.8f};
+    wp.lookOffset = {.2f, 1, -1.5f};
+    Follow world(wp);
+    Subject ws{{5, 0, -50}, 2.5f};
+    for (int i = 0; i < 300; ++i) {
+        ws.position.z -= 1.2f / 60;
+        ws.heading = 2.5f + .4f * std::sin(i * .1f); // wandering heading: no effect on the eye
+        world.step(ws, 1.f / 60, 60);
+    }
+    auto settled = world.step(ws, 1.f / 60, 60);
+    check(near(settled.eye, ws.position + wp.offset, .6f) && std::abs(settled.eye.x - (ws.position.x - .8f)) < 1e-3f,
+          "a world-frame follow keeps its world offset");
+    // Fixed eye: the camera stays put and pans to keep the subject in view.
+    FollowParams fp;
+    fp.frame = FollowParams::Frame::Fixed;
+    fp.offset = {0, 2, 10};
+    fp.lookOffset = {0, 1, 0};
+    Follow tripod(fp);
+    Subject ts{{-5, 0, 0}, 0};
+    std::vector<Pose> pan;
+    for (int i = 0; i < 300; ++i) {
+        ts.position.x += 1.4f / 60;
+        pan.push_back(tripod.step(ts, 1.f / 60, 60));
+    }
+    check(near(pan.back().eye, {0, 2, 10}) && near(pan.front().eye, {0, 2, 10}), "a fixed eye does not move");
+    auto want = lookAt({0, 2, 10}, ts.position + Vec3{0, 1, 0}, 60);
+    // The damped target trails a 1.4 m/s walker by about 0.4 m at 10 m.
+    check(std::abs(wrap(pan.back().yaw - want.yaw)) < .06f, "a fixed eye pans after its subject");
     // Clip: an eye goal behind a wall is pulled in.
     Follow g({});
     auto clipped = g.step({{0, 0, 0}, 0}, 1.f / 60, 60, [](Vec3 target, Vec3 eye) { return target + (eye - target) * .5f; });

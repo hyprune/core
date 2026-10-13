@@ -94,8 +94,13 @@ struct Subject {
     float heading = 0; // forward (sin h, 0, cos h)
 };
 struct FollowParams {
+    // Heading: the eye is back/side/height and the target ahead/lookHeight in the subject's
+    // heading frame. World: eye = feet + offset, target = feet + lookOffset (world axes).
+    // Fixed: eye = offset (a point), target = feet + lookOffset (a pan that tracks it).
+    enum class Frame { Heading, World, Fixed } frame = Frame::Heading;
     float back = 3.4f, side = 1.2f, height = 1.9f; // eye: behind, to the subject's left (+), above its feet
     float ahead = 1.5f, lookHeight = 1.f;          // target: ahead of the subject, above its feet
+    Vec3 offset{}, lookOffset{};
     float halfLife = .35f, lookHalfLife = .2f, headingHalfLife = .45f;
     float snap = 12; // a subject that jumps further than this in one tick is a cut, not a swoop
     std::optional<float> fov;

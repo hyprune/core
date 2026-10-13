@@ -137,6 +137,16 @@ Json Runtime::cinemaCommand(const Json &request) {
         p.snap = request.value("snap", p.snap);
         if (request.contains("fov"))
             p.fov = request["fov"].get<float>();
+        static const std::map<std::string, FollowParams::Frame> frames{
+            {"heading", FollowParams::Frame::Heading}, {"world", FollowParams::Frame::World}, {"fixed", FollowParams::Frame::Fixed}};
+        auto frame = request.value("frame", "heading");
+        if (!frames.contains(frame))
+            throw std::invalid_argument("frame: heading, world or fixed");
+        p.frame = frames.at(frame);
+        if (p.frame != FollowParams::Frame::Heading) {
+            p.offset = vec(request.at("offset"));
+            p.lookOffset = request.contains("lookOffset") ? vec(request["lookOffset"]) : Vec3{0, p.lookHeight, 0};
+        }
         auto subject = request.at("target").get<std::string>();
         if (!cinemaSubject(subject))
             throw std::invalid_argument("no character or object " + subject);

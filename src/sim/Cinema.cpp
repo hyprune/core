@@ -206,6 +206,10 @@ void Spring3::step(Vec3 goal, float halfLife, float dt) {
 }
 
 std::pair<Vec3, Vec3> Follow::goal(Vec3 q, float h) const {
+    if (p.frame == FollowParams::Frame::World)
+        return {q + p.offset, q + p.lookOffset};
+    if (p.frame == FollowParams::Frame::Fixed)
+        return {p.offset, q + p.lookOffset};
     Vec3 f{std::sin(h), 0, std::cos(h)}, left{f.z, 0, -f.x};
     return {q - f * p.back + left * p.side + Vec3{0, p.height, 0}, q + f * p.ahead + Vec3{0, p.lookHeight, 0}};
 }
