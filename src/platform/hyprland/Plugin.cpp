@@ -6961,7 +6961,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
 #ifndef HYPRUNE_LIVE_BUILD
     runtime->deferInput([] { runtime->readyNotice(); });
 #endif
-    return {"hyprune-core", "World-driven desktop runtime", "Hyprune contributors", "0.8.1"};
+    return {"hyprune-core", "World-driven desktop runtime", "Hyprune contributors", "0.8.2"};
 }
 APICALL EXPORT void PLUGIN_EXIT() {
     if (!runtime)
