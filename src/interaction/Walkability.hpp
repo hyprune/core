@@ -15,6 +15,8 @@ namespace hyprune::interaction {
 // and workspace wall, its width plus 0.3 m each side, from 0.1 m above its floor to its top
 // edge, 1.5 m deep. Floor and ceiling screens have none.
 std::vector<Box> approachZones(const world::World &, std::function<bool(unsigned)> ignore = {});
+// The same zones with the anchor each stands in front of.
+std::vector<std::pair<std::string, Box>> namedApproachZones(const world::World &, std::function<bool(unsigned)> ignore = {});
 struct Body {
     float radius = .35f, height = 1.8f;
 };

@@ -662,6 +662,7 @@ std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions optio
     require(!result->meshes.empty(), "empty scene");
     loadSpatial(*result, root);
     result->nodeParents = scene.parents;
+    result->nodeNames = scene.names;
     loadMounts(*result, scene.parents.size());
     // Paths and interactions load with the objects, before the mounts: their anchor
     // references are checked now that the anchors exist.

@@ -29,6 +29,12 @@ bool hitsCollision(const PlacementScene &s, const Box &box) {
 } // namespace
 std::vector<Box> approachZones(const world::World &w, std::function<bool(unsigned)> ignore) {
     std::vector<Box> out;
+    for (auto &[id, box] : namedApproachZones(w, std::move(ignore)))
+        out.push_back(box);
+    return out;
+}
+std::vector<std::pair<std::string, Box>> namedApproachZones(const world::World &w, std::function<bool(unsigned)> ignore) {
+    std::vector<std::pair<std::string, Box>> out;
     PlacementScene floorOnly;
     floorOnly.collision = w.collision;
     floorOnly.index = &w.collisionIndex;
@@ -54,7 +60,7 @@ std::vector<Box> approachZones(const world::World &w, std::function<bool(unsigne
             continue;
         b.centre = Vec3{front.x, (low + top) * .5f, front.z};
         b.half = {width * .5f + .3f, (top - low) * .5f, .75f};
-        out.push_back(b);
+        out.push_back({a.value("id", ""), b});
     }
     return out;
 }

@@ -151,6 +151,7 @@ struct World {
     // (its collision moves with it). Everything else in a package is static.
     std::vector<bool> ownsCollision;
     std::vector<int> nodeParents;
+    std::vector<std::string> nodeNames; // per scene node, "" when unnamed (the debug tool's labels)
     // World 0.8 placed objects (RFC-0004): assets are uploaded once, instances
     // are drawn instanced. Render-only apart from their static collision proxies.
     std::vector<ObjectAsset> objectAssets;
