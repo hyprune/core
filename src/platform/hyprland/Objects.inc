@@ -222,6 +222,19 @@ Json Runtime::catalogEntries() {
 // ---- assets and instances ----------------------------------------------------------
 // The world asset for a catalog entry: package assets are loaded with the world; library
 // and user objects decode on a worker (-1 while loading, -2 when they failed).
+// What prompts, labels and the objects state call an object: a character's companion
+// block name, else its object.json name, else the fallback (the asset id).
+static std::string displayName(const Json &manifest, bool character, const std::string &fallback) {
+    auto text = [](const Json &v) { return v.is_string() && !v.get<std::string>().empty() ? v.get<std::string>() : ""; };
+    std::string name;
+    if (manifest.is_object()) {
+        if (character && manifest.contains("companion") && manifest["companion"].is_object())
+            name = text(manifest["companion"].value("name", Json()));
+        if (name.empty())
+            name = text(manifest.value("name", Json()));
+    }
+    return (name.empty() ? fallback : name).substr(0, 64);
+}
 int Runtime::assetFor(const world::CatalogEntry &e) {
     if (!world)
         return -2;
@@ -345,7 +358,8 @@ void Runtime::objectsSync() {
         info.id = inst.id;
         info.source = "authored";
         info.ref = "package/" + world->objectAssets[inst.asset].id;
-        info.name = world->objectAssets[inst.asset].id.substr(0, 64);
+        auto &asset = world->objectAssets[inst.asset];
+        info.name = displayName(asset.manifest, bool(asset.character), asset.id);
         info.index = int(k);
         info.position = inst.position;
         info.rotation = inst.rotation;
@@ -395,7 +409,8 @@ void Runtime::objectsSync() {
         info.locked = r.value("locked", false);
         std::string substitute;
         auto *e = catalogEntry(info.ref, &substitute);
-        info.name = e ? e->name : info.ref.substr(info.ref.rfind('/') + 1).substr(0, 64);
+        info.name = e ? displayName(e->manifest, e->manifest.is_object() && e->manifest.contains("companion"), e->name)
+                      : info.ref.substr(info.ref.rfind('/') + 1).substr(0, 64);
         if (info.name.empty())
             info.name = info.id;
         if (e && !substitute.empty())

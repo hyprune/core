@@ -222,6 +222,8 @@ def acceptance(client, children, args, shell_token, socketpath):
           {i['path'] for i in chars} == {'package/yard-loop', 'package/north-walk'} and st['npcs']['usage']['authored'] == 2, chars)
     check('npcs state', st['npcs']['motion'] == 'always' and st['npcs']['state'] == 'animating' and st['npcs']['limits'] == {'authored': 16, 'user': 8},
           st['npcs'])
+    check('authored residents are named by their object.json name, not the asset id',
+          all(i['name'].startswith('Resident') and i['name'] not in ('blue', 'crimson') for i in chars), [i['name'] for i in chars])
     a0 = agent('crimson-walker'); look([a0['position'][0], 3, a0['position'][2] + 6], a0['position'])
     a0 = agent('crimson-walker'); t0 = time.monotonic(); time.sleep(2)
     a1 = agent('crimson-walker'); t1 = time.monotonic()

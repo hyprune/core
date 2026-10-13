@@ -268,6 +268,14 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Characters and objects named by their display name (no wire change)
+
+- `objects.instances[].name` for authored instances, NPC prompts ("Talk to …"), say
+  captions and notices use the object's display name: a character's `companion.name`,
+  else its object.json `name`, else (inline assets) the asset id. Authored residents read
+  "Resident (blue)" where they read `blue` before; user-placed characters use the
+  companion name over the catalog name when they have one.
+
 ## Waypoints: route line on the ground, routes round obstructions, cleared on arrival (no wire change)
 
 - Arrival (RFC-0012): a waypoint the player reaches is cleared by core: within its

@@ -42,11 +42,11 @@
      "id": "blue-walker",
      "locked": false,
      "movable": false,
-     "name": "blue",
+     "name": "Resident (blue)",
      "path": "package/yard-loop",
      "pose": {
       "position": [
-       -1.2719976902008057,
+       -1.2723486423492432,
        0.0,
        3.0
       ],
@@ -72,11 +72,11 @@
      "id": "crimson-walker",
      "locked": false,
      "movable": false,
-     "name": "crimson",
+     "name": "Resident (crimson)",
      "path": "package/north-walk",
      "pose": {
       "position": [
-       -5.8116607666015625,
+       -5.811210632324219,
        0.0,
        -12.5
       ],
@@ -117,10 +117,18 @@
    }
   },
   {
+   "name": "authored residents are named by their object.json name, not the asset id",
+   "ok": true,
+   "evidence": [
+    "Resident (blue)",
+    "Resident (crimson)"
+   ]
+  },
+  {
    "name": "walks its route at about the walk clip speed (0.87 m/s)",
    "ok": true,
    "evidence": {
-    "mPerS": 1.007837361672392,
+    "mPerS": 1.0127037094795006,
     "agent": {
      "activity": "walking",
      "backingOff": false,
@@ -129,11 +137,11 @@
      "detour": -1,
      "detours": 0,
      "gait": {
-      "clipTime": 0.5585294365882874,
-      "fade": 6.851641046523582e-06,
-      "phase": 0.8377941250801086,
+      "clipTime": 0.5910952687263489,
+      "fade": 4.860961780650541e-06,
+      "phase": 0.8866428732872009,
       "previous": "walk",
-      "previousTime": 0.8657205700874329
+      "previousTime": 0.9161975979804993
      },
      "heading": 1.5707963705062866,
      "id": "crimson-walker",
@@ -147,13 +155,13 @@
      "occluded": false,
      "path": "package/north-walk",
      "position": [
-      -3.1978139877319336,
+      -3.1467056274414062,
       0.0,
       -12.5
      ],
      "radius": 0.3499999940395355,
      "routeLength": 24.0,
-     "s": 8.802186012268066,
+     "s": 8.853294372558594,
      "seat": "",
      "seatFit": {
       "known": true,
@@ -316,7 +324,7 @@
    "ok": true,
    "evidence": {
     "bind": null,
-    "pathId": "path-254316031355922",
+    "pathId": "path-264094015431099",
     "spawn": {
      "ref": "library/com.hyprune.starter@0.2.0/resident-ember"
     },
@@ -336,7 +344,7 @@
    "evidence": {
     "areaId": "",
     "closed": false,
-    "id": "path-254316031355922",
+    "id": "path-264094015431099",
     "name": null,
     "points": [
      {
@@ -375,20 +383,20 @@
    "ok": true,
    "evidence": {
     "finish": {
-     "bound": "u-6078c3",
-     "id": "path-254316031355922",
-     "revision": 135
+     "bound": "u-df3bdb",
+     "id": "path-264094015431099",
+     "revision": 132
     },
     "instance": {
      "accent": null,
      "activity": null,
      "areaId": "",
      "character": true,
-     "id": "u-6078c3",
+     "id": "u-df3bdb",
      "locked": false,
      "movable": false,
      "name": "Resident (ember)",
-     "path": "user/path-254316031355922",
+     "path": "user/path-264094015431099",
      "pose": {
       "position": [
        5.997600555419922,
@@ -416,12 +424,12 @@
    "ok": true,
    "evidence": {
     "from": [
-     6.211149215698242,
+     6.195939540863037,
      0.0027196407318115234,
      0.033999472856521606
     ],
     "to": [
-     7.840780258178711,
+     7.825805187225342,
      0.0027196407318115234,
      0.033999472856521606
     ]
@@ -435,14 +443,14 @@
     "activity": "walking",
     "areaId": "research",
     "character": true,
-    "id": "u-27ea28",
+    "id": "u-b30a12",
     "locked": false,
     "movable": false,
     "name": "Resident (ember)",
     "path": "package/north-walk",
     "pose": {
      "position": [
-      0.0017919540405273438,
+      0.0013818740844726562,
       0.0,
       -12.5
      ],
@@ -507,31 +515,31 @@
    "name": "glances at a player within 4 m (head turned, clamped)",
    "ok": true,
    "evidence": [
-    0.7836236953735352,
-    0.09806142002344131
+    0.7839617133140564,
+    0.09762777388095856
    ]
   },
   {
    "name": "steps aside instead of walking into the player",
    "ok": true,
    "evidence": {
-    "closest": 0.67386638140471,
-    "widest": 0.8164668083190918,
+    "closest": 0.6766724689277137,
+    "widest": 0.8165395259857178,
     "stand": [
-     2.6977165222167967,
+     2.7680690765380858,
      1.7,
      -12.5
     ],
     "samples": [
      {
       "agent": [
-       4.692987442016602,
+       4.746503829956055,
        0.0,
-       -12.783072471618652
+       -12.783031463623047
       ],
-      "lateral": -0.28307202458381653,
+      "lateral": -0.28303152322769165,
       "player": [
-       2.697716474533081,
+       2.76806902885437,
        1.7000000476837158,
        -12.5
       ],
@@ -539,13 +547,13 @@
      },
      {
       "agent": [
-       4.616933822631836,
+       4.670555114746094,
        0.0,
-       -12.93337631225586
+       -12.933134078979492
       ],
-      "lateral": -0.4333767890930176,
+      "lateral": -0.43313392996788025,
       "player": [
-       2.697716474533081,
+       2.76806902885437,
        1.7000000476837158,
        -12.5
       ],
@@ -553,13 +561,13 @@
      },
      {
       "agent": [
-       4.5404510498046875,
+       4.594043731689453,
        0.0,
-       -13.08316421508789
+       -13.082992553710938
       ],
-      "lateral": -0.5831644535064697,
+      "lateral": -0.5829923748970032,
       "player": [
-       2.697716474533081,
+       2.76806902885437,
        1.7000000476837158,
        -12.5
       ],
@@ -567,13 +575,13 @@
      },
      {
       "agent": [
-       4.442373275756836,
+       4.495983123779297,
        0.0,
-       -13.216578483581543
+       -13.216415405273438
       ],
-      "lateral": -0.7165786623954773,
+      "lateral": -0.7164149880409241,
       "player": [
-       2.697716474533081,
+       2.76806902885437,
        1.7000000476837158,
        -12.5
       ],
@@ -581,13 +589,13 @@
      },
      {
       "agent": [
-       4.29295539855957,
+       4.34661865234375,
        0.0,
-       -13.31646728515625
+       -13.316539764404297
       ],
-      "lateral": -0.8164668083190918,
+      "lateral": -0.8165395259857178,
       "player": [
-       2.697716474533081,
+       2.76806902885437,
        1.7000000476837158,
        -12.5
       ],
@@ -595,13 +603,13 @@
      },
      {
       "agent": [
-       4.141139984130859,
+       4.194812774658203,
        0.0,
-       -13.31646728515625
+       -13.316539764404297
       ],
-      "lateral": -0.8164668083190918,
+      "lateral": -0.8165395259857178,
       "player": [
-       2.697716474533081,
+       2.76806902885437,
        1.7000000476837158,
        -12.5
       ],
@@ -614,7 +622,7 @@
    "name": "animating characters in view render frames; out of view, none",
    "ok": true,
    "evidence": {
-    "inView": 61.2,
+    "inView": 60.8,
     "occluded": false,
     "outOfView": 0.0,
     "causes": {},
@@ -659,25 +667,25 @@
     "detour": -1,
     "detours": 0,
     "gait": {
-     "clipTime": 0.016655173152685165,
-     "fade": 0.06662069261074066,
-     "phase": 0.4336034953594208,
+     "clipTime": 0.06663291901350021,
+     "fade": 0.26653167605400085,
+     "phase": 0.43339642882347107,
      "previous": "sit",
-     "previousTime": 2.315852165222168
+     "previousTime": 2.3666329383850098
     },
     "heading": 4.71238899230957,
     "id": "blue-walker",
     "interactions": 3,
     "lateral": 0.0,
     "look": [
-     8.300895815454505e-38,
-     3.7010380377530263e-38
+     4.762311149449734e-38,
+     2.123319459886029e-38
     ],
     "mode": 6,
     "occluded": false,
     "path": "package/yard-loop",
     "position": [
-     3.377068281173706,
+     3.377200126647949,
      0.0,
      2.5999999046325684
     ],
@@ -726,29 +734,29 @@
      "activity": "guiding",
      "backingOff": false,
      "blockedFor": 0.0,
-     "clip": "walk",
+     "clip": "sit",
      "detour": -1,
      "detours": 0,
      "gait": {
-      "clipTime": 0.014917377382516861,
-      "fade": 0.1988983452320099,
-      "phase": 0.0,
-      "previous": "idle",
-      "previousTime": 0.0664697214961052
+      "clipTime": 0.016631999984383583,
+      "fade": 1.0,
+      "phase": 0.43339642882347107,
+      "previous": "sit_idle",
+      "previousTime": 3.385091543197632
      },
      "heading": 4.71238899230957,
      "id": "blue-walker",
      "interactions": 3,
      "lateral": 0.0,
      "look": [
-      -0.5271753668785095,
-      0.03572743758559227
+      -0.5238825678825378,
+      0.029953137040138245
      ],
      "mode": 10,
      "occluded": false,
      "path": "package/yard-loop",
      "position": [
-      2.989607334136963,
+      3.002727746963501,
       0.0,
       2.5999999046325684
      ],
@@ -761,9 +769,9 @@
       "seatHeight": -0.06109088659286499,
       "sink": 0.12745562195777893
      },
-     "seatOffset": 0.0,
+     "seatOffset": 0.0026111549232155085,
      "seats": 1,
-     "speed": 0.20808976888656616,
+     "speed": 0.0,
      "state": "active",
      "stop": 0,
      "stopSpots": [
@@ -799,25 +807,25 @@
     "detour": -1,
     "detours": 0,
     "gait": {
-     "clipTime": 0.05006870627403259,
-     "fade": 0.20027482509613037,
-     "phase": 0.7910914421081543,
+     "clipTime": 0.06664927303791046,
+     "fade": 0.26659709215164185,
+     "phase": 0.6469615697860718,
      "previous": "sit",
-     "previousTime": 2.3494722843170166
+     "previousTime": 2.3666491508483887
     },
     "heading": 4.71238899230957,
     "id": "blue-walker",
     "interactions": 3,
     "lateral": 0.0,
     "look": [
-     -5.1437614277956737e-17,
-     3.473409147087743e-18
+     -8.878247305050874e-17,
+     6.574950564405841e-18
     ],
     "mode": 6,
     "occluded": false,
     "path": "package/yard-loop",
     "position": [
-     3.3771021366119385,
+     3.377200126647949,
      0.0,
      2.5999999046325684
     ],
@@ -860,17 +868,17 @@
     "activity": "walking",
     "backingOff": false,
     "blockedFor": 0.0,
-    "clip": "idle",
+    "clip": "walk",
     "detour": -1,
     "detours": 0,
     "gait": {
-     "clipTime": 0.016639024019241333,
-     "fade": 0.06655609607696533,
-     "phase": 0.23912082612514496,
-     "previous": "walk",
-     "previousTime": 0.24709151685237885
+     "clipTime": 0.24922716617584229,
+     "fade": 1.0,
+     "phase": 0.24118758738040924,
+     "previous": "idle",
+     "previousTime": 0.24922716617584229
     },
-    "heading": 5.393099308013916,
+    "heading": 5.4977874755859375,
     "id": "blue-walker",
     "interactions": 3,
     "lateral": 0.0,
@@ -897,7 +905,7 @@
     },
     "seatOffset": 0.0,
     "seats": 1,
-    "speed": 0.0,
+    "speed": 0.5123712420463562,
     "state": "active",
     "stop": 0,
     "stopSpots": [
@@ -940,9 +948,9 @@
        "type": "guide"
       }
      ],
-     "name": "blue",
+     "name": "Resident (blue)",
      "objectId": "blue-walker",
-     "prompt": "Talk to blue"
+     "prompt": "Talk to Resident (blue)"
     },
     "reticle": {
      "action": "interact",
@@ -969,7 +977,7 @@
      }
     ],
     "interactionId": null,
-    "label": "blue",
+    "label": "Resident (blue)",
     "line": null,
     "lineCount": 0,
     "lineIndex": 0,
@@ -1020,8 +1028,8 @@
     ],
     "text": "The loop takes about a minute. Mind the step by the signal box, and wait for me at the bench where the yard lamps stand; the north walk is near gates.",
     "truncated": false,
-    "x": 0.5072916150093079,
-    "y": 0.09531551599502563
+    "x": 0.5072917342185974,
+    "y": 0.09531542658805847
    }
   },
   {
@@ -1046,9 +1054,9 @@
        "type": "guide"
       }
      ],
-     "name": "blue",
+     "name": "Resident (blue)",
      "objectId": "blue-walker",
-     "prompt": "Talk to blue"
+     "prompt": "Talk to Resident (blue)"
     },
     "drawing": null,
     "interaction": null,
@@ -1112,14 +1120,14 @@
     "states": [
      "('animating', None)"
     ],
-    "walkedM": 7.19
+    "walkedM": 7.53
    }
   },
   {
    "name": "auto: a guide runs to completion with no movement input (over 30 s), back on its route",
    "ok": true,
    "evidence": {
-    "seconds": 37.4,
+    "seconds": 37.7,
     "nearestEnd": 0.0,
     "agent": {
      "activity": "walking",
@@ -1129,25 +1137,25 @@
      "detour": -1,
      "detours": 0,
      "gait": {
-      "clipTime": 1.0118117332458496,
+      "clipTime": 0.20483113825321198,
       "fade": 1.0,
-      "phase": 0.9791726469993591,
+      "phase": 0.19822369515895844,
       "previous": "wave",
-      "previousTime": 1.0118117332458496
+      "previousTime": 0.20483113825321198
      },
-     "heading": 8.325166702270508,
+     "heading": 7.853981971740723,
      "id": "blue-walker",
      "interactions": 3,
      "lateral": 0.0,
      "look": [
-      -0.004595367703586817,
-      0.00020834679889958352
+      -0.6873458623886108,
+      0.02829597145318985
      ],
      "mode": 3,
      "occluded": false,
      "path": "package/yard-loop",
      "position": [
-      2.462778329849243,
+      2.6604647636413574,
       0.0,
       2.5999999046325684
      ],
@@ -1191,20 +1199,20 @@
    "name": "two residents walking a loop in opposite directions never overlap",
    "ok": true,
    "evidence": {
-    "closest": 0.907,
+    "closest": 0.901,
     "radii": 0.699999988079071,
     "meetings": 2,
     "at": {
-     "seconds": 47.2,
+     "seconds": 21.6,
      "blue": {
       "activity": "walking",
       "mode": 1,
       "position": [
-       1.5499999523162842,
+       -12.449999809265137,
        0.0,
-       4.373121738433838
+       6.9973673820495605
       ],
-      "lateral": 0.44999998807907104,
+      "lateral": -0.44999998807907104,
       "speed": 0.8730000257492065,
       "backingOff": false,
       "detour": -1,
@@ -1214,11 +1222,11 @@
       "activity": "walking",
       "mode": 1,
       "position": [
-       2.450000047683716,
+       -11.550000190734863,
        0.0,
-       4.486597537994385
+       7.042388916015625
       ],
-      "lateral": 0.44999998807907104,
+      "lateral": -0.44999998807907104,
       "speed": 0.7950000166893005,
       "backingOff": false,
       "detour": -1,
@@ -1239,11 +1247,11 @@
      "detour": -1,
      "detours": 1,
      "gait": {
-      "clipTime": 0.5577883124351501,
-      "fade": 2.499923084542388e-06,
-      "phase": 0.8366824388504028,
+      "clipTime": 0.5575785040855408,
+      "fade": 6.481282071035821e-07,
+      "phase": 0.8363677263259888,
       "previous": "walk",
-      "previousTime": 0.8645718097686768
+      "previousTime": 0.8642466068267822
      },
      "heading": -1.5707963705062866,
      "id": "crimson-walker",
@@ -1257,13 +1265,13 @@
      "occluded": false,
      "path": "package/north-walk",
      "position": [
-      -1.5524654388427734,
+      -1.4534292221069336,
       0.0,
       -12.5
      ],
      "radius": 0.3499999940395355,
      "routeLength": 24.0,
-     "s": 10.447534561157227,
+     "s": 10.546570777893066,
      "seat": "",
      "seatFit": {
       "known": true,
@@ -1294,15 +1302,15 @@
      "activity": "walking",
      "backingOff": false,
      "blockedFor": 0.0,
-     "clip": "walk",
+     "clip": "run",
      "detour": -1,
      "detours": 1,
      "gait": {
-      "clipTime": 0.26751208305358887,
-      "fade": 1.0,
-      "phase": 0.25888267159461975,
-      "previous": "run",
-      "previousTime": 0.17258845269680023
+      "clipTime": 0.0989748165011406,
+      "fade": 2.222153852926567e-06,
+      "phase": 0.1484622210264206,
+      "previous": "walk",
+      "previousTime": 0.15341095626354218
      },
      "heading": 1.5707963705062866,
      "id": "crimson-walker",
@@ -1316,13 +1324,13 @@
      "occluded": false,
      "path": "package/north-walk",
      "position": [
-      8.405454635620117,
+      8.290414810180664,
       0.0,
       -12.5
      ],
      "radius": 0.3499999940395355,
      "routeLength": 24.0,
-     "s": 20.405454635620117,
+     "s": 20.290414810180664,
      "seat": "",
      "seatFit": {
       "known": true,
@@ -1354,11 +1362,11 @@
      "detour": -1,
      "detours": 0,
      "gait": {
-      "clipTime": 0.9250808954238892,
+      "clipTime": 0.017792554572224617,
       "fade": 1.0,
-      "phase": 0.8952395915985107,
+      "phase": 0.01721860095858574,
       "previous": "run",
-      "previousTime": 0.596826434135437
+      "previousTime": 0.011479067616164684
      },
      "heading": -1.5707963705062866,
      "id": "crimson-walker",
@@ -1372,13 +1380,13 @@
      "occluded": true,
      "path": "package/north-walk",
      "position": [
-      8.982534408569336,
+      8.855669021606445,
       0.0,
       -12.5
      ],
      "radius": 0.3499999940395355,
      "routeLength": 24.0,
-     "s": 20.982534408569336,
+     "s": 20.855669021606445,
      "seat": "",
      "seatFit": {
       "known": true,
@@ -1412,11 +1420,11 @@
      "detour": -1,
      "detours": 0,
      "gait": {
-      "clipTime": 0.3300597071647644,
-      "fade": 1.0647820545273134e-06,
-      "phase": 0.4950895607471466,
+      "clipTime": 0.3385668992996216,
+      "fade": 4.768372036778601e-06,
+      "phase": 0.5078503489494324,
       "previous": "walk",
-      "previousTime": 0.5115925073623657
+      "previousTime": 0.5247786641120911
      },
      "heading": -1.5707963705062866,
      "id": "crimson-walker",
@@ -1430,13 +1438,13 @@
      "occluded": false,
      "path": "package/north-walk",
      "position": [
-      -1.056406021118164,
+      -1.0690526962280273,
       0.0,
       -12.5
      ],
      "radius": 0.3499999940395355,
      "routeLength": 24.0,
-     "s": 10.943593978881836,
+     "s": 10.930947303771973,
      "seat": "",
      "seatFit": {
       "known": true,
@@ -1465,7 +1473,7 @@
    "evidence": {
     "agent": {
      "position": [
-      0.6360597610473633,
+      0.5382823944091797,
       0.0,
       -12.5
      ],
@@ -1481,7 +1489,7 @@
    "evidence": {
     "agent": {
      "position": [
-      6.018850326538086,
+      6.063636779785156,
       0.0,
       -12.5
      ],
@@ -1502,11 +1510,11 @@
     "id": "crimson-walker",
     "locked": false,
     "movable": false,
-    "name": "crimson",
+    "name": "Resident (crimson)",
     "path": null,
     "pose": {
      "position": [
-      6.467029571533203,
+      6.512447357177734,
       0.0,
       -12.5
      ],
@@ -1538,11 +1546,11 @@
     "activity": null,
     "areaId": "",
     "character": true,
-    "id": "u-6078c3",
+    "id": "u-df3bdb",
     "locked": false,
     "movable": false,
     "name": "Resident (ember)",
-    "path": "user/path-254316031355922",
+    "path": "user/path-264094015431099",
     "pose": {
      "position": [
       5.997600555419922,
@@ -1575,25 +1583,25 @@
     "detour": -1,
     "detours": 0,
     "gait": {
-     "clipTime": 0.412300705909729,
+     "clipTime": 0.4262000322341919,
      "fade": 1.0,
      "phase": 0.0,
      "previous": "",
-     "previousTime": 0.412300705909729
+     "previousTime": 0.4262000322341919
     },
     "heading": 0.0,
-    "id": "u-e6dda0",
+    "id": "u-22e1ee",
     "interactions": 0,
     "lateral": 0.0,
     "look": [
      0.0,
-     0.3387305736541748
+     0.3399631083011627
     ],
     "mode": 0,
     "occluded": false,
     "path": "",
     "position": [
-     6.018850326538086,
+     6.063636779785156,
      0.0,
      -7.5
     ],
@@ -1633,8 +1641,8 @@
      0.15
     ],
     "areaId": "",
-    "id": "u-6078c3",
-    "path": "user/path-254316031355922",
+    "id": "u-df3bdb",
+    "path": "user/path-264094015431099",
     "pose": {
      "position": [
       5.997600555419922,
@@ -1666,14 +1674,14 @@
      "activity": "walking",
      "areaId": "",
      "character": true,
-     "id": "u-6078c3",
+     "id": "u-df3bdb",
      "locked": false,
      "movable": false,
      "name": "Resident (ember)",
-     "path": "user/path-254316031355922",
+     "path": "user/path-264094015431099",
      "pose": {
       "position": [
-       7.097220420837402,
+       6.713067531585693,
        0.0027196407318115234,
        0.033999472856521606
       ],
@@ -1699,7 +1707,7 @@
      "id": "crimson-walker",
      "locked": false,
      "movable": false,
-     "name": "crimson",
+     "name": "Resident (crimson)",
      "path": null,
      "pose": {
       "position": [
@@ -1729,7 +1737,7 @@
    "evidence": {
     "parityMeanLevels": 0.0,
     "parityDiffering": 0.0,
-    "hiddenDiffering": 0.14181
+    "hiddenDiffering": 0.13359
    }
   },
   {
@@ -1828,7 +1836,7 @@
    "name": "Lumen: a resident in view keeps frames coming",
    "ok": true,
    "evidence": {
-    "fps": 60.8,
+    "fps": 61.2,
     "agent": "sun-court-resident"
    }
   }
