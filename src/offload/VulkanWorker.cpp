@@ -297,6 +297,13 @@ int main(int argc, char **argv) {
         offload::ObjectReceiver::Loader loadAsset = [formats](const std::filesystem::path &dir, const Json &manifest) {
             return world::loadObjectAsset(dir, manifest, {formats});
         };
+        // Assets drawable here (merged and uploaded): announced whenever the count grows, so
+        // the plugin poses again for a still scene once a mid-session asset is ready.
+        size_t announced = scene->objectAssets.size();
+        auto announce = [&] {
+            send(sock, {{"type", "assets"}, {"ready", announced}, {"failed", objects.failures()}});
+        };
+        announce();
         send(sock, {{"type", "ready"}});
         note("ready");
         offload::RateCap cap; // the watchdog's FPS as an average, not a spacing (Pacing.hpp)
@@ -331,6 +338,7 @@ int main(int argc, char **argv) {
                     reply["gpuEffectsMs"] = timing["gpuEffectsMs"];
                     reply["objectDraw"] = timing["objects"];
                     reply["objectsLoading"] = objects.loading() || renderer.objectAssetsPending();
+                    reply["assetsFailed"] = objects.failures();
                     reply["machines"] = machines.diagnostics();
                     reply["machines"]["labelsDrawn"] = renderer.worldLabelsDrawn;
                     if (b.acquire < 0)
@@ -343,6 +351,11 @@ int main(int argc, char **argv) {
             if (objects.merge(*scene, !renderer.objectAssetsPending()))
                 renderer.stageObjectAssets();
             renderer.continueObjectAssets();
+            if (!renderer.objectAssetsPending() && scene->objectAssets.size() != announced) {
+                announced = scene->objectAssets.size();
+                note("assets ready " + std::to_string(announced));
+                announce();
+            }
             // Keep retiring completed slots while waiting for the next capped
             // submission. Sleeping after dequeue used to delay frame replies.
             if (!cap.ready(now(), fps)) {

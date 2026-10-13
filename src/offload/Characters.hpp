@@ -3,18 +3,22 @@
 // assets with the package and catalog assets (Objects.hpp), and every pose carries each
 // drawn character's pose inputs (asset, model, clips, times, crossfade, look-at, accent,
 // probe light), so the worker evaluates the same skinning (Character::evaluate) as the
-// in-process renderer. Internal to core: not part of the IPC contract.
+// in-process renderer. A record names its asset by index and by stable ref: an asset
+// merged mid-session (a companion, a library installed later) is drawn once the worker
+// has decoded and uploaded it, and never as another asset. Internal to core: not part
+// of the IPC contract.
 #include "render/Renderer.hpp"
 #include "world/Character.hpp"
 #include "world/World.hpp"
 #include <json.hpp>
 namespace hyprune::offload {
-inline nlohmann::json characterRecord(unsigned asset, const Mat4 &model, const world::Character::PoseInput &in,
+inline nlohmann::json characterRecord(unsigned asset, const std::string &ref, const Mat4 &model, const world::Character::PoseInput &in,
                                       const std::optional<Vec3> &accent, const std::array<float, 8> &probe, bool moving,
                                       bool occluded = false) {
     using Json = nlohmann::json;
     auto name = [](const world::Character::Clip *c) { return c ? Json(c->name) : Json(nullptr); };
     return Json{{"asset", asset},
+                {"ref", ref},
                 {"model", model.v},
                 {"from", name(in.from)},
                 {"fromTime", in.fromTime},
@@ -29,8 +33,8 @@ inline nlohmann::json characterRecord(unsigned asset, const Mat4 &model, const w
                 {"moving", moving},
                 {"occluded", occluded}};
 }
-// Worker side: the renderer's character list from a pose's records (unknown assets and
-// clips are skipped).
+// Worker side: the renderer's character list from a pose's records (assets not loaded
+// yet, failed or under another ref, and unknown clips are skipped).
 inline void applyCharacters(const nlohmann::json &records, const world::World &w, render::Renderer &r) {
     r.npcs.clear();
     if (!records.is_array())
@@ -38,6 +42,8 @@ inline void applyCharacters(const nlohmann::json &records, const world::World &w
     for (auto &c : records) {
         size_t asset = c.at("asset");
         if (asset >= w.objectAssets.size() || !w.objectAssets[asset].character || r.npcs.size() >= 64)
+            continue;
+        if (auto ref = c.value("ref", std::string()); !ref.empty() && ref != w.objectAssets[asset].ref)
             continue;
         auto &ch = w.objectAssets[asset].character;
         world::Character::PoseInput in;

@@ -32,6 +32,7 @@ class Client {
     // Frame ticks (diagnostics): time, promoted sequence, sent sequence, slot phases, budget.
     std::deque<std::array<double, 6>> ticks_;
     std::string lastSent_; // the last pose request without its identity: unchanged means no new frame
+    size_t workerAssets_ = 0; // assets the worker can draw (its "assets" messages)
     ExternalCopy externalCopy_;
 
   public:
@@ -194,6 +195,8 @@ class Client {
                     check(packet->fds.empty(), "unexpected descriptors");
                     if (type == "caps")
                         capabilities = p;
+                    else if (type == "assets")
+                        workerAssets_ = p.at("ready").get<size_t>(); // a new count poses again (below)
                     else if (type == "ready") {
                         check(slots_[0].tex && slots_[1].tex, "ready before buffers");
                         ready_ = true;
@@ -278,6 +281,9 @@ class Client {
                                        camera.pitch, camera.fov, camera.roll, camera.shiftX, camera.shiftY}}};
                         if (extra)
                             b.request.update(extra());
+                        // The worker's drawable asset count is part of what a frame shows: an
+                        // asset that finished loading after the last pose redraws a still scene.
+                        b.request["assetsReady"] = workerAssets_;
                         if (frame) {
                             auto same = b.request;
                             for (auto key : {"slot", "sequence", "sent"})
@@ -342,6 +348,7 @@ class Client {
         }
         ready_ = false;
         lastSent_.clear();
+        workerAssets_ = 0;
         budget_ = {};
         front_ = -1;
         frontSequence_ = sequence_ = 0;

@@ -581,7 +581,7 @@ void Runtime::objectsTick() {
                 auto section = timed("objects.merge");
                 auto scratch = slot.load.get();
                 slot.index = int(world::mergeObjectAsset(*world, *scratch));
-                mergedAssets.push_back({slot.entry.directory, slot.entry.manifest});
+                mergedAssets.push_back({slot.entry.directory, slot.entry.manifest, slot.entry.ref});
             } catch (const std::exception &e) {
                 slot.error = e.what();
                 objectNotice("object.missing", "Can't load " + slot.entry.name + ": " + e.what(), "load:" + ref + slot.entry.digest);

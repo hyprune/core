@@ -16,6 +16,11 @@ OFFLOAD_OBJECTS_STAGE:
                     the rack moved with the tool 4 gizmo while offload runs, a hidden
                     authored object, and edited scene-node transforms (the M3B
                     fixture's cube). Writes parity.json, the stills and diff images.
+  midsession        a library installed while offload already draws (its root existed, so
+                    the worker keeps running): a rack placed and a resident spawned from it
+                    are drawn by the worker (no restart), with pixel parity against the
+                    in-process renderer; the character's own pixels are checked as well.
+                    Writes midsession.json, the stills and diff images.
   perf              frame times, offload off then on, with the clock running and the
                     armillaries in view, render scale 1 (HYPRUNE_NESTED_4K=1 for 4K).
                     Writes perf.json. HYPRUNE_MEASURE_DEVICE picks the offload GPU.
@@ -132,6 +137,7 @@ def acceptance(client, children, args, shell_token, socketpath):
         # (GPU ms; near zero when the offload frame replaces it).
         t = diag().get('timings', {})
         results.setdefault('stills', []).append({'name': name, 'renderer': perf()['activeRenderer'],
+                                                 'workerClock': (perf().get('workerTimings') or {}).get('clock'),
                                                  'compositorWorldPassGpuMs': (t.get('gpuPassMs') or [None])[0]})
         return path
 
@@ -141,16 +147,14 @@ def acceptance(client, children, args, shell_token, socketpath):
     wait(lambda: diag()['active'])
     client.call('movement.set', {'modeId': 'com.hyprune.fly'})
     client.call('graphics.set', {'patch': {'offload': 'off', 'render_scale': 1, 'dynamic_resolution': False}})
+    if stage != 'perf':
+        client.call('graphics.set', {'patch': {'npc_motion': 'still'}})  # the world's residents hold their pose
     center()
     archive = s.STATE / catalog.ARCHIVE.name
     import hashlib
-    client.call('libraries.install', {'archive': str(archive), 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()})
-    arm = instance(AUTHORED)
-    check('Lumen Reach has its animated authored armillary', arm and arm['state'] == 'active',
-          {'world': state()['world'].get('version') if isinstance(state().get('world'), dict) else None, 'armillary': arm})
 
-    # Catalog placements (offload off): the ghost of tool 5 finds a valid floor spot, then
-    # objects.place puts the object there (the same overlay record as a Primary click).
+    # Catalog placements: the ghost of tool 5 finds a valid floor spot, then objects.place
+    # puts the object there (the same overlay record as a Primary click).
     def place(ref, candidates):
         client.call('objects.pocket', {'ref': ref})
         for pos, yaw, pitch in candidates:
@@ -161,6 +165,15 @@ def acceptance(client, children, args, shell_token, socketpath):
                 placed = client.call('objects.place', {'ref': ref, 'pose': {'position': g['position'], 'rotation': g['rotation']}})
                 return placed['id'], g['position']
         raise AssertionError(('no spot', ref))
+
+    if stage == 'midsession':
+        return midsession(client, out, check, archive, place, look, still, offload, perf, diag, instance, clock)
+    client.call('libraries.install', {'archive': str(archive), 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()})
+    arm = instance(AUTHORED)
+    check('Lumen Reach has its animated authored armillary', arm and arm['state'] == 'active',
+          {'world': state()['world'].get('version') if isinstance(state().get('world'), dict) else None, 'armillary': arm})
+
+    # Catalog placements, offload off.
     rack_id, rack_at = place(RACK, [((-8, 1.7, 8), 0, -.35), ((-5, 1.7, 8), 0, -.35), ((-11, 1.7, 8), 0, -.35)])
     arm_id, arm_at = place(ARMILLARY, [((-4, 2.4, 12), math.pi / 2, -.38), ((0, 2.4, 15.2), 0, -.6), ((4, 2.4, 15.2), 0, -.6),
                                        ((-6, 2.4, 12.5), math.pi / 2, -.3), ((10, 2.4, 13), -math.pi / 2, -.38)])
@@ -352,6 +365,68 @@ def acceptance(client, children, args, shell_token, socketpath):
     print('PASS offload-objects parity', json.dumps({'worst': worst}), flush=True)
 
 
+def midsession(client, out, check, archive, place, look, still, offload, perf, diag, instance, clock):
+    """A library installed mid-session while the offload worker draws: its assets reach the
+    running worker as they are used (no restart), and draw like in-process once ready."""
+    import hashlib
+    resident = f'library/{catalog.LIBRARY}/resident-ember'
+    (s.STATE / 'datahome/hyprune/libraries').mkdir(parents=True, exist_ok=True)  # the root exists already
+    clock(0)
+    client.call('graphics.set', {'patch': {'npc_motion': 'still'}})
+    on = offload('on')
+    requests = lambda: (diag().get('offloadRequests') or {}).get('count', 0)
+    before = {'generation': perf().get('generation'), 'requests': requests(), 'pid': perf().get('pid')}
+    check('offload draws before the library exists', on['activeRenderer'] == 'offload', before)
+    installed = client.call('libraries.install', {'archive': str(archive), 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()})
+    wait(lambda: any(e['ref'] == RACK for e in client.call('objects.catalog', {}).get('entries', [])), 30)
+    rack_id, rack_at = place(RACK, [((-8, 1.7, 8), 0, -.35), ((-5, 1.7, 8), 0, -.35), ((-11, 1.7, 8), 0, -.35)])
+    keys('-k', '1'); time.sleep(.3)
+    floor = rack_at[1]
+    npc_id = None
+    for dx, dz in ((1.6, .4), (-1.6, .4), (0, 1.8), (2.4, 1.2)):
+        try:
+            npc_id = client.call('npcs.spawn', {'ref': resident, 'pose': {'position': [rack_at[0] + dx, floor, rack_at[2] + dz],
+                                                                           'rotation': [0, 0, 0, 1]}})['id']
+            break
+        except Exception as e:  # not a free walkable spot: the next one
+            last = e
+    assert npc_id, ('no spot for the resident', last)
+    wait(lambda: instance(rack_id) and instance(rack_id)['state'] == 'active' and instance(npc_id) and instance(npc_id)['state'] == 'active', 30)
+    npc_at = instance(npc_id)['pose']['position']
+
+    def drawn():
+        w = perf().get('workerTimings') or {}
+        return w if perf()['activeRenderer'] == 'offload' and w.get('objectsLoading') is False and not w.get('assetsFailed') else None
+    worker = wait(drawn, 30)
+    after = {'generation': perf().get('generation'), 'requests': requests(), 'pid': perf().get('pid'),
+             'install': installed, 'objectDraw': worker.get('objectDraw')}
+    check('the worker took the new assets without a restart', after['generation'] == before['generation'] and
+          after['requests'] == before['requests'] and after['pid'] == before['pid'], {'before': before, 'after': after})
+    views = {'rack': ([rack_at[0] + 1.2, floor + 2.4, rack_at[2] + 3.4], [rack_at[0], floor + 1.0, rack_at[2]]),
+             'resident': ([npc_at[0], floor + 1.6, npc_at[2] + 3.2], [npc_at[0], floor + .9, npc_at[2]])}
+    shots = {}
+    for tag in ('offload', 'local'):
+        if tag == 'local':
+            offload('off')
+        for view, (eye, target) in views.items():
+            clock(0)  # the rack's fans: the same pinned time in both renderers
+            look(eye, target)
+            shots[(tag, view)] = still(f'mid-{tag}-{view}.png', 1.0)
+    client.call('graphics.set', {'patch': {'npc_motion': 'off'}}); time.sleep(.5)
+    clock(0)
+    look(*views['resident'])
+    hidden = still('mid-local-resident-hidden.png', 1.0)
+    client.call('graphics.set', {'patch': {'npc_motion': 'auto'}})
+    clock(None)
+    parity = {view: compare(shots[('local', view)], shots[('offload', view)], out / f'diff-mid-{view}.png') for view in views}
+    shown = compare(shots[('local', 'resident')], hidden, out / 'diff-mid-resident-shown.png')
+    (out / 'midsession.json').write_text(json.dumps({'parity': parity, 'residentShown': shown, 'before': before, 'after': after}, indent=2) + '\n')
+    check('a mid-session object and character: pixel parity in-process vs offload',
+          all(m.get('differingFraction', 1) <= .001 for m in parity.values()), parity)
+    check('the resident is in view (its pixels, not just the background, match)', shown['differingPixels'] > 2000, shown)
+    print('PASS offload-objects midsession', flush=True)
+
+
 def gpu_sample():
     rows = subprocess.run(['nvidia-smi', '--query-gpu=pci.bus_id,utilization.gpu,power.draw', '--format=csv,noheader,nounits'],
                           capture_output=True, text=True).stdout
@@ -461,4 +536,5 @@ if __name__ == '__main__':
     catalog.acceptance = acceptance
     catalog.prepare = prepare
     s.run(argparse.Namespace(catalog=True, m3b=False, m3a=False, m2=False, m1=False, integration=False, live=False, serve=False,
-                             record=False, visible=False, output=str(pathlib.Path(a.output).resolve())))
+                             record=False, visible=False, output=str(pathlib.Path(a.output).resolve()),
+                             protocol='0.23'))  # npc_motion and npcs.spawn

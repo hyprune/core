@@ -268,6 +268,17 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Offload draws assets added mid-session (no wire change)
+
+- The offload worker now draws characters and objects whose assets were added after
+  the world loaded: the companion, residents spawned and objects placed from a library
+  installed mid-session. Before, a still view kept the worker's first frame without
+  them (the companion was missing in offload). Each new asset reaches the running
+  worker by stable ref; until it is decoded and uploaded only that item is missing,
+  and a decode the worker can't do no longer ends offload. `graphics.get`
+  `performance.workerTimings` (a free-form object) gains `assetsReady` and
+  `assetsFailed` (index, ref, error).
+
 ## Debug tool, tool 9 (no wire change)
 
 - Key `9` (world action `tool9`) selects the debug tool. It shows one debug layer at a time;

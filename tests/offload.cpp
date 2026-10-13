@@ -120,9 +120,10 @@ static void objectSync() {
         copy->objectAssets = scratch->objectAssets;
         return copy;
     };
-    std::vector<AssetSource> sources{{"/objects/rack", {{"id", "rack"}}}};
+    std::vector<AssetSource> sources{{"/objects/rack", {{"id", "rack"}}, "library/org.example.kit@1.0.0/rack"}};
     auto added = sender.delta(live, {{4, m}}, sources, 2);
-    assert(added["assets"].size() == 1 && added["assets"][0]["index"] == 2 && added["count"] == 3);
+    assert(added["assets"].size() == 1 && added["assets"][0]["index"] == 2 && added["count"] == 3 &&
+           added["assets"][0]["ref"] == "library/org.example.kit@1.0.0/rack");
     receiver.apply(Json::parse(added.dump()), worker.objectAssets.size(), load);
     sender.commit();
     receiver.materialize(worker);
@@ -132,8 +133,69 @@ static void objectSync() {
     while (!receiver.merge(worker, true))
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     receiver.materialize(worker);
-    assert(!receiver.loading() && worker.objectAssets.size() == 3 && worker.objectAssets[2].id == "rack");
+    assert(!receiver.loading() && worker.objectAssets.size() == 3 && worker.objectAssets[2].id == "rack" &&
+           worker.objectAssets[2].ref == "library/org.example.kit@1.0.0/rack");
     same();
+    // Mid-session adds (a companion, then a library installed later): a decode the worker
+    // can't do leaves a placeholder at its index, so the next asset keeps its own index,
+    // its instances stay hidden, and nothing throws (the frame still draws).
+    for (auto id : {"broken", "lamp"}) {
+        auto a = std::make_shared<world::World>();
+        a->objectAssets.resize(1);
+        a->objectAssets[0].id = id;
+        live.objectAssets.push_back(a->objectAssets[0]);
+        sources.push_back({std::string("/objects/") + id, {{"id", id}}, std::string("library/org.example.late@2.0.0/") + id});
+    }
+    live.objectInstances.push_back(instance(3, 8));
+    live.objectInstances.push_back(instance(4, 9));
+    ObjectReceiver::Loader late = [&](const std::filesystem::path &, const Json &manifest) {
+        if (manifest["id"] == "broken")
+            throw std::runtime_error("Landlock: no access");
+        auto copy = std::make_shared<world::World>();
+        copy->objectAssets.resize(1);
+        copy->objectAssets[0].id = manifest["id"];
+        return copy;
+    };
+    auto two = sender.delta(live, {{4, m}}, sources, 2);
+    assert(two["assets"].size() == 2 && two["assets"][0]["index"] == 3 && two["assets"][1]["index"] == 4);
+    receiver.apply(Json::parse(two.dump()), worker.objectAssets.size(), late);
+    sender.commit();
+    while (receiver.loading())
+        if (!receiver.merge(worker, true))
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    receiver.materialize(worker);
+    assert(worker.objectAssets.size() == 5 && worker.objectAssets[3].meshes.empty() && worker.objectAssets[4].id == "lamp");
+    assert(worker.objectAssets[3].ref == "library/org.example.late@2.0.0/broken" &&
+           worker.objectAssets[4].ref == "library/org.example.late@2.0.0/lamp");
+    assert(receiver.failures().size() == 1 && receiver.failures()[0]["index"] == 3 &&
+           receiver.failures()[0]["ref"] == "library/org.example.late@2.0.0/broken");
+    assert(worker.objectInstances.size() == 5 && worker.objectInstances[3].hidden && !worker.objectInstances[4].hidden);
+    assert(instanceRecord(worker.objectInstances[4]) == instanceRecord(live.objectInstances[4]));
+    // A new worker (restart) loads the package again and gets every merged asset, in order.
+    {
+        world::World fresh;
+        fresh.objectAssets.resize(2);
+        ObjectSender again;
+        ObjectReceiver receiver2;
+        again.reset(2);
+        receiver2.start(fresh);
+        auto all = again.delta(live, {{4, m}}, sources, 2);
+        assert(all["assets"].size() == 3 && all["assets"][0]["index"] == 2 && all["count"] == 5);
+        ObjectReceiver::Loader any = [](const std::filesystem::path &, const Json &manifest) {
+            auto copy = std::make_shared<world::World>();
+            copy->objectAssets.resize(1);
+            copy->objectAssets[0].id = manifest["id"];
+            return copy;
+        };
+        receiver2.apply(Json::parse(all.dump()), fresh.objectAssets.size(), any);
+        while (receiver2.loading())
+            if (!receiver2.merge(fresh, true))
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        receiver2.materialize(fresh);
+        assert(fresh.objectAssets.size() == 5 && fresh.objectAssets[4].ref == "library/org.example.late@2.0.0/lamp");
+        for (size_t k = 0; k < 5; ++k)
+            assert(fresh.objectInstances[k].hidden == live.objectInstances[k].hidden);
+    }
     // An asset with no recorded source can't be sent: offload stops instead of drawing wrong.
     live.objectAssets.push_back({});
     threw = false;

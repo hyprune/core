@@ -1517,7 +1517,10 @@ Json Runtime::offloadCharacters() const {
         auto &draw = renderer.npcs[i];
         if (!draw.character)
             continue;
-        out.push_back(offload::characterRecord(n.asset, draw.model, n.posed, draw.accent, draw.probe, draw.moving,
+        auto ref = !world || n.asset >= world->objectAssets.size() ? std::string()
+                   : n.asset < packageAssets ? world->objectAssets[n.asset].ref
+                   : n.asset - packageAssets < mergedAssets.size() ? mergedAssets[n.asset - packageAssets].ref : std::string();
+        out.push_back(offload::characterRecord(n.asset, ref, draw.model, n.posed, draw.accent, draw.probe, draw.moving,
                                                draw.occluded));
     }
     return out;

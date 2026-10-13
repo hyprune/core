@@ -3,8 +3,13 @@
 // placements). The worker loads the same package, so it starts with the authored
 // assets and instances. The plugin then sends the object state that draws
 // differently from that package as deltas against what the worker already has:
-// - assets merged into the live world after load (catalog library and user objects),
-//   by directory and manifest; the worker decodes them itself;
+// - assets merged into the live world after load (catalog library and user objects,
+//   a companion, a library installed mid-session), by stable ref, directory and
+//   manifest; the worker decodes them itself. The asset table is append-only for a
+//   world: an index, once sent, names the same ref for the worker's whole life, and a
+//   new worker gets every merged asset again in the same order. A decode the worker
+//   can't do leaves a placeholder at its index (its instances stay hidden), so nothing
+//   after it shifts and the rest of the frame still draws;
 // - the instance list: count, and the records of changed instances only (model,
 //   speed/phase, bounds, regions, probe lighting);
 // - the hidden set, with its own revision, only when it changes;
@@ -62,6 +67,7 @@ inline Json matrixJson(const Mat4 &m) { return Json(m.v); }
 struct AssetSource {
     std::filesystem::path directory;
     Json manifest;
+    std::string ref; // catalog ref (library/<lib>@<v>/<obj>, user/<id>): checked by the worker
 };
 
 // Plugin side: the mirror of what the worker has.
@@ -99,7 +105,7 @@ class ObjectSender {
                 if (k < packageAssets || k - packageAssets >= sources.size())
                     throw std::runtime_error("object asset without a source");
                 auto &s = sources[k - packageAssets];
-                Json a = {{"index", k}, {"directory", s.directory.string()}, {"manifest", s.manifest}};
+                Json a = {{"index", k}, {"ref", s.ref}, {"directory", s.directory.string()}, {"manifest", s.manifest}};
                 bytes += a.dump().size();
                 assets.push_back(std::move(a));
                 next_.assets = k + 1;
@@ -168,13 +174,17 @@ class ObjectSender {
 
 // Worker side: applies deltas to its own world. Catalog assets decode off the frame
 // loop (load) and merge in index order (merge returns the new index); instances of
-// an asset not merged yet stay hidden until it is.
+// an asset not merged yet stay hidden until it is. A failed decode merges an empty
+// placeholder with the same ref (listed in failures()), whose instances stay hidden.
 class ObjectReceiver {
     struct Load {
         size_t index;
+        std::string ref;
         std::future<std::shared_ptr<world::World>> scratch;
     };
     std::vector<Load> loads_;
+    std::set<size_t> failed_;
+    Json failures_ = Json::array();
     std::vector<world::ObjectInstance> wanted_;
     std::vector<bool> received_;
     std::set<size_t> hidden_;
@@ -202,7 +212,7 @@ class ObjectReceiver {
                     throw std::runtime_error("object asset order");
                 std::filesystem::path dir = a.at("directory").get<std::string>();
                 Json manifest = a.at("manifest");
-                loads_.push_back({index, std::async(std::launch::async, [load, dir, manifest] { return load(dir, manifest); })});
+                loads_.push_back({index, a.value("ref", ""), std::async(std::launch::async, [load, dir, manifest] { return load(dir, manifest); })});
             }
         if (d.contains("count")) {
             size_t count = d["count"];
@@ -241,15 +251,30 @@ class ObjectReceiver {
         bool merged = false;
         while (canMerge && !loads_.empty() &&
                loads_.front().scratch.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-            auto scratch = loads_.front().scratch.get(); // rethrows a failed decode
-            if (world::mergeObjectAsset(w, *scratch) != loads_.front().index)
+            auto &load = loads_.front();
+            if (w.objectAssets.size() != load.index)
                 throw std::runtime_error("object asset index");
+            try {
+                auto scratch = load.scratch.get();
+                world::mergeObjectAsset(w, *scratch);
+                merged = true;
+                canMerge = false; // one upload at a time
+            } catch (const std::exception &e) {
+                world::ObjectAsset placeholder;
+                w.objectAssets.push_back(std::move(placeholder));
+                failed_.insert(load.index);
+                failures_.push_back({{"index", load.index}, {"ref", load.ref}, {"error", std::string(e.what()).substr(0, 160)}});
+                if (failures_.size() > 8)
+                    failures_.erase(failures_.begin());
+            }
+            w.objectAssets.back().ref = load.ref;
             loads_.erase(loads_.begin());
-            merged = dirty_ = true;
-            canMerge = false; // one upload at a time
+            dirty_ = true;
         }
         return merged;
     }
+    // Assets the worker couldn't decode (diagnostics): the last few, index, ref and error.
+    const Json &failures() const { return failures_; }
     // Writes the received instances into the world the renderer draws.
     void materialize(world::World &w) {
         if (!dirty_)
@@ -259,7 +284,7 @@ class ObjectReceiver {
         for (size_t k = 0; k < wanted_.size(); ++k) {
             auto &o = w.objectInstances[k];
             o = wanted_[k];
-            o.hidden = hidden_.contains(k) || !received_[k] || o.asset >= w.objectAssets.size();
+            o.hidden = hidden_.contains(k) || !received_[k] || o.asset >= w.objectAssets.size() || failed_.contains(o.asset);
             if (o.asset >= w.objectAssets.size())
                 o.asset = 0, o.speed = 0;
         }

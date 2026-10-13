@@ -171,7 +171,7 @@ poses, as a delta against what the worker already has (`src/offload/Objects.hpp`
 | --- | --- |
 | World-animation clock | Every pose (the plugin's clock, so both renderers draw the same pose) |
 | Output scale | Every pose (outline widths) |
-| Catalog assets merged after load | Once, by object directory and manifest; the worker decodes them on a thread and uploads between frames |
+| Assets merged after load (catalog placements, a companion, characters, a library installed mid-session) | Once, by stable ref, object directory and manifest, at the next index of an append-only table; the worker decodes them on a thread and uploads between frames |
 | Instances (user placements, gizmo edits, relit probes) | The count, and the records of changed instances only |
 | Hidden instances | The set with its own revision, only when it changes |
 | Edited scene-node transforms | Changed and removed nodes |
@@ -179,8 +179,17 @@ poses, as a delta against what the worker already has (`src/offload/Objects.hpp`
 
 A delta is committed to the plugin's mirror only once its pose was written, so
 transport backpressure never drops a change; the frame reply carries the applied
-revision (`objectsRevision`) and whether assets are still loading. A new worker
-starts from the package and gets every instance in its first pose. The worker may
+revision (`objectsRevision`), whether assets are still loading and any asset it
+could not decode (`assetsFailed`: index, ref, error). Until an asset is decoded and
+uploaded its instances and characters are simply not drawn; the rest of the frame
+is. A failed decode leaves a placeholder at its index (nothing after it shifts) and
+the worker keeps running. The worker announces how many assets it can draw
+(`assets` message) whenever that grows, and the count is part of each pose, so a
+still view gets a new frame once a mid-session asset is ready. Character records
+name their asset by index and ref; a record whose ref doesn't match the worker's
+asset at that index is skipped, never drawn as another model. A new worker starts
+from the package and gets every merged asset again, in order, and every instance in
+its first pose. The worker may
 read the catalog object roots that exist (Landlock, read-only); one created later
 restarts it once. Machines render in the worker like any object (a placed gauge
 no longer forces the local renderer); `machinesRevision` and the worker's machine
@@ -193,8 +202,11 @@ ends other than by its stop (signal or exit status), and the transport error say
 whether the worker closed the channel or a packet was truncated.
 
 `dev/nested/offload_objects.py` checks this on Lumen Reach with the clock pinned
-(`hl.plugin.hyprune.animation_clock(t)`): stills of the authored armillary, a placed
+(`hl.plugin.hyprune.animation_clock(t)`, which also holds machines at rest; residents
+hold their pose with `npc_motion` `still`): stills of the authored armillary, a placed
 catalog rack and armillary, a rack moved with the tool 4 gizmo while offload runs, a
 hidden authored object and an edited scene node match the in-process renderer per
-pixel. Its `perf` stage measures frame times in-process and offloaded; results in
+pixel. Its `midsession` stage installs the starter library while offload already
+draws, places a rack and spawns a resident from it, and checks that the same worker
+(no restart) draws both with pixel parity. Its `perf` stage measures frame times in-process and offloaded; results in
 `docs/evidence/offload/objects/README.md`.
