@@ -119,6 +119,8 @@ struct NpcAgent {
     // Steering: the motion chosen last tick, how long a mover has held it up, and a back-off
     // (walking its route the other way to let a higher-priority character through).
     float steerLateral = 0, steerFactor = 1, blockedFor = 0, backoffLeft = 0;
+    const std::vector<Mover> *movers = nullptr; // this tick's (legs check them too)
+    int heldBy = -1; // the id of the mover the last step would have walked into (bodies touching), or -1
     int blockedBy = -1, backoffFrom = 0, detour = -1;
     static constexpr float turnRate = 3.1416f, alignSeconds = .25f, fadeSeconds = .25f, accel = 2.5f, decel = 4.f,
                            maxRunRate = 1.8f, minWalkRate = .3f;
@@ -157,6 +159,25 @@ struct NpcAgent {
         case Mode::Suspended: return "suspended";
         default: return "idle";
         }
+    }
+    // The last word before a step: the index of a mover whose body it would touch (within 2 cm)
+    // while getting closer, or -1. Predictions can be wrong at corners; bodies never overlap.
+    int touching(Vec3 from, Vec3 to) const {
+        if (!movers)
+            return -1;
+        for (size_t j = 0; j < movers->size(); ++j) {
+            auto &m = (*movers)[j];
+            float now = flatDistance(to, m.position);
+            if (m.id != id && now < radius + m.radius + .02f && now < flatDistance(from, m.position) - 1e-5f)
+                return int(j);
+        }
+        return -1;
+    }
+    // Held up on its way (steering's "waiting" mover): stopped on its route or its legs.
+    bool heldUp() const {
+        return (mode == Mode::Walk && yielding) ||
+               ((mode == Mode::Detour || mode == Mode::ToSeat || mode == Mode::FromSeat || mode == Mode::ToSpot) && speedNow <= 0 &&
+                !legs.empty());
     }
     bool seated() const { return mode == Mode::Sit || mode == Mode::Seated || mode == Mode::Stand || mode == Mode::Align; }
     std::string seatRef() const { return seat >= 0 && seat < int(seats.size()) && seated() ? seats[seat].ref : ""; }
@@ -314,6 +335,15 @@ struct NpcAgent {
         step(dt, w);
         velocity = Vec3{position.x - before.x, 0, position.z - before.z} / dt;
     }
+    // Metres per gait cycle at ground speed v: the walk clip's stride, the run clip's, or the
+    // blend of the two (diagnostics: cycles x stride = distance when the feet keep step).
+    float strideAt(float v) const {
+        float wv = std::max(.1f, walkSpeed), walkCycle = std::max(.1f, duration("walk"));
+        if (!has("run") || runSpeed <= wv + .05f)
+            return wv * walkCycle;
+        float t = std::clamp((v - wv) / (runSpeed - wv), 0.f, 1.f);
+        return (1 - t) * wv * walkCycle + t * runSpeed * std::max(.1f, duration("run"));
+    }
     // The fastest it goes: the run clip played at most maxRunRate (feet still in step).
     float topSpeed() const { return (runSpeed > walkSpeed ? runSpeed : walkSpeed) * maxRunRate; }
     // Locomotion at ground speed v: walk below the walk clip's speed (slower steps), a walk-run
@@ -337,7 +367,7 @@ struct NpcAgent {
             play(t > .5f ? "run" : "walk", true, t > .5f ? v / runSpeed : std::max(minWalkRate, v / wv));
             return;
         }
-        float stride = (1 - t) * wv * walkCycle + t * (blend ? runSpeed * runCycle : wv * walkCycle);
+        float stride = strideAt(v);
         if (pose.fade >= 1 && pose.clipTime > 0 && gaitPhase == 0) // joined from a plain clip: keep its phase
             gaitPhase = std::fmod(pose.clipTime / (pose.clip == "run" ? runCycle : walkCycle), 1.f);
         gaitPhase = std::fmod(gaitPhase + v * dt / std::max(.05f, stride), 1.f);
@@ -364,6 +394,7 @@ struct NpcAgent {
         return speedNow;
     }
     void step(float dt, const NpcWorld &w) {
+        movers = w.movers;
         advance(dt, w);
         switch (mode) {
         case Mode::Idle: standIdle(dt, w); break;
@@ -574,7 +605,10 @@ struct NpcAgent {
             return;
         }
         const Mover *b = c.ahead.any() ? &(*w.movers)[c.ahead.mover] : nullptr;
-        bool stuck = c.factor == 0 && speedNow < .05f && b && flatSpeed(b->velocity) < .2f &&
+        for (auto &m : *w.movers) // the one it nearly walked into last tick, when still about
+            if (heldBy >= 0 && m.id == heldBy)
+                b = &m;
+        bool stuck = (c.factor == 0 || heldBy >= 0) && speedNow < .05f && b && flatSpeed(b->velocity) < .2f &&
                      flatDistance(b->position, position) < radius + b->radius + 2.5f && dot(b->position - position, travel) > 0;
         if (!stuck) {
             blockedFor = std::max(0.f, blockedFor - dt);
@@ -631,7 +665,9 @@ struct NpcAgent {
         float v = ease(yielding ? 0.f : base * factor * (std::abs(lateralTarget - lateral) > .3f ? .5f : 1.f), dt);
         lateral += std::clamp(lateralTarget - lateral, -dt, dt); // 1 m/s sideways, standing too
         if (v <= 0) {
-            place();
+            Vec3 from = position, to = towardsLine(from, 0, dt);
+            if (touching(from, to) < 0)
+                position = to;
             idle();
             return;
         }
@@ -646,8 +682,19 @@ struct NpcAgent {
                 d = std::fmod(std::fmod(d, l) + l, l);
             return d;
         };
+        // A stop it reaches stepped aside, or with someone standing there, is walked past this time
+        // (entering puts it on the route point: no jump, no stepping into another).
+        auto taken = [&](const NpcStop &st) {
+            if (std::abs(lateral) > .05f)
+                return true;
+            if (movers)
+                for (auto &m : *movers)
+                    if (m.id != id && flatDistance(m.position, route.at(st.at)) < radius + m.radius + .1f)
+                        return true;
+            return false;
+        };
         for (size_t i = 0; i < stops.size(); ++i)
-            if (float d = ahead(stops[i].at); d > 1e-5f && d <= step + 1e-4f && d < hitAt)
+            if (float d = ahead(stops[i].at); d > 1e-5f && d <= step + 1e-4f && d < hitAt && !taken(stops[i]))
                 hit = int(i), hitAt = d;
         for (size_t i = 0; i < detours.size(); ++i) {
             float entry = direction > 0 ? detours[i].enter : detours[i].exit;
@@ -655,6 +702,8 @@ struct NpcAgent {
                 hit = -1, hitDetour = int(i), hitAt = d;
         }
         Vec3 before = position;
+        float sBefore = s;
+        int dirBefore = direction, backoffBefore = backoffFrom;
         if (hitDetour >= 0) {
             enterDetour(hitDetour);
             return;
@@ -672,7 +721,19 @@ struct NpcAgent {
                     backoffFrom = -backoffFrom;
             } else
                 s = route.wrap(next);
-            place();
+            position = towardsLine(before, v, dt);
+        }
+        int touched = touching(before, position);
+        heldBy = touched >= 0 ? (*movers)[touched].id : -1;
+        if (heldBy >= 0 && mode == Mode::Walk) { // stays put this tick
+            position = before, s = sBefore;
+            if (direction != dirBefore)
+                turnBack();
+            backoffFrom = backoffBefore;
+            speedNow = 0;
+            yielding = true;
+            idle();
+            return;
         }
         float moved = std::hypot(position.x - before.x, position.z - before.z) / dt;
         if (mode != Mode::Walk)
@@ -685,8 +746,7 @@ struct NpcAgent {
         detour = index;
         float entry = direction > 0 ? d.enter : d.exit;
         s = route.closed ? route.wrap(entry) : entry;
-        lateral = lateralTarget = 0;
-        place();
+        lateral = lateralTarget = steerLateral = 0; // the legs start where it is (stepped aside or not)
         if (direction > 0)
             legs = d.legs;
         else { // the same way round, backwards: to the enter point
@@ -695,22 +755,8 @@ struct NpcAgent {
         }
         mode = Mode::Detour;
     }
-    void detourTick(float dt, const NpcWorld &w) {
-        // Others still count: it slows or waits for someone in the way.
-        float factor = 1;
-        if (w.movers && !legs.empty() && anyNear(*w.movers, id, position)) {
-            Vec3 to = legs.front() - position;
-            float dist = std::max(1e-3f, std::hypot(to.x, to.z));
-            Vec3 dir{to.x / dist, 0, to.z / dist};
-            float best = 1e30f;
-            for (float f : {1.f, .5f, 0.f}) {
-                auto c = predict([&](float time) { return position + dir * (pace() * f * time); }, radius, *w.movers, id);
-                float cost = conflictCost(c) + (1 - f);
-                if (cost < best)
-                    best = cost, factor = f;
-            }
-        }
-        if (!walkLegs(dt, pace() * factor))
+    void detourTick(float dt, const NpcWorld &) {
+        if (!walkLegs(dt, pace()))
             return;
         auto &d = detours[detour];
         float exit = direction > 0 ? d.exit : d.enter;
@@ -718,6 +764,15 @@ struct NpcAgent {
         detour = -1;
         place();
         mode = Mode::Walk;
+    }
+    // Towards the route point at the current offset, never a jump (a corner turns the offset's
+    // side): at most the pace plus 1.2 m/s each tick.
+    Vec3 towardsLine(Vec3 from, float v, float dt) const {
+        Vec3 t = route.tangent(s) * float(direction);
+        Vec3 target = route.at(s) + Vec3{t.z, 0, -t.x} * lateral;
+        Vec3 d = target - from;
+        float len = std::hypot(d.x, d.z), most = (v + 1.2f) * dt + 1e-4f;
+        return len > most ? Vec3{from.x + d.x * most / len, target.y, from.z + d.z * most / len} : target;
     }
     void place() {
         Vec3 t = route.tangent(s) * float(direction);
@@ -803,6 +858,17 @@ struct NpcAgent {
                 return false;
             }
             heading += std::clamp(angleTo(heading, target), -turnRate * dt, turnRate * dt);
+            Vec3 dir = d / dist;
+            if (movers && anyNear(*movers, id, position)) { // others still count: slow or wait for one in the way
+                float best = 1e30f, factor = 1;
+                for (float f : {1.f, .5f, 0.f}) {
+                    auto c = predict([&](float time) { return position + dir * (v * f * time); }, radius, *movers, id);
+                    float cost = conflictCost(c) + (1 - f);
+                    if (cost < best)
+                        best = cost, factor = f;
+                }
+                v *= factor;
+            }
             float remaining = dist;
             for (size_t i = 1; i < legs.size(); ++i)
                 remaining += std::hypot(legs[i].x - legs[i - 1].x, legs[i].z - legs[i - 1].z);
@@ -812,9 +878,14 @@ struct NpcAgent {
                 return false;
             }
             float step = std::min(dist, sp * dt);
-            Vec3 dir = d / dist;
             float y0 = position.y;
-            position = position + dir * step;
+            Vec3 next = position + dir * step;
+            if (touching(position, next) >= 0) { // someone right there: wait
+                speedNow = 0;
+                idle();
+                return false;
+            }
+            position = next;
             position.y = y0 + (legs.front().y - y0) * std::min(1.f, step / std::max(dist, 1e-3f));
             gait(sp, dt);
             return false;

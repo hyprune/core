@@ -40,7 +40,7 @@ struct Sim {
         std::vector<sim::Mover> movers;
         for (auto &a : agents)
             movers.push_back({a.id, a.position, a.velocity, a.radius, a.priority, Vec3{std::sin(a.heading), 0, std::cos(a.heading)},
-                              a.mode == sim::NpcAgent::Mode::Walk && a.yielding});
+                              a.heldUp()});
         sim::NpcWorld w;
         w.player = {100, 1.7f, 100};
         w.walkable = walkable;
@@ -130,6 +130,61 @@ int main() {
                 back |= s.agents[0].direction < 0 && s.agents[0].mode == sim::NpcAgent::Mode::Detour;
             }
             check(back && !inside, "detour: walked round backwards too");
+        }
+        // Legs (a seat approach) cross another resident's way: no overlap there either. The seat
+        // stop sits beside a line the other walks the opposite way.
+        {
+            Sim s;
+            auto a = agent(line({{-6, 0, 0}, {6, 0, 0}}), 0);
+            a.clips = {{"idle", 2}, {"walk", 1}, {"sit", 1}, {"sit_idle", 3}};
+            a.seatKnown = true;
+            a.seats = {{"bench/left", {0, 0, -1.2f}, 3.1416f, .45f, .6f}};
+            sim::NpcStop stop;
+            stop.at = 6, stop.point = 0, stop.seconds = 2, stop.seat = 0;
+            a.stops = {stop};
+            a.start();
+            auto b = agent(line({{-6, 0, -.6f}, {6, 0, -.6f}}), 1, true);
+            b.phase = .55f, b.start();
+            s.agents = {a, b};
+            s.run(20);
+            check(s.closest >= bodies - epsilon, std::format("seat legs: closest {:.3f} m", s.closest));
+        }
+        // The nested yard (dev/nested/npcs.py): a closed loop with a wave stop at a corner and a
+        // seat stop, walked both ways at a range of phases. Never an overlap, never a jump
+        // (a corner turning a sideways offset, a stop taken while someone stands there).
+        {
+            std::vector<Vec3> loop = {{-12, 0, 9.5f}, {2, 0, 9.5f}, {2, 0, 3}, {-12, 0, 3}};
+            auto route = sim::Route::build(loop, std::vector<sim::Segment>(4, sim::Segment::Line), true);
+            float worst = 1e9f, jump = 0;
+            for (float pa : {.1f, .35f, .6f, .9f})
+                for (float pb : {.05f, .3f, .55f, .8f}) {
+                    Sim s;
+                    for (int i = 0; i < 2; ++i) {
+                        sim::NpcAgent a;
+                        a.route = route, a.walkSpeed = .873f, a.runSpeed = 3.05f, a.fidgetEvery = 1e9f;
+                        a.clips = {{"idle", 2}, {"walk", 1.033f}, {"run", .667f}, {"sit", 2.3f}, {"sit_idle", 10.7f}, {"wave", 2}};
+                        a.id = i, a.priority = 1000 - i, a.phase = i ? pb : pa, a.reverse = i == 1;
+                        a.seatKnown = true, a.seatHeight = -.06f, a.seatSink = .127f;
+                        a.seats = {{"bench-1/left", {3, 0, 3.4f}, 1.5708f, .3f, .6f}};
+                        sim::NpcStop seat, wave;
+                        seat.at = route.points[2], seat.point = 2, seat.seconds = 6, seat.seat = 0;
+                        wave.at = route.points[0], wave.point = 0, wave.seconds = 2, wave.clip = "wave";
+                        a.stops = {seat, wave};
+                        a.start();
+                        s.agents.push_back(a);
+                    }
+                    for (int i = 0; i < 60 * 70; ++i) {
+                        Vec3 b0 = s.agents[0].position, b1 = s.agents[1].position;
+                        s.tick(1.f / 60);
+                        bool sat = s.agents[0].seated() || s.agents[1].seated();
+                        if (!sat) {
+                            worst = std::min(worst, flat(s.agents[0].position, s.agents[1].position));
+                            jump = std::max({jump, flat(b0, s.agents[0].position), flat(b1, s.agents[1].position)});
+                        }
+                    }
+                }
+            check(worst >= bodies - epsilon, std::format("yard loop both ways: closest {:.3f} m", worst));
+            check(jump < .1f, std::format("yard loop: no jumps ({:.3f} m in a tick)", jump));
         }
         // Deterministic: the same start gives bit-identical results whatever the update order.
         {

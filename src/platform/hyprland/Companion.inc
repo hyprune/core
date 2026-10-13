@@ -717,6 +717,7 @@ Json Runtime::companionDiagnostics() {
             {"madeWay", b.madeWay},
             {"makingWay", b.wayFor >= 0},
             {"speed", n ? n->agent.speedNow : 0.f},
+            {"stride", n ? n->agent.strideAt(n->agent.speedNow) : 0.f},
             {"gait", n ? Json{{"phase", n->agent.gaitPhase}, {"clip", n->agent.pose.clip}, {"previous", n->agent.pose.previous},
                               {"fade", n->agent.pose.fade}} : Json(nullptr)},
             {"run", n ? Json(n->state) : Json(nullptr)},

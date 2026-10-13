@@ -556,9 +556,8 @@ void Runtime::npcTick(float dt) {
         a.priority = n.companion ? -1 : 1000 - int(i);
         if (n.state != "active" || n.id == carried || (n.companion && companionBrain.hidden()))
             continue;
-        bool waiting = (a.mode == sim::NpcAgent::Mode::Walk && a.yielding) || (a.mode == sim::NpcAgent::Mode::Detour && a.speedNow <= 0);
         movers.push_back({a.id, a.position, animate ? a.velocity : Vec3{}, a.radius, a.priority,
-                          Vec3{std::sin(a.heading), 0, std::cos(a.heading)}, waiting});
+                          Vec3{std::sin(a.heading), 0, std::cos(a.heading)}, animate && a.heldUp()});
     }
     w.movers = &movers;
     npcInteractionTick();
@@ -1454,9 +1453,20 @@ Json Runtime::npcDiagnostics() {
                           {"s", a.s},
                           {"routeLength", a.route.length()},
                           {"speed", a.speedNow},
+                          {"radius", a.radius},
+                          {"stride", a.strideAt(a.speedNow)},
                           {"gait", {{"phase", a.gaitPhase}, {"previous", a.pose.previous}, {"fade", a.pose.fade},
                                     {"clipTime", a.pose.clipTime}, {"previousTime", a.pose.previousTime}}},
                           {"detours", a.detours.size()},
+                          {"stopSpots", [&] {
+                               Json out = Json::array();
+                               for (auto &st : a.stops)
+                                   out.push_back({{"point", st.point},
+                                                  {"face", st.face ? vecJson(*st.face) : Json(nullptr)},
+                                                  {"spot", st.spot ? vecJson(*st.spot) : Json(nullptr)}});
+                               return out;
+                           }()},
+                          {"stop", a.stop},
                           {"detour", a.detour},
                           {"backingOff", a.backoffLeft > 0},
                           {"blockedFor", a.blockedFor},

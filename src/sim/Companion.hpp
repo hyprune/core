@@ -522,6 +522,12 @@ struct Companion {
             }
             float step = std::min(dist, v * dt);
             float y0 = a.position.y;
+            a.movers = movers ? movers : a.movers;
+            if (a.touching(a.position, a.position + dir * step) >= 0) { // someone right there: wait
+                a.speedNow = 0;
+                a.idle();
+                return;
+            }
             a.position = a.position + dir * step;
             a.position.y = y0 + (waypoints.front().y - y0) * std::min(1.f, step / std::max(dist, 1e-3f));
             a.gait(v, dt);
