@@ -31,3 +31,6 @@ embedded validator resolves them against the world schema itself.
 
 IPC 0.25 (companions, draft) and the object format 0.10 companion block are pinned to the
 schema commit recorded in `ipc-source.json` and `OBJECT-SOURCE.json`.
+
+IPC 0.26 (debug tool, companion pace, longer pocket list) is pinned to the schema commit
+recorded in `ipc-source.json`.
