@@ -51,6 +51,8 @@ std::shared_ptr<world::World> sample() {
         {"position": [-6, 0, 0], "type": "line"}, {"position": [6, 0, -1], "type": "curve"}, {"position": [14, 0, -2], "type": "line"}],
         "stops": [{"point": 1, "seconds": 5, "clip": "look_around"}]}])");
     w->visibility = {{{-10, 0, -10}, {10, 5, 20}, {0}}, {{-10, 0, -40}, {10, 5, -10}, {1}}};
+    w->nodeParents = {-1, -1, -1};
+    w->nodeVisibility = {-1, 1, -1}; // the hall owns a node; the court is a viewpoint only
     // A floor, a wall with a visible face just in front of it and an invisible wall.
     w->collision = {{{-20, 0, -20}, {20, 0, -20}, {20, 0, 20}},          // floor (up)
                     {{-20, 0, -20}, {20, 0, 20}, {-20, 0, 20}},          // floor
@@ -134,7 +136,7 @@ void picking() {
     // straight ahead and wins over the region holding the eye.
     auto items = debugItems(DebugLayer::Visibility, in);
     assert(items.size() == 2 && items[0].type.find("eye is here") != std::string::npos);
-    assert(items[1].type.find("hidden from here") != std::string::npos);
+    assert(items[1].type.find("culled from here") != std::string::npos && items[1].owner == "1 scene nodes");
     auto ahead = pickDebugItem(items, view(in.eye, 0), 960, 540);
     assert(ahead && items[ahead->item].id == "hall" && std::abs(ahead->distance - 15) < .01f);
     // Looking back, nothing is entered: the region holding the eye answers.
@@ -212,9 +214,12 @@ void frame() {
     for (auto &fill : chosen.fills)
         for (auto &s : chosen.strokes)
             assert(fill.sequence < s.sequence);
-    // Standing inside the zone: edges crossing the eye plane are clipped, never projected behind.
+    // Standing inside the zone: edges crossing the eye plane are clipped, never projected behind,
+    // and its fill (which would tint the whole view) is left out.
     auto inside = view({2.5f, 1.7f, 4}, 0);
-    for (auto &s : debugFrame(items, inside).strokes)
+    auto within = debugFrame(items, inside);
+    assert(!within.strokes.empty() && within.fills.empty());
+    for (auto &s : within.strokes)
         assert(s.a.depth >= .079f && s.b.depth >= .079f);
 }
 void keymap() {

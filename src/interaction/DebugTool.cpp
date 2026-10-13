@@ -535,16 +535,21 @@ void visibility(std::vector<DebugItem> &out, const DebugInputs &in) {
         auto &a = w.visibility[i];
         bool here = in.eye.x >= a.min.x && in.eye.y >= a.min.y && in.eye.z >= a.min.z && in.eye.x <= a.max.x &&
                     in.eye.y <= a.max.y && in.eye.z <= a.max.z;
-        Rgba color = here ? yellow : shown[i] ? green : Rgba{slate.r, slate.g, slate.b, .45f};
+        // Regions that own scene nodes are drawn or culled from where the eye is; the others
+        // are only viewpoints (other regions list them in visibleFrom).
+        bool owner = owned[i] > 0;
+        Rgba color = here ? yellow : !owner ? Rgba{slate.r, slate.g, slate.b, .45f} : shown[i] ? green : coral;
         std::string id = i < areas.size() ? areas[i].value("id", "") : "area-" + std::to_string(i);
-        DebugItem item{id, here ? "Visibility region (the eye is here)" : shown[i] ? "Visibility region (drawn from here)"
-                                                                                    : "Visibility region (hidden from here)",
-                       owned[i] ? std::to_string(owned[i]) + " scene nodes" : "", debugArea(w, (a.min + a.max) * .5f)};
+        std::string type = here ? "Visibility region (the eye is here)"
+                           : !owner ? "Visibility region (a viewpoint, owns no nodes)"
+                           : shown[i] ? "Visibility region (drawn from here)"
+                                      : "Visibility region (culled from here)";
+        DebugItem item{id, type, owner ? std::to_string(owned[i]) + " scene nodes" : "", debugArea(w, (a.min + a.max) * .5f)};
         item.color = color;
         item.details = {std::format("Visible from {} regions; owns {} scene nodes", a.from.size(), owned[i]),
                         "Bounds " + point(a.min) + " to " + point(a.max)};
         item.volume = aabbBox(a.min, a.max);
-        item.shapes.push_back(boxShape(*item.volume, color, here ? .06f : 0.f, !here && !shown[i]));
+        item.shapes.push_back(boxShape(*item.volume, color, owner && shown[i] ? .05f : 0.f, !here && !(owner && shown[i])));
         out.push_back(std::move(item));
     }
 }
@@ -667,7 +672,8 @@ const DebugLayerInfo &debugLayerInfo(int layer) {
         {"keep-clear", "keepClear & approach zones",
          {{"keepClear", yellow}, {"screen approach", violet}, {"spawn / climb clearance", orange}}},
         {"seats", "Seats", {{"seat", mint}, {"approach", sky}, {"taken", coral}}},
-        {"visibility", "Visibility regions", {{"eye is here", yellow}, {"drawn from here", green}, {"hidden from here", slate}}},
+        {"visibility", "Visibility regions",
+         {{"eye is here", yellow}, {"drawn from here", green}, {"culled from here", coral}, {"viewpoint", slate}}},
         {"steering", "NPC steering",
          {{"body", mint}, {"predicted", sky}, {"route offset", path}, {"detour", violet}, {"held up by", red}}},
         {"placement", "Placement rules",
@@ -815,13 +821,22 @@ GizmoFrame debugFrame(std::span<const DebugItem> items, const GizmoView &view, i
     std::vector<GizmoFill> fills;
     std::vector<GizmoStroke> strokes, chosenStrokes;
     constexpr size_t strokeLimit = 16000, fillLimit = 6000;
+    auto eye = view.camera.position;
+    auto holdsEye = [&](const DebugItem &item) {
+        if (!item.volume)
+            return false;
+        auto d = eye - item.volume->centre;
+        auto h = item.volume->half;
+        return std::abs(dot(d, item.volume->axes[0])) <= h.x && std::abs(dot(d, item.volume->axes[1])) <= h.y &&
+               std::abs(dot(d, item.volume->axes[2])) <= h.z;
+    };
     for (int i = 0; i < int(items.size()); ++i) {
-        bool chosen = i == selected;
+        bool chosen = i == selected, inside = holdsEye(items[i]); // its fill would tint the whole view
         for (auto &shape : items[i].shapes) {
             Rgba color = shape.color;
             if (chosen)
                 color = {color.r + (1 - color.r) * .35f, color.g + (1 - color.g) * .35f, color.b + (1 - color.b) * .35f, 1};
-            if (shape.fill > 0)
+            if (shape.fill > 0 && !inside)
                 for (auto &f : shape.faces) {
                     if (fills.size() >= fillLimit)
                         break;
