@@ -15,8 +15,10 @@ static void name(Display *d, Window w, const char *n) {
                     1);
 }
 int main(int argc, char **argv) {
-    if (argc != 3)
+    // argv[3] "bare": the menu has no WM_TRANSIENT_FOR (as many override-redirect popups).
+    if (argc != 3 && argc != 4)
         return 2;
+    int bare = argc == 4 && strcmp(argv[3], "bare") == 0;
     Display *d = XOpenDisplay(NULL);
     if (!d)
         return 3;
@@ -32,7 +34,8 @@ int main(int argc, char **argv) {
             Window menu = XCreateWindow(d, root, 80, 80, 320, 160, 0, CopyFromParent, InputOutput, CopyFromParent,
                                         CWOverrideRedirect | CWBackPixel, &attr);
             name(d, menu, "Audit X11 menu");
-            XSetTransientForHint(d, menu, w);
+            if (!bare)
+                XSetTransientForHint(d, menu, w);
             XMapWindow(d, menu);
             Window dialog = XCreateSimpleWindow(d, root, 30, 30, 1600, 900, 0, 0, 0x408080);
             name(d, dialog, "Audit X11 dialog");

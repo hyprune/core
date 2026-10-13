@@ -18,13 +18,16 @@ def acceptance(client,children,args,shell_token,socketpath):
         assert value,name;results[name]=True;print('PASS audit:',name,flush=True)
     s.ctl('dispatch','hl.dsp.focus({ workspace = "10" })')
     client.call('world.load',{'worldId':'org.hyprune.m3b'})
-    if os.environ.get('HYPRUNE_AUDIT_CASE')=='x11':
+    case=os.environ.get('HYPRUNE_AUDIT_CASE')
+    if case in ('x11','x11-bare'):  # x11-bare: the menu has no transient-for, only its own client
         trigger=s.STATE/'x11-trigger';trigger.unlink(missing_ok=True)
+        # Enter first: clients launched while the world is active open in its room (room 20 model).
+        s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")')
+        wait(lambda:s.camera()['active'],'world active')
         for title in ['Audit X11 owner','Audit X11 distractor']:
-            command=shlex.join([str(s.ROOT/'build/nested-x11-owner'),title,str(trigger if 'owner' in title else trigger.with_suffix('.never'))])
+            command=shlex.join([str(s.ROOT/'build/nested-x11-owner'),title,str(trigger if 'owner' in title else trigger.with_suffix('.never'))]+(['bare'] if case=='x11-bare' else []))
             s.ctl('eval','hl.dispatch(hl.dsp.exec_cmd('+json.dumps(command)+'))')
         wait(lambda:len(json.loads(s.ctl('clients','-j')))>=2,'X11 clients')
-        s.ctl('eval','hl.plugin.hyprune.toggle("HEADLESS-1")')
         def cap(title):return next((v for v in s.camera()['captures'] if v['title']==title),None)
         owner=wait(lambda:cap('Audit X11 owner'),'owner capture')
         other=wait(lambda:cap('Audit X11 distractor'),'distractor capture')
@@ -33,7 +36,11 @@ def acceptance(client,children,args,shell_token,socketpath):
         menu=wait(lambda:cap('Audit X11 menu'),'menu capture')
         dialog=wait(lambda:cap('Audit X11 dialog'),'dialog capture');time.sleep(.8)
         menu=cap('Audit X11 menu');dialog=cap('Audit X11 dialog')
-        check('X11_transient_owner_beats_other_focus',menu['parentId']==owner['id'] and dialog['parentId']==owner['id'])
+        print('x11 parents',json.dumps({'menu':menu['parentId'],'dialog':dialog['parentId'],'owner':owner['id'],'other':other['id']}),flush=True)
+        # Without a transient-for the menu belongs to its own client: the window it opens over (here
+        # the client's dialog), never the other client's focused window.
+        check('X11_menu_without_transient_follows_its_own_client' if case=='x11-bare' else 'X11_transient_owner_beats_other_focus',
+              menu['parentId']==(dialog['id'] if case=='x11-bare' else owner['id']) and dialog['parentId']==owner['id'])
         print('dialog size',dialog['pixels'],flush=True)
         check('attached_dialog_keeps_requested_size',dialog['pixels']==[1600,900])
         check('attached_windows_skip_root_placement',not any(v['surfaceId'] in [menu['id'],dialog['id']] for v in s.camera()['instances']))

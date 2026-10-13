@@ -8,6 +8,7 @@
 #include "render/Watermark.hpp"
 #include <GLES3/gl3.h>
 #include <algorithm>
+#include <cmath>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
@@ -21,12 +22,36 @@
 #include <set>
 namespace hyprune::platform {
 namespace {
+// An X11 menu with no transient-for (override-redirect popups usually have none) belongs to
+// its own client's window: same process, the one it opens over (the top one), else the nearest.
+// Only when its client has no other window does it follow the focused one.
+PHLWINDOW ownerWindow(const PHLWINDOW &menu) {
+    auto pid = menu->m_xwaylandSurface ? menu->m_xwaylandSurface->m_pid : 0;
+    if (pid <= 0)
+        return nullptr;
+    auto at = menu->m_xwaylandSurface->m_geometry.pos();
+    PHLWINDOW best;
+    double nearest = INFINITY;
+    for (auto &other : Desktop::windowState()->windows()) {
+        if (!other || other == menu || !other->m_isMapped || !other->m_isX11 || !other->m_xwaylandSurface ||
+            other->m_xwaylandSurface->m_pid != pid || other->m_xwaylandSurface->m_overrideRedirect || other->m_X11ShouldntFocus)
+            continue;
+        auto box = other->m_xwaylandSurface->m_geometry;
+        double dx = std::max({box.x - at.x, 0.0, at.x - (box.x + box.w)}), dy = std::max({box.y - at.y, 0.0, at.y - (box.y + box.h)});
+        double distance = std::hypot(dx, dy); // 0 inside the window
+        if (distance <= nearest) // on a tie the later-mapped one: the window stacked on top (a dialog over its parent)
+            best = other, nearest = distance;
+    }
+    return best;
+}
 PHLWINDOW attachmentParent(const PHLWINDOW &w) {
     auto parent = w->parent();
     if (!parent)
         parent = w->x11Parent();
     bool menu =
         w->m_isX11 && (w->m_X11ShouldntFocus || (w->m_xwaylandSurface && w->m_xwaylandSurface->m_overrideRedirect));
+    if (!parent && menu)
+        parent = ownerWindow(w);
     if (!parent && menu)
         parent = Desktop::focusState()->window();
     return parent == w ? nullptr : parent;
