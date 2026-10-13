@@ -32,7 +32,6 @@ class Client {
     // Frame ticks (diagnostics): time, promoted sequence, sent sequence, slot phases, budget.
     std::deque<std::array<double, 6>> ticks_;
     std::string lastSent_; // the last pose request without its identity: unchanged means no new frame
-    Json lastRequest_ = Json::object(), changed_ = Json::object(); // diagnostics: what made the last frames new
     ExternalCopy externalCopy_;
 
   public:
@@ -61,7 +60,6 @@ class Client {
         return {{"front", front_}, {"frontSequence", frontSequence_}, {"sequence", sequence_}, {"phases", phases},
                 {"frontAgeMs", front_ >= 0 ? Json(now() - frontReply_.at("sent").get<double>()) : Json(nullptr)},
                 {"trips", Json(std::vector<std::array<double, 3>>(trips_.begin(), trips_.end()))},
-                {"changed", changed_},
                 {"ticks", Json(std::vector<std::array<double, 6>>(ticks_.begin(), ticks_.end()))}};
     }
     sim::Camera camera() const {
@@ -290,10 +288,6 @@ class Client {
                                 b.request = {};
                                 break;
                             }
-                            for (auto &[key, value] : same.items())
-                                if (!lastRequest_.contains(key) || lastRequest_[key] != value)
-                                    changed_[key] = changed_.value(key, 0) + 1;
-                            lastRequest_ = std::move(same);
                             lastSent_ = std::move(signature);
                             budget_.spend();
                         }
