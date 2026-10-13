@@ -62,6 +62,28 @@ inline Json withoutMarkersReveal(Json j) {
             v = withoutMarkersReveal(std::move(v));
     return j;
 }
+// Tool 9 (the debug tool) as peers before IPC 0.26 see the keymap: no tool9 action, no
+// conflict or Hyprland collision naming it.
+inline Json withoutDebugTool(Json j) {
+    if (j.is_object()) {
+        j.erase("tool9");
+        for (auto key : {"conflicts", "steals"})
+            if (j.contains(key) && j[key].is_array())
+                std::erase_if(j[key].get_ref<Json::array_t &>(), [](const Json &c) {
+                    if (!c.is_object())
+                        return false;
+                    if (c.value("action", Json()) == "tool9")
+                        return true;
+                    return c.contains("actions") && c["actions"].is_array() &&
+                           std::find(c["actions"].begin(), c["actions"].end(), "tool9") != c["actions"].end();
+                });
+        for (auto &v : j)
+            v = withoutDebugTool(std::move(v));
+    } else if (j.is_array())
+        for (auto &v : j)
+            v = withoutDebugTool(std::move(v));
+    return j;
+}
 // IPC 0.22 editor deltas (RFC-0011 P1) as older peers see them: scene nodes are
 // "object" selections, the universal gizmo mode reads "move", no gizmo state, and the
 // pocket lists windows only (a selected object item reads as the first window or null).

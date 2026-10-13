@@ -119,6 +119,18 @@ Json Server::snapshot() const {
 }
 Json Server::visibleState(const Peer &p) const {
     Json state = state_;
+    // Tool 9, the debug tool, stays core's own until a protocol names it: peers see the normal
+    // tool (its slots still say what the buttons do) and no tool9 action in the keymap.
+    if (!protocol::atLeast(p.protocol, "0.26") && state.is_object()) {
+        if (state.contains("interaction") && state["interaction"].is_object() && state["interaction"].value("tool", 1) == 9)
+            state["interaction"]["tool"] = 1;
+        if (state.contains("editor") && state["editor"].is_object() && state["editor"].value("tool", 1) == 9) {
+            state["editor"]["tool"] = 1;
+            state["editor"]["submode"] = "normal";
+        }
+        if (state.contains("keymap"))
+            state["keymap"] = interaction::withoutDebugTool(std::move(state["keymap"]));
+    }
     // IPC 0.24 (RFC-0013): the live state of bound machines.
     if (!protocol::atLeast(p.protocol, "0.24") && state.is_object())
         state.erase("live");
@@ -290,6 +302,17 @@ void Server::notify(const std::string &event, Json params, const std::string &ac
                 p.hudLast[event] = now;
             }
             auto payload = params;
+            if (!protocol::atLeast(p.protocol, "0.26")) {
+                if (event == "hud.pose" && payload.value("tool", 1) == 9) {
+                    payload["tool"] = 1;
+                    payload["subtype"] = "normal";
+                }
+                if (event == "tool.changed" && payload.value("slot", 1) == 9) {
+                    payload["slot"] = 1;
+                    payload["name"] = "pointer";
+                    payload["subtype"] = "normal";
+                }
+            }
             if (!protocol::atLeast(p.protocol, "0.15")) {
                 if (event == "hud.pose" && payload.value("tool", 1) == 5) {
                     payload["tool"] = 1;

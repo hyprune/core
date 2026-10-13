@@ -36,6 +36,10 @@ class Tools {
   public:
     std::optional<uint64_t> deterministicId;
     int slot = 1, windowMode = 0, pathMode = 0, positionMode = 0;
+    // Tool 9, the debug tool (DebugTool.hpp): the shown layer (Cycle steps through them).
+    // Not one of the five configurable slots: definitions() keeps those five.
+    static constexpr int debugSlot = 9;
+    int debugLayer = 0;
     std::string selected, kind, activePath;
     int activeHandle = -1;
     Json paths = Json::array(), objects = Json::array(), locks = Json::array();
@@ -73,6 +77,7 @@ class Tools {
     // Future trusted extensions can register definitions and action handlers at
     // this boundary without introducing another mouse/key routing path.
     Json definitions() const;
+    Json debugDefinition() const;
     Json slots() const;
     std::string slotAction(const std::string &) const;
     void removePoint();

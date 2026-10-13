@@ -83,6 +83,12 @@ class Renderer {
         std::vector<std::string> lines;
     };
     std::vector<Label> labels;
+    // Tool 9 (the debug tool): the shown layer's name and a one-line legend of its colours,
+    // centred at the top of the output. Empty title: nothing drawn.
+    struct Banner {
+        std::string title;
+        std::vector<std::pair<std::string, Vec3>> legend;
+    } debugBanner;
     world::Json overlayStyle = overlayDefaults(), waypoint = nullptr, route = world::Json::array(),
                 toolPrompt = nullptr;
     bool showAreaMarkers = false, showInteractionHints = true;
@@ -330,7 +336,8 @@ class Renderer {
     static constexpr int captionLines = 4;                    // a wrapped caption's most lines
     bool captionTruncated = false;
     GLuint gizmoProgram_ = 0, gizmoVao_ = 0, gizmoVbo_ = 0;
-    void panel(float x, float y, float width, float height);
+    void panel(float x, float y, float width, float height, Vec3 color = {.018f, .025f, .035f});
+    void drawBanner(int w, int h);
     void present(GLuint, int, int, bool);
     void debugGeometry(const sim::Camera &, std::span<const surfaces::Surface>);
     int warmStep_ = -1;

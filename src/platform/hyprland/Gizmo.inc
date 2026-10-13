@@ -776,6 +776,7 @@ void Runtime::gizmoDraw() {
     renderer.gizmo = {};
     renderer.readouts.clear();
     gizmoHover = interaction::Part::None;
+    debugToolDraw(); // tool 9: its layer, banner and info card (nothing for the other tools)
     if (world && editor.slot == 5 && objectGhost.active && !freeCursor && !control.uiVisible()) {
         // Tool 5 with an object in the pocket: its placement ghost and what it says.
         auto view = gizmoView();

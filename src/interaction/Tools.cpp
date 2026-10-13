@@ -1,4 +1,5 @@
 #include "Tools.hpp"
+#include "DebugTool.hpp"
 #include "sim/Route.hpp"
 #include <chrono>
 #include <set>
@@ -149,7 +150,19 @@ Json Tools::definitions() const {
              binding("placement.surface", "Place on surface"), binding("placement.pocket", "Pocket window"),
              binding("placement.cycle", "Choose pocketed window"))});
 }
+Json Tools::debugDefinition() const {
+    auto binding = [](const char *action, const char *label) { return Json{{"action", action}, {"label", label}}; };
+    return {{"slot", debugSlot},
+            {"name", "Debug"},
+            {"slots",
+             {{"primary", binding("debug.inspect", "Inspect")},
+              {"secondary", binding("debug.clear", "Close info card")},
+              {"alternate", nullptr},
+              {"cycle", binding("tool.cycle", "Debug layer")}}}};
+}
 Json Tools::slots() const {
+    if (slot == debugSlot)
+        return debugDefinition().at("slots");
     return definitions().at(std::clamp(slot, 1, 5) - 1).at("slots");
 }
 std::string Tools::slotAction(const std::string &name) const {
@@ -223,6 +236,8 @@ std::string Tools::submode() const {
         return std::string(pathMode >= 3 ? "closed " : "open ") + std::array{"line", "curve", "arc"}[pathMode % 3];
     if (slot == 4)
         return std::array{"move", "rotate", "scale", "universal"}[std::clamp(positionMode, 0, 3)];
+    if (slot == debugSlot)
+        return debugLayerInfo(debugLayer).id;
     return slot == 1 ? "normal" : "placement";
 }
 void Tools::wheel(int steps) {
@@ -238,6 +253,8 @@ void Tools::wheel(int steps) {
             positionMode = 0;
         cycle(positionMode, universal ? 4 : 3);
     }
+    if (slot == debugSlot)
+        debugLayer = debugLayerStep(debugLayer, steps);
 }
 std::string Tools::gizmoMode() const {
     return std::array{"move", "rotate", "scale", "universal"}[std::clamp(positionMode, 0, universal ? 3 : 2)];

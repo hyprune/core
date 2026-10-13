@@ -2476,6 +2476,7 @@ void Renderer::present(GLuint target, int w, int h, bool typing) {
     drawGizmo(w, h);
     drawLabels(labels, w, h);
     drawLabels(readouts, w, h);
+    drawBanner(w, h);
     for (auto &sprite : icons_)
         icon(sprite, w, h);
     drawMarkers(w, h);
@@ -2517,6 +2518,26 @@ void Renderer::drawLabels(const std::vector<Label> &list, int w, int h) {
         float y = std::clamp(label.y * h, 16.f, std::max(16.f, h - 30 * scale));
         panel(x - 6 * scale, y - 3 * scale, width + 12 * scale, 24 * scale);
         text(x, y, caption, label.color, w, h, scale);
+    }
+}
+void Renderer::drawBanner(int w, int h) {
+    if (debugBanner.title.empty())
+        return;
+    float scale = std::clamp(w / 1920.f, 1.f, 2.f), swatch = 12 * scale, gap = 6 * scale, space = 20 * scale;
+    float title = labelWidth(debugBanner.title, scale), legend = 0;
+    for (auto &[label, color] : debugBanner.legend)
+        legend += swatch + gap + labelWidth(label, scale) + space;
+    legend = std::max(0.f, legend - space);
+    float width = std::max(title, legend), top = 18 * scale, x = std::round((w - width) * .5f);
+    int lines = debugBanner.legend.empty() ? 1 : 2;
+    panel(x - 10 * scale, top - 5 * scale, width + 20 * scale, 26 * scale * lines + 6 * scale);
+    text(std::round((w - title) * .5f), top, debugBanner.title, {.875f, .74f, .41f}, w, h, scale);
+    float at = std::round((w - legend) * .5f), y = top + 26 * scale;
+    for (auto &[label, color] : debugBanner.legend) {
+        panel(at, y + 4 * scale, swatch, swatch, color);
+        at += swatch + gap;
+        text(at, y, label, {.965f, .96f, .92f}, w, h, scale);
+        at += labelWidth(label, scale) + space;
     }
 }
 float Renderer::labelWidth(const std::string &caption, float scale) const {
@@ -2669,10 +2690,10 @@ void Renderer::drawReticle(int w, int h, bool typing) {
         text(cx - width / 2, cy + extent, reticle.hint, reticle.color * reticle.opacity, w, h, scale);
     }
 }
-void Renderer::panel(float x, float y, float width, float height) {
+void Renderer::panel(float x, float y, float width, float height, Vec3 color) {
     glEnable(GL_SCISSOR_TEST);
     glScissor(int(x), int(y), int(width), int(height));
-    glClearColor(.018f, .025f, .035f, 1);
+    glClearColor(color.x, color.y, color.z, 1);
     glClear(GL_COLOR_BUFFER_BIT);
     glDisable(GL_SCISSOR_TEST);
 }

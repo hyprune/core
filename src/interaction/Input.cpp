@@ -108,6 +108,15 @@ Json validateInput(const Json &raw) {
         for (auto key : {"hud.cycle", "content.scale", "window.reset", "carry.facing", "alternate", "cycle"})
             if (!w.contains(key))
                 w[key] = inputDefaults()["modes"]["world"][key];
+        // Tool 9 (the debug tool): 9 selects it, unless 9 already does something here.
+        if (!w.contains("tool9")) {
+            bool nineTaken = false;
+            for (auto &[action, bindings] : w.items())
+                if (bindings.is_array())
+                    for (auto &b : bindings)
+                        nineTaken |= b.is_string() && b == "9";
+            w["tool9"] = nineTaken ? Json::array() : Json::array({"9"});
+        }
         // IPC 0.21: TAB tap reveals markers, unless plain Tab already does something here.
         if (!w.contains("markers.reveal")) {
             bool tabTaken = false;

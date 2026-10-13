@@ -252,6 +252,28 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Debug tool, tool 9 (no wire change)
+
+- Key `9` (world action `tool9`) selects the debug tool. It shows one debug layer at a time;
+  Cycle steps through them: window boxes and mounts, window zones, collision (floor, wall,
+  invisible wall or backstop, object proxy; within 36 m), playable volumes and the fly
+  ceiling, paths and stops, keepClear and approach zones, seats, visibility regions, NPC
+  steering, and placement rules. Core draws a banner naming the layer with a legend of its
+  colours. Lines are 3 px at 1080p (scaled with the output), anti-aliased in the gizmo pass,
+  with light fills; the F3 debug view keeps its 1 px lines. Nothing is drawn, and no frames
+  are forced, while another tool is out.
+- Primary (`debug.inspect`) opens an info card for the aimed item: id, type, owner, area and
+  the placement rule it enforces (for example "Inside a window zone (rule zone)"). In the
+  placement layer, Primary on open ground checks a 0.5 m box there. Secondary
+  (`debug.clear`) closes the card.
+- Until a protocol names tool 9, peers see it as the normal tool: `editor.tool` and
+  `interaction.tool` 1, `editor.submode` `normal`, `hud.pose` tool 1 and `tool.changed`
+  slot 1 `pointer`. `editor.toolSlots` carries the debug tool's slots (free action and label
+  strings), so hints stay right. `tool9` is left out of the published keymap, `input.get`
+  and `input.preview` (with any conflict or Hyprland collision naming it), and `input.set`
+  keeps its bindings, less any the peer has just given another action. An input file
+  without `tool9` gains `9`, unless 9 is already bound in world mode.
+
 ## Characters steer, detour and keep their feet in step (no wire change)
 
 RFC-0010 amendment "steering, detours and gait" (draft); closes open question 2.

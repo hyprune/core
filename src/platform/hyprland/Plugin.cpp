@@ -8,6 +8,7 @@
 #ifdef HYPRUNE_LIVE_BUILD
 #include "../../../dev/live/Bootstrap.hpp"
 #endif
+#include "interaction/DebugTool.hpp"
 #include "interaction/Gizmo.hpp"
 #include "interaction/Placement.hpp"
 #include "interaction/Tools.hpp"
@@ -18,6 +19,7 @@
 #include "world/Objects.hpp"
 #include "world/Occlusion.hpp"
 #include "world/Catalog.hpp"
+#include <format>
 #include <regex>
 #include <sys/inotify.h>
 #include <sys/random.h>
@@ -264,6 +266,28 @@ struct Runtime {
     void ghostEdges();
     void gizmoDraw();
     Json gizmoDiagnostics();
+    // Tool 9, the debug tool (DebugTool.inc): the shown layer's items, how they were built,
+    // and the info card of the item Primary inspected (by id and type, kept across rebuilds).
+    std::vector<interaction::DebugItem> debugItems;
+    struct DebugBuilt {
+        int layer = -1;
+        const world::World *world = nullptr;
+        uint64_t revision = 0;
+        Vec3 eye{};
+    } debugBuilt;
+    std::vector<uint8_t> debugKinds; // classifyCollision, per world and collision revision
+    const world::World *debugKindsWorld = nullptr;
+    uint64_t debugKindsRevision = 0;
+    std::vector<std::string> debugCard;
+    std::string debugSelected;
+    int debugCardLayer = -1;
+    Vec3 debugCardAt{};
+    double debugBuildMs = 0;
+    bool debugToolShown() const;
+    interaction::DebugInputs debugInputs();
+    void debugToolDraw();
+    void debugInspect();
+    Json debugToolDiagnostics();
     void projectCursor();
     // Frame-time diagnostics (HYPRUNE_FRAME_LOG=<file>, development): JSON lines per
     // presentation, tick (with section times), renderer draw and IPC method. Buffered in
@@ -1643,7 +1667,8 @@ void Runtime::publishHUD() {
                          {"heading", camera.yaw}, {"pitch", camera.pitch}, {"zone", zone},
                          {"tool", editor.slot}, {"subtype", editor.submode()}});
     }
-    Json toolState = {{"slot", editor.slot}, {"name", config["tools"]["slots"][editor.slot - 1]},
+    Json toolState = {{"slot", editor.slot},
+                      {"name", editor.slot == editor.debugSlot ? Json("debug") : config["tools"]["slots"].at(std::clamp(editor.slot, 1, 5) - 1)},
                       {"subtype", editor.submode()}};
     if (hudTool != toolState) {
         hudTool = toolState;
@@ -3584,6 +3609,8 @@ void Runtime::action(interaction::Action a) {
         objectCarry = false;
         editor.slot = tool = std::stoi(a.name.substr(4));
         tagged.clear();
+        debugCard.clear();
+        debugSelected.clear();
         if (npcDrawing && editor.activePath == npcDrawing->pathId)
             finishDrawing(); // leaving (or re-selecting) tool 3 finishes a drawn route
         editor.finishPath();
@@ -3646,6 +3673,7 @@ Vec3 objectOrigin(const world::World &w, const std::string &id) {
 #include "Paths.inc"
 #include "Npcs.inc"
 #include "Companion.inc"
+#include "DebugTool.inc"
 void Runtime::saveEditor() {
     if (session.playing) return;
     auto value = editor.saved();
@@ -3989,6 +4017,11 @@ void Runtime::toolInput(const std::string &slot, interaction::Action event) {
     } else if (action == "tool.cycle") {
         editor.wheel(event.value > 0 ? 1 : -1);
         cancelGizmo();
+    } else if (action == "debug.inspect") {
+        debugInspect();
+    } else if (action == "debug.clear") {
+        debugCard.clear();
+        debugSelected.clear();
     } else if (action == "window.lock") {
         if (auto h = aim())
             if (auto e = capture.find(h->first)) {
@@ -4576,6 +4609,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                              {"path", ipc::boundedText(inputFile.path.string(), ipc::PathLimit)},
                              {"steals", steals(input.config)},
                              {"conflicts", interaction::inputConflicts(input.config)}};
+        if (!ipc::protocol::atLeast(protocol, "0.26"))
+            response = interaction::withoutDebugTool(response);
         if (!ipc::protocol::atLeast(protocol, "0.15"))
             response = interaction::beforePlacementInput(response);
         return ipc::protocol::atLeast(protocol, "0.9") ? response : interaction::legacyInputNames(response);
@@ -4618,12 +4653,30 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                 requested["modes"].contains("world"))
                 for (auto key : {"tool5", "carry.facing", "content.scale", "window.reset", "alternate"})
                     requested["modes"]["world"][key] = input.config["modes"]["world"][key];
+            // Peers before IPC 0.26 never see tool9: it keeps its current bindings, less any the
+            // peer has just given another action.
+            if (!ipc::protocol::atLeast(protocol, "0.26") && requested.contains("modes") && requested["modes"].is_object() &&
+                requested["modes"].contains("world") && requested["modes"]["world"].is_object()) {
+                auto &world = requested["modes"]["world"];
+                Json kept = Json::array();
+                for (auto &b : input.config["modes"]["world"].value("tool9", Json::array())) {
+                    bool taken = false;
+                    for (auto &[action, bindings] : world.items())
+                        if (action != "tool9" && bindings.is_array())
+                            taken |= std::find(bindings.begin(), bindings.end(), b) != bindings.end();
+                    if (!taken)
+                        kept.push_back(b);
+                }
+                world["tool9"] = kept;
+            }
             next = interaction::validateInput(requested);
         } catch (const std::exception &e) {
             throw ipc::Error(-32602, e.what());
         }
         if (method == "input.preview") {
             auto response = Json{{"config", next}, {"steals", steals(next)}, {"conflicts", interaction::inputConflicts(next)}};
+            if (!ipc::protocol::atLeast(protocol, "0.26"))
+                response = interaction::withoutDebugTool(response);
             if (!ipc::protocol::atLeast(protocol, "0.15"))
                 response = interaction::beforePlacementInput(response);
             return ipc::protocol::atLeast(protocol, "0.9") ? response : interaction::legacyInputNames(response);
@@ -5624,8 +5677,14 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
         for (auto &p : f.points)
             h(p.x)(p.y)(f.color.r)(f.color.a);
     part("gizmo");
-    for (auto &l : r.readouts)
+    for (auto &l : r.readouts) {
         h(l.text)(l.x)(l.y);
+        for (auto &line : l.lines)
+            h(line);
+    }
+    h(r.debugBanner.title);
+    for (auto &[label, color] : r.debugBanner.legend)
+        h(label)(color);
     part("readouts");
     // Characters' instances follow their agents every tick; their frames come from the NPC
     // rule above (in view while animating), so they stay out of this part of the key.
@@ -5881,6 +5940,7 @@ int luaCamera(lua_State *state) {
         {"positionMode", runtime->editor.positionMode},
         {"gizmo", runtime->gizmoDiagnostics()},
         {"path", runtime->pathDiagnostics()},
+        {"debugTool", runtime->debugToolDiagnostics()},
         {"selectedScale",
          {runtime->selectedTransform.scale.x, runtime->selectedTransform.scale.y, runtime->selectedTransform.scale.z}},
         {"superHeld", runtime->superHeld},
