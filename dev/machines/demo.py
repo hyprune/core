@@ -113,7 +113,8 @@ def run(client, s, source):
     try:
         while True:
             t = time.monotonic() - started
-            if t > duration + .5:
+            # Core counts the path's time in presented frames: end when it says so.
+            if t > duration + .5 and (cam.status()['done'] or t > duration + 15):
                 break
             if t - last >= .25:
                 last = t
