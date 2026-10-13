@@ -20,9 +20,11 @@ def demo(client,children,state,pointer,ui,status,sid):
  def exit():keys('-M','logo','-P','Super_L','-s','40','-k','Tab','-p','Super_L','-m','logo');time.sleep(.5)
  def mode(slot,name):
   keys('-k',str(slot))
-  for _ in range(6):
+  for _ in range(8):
    if state()['editor']['submode']==name:return
-   pointer('scroll',-1)
+   # Path tool: the wheel picks the segment type, the middle button open or closed.
+   if slot==3 and state()['editor']['submode'].split()[0]!=name.split()[0]:pointer('button',274)
+   else:pointer('scroll',-1)
   raise AssertionError(('demo submode',slot,name,state()['editor']))
  client.call('surface.place',{'surfaceId':sid,'anchorId':'sun-court-slot-01-operator-desk-01'});target();keys('-k','e');time.sleep(.2);keys("printf '\\033[2J\\033[H  HYPRUNE / KEYMAP V2\\n\\n  E Use in place   F Focus\\n  Super+Tab Return   Q Scope\\n\\n  HJKL / WASD / Arrows\\n  1 Normal  2 Window  3 Path  4 Position\\n'");keys('-k','Return');exit()
  cam=cinema.Cinema(s);record=cam.recording(raw);start=record.__enter__();timeline=[]
@@ -33,10 +35,12 @@ def demo(client,children,state,pointer,ui,status,sid):
   client.call('surface.place',{'surfaceId':sid,'anchorId':'sun-court-slot-01-operator-desk-01'});target();mark('F: zoom to terminal fullscreen');keys('-k','f');wait(lambda:s.camera()['fullscreen']==2);time.sleep(2);mark('Super+Tab: exit; native colliding bind stays stolen');exit();wait(lambda:s.camera()['fullscreen']==0)
   client.call('surface.return',{'surfaceId':sid});pose(client,[0,3,-8]);mark('F: zoom to workspace fullscreen');keys('-k','f');wait(lambda:state()['mounts']['desktopWorkspaceId']==10);time.sleep(2);exit();wait(lambda:state()['mounts']['desktopWorkspaceId'] is None)
   pose(client,[0,2.2,4]);mark('Q: scope zoom with wheel and vignette');q=s.envrun('wtype','-P','q','-s','2800','-p','q');children.append(q);time.sleep(.4);pointer('scroll',-2);time.sleep(1.8);q.wait(timeout=5)
-  mark('Settings: three capture boxes, native shortcut conflict');keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status().get('director'));ui('tabNamed','settings');time.sleep(.4);xy=list(map(float,s.ctl('cursorpos').split(',')));pointer(1600+854-xy[0],531-xy[1]);pointer();wait(lambda:state()['keymap']['capture'] and state()['keymap']['capture']['status']=='waiting');keys('-M','logo','-P','Super_L','-s','40','-k','Tab','-p','Super_L','-m','logo');time.sleep(2.5);ui('inputSave');time.sleep(1);keys('-k','Escape');time.sleep(.4);client.call('input.set',{'config':defaults})
+  mark('Settings: three capture boxes, native shortcut conflict');keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status().get('director'));ui('tabNamed','settings');time.sleep(.4);ui('settingsSection',2);time.sleep(.4);ui('inputCapture','world','debug',2);wait(lambda:state()['keymap']['capture'] and state()['keymap']['capture']['status']=='waiting');keys('-M','logo','-P','Super_L','-s','40','-k','Tab','-p','Super_L','-m','logo');time.sleep(2.5);ui('inputSave');time.sleep(1);keys('-k','Escape');time.sleep(.4);client.call('input.set',{'config':defaults})
   client.call('surface.place',{'surfaceId':sid,'anchorId':'sun-court-slot-01-operator-desk-01'});target();mode(4,'move');pointer();mark('Position tool: move arrows');time.sleep(1.2);p=cap()['position'];pose(client,[p[0]+.6,p[1],p[2]+3]);pointer('button',272,1);pointer(90,0);time.sleep(.3);pointer('button',272,0);target();time.sleep(.5);mode(4,'rotate');mark('Position tool: rotation arcs');time.sleep(2);mode(4,'scale');mark('Position tool: axis cubes and uniform scale centre');time.sleep(2)
   mode(2,'lock');mark('Window tool: lock badge prevents accidental carrying');pointer();wait(lambda:sid in state()['editor']['locked']);time.sleep(2.5);pointer();mode(3,'open line');pose(client,[1,2.5,4],pitch=-.6);mark('Path tool: open and closed line, curve and arc');time.sleep(.4)
-  for _ in range(6):pointer();pointer(25,0);pointer();pointer('button',273);pointer('scroll',-1);time.sleep(.35)
+  for k in range(6):  # LMB adds points, MMB open/closed, wheel segment type; reselecting the tool finishes the path
+   if k==3:pointer('button',274);time.sleep(.1)
+   pointer();pointer(25,0);time.sleep(.1);pointer();keys('-k','3');pointer('scroll',-1);time.sleep(.35)
   keys('-k','1');client.call('world.load',{'worldId':'com.hyprune.lumen-reach'});mark('Lumen Reach: unchanged authored world');time.sleep(2.5);client.call('world.load',{'worldId':'com.hyprune.switchyard'});mark('Switchyard: unchanged authored world');time.sleep(2.5)
   elapsed=time.monotonic()-start
   if elapsed<60:time.sleep(60-elapsed)
