@@ -380,7 +380,7 @@ void Runtime::npcWorldLoaded() {
     npcAimed = nullptr;
     npcSynced = {};
     companionBrain.rejoin(true); // comes along: out of view, a wave when seen
-    companionCarry = false;
+    carried.clear(), companionCarry = false;
     companionFocused = false;
     companionFeet = camera.position - Vec3{0, camera.eyeHeight, 0};
     renderer.npcs.clear();
@@ -462,7 +462,12 @@ void Runtime::npcTick(float dt) {
         if (n.companion) {
             moving = n.state == "active" && companionStep(n, dt, w, paused);
             companionMoving = moving;
-        } else if (animate && n.state == "active")
+        } else if (n.id == carried) { // hangs from the grab point (characterCarryTick), idling
+            a.advance(dt, w);
+            a.idle();
+            moving = true;
+        }
+        else if (animate && n.state == "active")
             a.update(dt, w);
         if (animate || still || n.skin.empty() || n.stillPosed != still) {
             world::Character::PoseInput in;

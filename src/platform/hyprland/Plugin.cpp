@@ -661,22 +661,26 @@ struct Runtime {
     interaction::Body companionBody;
     std::map<const world::Character *, std::string> companionChecked; // core's character check, first error
     uint64_t companionRevision = 0;
-    Vec3 companionFeet{}, companionPublished{}, companionCarryFrom{};
-    float companionHeading = 0, companionCarryHeading = 0, companionCarryDistance = 2;
+    Vec3 companionFeet{}, companionPublished{};
+    float companionHeading = 0;
     bool companionCarry = false, companionFocused = false, companionMoving = false, companionInView = false;
     const char *companionLastStep = "none"; // diagnostics: how the last companion step ended
     float companionFocusRetry = 0;
     int companionFocusMoves = 0, companionFocusMisses = 0;
     int companionPops = 0; // teleports seen in view (diagnostics; never expected)
     size_t companionLine = 0;
-    struct CompanionDrop {
+    // Carrying a character (the companion or a user character; Companion.inc).
+    std::string carried; // its id, or empty
+    Vec3 carryFrom{};
+    float carryHeading = 0, carryDistance = 2;
+    struct CarryDrop {
         Vec3 at{};
         bool valid = false;
         std::string route;
         float s = 0, length = 0;
         std::vector<Vec3> samples;
     };
-    CompanionDrop companionDrop;
+    CarryDrop carryDrop;
     std::string methodProtocol = "0.1"; // the peer protocol of the method being run
     Json companionCapability(const world::CatalogEntry &) const;
     std::string companionRef() const;
@@ -696,10 +700,12 @@ struct Runtime {
         ~CompanionPlannerScope() { planner.stand = {}, planner.leg = {}; }
     };
     bool companionStep(NpcRun &, float dt, const sim::NpcWorld &, const std::string &paused);
-    bool companionPickUp();
-    void companionCarryTick();
-    void companionDraw();
-    void companionPutDown();
+    bool carriable(const std::string &id);
+    interaction::Body carryBody(const std::string &id);
+    bool characterPickUp();
+    void characterCarryTick();
+    void characterCarryDraw();
+    void characterPutDown();
     std::optional<Json> companionMethod(const std::string &method, const Json &params);
     Json companionState();
     Json companionDiagnostics();
@@ -2437,8 +2443,12 @@ void Runtime::reticleTick() {
                 next = {"invalid", "grab", o->second.distance, config["player"]["reach_grab"]};
             else
                 ranged(o->second.distance, "reach_grab", "grab");
-        } else if (auto c = characterAim())
-            next = {"invalid", "grab", c->second, config["player"]["reach_grab"]}; // characters are protected
+        } else if (auto c = characterAim()) {
+            if (carriable(c->first)) // the companion and user characters can be carried
+                ranged(c->second, "reach_grab", "grab");
+            else
+                next = {"invalid", "grab", c->second, config["player"]["reach_grab"]}; // residents are protected
+        }
         else
             next.state = "neutral";
     } else {
@@ -3313,11 +3323,12 @@ void Runtime::action(interaction::Action a) {
                                           : config["input"]["resize_button"].get<uint32_t>();
         // Carry needs no particular tool for movable world objects (RFC-0011); scene nodes
         // that own collision stay tool 4 targets.
-        // The companion is the one character carry picks up (to set it down on a route or spot).
-        if (a.name == "carry" && a.pressed && a.edge && !aim() && !gizmo.dragging() && !instanceAim() && companionPickUp())
+        // The companion and user characters are the characters carry picks up (to set them
+        // down on a route or a spot); authored residents stay protected.
+        if (a.name == "carry" && a.pressed && a.edge && !aim() && !gizmo.dragging() && !instanceAim() && characterPickUp())
             return;
-        if (a.name == "carry" && !a.pressed && companionCarry) {
-            companionPutDown();
+        if (a.name == "carry" && !a.pressed && !carried.empty()) {
+            characterPutDown();
             return;
         }
         if (a.name == "carry" && a.pressed && a.edge && !aim() && !gizmo.dragging() && !instanceAim() &&
@@ -4256,8 +4267,8 @@ void Runtime::toolsTick() {
             }
         }
     pathDraw();
-    companionCarryTick();
-    companionDraw();
+    characterCarryTick();
+    characterCarryDraw();
     for (auto &e : capture.entries)
         if (editor.locked(world->id, e.instance) && e.visible) {
             auto &s = e.surface;

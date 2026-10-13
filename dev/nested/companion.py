@@ -15,7 +15,8 @@ companion-capable character; required). Checks, in Switchyard:
     the route; Follow returns it to the player.
  7. Carry and set down: Super+LMB picks it up; held within 0.75 m of the route the route is the
     snap target; released, it walks that route from there. Released on a wall: back where it was.
-    Released on free floor away from routes: it stays there.
+    Released on free floor away from routes: it stays there. A user character carried near the
+    route snaps on and walks it.
  8. Persistence: companion.json keeps the choice, editor.json the per-world binding; a world
     reload restores it.
  9. Offload parity (HYPRUNE_COMPANION_OFFLOAD != 0): posed still, stills with offload off and on
@@ -301,6 +302,31 @@ def acceptance(client, children, args, shell_token, socketpath):
         spot = carry([-4, 0, 3.5], aim_from=[-4, 1.7, 6])
         check('released on free floor away from routes: it stays there', spot.get('valid') and not spot.get('route') and
               comp()['state']['mode'] == 'stay' and flat(pos(), [-4, 0, 3.5]) < .4, {'carry': spot, 'state': comp()['state']})
+        # A user character: carried near the drawn path, it snaps on and walks it (and stays on it).
+        agent = lambda i: next((x for x in s.camera()['npcs']['agents'] if x['id'] == i), None)
+        user = None
+        for spot in ([-7, 0, 3.5], [-2, 0, 3.5], [-7, 0, 8], [-2, 0, 8]):  # the first free standing spot
+            try:
+                user = client.call('npcs.spawn', {'ref': REF, 'pose': {'position': spot, 'rotation': [0, 0, 0, 1]}})['id']; break
+            except RuntimeError as e:
+                print('spawn at', spot, e, flush=True)
+        wait(lambda: agent(user) is not None, timeout=20); time.sleep(1)
+        u = agent(user)['position']; eye = [u[0] + 2.2, 1.7, u[2] + .2]
+        look(eye, [u[0], 1.1, u[2]]); center(); time.sleep(.5)
+        seen = {}
+        def gesture():
+            pointer('button', 272, 1); time.sleep(.5)
+            seen['reticle'] = s.camera().get('reticle')
+            look([8, 1.7, 1], [10.55, 0, 1]); time.sleep(.8)
+            seen['position'] = agent(user)['position']
+            pointer('button', 272, 0)
+        held([('logo', 'Super_L')], gesture)
+        time.sleep(1.5)
+        a = agent(user)
+        on = min(math.hypot(a['position'][0] - x, a['position'][2] - z) for x, z in [(6 + t * .25, 0) for t in range(21)] + [(11, t * .25) for t in range(17)])
+        check('a user character carried near the path snaps on and walks it', a['path'] == route and on < .3 and
+              flat(seen['position'], [11, 0, 1]) < .3, {'held': seen, 'agent': {k: a[k] for k in ('path', 'position', 'activity')}})
+        client.call('npcs.remove', {'id': user}); time.sleep(.5)
         client.call('companion.mode', {'mode': 'follow'}); time.sleep(2)
 
         # 8. Persistence (and the binding we leave in Switchyard for step 15).

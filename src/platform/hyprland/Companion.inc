@@ -6,7 +6,7 @@
 // sim::Companion drives its agent in follow and stay modes; on a route it walks like one.
 // Included by Plugin.cpp after Npcs.inc.
 namespace {
-constexpr float companionSnap = .75f; // setting it down: a route within this distance takes it
+constexpr float carrySnap = .75f; // setting a character down: a route within this distance takes it
 } // namespace
 
 // ---- capability, choice and per-world mode -------------------------------------------
@@ -339,7 +339,8 @@ bool Runtime::companionStep(NpcRun &n, float dt, const sim::NpcWorld &w, const s
             companionHeading = std::atan2(f.x, f.z);
     }
     companionFeet = feet;
-    if (companionCarry) { // hangs from the grab point (companionCarryTick moves it)
+    if (companionCarry) { // hangs from the grab point (characterCarryTick moves it)
+        companionLastStep = "carried";
         a.advance(dt, w);
         a.idle();
         return true;
@@ -421,48 +422,66 @@ bool Runtime::companionStep(NpcRun &n, float dt, const sim::NpcWorld &w, const s
 }
 
 // ---- carrying and setting down ---------------------------------------------------------
-// Super+LMB on the companion picks it up (the one carry a character allows).
-bool Runtime::companionPickUp() {
+// The companion and the user's own characters can be carried (authored residents stay
+// protected): Super+LMB picks one up to set it down on a route or a standing spot.
+bool Runtime::carriable(const std::string &id) {
+    if (id == companionId)
+        return !companionBrain.hidden();
+    auto *n = npcRun(id);
+    return n && n->user && n->state == "active";
+}
+interaction::Body Runtime::carryBody(const std::string &id) {
+    if (id == companionId)
+        return companionBody;
+    auto *info = objectInfo(id);
+    auto *e = info ? catalogEntry(info->ref) : nullptr;
+    return e ? bodyOf(*e) : interaction::Body{};
+}
+bool Runtime::characterPickUp() {
     auto c = characterAim();
-    if (!c || c->first != companionId || companionCarry)
+    if (!c || !carried.empty() || !carriable(c->first))
         return false;
-    auto *n = npcRun(companionId);
-    if (!n || companionBrain.hidden())
+    auto *n = npcRun(c->first);
+    if (!n)
         return false;
     if (tooFar(c->second, "reach_grab", "grab"))
         return true;
-    companionCarry = true;
-    companionCarryFrom = n->agent.position;
-    companionCarryHeading = n->agent.heading;
-    companionCarryDistance = c->second;
-    companionDrop = {};
-    if (npcInteraction && npcInteraction->objectId == companionId)
+    carried = c->first;
+    companionCarry = carried == companionId;
+    carryFrom = n->agent.position;
+    carryHeading = n->agent.heading;
+    carryDistance = c->second;
+    carryDrop = {};
+    if (npcInteraction && npcInteraction->objectId == carried)
         endInteraction();
+    if (!companionCarry)
+        n->agent.idle();
     ++npcRevision;
     return true;
 }
 // Where a release would put it: the floor under the aim, snapped to a route of this world
 // within 0.75 m (highlighted), else a free standing spot, else invalid.
-void Runtime::companionCarryTick() {
-    if (!companionCarry || !world)
+void Runtime::characterCarryTick() {
+    if (carried.empty() || !world)
         return;
-    auto *n = npcRun(companionId);
+    auto *n = npcRun(carried);
     if (!n) {
-        companionCarry = false;
+        carried.clear(), companionCarry = false;
         return;
     }
+    auto body = carryBody(carried);
     auto o = pointerCamera().position, d = pointerRay();
     float reach = config["player"]["reach_grab"];
     auto hit = interaction::raycast(o, d, world->collision, &world->collisionIndex);
-    float along = hit ? std::min(hit->distance, reach) : std::min(companionCarryDistance, reach);
+    float along = hit ? std::min(hit->distance, reach) : std::min(carryDistance, reach);
     Vec3 aimAt = o + d * along;
     auto scene = npcScene();
     auto floor = interaction::floorBelow(scene, aimAt + Vec3{0, .3f, 0}, 4);
-    CompanionDrop drop;
+    CarryDrop drop;
     if (floor) {
         drop.at = {aimAt.x, *floor, aimAt.z};
         // Routes of this world: the nearest within the snap distance at a walkable point.
-        float best = companionSnap;
+        float best = carrySnap;
         auto consider = [&](const Json &p, const std::string &ref) {
             if (world::pathUse(p) != "route")
                 return;
@@ -472,11 +491,11 @@ void Runtime::companionCarryTick() {
             float s = route.nearest(drop.at);
             Vec3 q = route.at(s);
             float dist = std::hypot(q.x - drop.at.x, q.z - drop.at.z);
-            if (dist > best || std::abs(q.y - drop.at.y) > .5f || !routeWalkability(p, companionBody).walkable)
+            if (dist > best || std::abs(q.y - drop.at.y) > .5f || !routeWalkability(p, body).walkable)
                 return;
             size_t bound = 0;
             for (auto &m : npcs)
-                bound += m.path == ref && m.id != companionId;
+                bound += m.path == ref && m.id != carried;
             if (bound >= world::charactersPerPath)
                 return;
             best = dist;
@@ -494,11 +513,11 @@ void Runtime::companionCarryTick() {
             auto strict = npcScene();
             for (auto &k : placementScene().keepClear)
                 strict.keepClear.push_back(k);
-            drop.valid = !interaction::checkSpot(strict, drop.at, companionBody, true);
+            drop.valid = !interaction::checkSpot(strict, drop.at, body, true);
         }
     } else
         drop.at = aimAt - Vec3{0, .1f, 0};
-    companionDrop = drop;
+    carryDrop = drop;
     // It hangs with its feet 0.1 m above the target, facing the player.
     n->agent.position = drop.at + Vec3{0, .1f, 0};
     Vec3 back = o - drop.at;
@@ -506,54 +525,60 @@ void Runtime::companionCarryTick() {
         n->agent.heading = std::atan2(back.x, back.z);
 }
 // Highlights while carrying: the snapped route and the spot, or a red ring where it can't go.
-void Runtime::companionDraw() {
-    if (!companionCarry)
+void Runtime::characterCarryDraw() {
+    if (carried.empty())
         return;
     auto decode = [](float v) { return v <= .04045f ? v / 12.92f : std::pow((v + .055f) / 1.055f, 2.4f); };
     auto c = renderer.overlayStyle["promptColor"];
     Vec3 glow{decode(c[0]), decode(c[1]), decode(c[2])}, red{1, .12f, .08f};
-    auto &d = companionDrop;
+    auto &d = carryDrop;
     Vec3 lift{0, .04f, 0};
     for (size_t i = 1; i < d.samples.size(); ++i) {
         renderer.lines.push_back({d.samples[i - 1] + lift, d.samples[i] + lift, glow * .35f, .05f});
         renderer.lines.push_back({d.samples[i - 1] + lift, d.samples[i] + lift, glow, .015f});
     }
     Vec3 colour = d.valid ? glow : red;
+    float r = carryBody(carried).radius + .1f;
     for (int k = 0; k < 24; ++k) {
         float a0 = k * .2618f, a1 = (k + 1) * .2618f;
-        float r = companionBody.radius + .1f;
         renderer.lines.push_back({d.at + lift + Vec3{std::sin(a0) * r, 0, std::cos(a0) * r},
                                   d.at + lift + Vec3{std::sin(a1) * r, 0, std::cos(a1) * r}, colour, .02f});
     }
 }
 // Release: binds to the snapped route, stays on a free spot, else goes back (never thrown).
-void Runtime::companionPutDown() {
+void Runtime::characterPutDown() {
+    auto id = std::exchange(carried, std::string());
     companionCarry = false;
     ++npcRevision;
-    auto *n = npcRun(companionId);
+    auto *n = npcRun(id);
     if (!n)
         return;
-    auto drop = companionDrop;
+    auto drop = carryDrop;
+    auto name = id == companionId ? companionName : n->name;
     try {
         if (drop.valid && !drop.route.empty()) {
             n->agent.position = drop.at;
-            companionBind({{"path", drop.route}, {"phase", std::clamp(drop.s / std::max(1e-3f, drop.length), 0.f, .999f)}});
+            bindCharacter(id, {{"path", drop.route}, {"phase", std::clamp(drop.s / std::max(1e-3f, drop.length), 0.f, .999f)}});
             return;
         }
         if (drop.valid) {
             n->agent.position = drop.at;
-            companionRecord({{"pose", {{"position", vecJson(drop.at)}, {"rotation", yawRotation(n->agent.heading)}}}});
-            objectNotice("companion.staying", companionName + " stays here");
+            Json pose{{"position", vecJson(drop.at)}, {"rotation", yawRotation(n->agent.heading)}};
+            if (id == companionId) {
+                companionRecord({{"pose", pose}});
+                objectNotice("companion.staying", companionName + " stays here");
+            } else
+                bindCharacter(id, {{"pose", pose}});
             return;
         }
     } catch (const ipc::Error &e) {
         objectNotice("placement.blocked", e.what());
     }
-    n->agent.position = companionCarryFrom;
-    n->agent.heading = companionCarryHeading;
+    n->agent.position = carryFrom;
+    n->agent.heading = carryHeading;
     reticleFlash = {"invalid", "drop", -1, -1};
     reticleFlashUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(700);
-    objectNotice("placement.blocked", companionName + " can't stand there");
+    objectNotice("placement.blocked", name + " can't stand there");
 }
 
 // ---- IPC 0.25 --------------------------------------------------------------------------
@@ -600,7 +625,8 @@ std::optional<Json> Runtime::companionMethod(const std::string &method, const Js
         if (!companionRef().empty()) {
             companionFile.save(Json::object());
             companionFile.current = Json::object();
-            companionCarry = false;
+            if (companionCarry)
+                carried.clear(), companionCarry = false;
             ++companionRevision;
             objectsDirty = true;
             objectNotice("companion.cleared", "No companion");
@@ -676,5 +702,5 @@ Json Runtime::companionDiagnostics() {
             {"inView", companionInView},
             {"pops", companionPops},
             {"feet", vecJson(companionFeet)},
-            {"carry", companionCarry ? Json{{"valid", companionDrop.valid}, {"route", companionDrop.route}, {"at", vecJson(companionDrop.at)}} : Json(nullptr)}};
+            {"carry", companionCarry ? Json{{"valid", carryDrop.valid}, {"route", carryDrop.route}, {"at", vecJson(carryDrop.at)}} : Json(nullptr)}};
 }
