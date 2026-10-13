@@ -3,13 +3,15 @@
 Lumen Reach with the real shell (HYPRUNE_SHELL_DIR): the Director's Objects tab, Add
 puts the server rack and then the armillary in the pocket, tool 5 places them with the
 ghost, tool 4 moves and turns the rack, a refused placement, and Remove from the Placed
-list. CATALOG_VIDEO names the output (default <state>/catalog/demo.mp4); a timeline and
-a still of the Objects tab are written beside it. CATALOG_FPS sets the recording rate
-(default 30). CATALOG_OFFLOAD=on records with the offload renderer drawing the world
-(RFC-0009); the timeline records the active renderer at each step.
+list. CATALOG_VIDEO names the output (default <state>/catalog/demo.mp4); a timeline, the
+smoothness gate and a still of the Objects tab are written beside it. The camera moves in
+core per presented frame (cinema.py: eased moves) and every presented frame is exported
+(60 fps at the output's rate). CATALOG_OFFLOAD=on records with the offload renderer drawing
+the world (RFC-0009); the timeline records the active renderer at each step.
 """
-import builtins, hashlib, json, math, os, pathlib, signal, subprocess, time
+import builtins, hashlib, json, math, os, pathlib, subprocess, time
 import session as s
+import cinema
 from ctl import verified
 from m2 import wait, keys
 
@@ -43,24 +45,17 @@ def run(client, children, shell_token, socketpath, archive, world):
     diag = lambda: s.camera()
     ghost = lambda: diag()['objects']['ghost']
 
-    def camera(pos, yaw, pitch=0.):
-        s.ctl('eval', f'hl.plugin.hyprune.camera({pos[0]},{pos[1]},{pos[2]},{yaw},{pitch})')
+    cam = cinema.Cinema(s)
+
+    def camera(pos, yaw, pitch=0.):  # rehearsal and cuts
+        cam.hold(pos, yaw=yaw, pitch=pitch)
         time.sleep(.25)
 
     def glide(eye, yaw, pitch, seconds=1.2):
-        cam = diag()
-        p0, y0, q0 = cam['position'], cam['yaw'], cam['pitch']
-        while yaw - y0 > math.pi: yaw -= 2 * math.pi
-        while yaw - y0 < -math.pi: yaw += 2 * math.pi
-        n = max(2, int(seconds * 9))
-        for k in range(1, n + 1):
-            a = (1 - math.cos(math.pi * k / n)) / 2
-            p = [p0[i] + (eye[i] - p0[i]) * a for i in range(3)]
-            s.ctl('eval', f'hl.plugin.hyprune.camera({p[0]},{p[1]},{p[2]},{y0 + (yaw - y0) * a},{q0 + (pitch - q0) * a})')
+        cam.move_to(eye, yaw=yaw, pitch=pitch, seconds=seconds)
 
     def look_at(eye, target, seconds=1.2):
-        d = [target[i] - eye[i] for i in range(3)]
-        glide(eye, math.atan2(d[0], -d[2]), math.atan2(d[1], math.hypot(d[0], d[2])), seconds)
+        cam.move_to(eye, target=target, seconds=seconds)
 
     # The real shell (this branch's Objects tab), as M3B launches it.
     read, write = os.pipe(); os.write(write, (shell_token + '\n').encode()); os.close(write)
@@ -142,11 +137,10 @@ def run(client, children, shell_token, socketpath, archive, world):
 
     camera([-10, 3.2, 14], .35, -.12)
     time.sleep(1.5)
-    log = open(s.STATE / 'recorder.log', 'w')
     # CATALOG_RECORD=0 runs the same script without the recorder (its load, for frame-time runs).
-    recorder = s.envrun('true') if os.environ.get('CATALOG_RECORD') == '0' else s.envrun('wf-recorder', '-o', 'HEADLESS-1', '-r', os.environ.get('CATALOG_FPS', '30'), '-D', '--no-dmabuf', '-c', 'h264_nvenc', '-x', 'bgr0',
-                        '-p', 'preset=p4', '-p', 'rc=constqp', '-p', 'qp=16', '-f', str(out), stdout=log, stderr=subprocess.STDOUT)
-    children.append(recorder); time.sleep(1.0); t0[0] = time.monotonic()
+    clip = out.with_suffix('.capture.mkv')
+    recording = cinema.contextlib.nullcontext(time.monotonic()) if os.environ.get('CATALOG_RECORD') == '0' else cam.recording(clip)
+    t0[0] = recording.__enter__()
     still = None
     try:
         mark('Sun Court, Lumen Reach' + (' (offload renderer: ' + str((perf().get('device') or {}).get('name')) + ')' if offload else ''))
@@ -194,7 +188,7 @@ def run(client, children, shell_token, socketpath, archive, world):
             for _ in range(6):
                 g = wait(lambda: diag()['gizmo'] if part in diag()['gizmo']['handles'] else None, 5)
                 d = [g['handles'][part]['world'][i] - diag()['position'][i] for i in range(3)]
-                camera(diag()['position'], math.atan2(d[0], -d[2]), math.atan2(d[1], math.hypot(d[0], d[2])))
+                cam.move_to(diag()['position'], yaw=math.atan2(d[0], -d[2]), pitch=math.atan2(d[1], math.hypot(d[0], d[2])), seconds=.45)
                 if diag()['gizmo']['hover'] == part:
                     return diag()['gizmo']
             return diag()['gizmo']
@@ -243,7 +237,13 @@ def run(client, children, shell_token, socketpath, archive, world):
         glide([rack_at[0] + 1.5, 3.4, rack_at[2] + 8], .05, -.2, 2.0)
         time.sleep(1.0)
     finally:
-        recorder.send_signal(signal.SIGINT); recorder.wait(timeout=30); log.close()
+        recording.__exit__(None, None, None)
+        cam.stop()
     out.with_suffix('.timeline.json').write_text(json.dumps(timeline, indent=2))
+    if os.environ.get('CATALOG_RECORD') != '0':
+        cinema.encode([clip], out, trim=.5)
+        gate = cinema.gate(out)
+        out.with_suffix('.gate.json').write_text(json.dumps(gate, indent=1) + '\n')
+        print('catalog gate:', cinema.gate_summary(gate), 'export', json.dumps(cam.last_export), flush=True)
     print('PASS catalog: demo recorded', round(time.monotonic() - t0[0], 1), 's', out, still, flush=True)
     client.call('runtime.exit', {})

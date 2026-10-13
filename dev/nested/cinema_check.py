@@ -72,7 +72,11 @@ def acceptance(client, children, args, shell_token, socketpath):
     client.call('world.load', {'worldId': world})
     s.ctl('eval', 'hl.plugin.hyprune.toggle("HEADLESS-1")'); wait(lambda: s.camera()['active'], timeout=90); time.sleep(2)
     client.call('movement.set', {'modeId': 'com.hyprune.fly'})
-    client.call('graphics.set', {'patch': {'offload': 'off', 'npc_motion': 'always', 'quality': 'high'}})
+    offload = os.environ.get('HYPRUNE_CINEMA_OFFLOAD', 'off')
+    client.call('graphics.set', {'patch': {'offload': offload, 'npc_motion': 'always', 'quality': 'high'}})
+    if offload != 'off':
+        wait(lambda: client.call('graphics.get', {})['performance']['activeRenderer'] == 'offload', 60)
+    results['offload'] = offload
     check('the hook is registered', cam.status()['mode'] == 'idle')
     manifest = json.loads((s.STATE / 'worlds' / world / 'world.json').read_text())
     spawns = {x['id']: x['pose']['position'] for x in manifest.get('spawns', [])}
@@ -83,13 +87,17 @@ def acceptance(client, children, args, shell_token, socketpath):
              {'t': 2, 'eye': [x, y + 1.2, z + 1], 'target': [x + 6, y - .2, z - 7], 'ease': 'out'},
              {'t': 4, 'eye': [x + 3, y + 1.6, z - 1], 'target': [x + 10, y, z - 2]}]
     cam.hold(keys_[0]['eye'], keys_[0]['target']); time.sleep(3)  # uploads and shader warm-up
-    frames0 = s.camera()['frames']
+    c0 = s.camera(); frames0 = c0['frames']; draws0 = dict(c0.get('offloadDraws') or {})
     clip = out / 'path.mkv'
     with cam.recording(clip):
         cam.path(keys_, trace=True)
         t0 = time.monotonic(); st = cam.wait(30); took = time.monotonic() - t0
         time.sleep(.6)
-    frames = s.camera()['frames'] - frames0
+    c1 = s.camera(); frames = c1['frames'] - frames0
+    kinds = [int(p[1]) for p in c1.get('presentLog', [])]
+    draws = {k: v - draws0.get(k, 0) for k, v in (c1.get('offloadDraws') or {}).items() if isinstance(v, (int, float))}
+    results['presents'] = {'new': kinds.count(0), 'repeat': kinds.count(1), 'idle': kinds.count(2), 'offloadDraws': draws}
+    print('INFO presents', json.dumps(results['presents']), flush=True)
     trace = cam.trace()
     (out / 'path-trace.json').write_text(json.dumps(trace))
     ts = trace_steps(trace['samples'], trace['fields'])
