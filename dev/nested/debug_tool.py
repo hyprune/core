@@ -7,15 +7,20 @@ checks the banner, legend, line width and that a still view renders no frames, a
 Sun Court window zone and gets the info card naming it, closes the card, and leaves the tool.
 IPC 0.26 publishes it (editor.tool 9, the layer as editor.submode, editor.debugTool with the
 legend and card, the slot-9 tool definition, the tool9 action); a 0.25 peer sees the normal
-tool, 5 definitions and no tool9 action. Stills go to
+tool, 5 definitions and no tool9 action. The real shell at 0.26 (HYPRUNE_SHELL_DIR, default the
+shell checkout; HYPRUNE_DEBUG_TOOL_SHELL=0 skips it) names the layer in its tool deck
+(DEBUG · LAYER n/N and the layer label). Stills go to
 <state>/debug-tool/ and, with DEBUG_TOOL_STILLS=<dir>, are copied there.
 """
-import json, math, os, pathlib, secrets, shutil, subprocess, time
+import builtins, json, math, os, pathlib, secrets, shutil, subprocess, time
 import session as s
+from ctl import verified
 from m2 import wait, keys
 
 WORLD = 'com.hyprune.lumen-reach'
 OLD_PEER = secrets.token_hex(32)  # the 0.25 peer
+SHELL_TOKEN = secrets.token_hex(32)  # the real shell at 0.26
+SHELL = os.environ.get('HYPRUNE_DEBUG_TOOL_SHELL', '1') != '0'
 ZONE = 'sun-court-open-work'
 # A view per layer that shows it: eye, target.
 VIEWS = {
@@ -33,7 +38,9 @@ VIEWS = {
 
 
 def grants():
-    return [{'token': OLD_PEER, 'client': 'com.example.peer-025', 'capabilities': ['state.read', 'input.control']}]
+    return [{'token': OLD_PEER, 'client': 'com.example.peer-025', 'capabilities': ['state.read', 'input.control']},
+            {'token': SHELL_TOKEN, 'client': 'com.hyprune.shell', 'capabilities': ['state.read', 'world.control', 'surface.control',
+             'movement.control', 'shell.control', 'runtime.control', 'input.control', 'quest.control', 'objects.control']}]
 
 
 def prepare(installed):
@@ -53,6 +60,30 @@ def prepare(installed):
 def acceptance(client, children, args, shell_token, socketpath):
     results = []
     old = s.Client(str(socketpath), OLD_PEER, '0.25', 'com.example.peer-025')  # launch tokens expire in 30 s
+    deck = None
+    if SHELL:
+        read, write = os.pipe(); os.write(write, (SHELL_TOKEN + '\n').encode()); os.close(write)
+        _, environment = verified()
+        environment.update(HYPRUNE_TOKEN_FD=str(read), HYPRUNE_PROTOCOL='0.26', HYPRUNE_SOCKET=str(socketpath),
+                           HYPRUNE_OUTPUT_SCREEN='HEADLESS-1', HYPRUNE_DEV_AUTOMATION='1')
+        shell_dir = pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR', str(s.ROOT.parent / 'shell')))
+        shell = subprocess.Popen(['python3', str(shell_dir / 'bridge/launch.py'), '--protocol', '0.26'], env=environment,
+                                 pass_fds=(read,), stdout=open(s.STATE / 'shell.log', 'w'), stderr=subprocess.STDOUT)
+        os.close(read); children.append(shell)
+
+        def childpid():
+            assert shell.poll() is None, 'shell exited; see shell.log'
+            return builtins.next((int(q) for q in pathlib.Path(f'/proc/{shell.pid}/task/{shell.pid}/children').read_text().split()
+                                  if pathlib.Path(f'/proc/{q}/comm').read_text().strip() == 'qs'), None)
+        qpid = wait(childpid, 30)
+
+        def deck():
+            try:
+                return json.loads(subprocess.check_output([str(s.HERE / 'ctl.py'), 'env', 'qs', 'ipc', '--pid', str(qpid), 'call', 'preview',
+                                                           'status'], text=True)).get('toolDeck') or {}
+            except (subprocess.CalledProcessError, json.JSONDecodeError):
+                return {}
+        wait(lambda: deck() != {}, 30)
     out = s.STATE / 'debug-tool'
     out.mkdir(exist_ok=True)
 
@@ -148,6 +179,15 @@ def acceptance(client, children, args, shell_token, socketpath):
                 all(len(l['colour']) == 3 and all(0 <= c <= 1 for c in l['colour']) for l in d['legend']))
     check('IPC 0.26 editor.debugTool matches the drawn layer (label, index of count, legend)', published(st, t) and st['editor']['debugTool']['card'] is None,
           st['editor']['debugTool'])
+    if deck:
+        try:
+            wait(lambda: deck().get('header') == 'DEBUG  ·  LAYER 1/10', 10)
+        except AssertionError:
+            pass
+        d = deck()
+        check('the real shell (0.26) names the layer in its tool deck',
+              d.get('tool') == 9 and d.get('header') == 'DEBUG  ·  LAYER 1/10' and d.get('subtype') == t['label'].upper(), d)
+        shot('debug-tool-shell-deck.png')
     osub = old.call('state.subscribe', {'topics': ['state']})['subscriptionId']
     ost = old.call('state.snapshot', {'subscriptionId': osub})['snapshot']['state']
     check('IPC 0.25 peers see the normal tool, 5 definitions and the debug slots',
