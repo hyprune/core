@@ -646,8 +646,11 @@ std::optional<Json> Runtime::companionMethod(const std::string &method, const Js
     if (method == "companion.clear") {
         only({});
         if (!companionRef().empty()) {
-            companionFile.save(Json::object());
-            companionFile.current = Json::object();
+            Json next = Json::object();
+            if (companionPace() == "run")
+                next["pace"] = "run"; // the pace stays for the next companion
+            companionFile.save(next);
+            companionFile.current = next;
             if (companionCarry)
                 carried.clear(), companionCarry = false;
             ++companionRevision;
@@ -657,9 +660,18 @@ std::optional<Json> Runtime::companionMethod(const std::string &method, const Js
         return revision();
     }
     if (method == "companion.mode") {
-        only({"mode"});
+        // IPC 0.26: an optional pace next to the mode (set first; it stays across modes).
+        bool paced = params.is_object() && params.contains("pace") && ipc::protocol::atLeast(methodProtocol, "0.26");
+        if (paced)
+            only({"mode", "pace"});
+        else
+            only({"mode"});
         if (params["mode"] != "follow" && params["mode"] != "stay")
             throw ipc::Error(-32602, "mode must be follow or stay");
+        if (paced && params["pace"] != "walk" && params["pace"] != "run")
+            throw ipc::Error(-32602, "pace must be walk or run");
+        if (paced && params["pace"] != companionPace())
+            companionSetPace(params["pace"]);
         companionSetMode(params["mode"]);
         return revision();
     }
@@ -700,7 +712,8 @@ Json Runtime::companionState() {
             {"path", n && mode == "route" && !n->path.empty() ? Json(n->path) : Json(nullptr)},
             {"activity", activity},
             {"position", position},
-            {"carried", companionCarry}};
+            {"carried", companionCarry},
+            {"pace", companionPace()}}; // IPC 0.26 (older peers: erased)
 }
 // Diagnostics (camera()["companion"]).
 Json Runtime::companionDiagnostics() {

@@ -6,8 +6,9 @@
 // tick, never in the render pass.
 namespace {
 namespace fs = std::filesystem;
+// pocketWindowLimit: pocketed windows listed on the wire (IPC 0.26, the apps limit).
 constexpr size_t userPlacementLimit = 128, userAssetLimit = 32, userTriangleLimit = 400000, userCollisionLimit = 10000,
-                 pocketObjectLimit = 16;
+                 pocketObjectLimit = 16, pocketWindowLimit = 128;
 constexpr uint64_t userGpuLimit = 192ull << 20;
 std::string poseKey(const Json &record) { return record.value("pose", Json()).dump() + record.value("scale", Json()).dump(); }
 Json poseJson(const interaction::Transform &t) { return {{"position", array3(t.position)}, {"rotation", t.rotation}}; }

@@ -130,6 +130,72 @@ void hudStreams(const std::string &runtime) {
     server.notify("zone.entered", {{"zone", "home"}}); server.flush();
     check(!unread(), "HUD unsubscribe did not stop delivery");
 }
+// IPC 0.26: tool 9 named on the wire (editor.debugTool, the slot-9 definition, tool9), the
+// companion's pace and 128-item pocket and mount instance lists; 0.25 peers keep the 0.25 view.
+void debugToolPacePocket(const std::string &runtime) {
+    std::vector<LaunchGrant> grants{{randomId(), "org.hyprune.test", {"state.read"}}, {randomId(), "org.hyprune.test", {"state.read"}}};
+    Server server(runtime, "ipc026", grants, [](auto &, auto &) { return Json{{"ok", true}}; });
+    Json windows = Json::array(), instances = Json::array(), definitions = Json::array();
+    for (int i = 0; i < 40; ++i)
+        windows.push_back({{"surfaceId", "surface-" + std::to_string(i)}});
+    for (int i = 0; i < 20; ++i)
+        instances.push_back({{"surfaceId", "placed-" + std::to_string(i)}});
+    for (int slot : {1, 2, 3, 4, 5, 9})
+        definitions.push_back({{"slot", slot}});
+    Json debugTool = {{"layer", "collision"}, {"label", "Collision & backstops"}, {"index", 2}, {"count", 10},
+                      {"legend", Json::array({Json{{"label", "floor"}, {"colour", {0.3, 0.9, 0.4}}}})}, {"card", nullptr}};
+    Json mounts = {{"instances", instances}};
+    server.publish({{"interaction", {{"tool", 9}}},
+                    {"editor", {{"tool", 9}, {"submode", "collision"}, {"debugTool", debugTool}, {"toolDefinitions", definitions},
+                                {"unplaced", {{"count", 41}, {"selectedId", "surface-30"}, {"windows", windows}, {"objects", Json::array()}}}}},
+                    {"keymap", {{"config", {{"modes", {{"world", {{"tool5", {"5"}}, {"tool9", {"9"}}}}}}}}}},
+                    {"mounts", mounts},
+                    {"companion", {{"mode", "follow"}, {"pace", "run"}}}});
+    size_t index = 0;
+    for (std::string version : {"0.25", "0.26"}) {
+        const bool latest = version == "0.26";
+        Client c(server.path());
+        auto request = [&](Json j) {
+            c.sendJson(j);
+            for (int i = 0; i < 3; ++i)
+                server.poll();
+            return c.receive();
+        };
+        auto h = hello(grants[index++].token);
+        h["params"]["protocols"] = {version};
+        check(request(h)["result"]["protocol"] == version, "0.26 negotiation");
+        auto state = request(req("sub", "state.subscribe", {{"topics", {"state"}}}))["result"]["snapshot"]["state"];
+        auto &e = state["editor"];
+        check(state["interaction"]["tool"] == (latest ? 9 : 1) && e["tool"] == (latest ? 9 : 1) &&
+                  e["submode"] == (latest ? "collision" : "normal"),
+              "tool 9 projection");
+        check(e.contains("debugTool") == latest && (!latest || e["debugTool"] == debugTool), "editor.debugTool projection");
+        check(e["toolDefinitions"].size() == (latest ? 6u : 5u) && e["toolDefinitions"].back()["slot"] == (latest ? 9 : 5),
+              "slot-9 definition projection");
+        check(state["keymap"]["config"]["modes"]["world"].contains("tool9") == latest, "tool9 keymap projection");
+        check(state["companion"].contains("pace") == latest && state["companion"]["mode"] == "follow", "companion pace projection");
+        auto &listed = e["unplaced"]["windows"];
+        check(listed.size() == (latest ? 40u : 16u) && e["unplaced"]["count"] == (latest ? 41 : 32), "pocket list projection");
+        check(std::any_of(listed.begin(), listed.end(), [](const Json &w) { return w["surfaceId"] == "surface-30"; }),
+              "the selected pocketed window stays listed");
+        check(state["mounts"]["instances"].size() == (latest ? 20u : 16u) && state["mounts"]["instances"][0]["surfaceId"] == "placed-0",
+              "mount instance projection");
+        server.notify("mounts.changed", {{"mounts", mounts}});
+        server.flush();
+        auto event = c.receive();
+        check(event["method"] == "mounts.changed" && event["params"]["mounts"]["instances"].size() == (latest ? 20u : 16u),
+              "mounts.changed instance projection");
+        request(req("hud", "hud.subscribe", {{"topics", {"hud.pose", "tool.changed"}}}));
+        server.notify("tool.changed", {{"slot", 9}, {"name", "debug"}, {"subtype", "collision"}});
+        server.flush();
+        auto changed = c.receive()["params"];
+        check(changed["slot"] == (latest ? 9 : 1) && changed["name"] == (latest ? "debug" : "pointer"), "tool.changed projection");
+        server.notify("hud.pose", {{"tool", 9}, {"subtype", "collision"}});
+        server.flush();
+        auto pose = c.receive()["params"];
+        check(pose["tool"] == (latest ? 9 : 1) && pose["subtype"] == (latest ? "collision" : "normal"), "hud.pose projection");
+    }
+}
 // Exercise every negotiated version, not a hand-picked latest pair. Appending
 // Supported automatically includes the next release in the inheritance matrix.
 void inheritance(const std::string &runtime) {
@@ -361,6 +427,7 @@ int main() {
     std::thread loop;
     try {
         inheritance(dir);
+        debugToolPacePocket(dir);
         hudStreams(dir);
         renewals(dir);
         auto token = randomId(), token02 = randomId(), token03 = randomId(), token04 = randomId(), token05 = randomId();

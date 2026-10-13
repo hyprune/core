@@ -183,6 +183,31 @@ void Runtime::debugInspect() {
     if (debugCard.empty())
         debugCard = {"Nothing of this layer under the reticle"};
 }
+// IPC 0.26 editor.debugTool: null while another tool is out, else the shown layer, its
+// legend (sRGB 0-1) and the open info card (null: none). Core draws all of it itself.
+Json Runtime::debugToolState() const {
+    if (editor.slot != editor.debugSlot)
+        return nullptr;
+    auto &info = interaction::debugLayerInfo(editor.debugLayer);
+    auto unit = [](float v) { return std::round(std::clamp(v, 0.f, 1.f) * 1000.f) / 1000.f; };
+    Json legend = Json::array();
+    for (auto &l : info.legend)
+        if (legend.size() < 8)
+            legend.push_back({{"label", ipc::boundedText(l.label, 64)}, {"colour", {unit(l.color.r), unit(l.color.g), unit(l.color.b)}}});
+    Json card = nullptr;
+    for (auto &line : debugCard)
+        if (!line.empty() && (card.is_null() || card.size() < 8)) {
+            if (card.is_null())
+                card = Json::array();
+            card.push_back(ipc::boundedText(line, 256));
+        }
+    return {{"layer", info.id},
+            {"label", ipc::boundedText(info.label, 64)},
+            {"index", std::clamp(editor.debugLayer, 0, interaction::debugLayerCount - 1)},
+            {"count", interaction::debugLayerCount},
+            {"legend", legend},
+            {"card", card}};
+}
 Json Runtime::debugToolDiagnostics() {
     auto &info = interaction::debugLayerInfo(editor.debugLayer);
     Json legend = Json::array();

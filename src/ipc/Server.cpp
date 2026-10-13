@@ -3,6 +3,7 @@
 #include "Text.hpp"
 #include "WireAudit.hpp"
 #include "interaction/Input.hpp"
+#include <algorithm>
 #include <cstring>
 #include <fcntl.h>
 #include <filesystem>
@@ -15,6 +16,26 @@
 #include <unistd.h>
 namespace hyprune::ipc {
 namespace {
+// IPC 0.26 lists up to 128 pocketed windows and mount instances; older peers get the first
+// 16 (the carried window and the selected pocket item stay listed) and a count of at most 32.
+void shortMountInstances(Json &mounts) {
+    if (mounts.is_object() && mounts.contains("instances") && mounts["instances"].is_array() && mounts["instances"].size() > 16)
+        mounts["instances"].erase(mounts["instances"].begin() + 16, mounts["instances"].end());
+}
+void shortPocket(Json &unplaced) {
+    if (!unplaced.is_object())
+        return;
+    if (unplaced.contains("windows") && unplaced["windows"].is_array() && unplaced["windows"].size() > 16) {
+        auto &windows = unplaced["windows"];
+        auto selected = unplaced.value("selectedId", Json());
+        auto chosen = std::find_if(windows.begin(), windows.end(), [&](const Json &w) { return w.value("surfaceId", Json()) == selected; });
+        if (chosen != windows.end() && chosen - windows.begin() >= 16)
+            std::rotate(windows.begin() + 15, chosen, chosen + 1);
+        windows.erase(windows.begin() + 16, windows.end());
+    }
+    if (unplaced.contains("count") && unplaced["count"].is_number_integer() && unplaced["count"].get<int64_t>() > 32)
+        unplaced["count"] = 32;
+}
 constexpr size_t MaxFrame = 1048576, MaxQueue = 4 * 1048576;
 using Clock = std::chrono::steady_clock;
 void check(bool ok, int code, const char *message) {
@@ -121,15 +142,30 @@ Json Server::visibleState(const Peer &p) const {
     Json state = state_;
     // Tool 9, the debug tool, stays core's own until a protocol names it: peers see the normal
     // tool (its slots still say what the buttons do) and no tool9 action in the keymap.
+    // From IPC 0.26 it is named: editor.debugTool and the slot-9 definition. Older peers also
+    // keep the 16-item pocket and mount instance lists and see no companion pace.
     if (!protocol::atLeast(p.protocol, "0.26") && state.is_object()) {
         if (state.contains("interaction") && state["interaction"].is_object() && state["interaction"].value("tool", 1) == 9)
             state["interaction"]["tool"] = 1;
-        if (state.contains("editor") && state["editor"].is_object() && state["editor"].value("tool", 1) == 9) {
-            state["editor"]["tool"] = 1;
-            state["editor"]["submode"] = "normal";
+        if (state.contains("editor") && state["editor"].is_object()) {
+            auto &editor = state["editor"];
+            if (editor.value("tool", 1) == 9) {
+                editor["tool"] = 1;
+                editor["submode"] = "normal";
+            }
+            editor.erase("debugTool");
+            if (editor.contains("toolDefinitions") && editor["toolDefinitions"].is_array())
+                std::erase_if(editor["toolDefinitions"].get_ref<Json::array_t &>(),
+                              [](const Json &d) { return d.is_object() && d.value("slot", 0) == 9; });
+            if (editor.contains("unplaced"))
+                shortPocket(editor["unplaced"]);
         }
         if (state.contains("keymap"))
             state["keymap"] = interaction::withoutDebugTool(std::move(state["keymap"]));
+        if (state.contains("mounts"))
+            shortMountInstances(state["mounts"]);
+        if (state.contains("companion") && state["companion"].is_object())
+            state["companion"].erase("pace");
     }
     // IPC 0.24 (RFC-0013): the live state of bound machines.
     if (!protocol::atLeast(p.protocol, "0.24") && state.is_object())
@@ -334,6 +370,8 @@ void Server::notify(const std::string &event, Json params, const std::string &ac
         if (p.hello && !p.closing && protocol::atLeast(p.protocol, "0.2") && !p.subscription.empty() &&
             (protocol::atLeast(p.protocol, "0.4") || (event != "mounts.changed" && event != "presentation.changed"))) {
             auto projected = params;
+            if (!protocol::atLeast(p.protocol, "0.26") && event == "mounts.changed" && projected.contains("mounts"))
+                shortMountInstances(projected["mounts"]);
             if (!protocol::atLeast(p.protocol, "0.15") && event == "mounts.changed" && projected.contains("mounts")) {
                 for (auto &v : projected["mounts"]["placements"]) v.erase("content");
                 if (projected["mounts"].contains("instances")) std::erase_if(projected["mounts"]["instances"].get_ref<Json::array_t &>(),

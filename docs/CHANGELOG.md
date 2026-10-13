@@ -180,6 +180,22 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   companion key, field or method, and never see the companion as the aimed character.
   Object format 0.10 (draft) gains the optional `companion` block (`name`,
   `followDistance` 1.5-2.5 m, `idles`, `say`).
+- **0.26** Debug tool, companion pace, longer pocket list (RFC-0003 amendment). No new
+  method, event or grant. Tool 9, the debug tool, is named: `tool` is 1-5 or 9 in
+  `interaction`, `editor`, `hud.pose` and `tool.changed` (name `debug`); `editor.submode`
+  is the shown layer (`windows`, `window-zones`, `collision`, `playable`, `paths`,
+  `keep-clear`, `seats`, `visibility`, `steering`, `placement`); `editor.toolDefinitions`
+  lists slot 9 after slots 1-5; the world action `tool9` is in the keymap, `input.get`,
+  `input.preview` and `input.set`. Required `editor.debugTool`: null while another tool is
+  out, else `{layer, label, index (0-based), count, legend [{label, colour (sRGB 0-1)}],
+  card ([string] | null)}`; core still draws the banner, legend and card itself. Required
+  `companion.pace` (`walk`|`run`, persisted in `companion.json`; it now also survives
+  `companion.clear`); `companion.mode` takes an optional `pace`. `editor.unplaced.windows`
+  and `mounts.instances` list up to 128 entries (the selected pocket item and the carried
+  window first when cut), `editor.unplaced.count` at most 144. Older sessions keep the
+  previous projection: tool 1 for tool 9, five tool definitions, no `tool9`, `debugTool`
+  or `pace`, 16-item lists (the selected and carried windows kept) and a count of at most
+  32, also in `mounts.changed`.
 
 ### Changes without a protocol bump
 
@@ -266,7 +282,7 @@ These are wire-compatible behavior changes that integrators may notice:
   the placement rule it enforces (for example "Inside a window zone (rule zone)"). In the
   placement layer, Primary on open ground checks a 0.5 m box there. Secondary
   (`debug.clear`) closes the card.
-- Until a protocol names tool 9, peers see it as the normal tool: `editor.tool` and
+- IPC 0.26 names it (see the 0.26 entry). Before 0.26, peers see it as the normal tool: `editor.tool` and
   `interaction.tool` 1, `editor.submode` `normal`, `hud.pose` tool 1 and `tool.changed`
   slot 1 `pointer`. `editor.toolSlots` carries the debug tool's slots (free action and label
   strings), so hints stay right. `tool9` is left out of the published keymap, `input.get`

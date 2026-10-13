@@ -288,6 +288,7 @@ struct Runtime {
     void debugToolDraw();
     void debugInspect();
     Json debugToolDiagnostics();
+    Json debugToolState() const;
     void projectCursor();
     // Frame-time diagnostics (HYPRUNE_FRAME_LOG=<file>, development): JSON lines per
     // presentation, tick (with section times), renderer draw and IPC method. Buffered in
@@ -1812,7 +1813,14 @@ void Runtime::publish() {
           {"contentScale", contentFeedback},
           {"toolInput", toolContext()},
           {"toolSlots", editor.slots()},
-          {"toolDefinitions", editor.definitions()},
+          {"toolDefinitions",
+           [&] {
+               // IPC 0.26: slots 1-5, then the debug tool (older peers see the five).
+               auto definitions = editor.definitions();
+               definitions.push_back(editor.debugDefinition());
+               return definitions;
+           }()},
+          {"debugTool", debugToolState()},
           {"carryFacing", hands.gesture == interaction::Gesture::Carry ? Json(hands.facePlayer) : Json(nullptr)},
           {"mode", inputMode()},
           {"tool", editor.slot},
@@ -3783,16 +3791,16 @@ Json Runtime::unplacedState() {
                                                     : "";
     bool any = !windows.empty() || !pocketObjects.empty();
     auto count = windows.size() + pocketObjects.size();
-    // The wire lists at most 16 pocketed windows (IPC schema), in pocket order; the count and
-    // the Placement tool's cycle cover all of them.
-    if (windows.size() > 16) {
+    // The wire lists at most 128 pocketed windows (IPC 0.26, the apps limit; older peers get 16),
+    // in pocket order; the Placement tool's cycle covers all of them.
+    if (windows.size() > pocketWindowLimit) {
         auto chosen = std::find_if(windows.begin(), windows.end(), [&](auto &v) { return v["surfaceId"] == unplacedSelected; });
-        if (chosen != windows.end() && chosen - windows.begin() >= 16)
-            std::rotate(windows.begin() + 15, chosen, chosen + 1); // the selected one stays listed
-        windows.erase(windows.begin() + 16, windows.end());
+        if (chosen != windows.end() && size_t(chosen - windows.begin()) >= pocketWindowLimit)
+            std::rotate(windows.begin() + (pocketWindowLimit - 1), chosen, chosen + 1); // the selected one stays listed
+        windows.erase(windows.begin() + pocketWindowLimit, windows.end());
     }
     return {{"preview", active && editor.slot == 5 && !freeCursor && any},
-            {"count", count},
+            {"count", std::min<size_t>(count, pocketWindowLimit + pocketObjectLimit)},
             {"windows", windows},
             {"objects", pocketObjectsJson()},
             {"selectedId", unplacedSelected.empty() ? Json(nullptr) : Json(unplacedSelected)}};
