@@ -188,6 +188,12 @@ def acceptance(client, children, args, shell_token, socketpath):
           1.4 < flat(c['position'], feet()) < 6.5 and not c['inView'] and c['pops'] == 0, c)
     check('companion.json keeps the choice', json.loads((s.STATE / 'companion.json').read_text()) == {'ref': REF}, None)
 
+    if os.environ.get('HYPRUNE_COMPANION_STAGE') == 'demo':  # the recording, not the checks
+        client.call('world.load', {'worldId': LUMEN}); wait(lambda: s.camera()['active'] and not s.camera().get('loading'), timeout=60)
+        client.call('movement.set', {'modeId': 'com.hyprune.walk'}); time.sleep(2)
+        from companion_demo import run
+        run(client, children, out, comp, look)
+        return
     full = os.environ.get('HYPRUNE_COMPANION_ONLY') != 'lumen'  # lumen: steps 1 and 11-14 (debugging)
     if full:
         # 2. Following a walked route.

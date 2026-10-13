@@ -43,8 +43,8 @@
      "name": "Drunk Ash",
      "reason": null
     },
-    "triangles": 8000,
-    "gpuBytes": 7223794
+    "triangles": 7999,
+    "gpuBytes": 7148570
    }
   },
   {
@@ -66,15 +66,15 @@
     ],
     "focusMisses": 0,
     "focusMoves": 0,
-    "heading": 2.792588949203491,
+    "heading": 2.7925922870635986,
     "inView": false,
     "moving": false,
     "plannerExpanded": 0,
     "pops": 0,
     "position": [
-     -11.631439208984375,
+     -11.634504318237305,
      0.0,
-     8.487176895141602
+     8.49560260772705
     ],
     "run": "active",
     "running": false,
@@ -90,9 +90,9 @@
      "name": "Drunk Ash",
      "path": null,
      "position": [
-      -11.631439208984375,
+      -11.634504318237305,
       0.0,
-      8.487176895141602
+      8.49560260772705
      ],
      "reason": null,
      "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -115,11 +115,11 @@
    "evidence": {
     "end": 2.23,
     "min": 1.96,
-    "max": 5.52,
+    "max": 5.59,
     "teleports": 0,
     "pops": 0,
     "ran": true,
-    "samples": 81,
+    "samples": 80,
     "endY": -0.0
    }
   },
@@ -127,9 +127,9 @@
    "name": "catches up by running",
    "ok": true,
    "evidence": {
-    "end": 2.23,
-    "min": 2.33,
-    "max": 7.25,
+    "end": 2.2,
+    "min": 2.41,
+    "max": 7.19,
     "teleports": 0,
     "pops": 0,
     "ran": true,
@@ -154,15 +154,15 @@
      ],
      "focusMisses": 0,
      "focusMoves": 0,
-     "heading": 0.555711030960083,
+     "heading": 0.5567446351051331,
      "inView": true,
      "moving": false,
      "plannerExpanded": 0,
      "pops": 0,
      "position": [
-      -1.0130555629730225,
+      -1.0149617195129395,
       0.0,
-      7.368646144866943
+      7.369339942932129
      ],
      "run": "active",
      "running": false,
@@ -178,9 +178,9 @@
       "name": "Drunk Ash",
       "path": null,
       "position": [
-       -1.0130555629730225,
+       -1.0149617195129395,
        0.0,
-       7.368646144866943
+       7.369339942932129
       ],
       "reason": null,
       "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -197,7 +197,7 @@
    "name": "walking, it keeps frames coming",
    "ok": true,
    "evidence": {
-    "fps": 60.17696638888411
+    "fps": 60.01832273414464
    }
   },
   {
@@ -210,9 +210,9 @@
     "name": "Drunk Ash",
     "path": null,
     "position": [
-     -1.0132453441619873,
+     -1.0049399137496948,
      0.0,
-     7.368716239929199
+     7.365692615509033
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -224,14 +224,14 @@
    "ok": true,
    "evidence": {
     "at": [
-     -1.0132453441619873,
+     -1.0049399137496948,
      0.0,
-     7.368716239929199
+     7.365692615509033
     ],
     "now": [
-     -1.0132453441619873,
+     -1.0049399137496948,
      0.0,
-     7.368716239929199
+     7.365692615509033
     ]
    }
   },
@@ -245,9 +245,9 @@
     "name": "Drunk Ash",
     "path": null,
     "position": [
-     -6.146076679229736,
+     -6.12279748916626,
      0.0,
-     2.001746892929077
+     2.0250751972198486
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -303,7 +303,7 @@
    "ok": true,
    "evidence": {
     "bind": "companion",
-    "pathId": "path-204657791399293",
+    "pathId": "path-205989548208398",
     "spawn": null,
     "use": "route"
    }
@@ -314,15 +314,15 @@
    "evidence": {
     "finish": {
      "bound": "companion",
-     "id": "path-204657791399293",
-     "revision": 2037
+     "id": "path-205989548208398",
+     "revision": 2067
     },
     "state": {
      "activity": "walking",
      "carried": false,
      "mode": "route",
      "name": "Drunk Ash",
-     "path": "user/path-204657791399293",
+     "path": "user/path-205989548208398",
      "position": [
       10.997600555419922,
       0.0027196407318115234,
@@ -341,14 +341,14 @@
     "from": [
      10.997600555419922,
      0.0027196407318115234,
-     3.102168083190918
+     3.1025304794311523
     ],
     "to": [
      10.997600555419922,
      0.0027196407318115234,
-     0.7208549976348877
+     0.7161943912506104
     ],
-    "offRoute": 0.02924360609013991
+    "offRoute": 0.033890655308059126
    }
   },
   {
@@ -368,9 +368,9 @@
     "name": "Drunk Ash",
     "path": null,
     "position": [
-     9.411639213562012,
-     0.0005715898587368429,
-     4.287125110626221
+     9.418334007263184,
+     0.0005806549452245235,
+     4.268675327301025
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -386,7 +386,7 @@
      0.0027196407318115234,
      2.000000238418579
     ],
-    "route": "user/path-204657791399293",
+    "route": "user/path-205989548208398",
     "valid": true,
     "activity": "carried"
    }
@@ -400,11 +400,11 @@
      "carried": false,
      "mode": "route",
      "name": "Drunk Ash",
-     "path": "user/path-204657791399293",
+     "path": "user/path-205989548208398",
      "position": [
       10.997600555419922,
       0.0027196407318115234,
-      3.013981342315674
+      3.0010180473327637
      ],
      "reason": null,
      "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -413,7 +413,7 @@
     "position": [
      10.997600555419922,
      0.0027196407318115234,
-     3.391993284225464
+     3.3657939434051514
     ]
    }
   },
@@ -432,14 +432,14 @@
      "activity": "carried"
     },
     "before": [
-     9.874964714050293,
-     0.0004932214505970478,
-     3.3219096660614014
+     9.874601364135742,
+     0.0004932770971208811,
+     3.3224732875823975
     ],
     "after": [
-     9.874964714050293,
-     0.0004932214505970478,
-     3.3219096660614014
+     9.874601364135742,
+     0.0004932770971208811,
+     3.3224732875823975
     ]
    }
   },
@@ -499,11 +499,11 @@
      ]
     },
     "agent": {
-     "path": "user/path-204657791399293",
+     "path": "user/path-205989548208398",
      "position": [
       10.997600555419922,
       0.0027196407318115234,
-      2.746735095977783
+      2.7450199127197266
      ],
      "activity": "walking"
     }
@@ -513,7 +513,7 @@
    "name": "editor.json keeps the per-world binding",
    "ok": true,
    "evidence": {
-    "path": "user/path-204657791399293",
+    "path": "user/path-205989548208398",
     "phase": 0.5,
     "worldId": "com.hyprune.switchyard"
    }
@@ -526,11 +526,11 @@
     "carried": false,
     "mode": "route",
     "name": "Drunk Ash",
-    "path": "user/path-204657791399293",
+    "path": "user/path-205989548208398",
     "position": [
      10.997600555419922,
      0.0027196407318115234,
-     0.9494405388832092
+     0.9703617691993713
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -543,7 +543,7 @@
    "evidence": {
     "parityMeanLevels": 0.0,
     "parityDiffering": 0.0,
-    "hiddenDiffering": 0.14799
+    "hiddenDiffering": 0.15654
    }
   },
   {
@@ -565,15 +565,15 @@
     ],
     "focusMisses": 0,
     "focusMoves": 0,
-    "heading": 1.9197977781295776,
+    "heading": 1.9197914600372314,
     "inView": false,
     "moving": false,
     "plannerExpanded": 0,
     "pops": 3,
     "position": [
-     -6.994781494140625,
+     -6.994511604309082,
      0.00022220611572265625,
-     13.63420581817627
+     13.634105682373047
     ],
     "run": "active",
     "running": false,
@@ -589,9 +589,9 @@
      "name": "Drunk Ash",
      "path": null,
      "position": [
-      -6.994781494140625,
+      -6.994511604309082,
       0.00022220611572265625,
-      13.63420581817627
+      13.634105682373047
      ],
      "reason": null,
      "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -608,12 +608,12 @@
    "ok": true,
    "evidence": {
     "end": 2.77,
-    "min": 1.96,
-    "max": 11.64,
+    "min": 1.97,
+    "max": 11.46,
     "teleports": 0,
     "pops": 0,
     "ran": true,
-    "samples": 114,
+    "samples": 113,
     "endY": -0.0
    }
   },
@@ -621,9 +621,9 @@
    "name": "follows up the hall ramp to the balcony",
    "ok": true,
    "evidence": {
-    "end": 2.22,
-    "min": 1.89,
-    "max": 5.63,
+    "end": 2.21,
+    "min": 2.37,
+    "max": 5.84,
     "teleports": 0,
     "pops": 0,
     "ran": true,
@@ -645,15 +645,15 @@
     ],
     "focusMisses": 0,
     "focusMoves": 0,
-    "heading": 4.363394737243652,
+    "heading": 4.363388538360596,
     "inView": false,
     "moving": false,
     "plannerExpanded": 0,
     "pops": 3,
     "position": [
-     -9.004551887512207,
+     -9.0038480758667,
      0.00022220611572265625,
-     13.634443283081055
+     13.634700775146484
     ],
     "run": "active",
     "running": false,
@@ -669,9 +669,9 @@
      "name": "Drunk Ash",
      "path": null,
      "position": [
-      -9.004551887512207,
+      -9.0038480758667,
       0.00022220611572265625,
-      13.634443283081055
+      13.634700775146484
      ],
      "reason": null,
      "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -691,11 +691,11 @@
     "carried": false,
     "mode": "route",
     "name": "Drunk Ash",
-    "path": "user/path-204657791399293",
+    "path": "user/path-205989548208398",
     "position": [
      10.997600555419922,
      0.0027196407318115234,
-     0.9432769417762756
+     0.9445167183876038
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -712,9 +712,9 @@
      5.0
     ],
     "before": [
-     0.08566489070653915,
+     0.08245561271905899,
      0.0,
-     8.061174392700195
+     8.076498985290527
     ],
     "after": [
      1.7484555314695172e-07,
@@ -739,9 +739,9 @@
     "name": "Drunk Ash",
     "path": null,
     "position": [
-     -1.1176401376724243,
+     -0.9894912838935852,
      0.0,
-     10.493380546569824
+     10.310532569885254
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
