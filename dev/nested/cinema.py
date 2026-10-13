@@ -128,8 +128,9 @@ def gate(video, start=None, end=None, max_duplicate=MAX_DUPLICATE, max_cv=MAX_ST
     """Smoothness of the camera in a recording.
 
     Motion segments: runs of frames whose step (median tile shift at 640x360) exceeds
-    0.08 px, joined across still gaps of up to 0.2 s (a stutter's held frames) and split
-    at cuts (a large difference that most tiles cannot match as a shift); segments under 0.5 s
+    0.08 px, joined across still gaps of up to 0.2 s (a stutter's held frames) unless the
+    motion slowed to rest step by step (an eased stop), and split at cuts (a large
+    difference that most tiles cannot match as a shift); segments under 0.5 s
     are ignored and 0.15 s is trimmed at both ends so starts and stops may ease. There, a
     frame is a duplicate when its step is under a quarter of the local (0.25 s) mean, and
     the step CV is the spread of step / local mean, both per tile (each against its own
@@ -145,6 +146,13 @@ def gate(video, start=None, end=None, max_duplicate=MAX_DUPLICATE, max_cv=MAX_ST
     cut = (mads > 8) & (found < .35)
     moving = (steps > .08) & ~cut
     gap, edge, shortest = int(round(fps * .2)), max(1, int(round(fps * .15))), fps * .5
+
+    def eased(k):
+        """Motion ending at frame k slowed down step by step to rest (a stutter stops at once)."""
+        if k < 8:
+            return False
+        tail = steps[k - 3:k + 1]
+        return bool(np.all(np.diff(tail) <= .15 * tail[0] + .05) and steps[k] < .35 * steps[k - 8:k - 3].mean())
     segments, i = [], 0
     while i < n:
         if not moving[i]:
@@ -154,6 +162,8 @@ def gate(video, start=None, end=None, max_duplicate=MAX_DUPLICATE, max_cv=MAX_ST
         while j < n and not cut[j] and j - last <= gap:
             if moving[j]:
                 last = j
+            elif j == last + 1 and eased(last):
+                break  # the camera came to rest smoothly: a stop, not a held frame
             j += 1
         if last + 1 - i >= shortest:
             segments.append((i + edge, last + 1 - edge))
