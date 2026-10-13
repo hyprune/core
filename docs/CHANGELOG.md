@@ -162,6 +162,24 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   (draft): a change restarts the running averages fed by that source. The source helper's
   control channel (`sources.sock` beside core's socket: status, test, restart, restart-all,
   reload; same user only) is local and not part of IPC.
+- **0.25** (draft) Companions (RFC-0010 companions amendment). Methods
+  (`objects.control`): `companion.set {ref}` (a companion-capable library or user catalog
+  character; persisted in `$XDG_CONFIG_HOME/hyprune/companion.json`, or
+  `HYPRUNE_COMPANION_FILE`), `companion.clear {}` and `companion.mode {mode: follow|stay}`,
+  each returning `{revision}`. The reserved object id `companion` works with `npcs.bind`
+  (a route or a standing spot), `paths.draw {bind: "companion"}` and `interaction.choose`
+  (`talk`, `stay`, `follow`); `npcs.disable`/`remove` and `objects.*` refuse it (-32005).
+  New required state key `companion {ref, name, state (none|loading|unavailable|active|
+  waiting|hidden), reason, mode (follow|stay|route), path, activity, position, carried}`;
+  `position` is published at most twice a second while it moves. `objects.catalog` entries
+  gain `companion` (null for non-characters, else `{capable, name, reason}`); aimed
+  interactions may have type `companion`; `paths.list` `bound` may list `companion`.
+  Per-world route or spot bindings live in the editor overlay (`editor.json` `companions`).
+  Notices: `companion.set`, `companion.cleared`, `companion.unavailable`,
+  `companion.bound`, `companion.following`, `companion.staying`. Older sessions see no
+  companion key, field or method, and never see the companion as the aimed character.
+  Object format 0.10 (draft) gains the optional `companion` block (`name`,
+  `followDistance` 1.5-2.5 m, `idles`, `say`).
 
 ### Changes without a protocol bump
 
@@ -233,6 +251,15 @@ These are wire-compatible behavior changes that integrators may notice:
   `gizmo.pivot`. Development switches (`HYPRUNE_GIZMO_OBJECTS`, `HYPRUNE_GIZMO_UNIVERSAL`)
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
+
+## Carrying characters (no wire change)
+
+Super+LMB (carry) picks up the companion or one of the user's own characters; authored
+residents stay protected and the reticle shows `invalid`. While carried it hangs idling
+from the grab point. Within 0.75 m of a walkable route of this world (with room for it) the
+route is highlighted and it snaps on; releasing binds it there (as `npcs.bind` with the
+phase at that point). On a free standing spot it stands there; anywhere else it goes back
+where it was picked up. It is never thrown.
 
 ## Path tool editing (no wire change)
 
