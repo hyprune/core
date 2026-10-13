@@ -253,10 +253,11 @@ bool Runtime::reserveSeat(const std::string &ref) {
 // blocked have no agent.
 // Where a resident stands to look at a screen (a stop facing an anchor): on the screen's
 // normal through its centre, just outside its approach zone (1.5 m deep, kept free), on the
-// floor; walkable, with straight legs from the route point and back. None: it stops on the
-// route point and turns to the screen from there.
-std::optional<Vec3> Runtime::screenFront(const Json &anchor, Vec3 from, const interaction::Body &body,
-                                         const interaction::PlacementScene &scene) {
+// floor, walkable, and reachable from the route point within 10 m: the way there is planned on
+// the standing-spot grid (round the approach zone, which a route point beside or behind the
+// screen would otherwise cut through). None: it stops on the route point and turns from there.
+std::optional<std::pair<Vec3, std::vector<Vec3>>> Runtime::screenFront(const Json &anchor, Vec3 from, const interaction::Body &body,
+                                                                         const interaction::PlacementScene &scene) {
     if (!anchor.contains("pose"))
         return std::nullopt;
     Vec3 centre = vec3(anchor["pose"]["position"]);
@@ -266,6 +267,18 @@ std::optional<Vec3> Runtime::screenFront(const Json &anchor, Vec3 from, const in
     if (length(n) < .5f)
         return std::nullopt; // a floor or ceiling screen has no front to stand at
     n = normalized(n);
+    sim::GridPlanner planner;
+    planner.range = 10;
+    planner.stand = [&](Vec3 p) -> std::optional<Vec3> {
+        auto floor = interaction::floorAt(scene, p);
+        if (!floor)
+            return std::nullopt;
+        Vec3 root{p.x, *floor, p.z};
+        if (interaction::checkSpot(scene, root, body))
+            return std::nullopt;
+        return root;
+    };
+    planner.leg = [&](Vec3 a, Vec3 b) { return interaction::checkLeg(scene, a, b, body, 1).empty(); };
     for (float d : {1.5f + body.radius + .15f, 2.3f, 2.8f}) {
         Vec3 p = centre + n * d;
         p.y = from.y;
@@ -273,9 +286,17 @@ std::optional<Vec3> Runtime::screenFront(const Json &anchor, Vec3 from, const in
         if (!floor)
             continue;
         Vec3 root{p.x, *floor, p.z};
-        if (!interaction::checkSpot(scene, root, body) && interaction::checkLeg(scene, from, root, body, 1).empty() &&
-            interaction::checkLeg(scene, root, from, body, 1).empty())
-            return root;
+        if (interaction::checkSpot(scene, root, body))
+            continue;
+        auto way = planner.plan(from, root, .05f);
+        if (!way || way->empty() || std::hypot(way->back().x - root.x, way->back().z - root.z) > .05f)
+            continue;
+        float length = 0;
+        Vec3 at = from;
+        for (auto &w : *way)
+            length += std::hypot(w.x - at.x, w.z - at.z), at = w;
+        if (length <= 10)
+            return std::pair{root, *way};
     }
     return std::nullopt;
 }
@@ -405,8 +426,9 @@ void Runtime::npcSync() {
                         for (auto &an : world->anchors)
                             if (Json(an.value("id", "")) == f["anchor"] && an.contains("pose")) {
                                 stop.face = vec3(an["pose"]["position"]);
-                                stop.spot = screenFront(an, at, body, scene);
-                                if (!stop.spot)
+                                if (auto front = screenFront(an, at, body, scene))
+                                    stop.spot = front->first, stop.spotLegs = front->second;
+                                else
                                     objectNotice("npc.suspended", info.name + " stops beside " + f["anchor"].get<std::string>() +
                                                                       ": there is no walkable spot in front of it",
                                                  "front:" + info.id + f["anchor"].get<std::string>() + signature);

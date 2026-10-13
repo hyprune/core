@@ -28,8 +28,10 @@ struct NpcStop {
     std::optional<Vec3> face;
     int seat = -1;      // NpcAgent::seats index
     // Where to stand for a stop that faces a screen: in front of it on its normal, outside its
-    // approach zone (the runtime checked the legs there and back). None: on the route point.
+    // approach zone, and the way there from the route point (planned round the zone; the last
+    // leg is the spot; walked back in reverse). None: on the route point.
     std::optional<Vec3> spot;
+    std::vector<Vec3> spotLegs;
 };
 // A way round something on the route (a placed object, collision): from the route at arc
 // length `enter` along `legs` (the last one is the route at `exit`, enter < exit, both
@@ -798,7 +800,7 @@ struct NpcAgent {
             }
         }
         if (st.spot) { // facing a screen: in front of it first
-            legs = {*st.spot};
+            legs = st.spotLegs.empty() ? std::vector<Vec3>{*st.spot} : st.spotLegs;
             mode = Mode::ToSpot;
             return;
         }
@@ -830,8 +832,10 @@ struct NpcAgent {
         stopLeft -= dt;
         if (stopLeft <= 0 && (pose.loop || clipDone())) {
             faceTarget.reset();
-            if (stop >= 0 && stop < int(stops.size()) && stops[stop].spot) { // back to the route point
-                legs = {route.at(s)};
+            if (stop >= 0 && stop < int(stops.size()) && stops[stop].spot) { // back to the route point the same way
+                auto &way = stops[stop].spotLegs;
+                legs.assign(way.rbegin() + (way.empty() ? 0 : 1), way.rend());
+                legs.push_back(route.at(s));
                 mode = Mode::FromSeat;
             } else
                 mode = Mode::Walk;

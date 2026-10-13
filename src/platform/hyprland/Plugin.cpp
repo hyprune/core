@@ -633,7 +633,8 @@ struct Runtime {
     NpcRun *npcRun(const std::string &id);
     void npcWorldLoaded();
     sim::NpcMotionInput npcMotion();
-    std::optional<Vec3> screenFront(const Json &anchor, Vec3 from, const interaction::Body &, const interaction::PlacementScene &);
+    std::optional<std::pair<Vec3, std::vector<Vec3>>> screenFront(const Json &anchor, Vec3 from, const interaction::Body &,
+                                                                  const interaction::PlacementScene &);
     std::string npcPaused();
     void npcTick(float dt);
     std::optional<std::pair<std::string, float>> characterAim();
