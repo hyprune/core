@@ -27,7 +27,7 @@ import argparse, contextlib, json, math, os, pathlib, signal, subprocess, sys, t
 # Captures go to .mkv so a recorder that is not finalised still leaves a playable file.
 RECORD = ['-r', '60', '-c', 'libx264', '-p', 'preset=veryfast', '-p', 'crf=16']
 # The final cut / gallery encode.
-ENCODE = ['-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart']
+ENCODE = ['-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-color_range', 'tv', '-movflags', '+faststart']
 
 # Gate limits, during camera motion.
 MAX_DUPLICATE = .01  # frames in which the camera did not advance
@@ -81,27 +81,32 @@ def _shift(a, b, window):
     return math.hypot(dx, dy), float(r[py, px])
 
 
-def measure(video, start=None, end=None, width=640, height=360, grid=(4, 3)):
-    """Per-frame camera step (median tile shift, pixels at 640x360) and mean absolute difference."""
+def measure(video, start=None, end=None, width=640, height=360, grid=(4, 3), matches=False):
+    """Per-frame camera step (median tile shift, pixels at 640x360), mean absolute difference
+    and (matches=True) the share of textured tiles whose shift was found."""
     import numpy as np
     tw, th = width // grid[0], height // grid[1]
     window = np.outer(np.hanning(th), np.hanning(tw)).astype(np.float32)
-    steps, mads, prev = [], [], None
+    steps, mads, found, prev = [], [], [], None
     for f in _frames(video, width, height, start, end):
         if prev is not None:
             mads.append(float(np.abs(f - prev).mean()))
-            shifts = []
+            shifts, textured = [], 0
             for gy in range(grid[1]):
                 for gx in range(grid[0]):
                     sl = (slice(gy * th, (gy + 1) * th), slice(gx * tw, (gx + 1) * tw))
                     a, b = prev[sl], f[sl]
                     if a.std() < 2 and b.std() < 2:  # flat tile (sky, wall): no information
                         continue
+                    textured += 1
                     d, peak = _shift(a, b, window)
                     if peak > .08:
                         shifts.append(d)
             steps.append(float(np.median(shifts)) if shifts else 0.)
+            found.append(len(shifts) / textured if textured else 1.)
         prev = f
+    if matches:
+        return np.array(steps), np.array(mads), np.array(found)
     return np.array(steps), np.array(mads)
 
 
@@ -115,33 +120,41 @@ def _rolling(x, n):
 def gate(video, start=None, end=None, max_duplicate=MAX_DUPLICATE, max_cv=MAX_STEP_CV):
     """Smoothness of the camera in a recording.
 
-    Motion: frames whose 0.5 s rolling mean step exceeds 0.25 px at 640x360 (about
-    0.75 px/frame at 1080p). There, a frame is a duplicate when its step is under a
-    quarter of the local (0.25 s) mean, and the step CV is the spread of step/local
-    mean. Segment edges (0.15 s) are left out so starts and stops can ease."""
+    Motion segments: runs of frames whose step (median tile shift at 640x360) exceeds
+    0.08 px, joined across still gaps of up to 0.2 s (a stutter's held frames) and split
+    at cuts (a large difference that most tiles cannot match as a shift); segments under 0.5 s
+    are ignored and 0.15 s is trimmed at both ends so starts and stops may ease. There, a
+    frame is a duplicate when its step is under a quarter of the local (0.25 s) mean, and
+    the step CV is the spread of step / local mean."""
     import numpy as np
+    from numpy.lib.stride_tricks import sliding_window_view as windows
     fps = _fps(video)
-    steps, mads = measure(video, start, end)
+    steps, mads, found = measure(video, start, end, matches=True)
     if not len(steps):
         return {'video': str(video), 'error': 'no frames'}
-    slow = _rolling(steps, max(3, int(round(fps * .5)) | 1))
-    local = _rolling(steps, max(3, int(round(fps * .25)) | 1))
-    moving = slow > .25
-    # Drop short islands and trim edges.
-    edge = max(1, int(round(fps * .15)))
+    n = len(steps)
+    # A cut changes the picture: most textured tiles no longer find their content shifted.
+    cut = (mads > 8) & (found < .35)
+    moving = (steps > .08) & ~cut
+    gap, edge, shortest = int(round(fps * .2)), max(1, int(round(fps * .15))), fps * .5
     segments, i = [], 0
-    while i < len(moving):
-        if moving[i]:
-            j = i
-            while j < len(moving) and moving[j]:
-                j += 1
-            if j - i >= fps * .5:
-                segments.append((i + edge, j - edge))
-            i = j
-        else:
+    while i < n:
+        if not moving[i]:
             i += 1
+            continue
+        j = last = i
+        while j < n and not cut[j] and j - last <= gap:
+            if moving[j]:
+                last = j
+            j += 1
+        if last + 1 - i >= shortest:
+            segments.append((i + edge, last + 1 - edge))
+        i = max(last + 1, j if j < n and cut[j] else last + 1)
+    clean = np.where(cut, np.nan, steps)
+    w = max(3, int(round(fps * .25)) | 1)
+    local = np.nanmean(windows(np.pad(clean, w // 2, mode='edge'), w), axis=1)
     idx = np.concatenate([np.arange(a, b) for a, b in segments if b > a]) if segments else np.array([], int)
-    out = {'video': str(video), 'fps': f'{fps:g}', 'frames': int(len(steps) + 1),
+    out = {'video': str(video), 'fps': f'{fps:g}', 'frames': int(n + 1), 'cuts': int(cut.sum()),
            'motionFrames': int(len(idx)), 'segments': [[round(a / fps + (start or 0), 2), round(b / fps + (start or 0), 2)] for a, b in segments]}
     if len(idx):
         ratio = steps[idx] / np.maximum(local[idx], 1e-6)
@@ -152,6 +165,7 @@ def gate(video, start=None, end=None, max_duplicate=MAX_DUPLICATE, max_cv=MAX_ST
         out['meanStepPx'] = round(float(steps[idx].mean()), 3)
         # Distinct camera positions per second during motion (the effective camera rate).
         out['cameraHz'] = round(fps * (1 - float(dup.mean())), 1)
+        out['worst'] = [round(float(idx[k]) / fps + (start or 0), 2) for k in np.argsort(-np.abs(ratio - 1))[:5]]
         out['pass'] = bool(dup.mean() < max_duplicate and out['stepCV'] < max_cv)
     else:
         out['pass'] = None  # nothing moved
@@ -185,12 +199,20 @@ class Cinema:
         return self._call({'op': 'path', 'keys': keys, 'blendMs': blend_ms, 'trace': trace})
 
     def follow(self, target, back=3.4, side=1.2, height=1.9, ahead=1.5, look_height=1.0, half_life=.35,
-               look_half_life=None, heading_half_life=None, blend_ms=600, collide=False, fov=None, trace=False):
-        """target: an NPC/resident id, 'companion', or an object instance id. The eye sits
-        back/side (+ = the subject's left)/height from its feet in its heading frame and
-        looks at a point `ahead` of it at look_height; all critically damped."""
+               look_half_life=None, heading_half_life=None, blend_ms=600, collide=False, fov=None, trace=False,
+               frame='heading', offset=None, look_offset=None):
+        """target: an NPC/resident id, 'companion', or an object instance id. frame 'heading':
+        the eye sits back/side (+ = the subject's left)/height from its feet in its heading
+        frame and looks at a point `ahead` of it at look_height. 'world': eye = feet + offset,
+        target = feet + look_offset (world axes). 'fixed': eye = offset (a point) panning to
+        keep feet + look_offset in view. All critically damped (half-lives in seconds)."""
         req = {'op': 'follow', 'target': target, 'back': back, 'side': side, 'height': height, 'ahead': ahead,
-               'lookHeight': look_height, 'halfLife': half_life, 'blendMs': blend_ms, 'collide': collide, 'trace': trace}
+               'lookHeight': look_height, 'halfLife': half_life, 'blendMs': blend_ms, 'collide': collide, 'trace': trace,
+               'frame': frame}
+        if offset is not None:
+            req['offset'] = list(offset)
+        if look_offset is not None:
+            req['lookOffset'] = list(look_offset)
         if heading_half_life is not None:
             req['headingHalfLife'] = heading_half_life
         if look_half_life is not None:
@@ -199,8 +221,24 @@ class Cinema:
             req['fov'] = fov
         return self._call(req)
 
-    def hold(self, eye, target, blend_ms=0):
-        return self.path([{'t': 0, 'eye': list(eye), 'target': list(target)}], blend_ms=blend_ms)
+    def hold(self, eye, target=None, yaw=None, pitch=0., blend_ms=0, fov=None):
+        """Hold a pose (looking at target, or yaw/pitch); blend_ms eases there from the
+        camera now (or from the shot in charge, which keeps moving during the blend)."""
+        key = {'t': 0, 'eye': list(eye)}
+        if target is not None:
+            key['target'] = list(target)
+        else:
+            key.update(yaw=yaw, pitch=pitch)
+        if fov is not None:
+            key['fov'] = fov
+        return self.path([key], blend_ms=blend_ms)
+
+    def move_to(self, eye, target=None, yaw=None, pitch=0., seconds=1.2, wait=True):
+        """An eased move from the camera now to a pose, then hold it."""
+        self.hold(eye, target, yaw, pitch, blend_ms=int(seconds * 1000))
+        if wait:
+            time.sleep(seconds)
+            self.wait(10)
 
     def trace(self, clear=True):
         return self._call({'op': 'trace', 'clear': clear})
@@ -229,12 +267,14 @@ class Cinema:
         return self.status()['export']
 
     @contextlib.contextmanager
-    def recording(self, clip, warmup=.5, method=None, crf=16, preset='veryfast', fps=60):
+    def recording(self, clip, warmup=.5, method=None, crf=16, preset='veryfast', fps=60, encoder=None, out_fps=None):
         """Record HEADLESS-1 while the block runs; yields the start time.
 
         method 'export' (default): core hands over every presented frame (FIFO, raw RGBX)
-        and ffmpeg encodes them at exactly fps, one video frame per presented frame.
-        'wf-recorder': the screen-capture client (misses frames on the headless host)."""
+        and ffmpeg encodes them at exactly fps (the output's refresh rate), one video
+        frame per presented frame; encoder replaces the x264 options (e.g. NVENC for 4K),
+        out_fps keeps every n-th frame. 'wf-recorder': the screen-capture client (misses
+        frames on the headless host)."""
         clip = pathlib.Path(clip)
         method = method or os.environ.get('HYPRUNE_CINEMA_RECORDER', 'export')
         log = open(clip.with_suffix('.rec.log'), 'w')
@@ -252,9 +292,10 @@ class Cinema:
         os.mkfifo(fifo)
         mon = next(m for m in json.loads(self.s.ctl('monitors', '-j')) if m['name'] == 'HEADLESS-1')
         w, h = mon['width'], mon['height']
+        codec = encoder or ['-c:v', 'libx264', '-preset', preset, '-crf', str(crf), '-pix_fmt', 'yuv420p', '-color_range', 'tv']
+        rate = ['-r', str(out_fps)] if out_fps else []
         enc = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb0', '-s', f'{w}x{h}',
-                                '-framerate', str(fps), '-i', str(fifo), '-an', '-c:v', 'libx264', '-preset', preset,
-                                '-crf', str(crf), '-pix_fmt', 'yuv420p', '-color_range', 'tv', str(clip)],
+                                '-framerate', str(fps), '-thread_queue_size', '512', '-i', str(fifo), '-an', *rate, *codec, str(clip)],
                                stdout=log, stderr=subprocess.STDOUT)
         self._call({'op': 'export', 'path': str(fifo), 'width': w, 'height': h})
         time.sleep(warmup)
@@ -289,20 +330,21 @@ def look_angles(eye, target):
     return math.atan2(d[0], -d[2]), math.atan2(d[1], math.hypot(d[0], d[2]))
 
 
+NVENC = ['-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'constqp', '-qp', '16', '-pix_fmt', 'yuv420p']
+
+
 def encode(inputs, output, trim=0.0, extra=()):
-    """Concatenate clips (each trimmed by `trim` s at the start) into one 1080p60 mp4."""
-    output = pathlib.Path(output)
-    with tempfile.TemporaryDirectory() as tmp:
-        parts = []
-        for k, clip in enumerate(inputs):
-            part = pathlib.Path(tmp) / f'{k:03d}.mkv'
-            subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', str(trim), '-i', str(clip), '-an', '-c', 'copy', str(part)], check=True)
-            parts.append(part)
-        listing = pathlib.Path(tmp) / 'list.txt'
-        listing.write_text(''.join(f"file '{p}'\n" for p in parts))
-        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', str(listing), '-an', '-r', '60',
-                        *ENCODE, *extra, str(output)], check=True)
-    return output
+    """Cut clips together (each trimmed by `trim` s at its start, frame-exact) into one
+    60 fps mp4 with the gallery settings. inputs: paths, or (path, start, end) in seconds."""
+    args, labels = [], []
+    for k, clip in enumerate(inputs):
+        path, start, end = (clip, trim, None) if isinstance(clip, (str, pathlib.Path)) else clip
+        args += ['-ss', f'{start:.3f}'] + (['-to', f'{end:.3f}'] if end else []) + ['-i', str(path)]
+        labels.append(f'[{k}:v]')
+    graph = f"{''.join(labels)}concat=n={len(labels)}:v=1:a=0,fps=60[v]"
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', *args, '-filter_complex', graph, '-map', '[v]', '-an', *ENCODE, *extra, str(output)],
+                   check=True)
+    return pathlib.Path(output)
 
 
 def sidecar(path, values):
