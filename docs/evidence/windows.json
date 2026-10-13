@@ -51,6 +51,60 @@
       "mismatches": []
     },
     {
+      "step": "14 more room windows",
+      "counts": {
+        "clients": 38,
+        "records": 38,
+        "room": 22,
+        "drawn": 15,
+        "pocketed": 7
+      },
+      "mismatches": []
+    },
+    {
+      "step": "pocket more than 16 (IPC 0.26)",
+      "result": {
+        "room": 22,
+        "listed": 22,
+        "count": 22,
+        "objects": 0,
+        "old": 16,
+        "oldCount": 22,
+        "oldSelected": true
+      }
+    },
+    {
+      "step": "22 room windows pocketed",
+      "counts": {
+        "clients": 38,
+        "records": 38,
+        "room": 22,
+        "drawn": 0,
+        "pocketed": 22
+      },
+      "mismatches": []
+    },
+    {
+      "step": "Director > Surfaces lists the whole pocket",
+      "result": {
+        "pocketed": 22,
+        "badges": 22,
+        "label": "IN THE POCKET  /  22",
+        "tab": "surfaces"
+      }
+    },
+    {
+      "step": "closed the pocketed extras, took the rest out",
+      "counts": {
+        "clients": 24,
+        "records": 24,
+        "room": 8,
+        "drawn": 7,
+        "pocketed": 1
+      },
+      "mismatches": []
+    },
+    {
       "step": "pocket each listed room window",
       "results": [
         {
@@ -223,6 +277,8 @@
   "stills": [
     "windows-spawn-sun-court.png",
     "windows-recall.png",
+    "windows-director-pocket.png",
+    "windows-director-pocket-end.png",
     "windows-unpocketed.png",
     "windows-placed.png",
     "windows-focus.png",

@@ -15,15 +15,15 @@
     {
       "name": "objects move between two stills while visible",
       "evidence": {
-        "changedFraction": 0.04732
+        "changedFraction": 0.0428
       }
     },
     {
       "name": "frames keep coming while an animated object is in view",
       "evidence": {
-        "perSecond": 60.1,
+        "perSecond": 59.8,
         "frames": 122,
-        "seconds": 2.03,
+        "seconds": 2.04,
         "animationFrames": true,
         "objects": {
           "animating": true,
@@ -49,7 +49,7 @@
       "evidence": {
         "perSecond": 0.0,
         "frames": 0,
-        "seconds": 3.03,
+        "seconds": 3.04,
         "animationFrames": false,
         "objects": {
           "animating": true,
@@ -71,7 +71,7 @@
       "evidence": {
         "perSecond": 0.0,
         "frames": 0,
-        "seconds": 2.03,
+        "seconds": 2.04,
         "animationFrames": false,
         "objects": {
           "animating": false,
@@ -85,7 +85,7 @@
     {
       "name": "instances with different phases are drawn differently",
       "evidence": {
-        "changedFraction": 0.09574,
+        "changedFraction": 0.08663,
         "boxes": [
           [
             366,
@@ -124,8 +124,8 @@
       "name": "motion resumes when reduced_motion is switched off",
       "evidence": {
         "perSecond": 60.1,
-        "frames": 122,
-        "seconds": 2.03,
+        "frames": 123,
+        "seconds": 2.05,
         "animationFrames": true,
         "objects": {
           "animating": true,
@@ -141,7 +141,7 @@
       "evidence": {
         "perSecond": 0.0,
         "frames": 0,
-        "seconds": 2.03,
+        "seconds": 2.04,
         "animationFrames": false,
         "objects": {
           "animating": true,
