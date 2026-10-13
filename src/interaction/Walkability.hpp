@@ -22,6 +22,7 @@ struct WalkProblem {
     Vec3 at{};
     std::string rule;    // "floor", "ledge", "walls", "playable", "approach", "keep-clear"
     std::string message; // short, names the position
+    float along = -1;    // checkRoute: the arc length where it was found
 };
 inline constexpr float walkStep = .25f, maxStep = .35f;
 // The floor under a root near y (within maxStep above or below it), if any.

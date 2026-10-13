@@ -37,6 +37,9 @@ struct PlacementScene {
     std::vector<Box> approaches; // screen approach zones (anchors, tool mounts, workspace walls)
     std::vector<Box> zones;      // placementZones: reserved for windows
     std::vector<Box> keepClear;  // spawn capsules, climbables and keepClear volumes
+    // Characters only (Walkability checkSpot): user-placed objects that have no collision
+    // proxy, as their bounds; a character walks round them like round collision.
+    std::vector<Box> obstacles;
     bool player = false;
     Vec3 playerLow{}, playerHigh{}; // capsule segment
     float playerRadius = .3f;

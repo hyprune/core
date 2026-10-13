@@ -156,16 +156,35 @@ void Runtime::companionInject(std::vector<ObjectInfo> &infos) {
     companionStatus = "active", companionReason.clear();
     infos.push_back(info);
 }
-// The companion's interactions: Talk (one line, the next each time), then Stay or Follow.
+// The companion's interactions: Talk (one line, the next each time), then Stay or Follow,
+// then (following) its pace: "Run with me" or "Walk with me", whichever it isn't keeping.
 Json Runtime::companionInteractions() const {
     Json out = Json::array();
     if (!companionLines().empty())
         out.push_back({{"id", "talk"}, {"label", "Talk"}, {"action", {{"type", "say"}, {"lines", Json::array({companionLines()[0]})}}}});
-    if (companionMode() == "follow")
+    if (companionMode() == "follow") {
         out.push_back({{"id", "stay"}, {"label", "Stay"}, {"action", {{"type", "companion"}, {"mode", "stay"}}}});
-    else
+        if (companionPace() == "run")
+            out.push_back({{"id", "walk"}, {"label", "Walk with me"}, {"action", {{"type", "companion"}, {"pace", "walk"}}}});
+        else
+            out.push_back({{"id", "run"}, {"label", "Run with me"}, {"action", {{"type", "companion"}, {"pace", "run"}}}});
+    } else
         out.push_back({{"id", "follow"}, {"label", "Follow"}, {"action", {{"type", "companion"}, {"mode", "follow"}}}});
     return out;
+}
+std::string Runtime::companionPace() const { return companionFile.current.value("pace", std::string("walk")); }
+// The pace it keeps while following (companion.json; "walk" is the default and not written).
+void Runtime::companionSetPace(const std::string &pace) {
+    if (companionRef().empty())
+        throw ipc::Error(-32005, "no companion chosen");
+    Json next = {{"ref", companionRef()}};
+    if (pace == "run")
+        next["pace"] = "run";
+    companionFile.save(next);
+    companionFile.current = next;
+    ++companionRevision; // its interactions change
+    objectNotice("companion.following", (companionName.empty() ? std::string("Your companion") : companionName) +
+                                            (pace == "run" ? " runs with you" : " walks with you"));
 }
 std::vector<std::string> Runtime::companionLines() const {
     std::vector<std::string> lines;
@@ -411,6 +430,7 @@ bool Runtime::companionStep(NpcRun &n, float dt, const sim::NpcWorld &w, const s
             a.update(dt, w);
     } else {
         companionBrain.mode = mode == "stay" ? sim::Companion::Mode::Stay : sim::Companion::Mode::Follow;
+        companionBrain.pace = companionPace() == "run" ? sim::Companion::Pace::Run : sim::Companion::Pace::Walk;
         if (mode == "stay")
             if (auto rec = editor.companion(world->id); rec.is_object() && rec.contains("pose"))
                 companionBrain.stay = vec3(rec["pose"]["position"]);
@@ -610,8 +630,11 @@ std::optional<Json> Runtime::companionMethod(const std::string &method, const Js
         if (!verdict["capable"].get<bool>())
             throw ipc::Error(-32005, e->name + " can't be a companion: " + verdict["reason"].get<std::string>());
         if (ref != companionRef()) {
-            companionFile.save({{"ref", ref}});
-            companionFile.current = {{"ref", ref}};
+            Json next = {{"ref", ref}};
+            if (companionPace() == "run")
+                next["pace"] = "run"; // the pace stays with the next companion
+            companionFile.save(next);
+            companionFile.current = next;
             companionBrain = {};
             companionBrain.rejoin(true);
             ++companionRevision;
@@ -690,6 +713,12 @@ Json Runtime::companionDiagnostics() {
             {"waypoints", b.waypoints.size()},
             {"plannerExpanded", b.planner.expanded},
             {"running", b.running},
+            {"pace", companionPace()},
+            {"madeWay", b.madeWay},
+            {"makingWay", b.wayFor >= 0},
+            {"speed", n ? n->agent.speedNow : 0.f},
+            {"gait", n ? Json{{"phase", n->agent.gaitPhase}, {"clip", n->agent.pose.clip}, {"previous", n->agent.pose.previous},
+                              {"fade", n->agent.pose.fade}} : Json(nullptr)},
             {"run", n ? Json(n->state) : Json(nullptr)},
             {"step", companionLastStep},
             {"teleportPending", b.teleport},

@@ -602,7 +602,8 @@ struct Runtime {
     std::map<const world::Character *, world::Character::SeatFit> seatFits;
     struct Walkability {
         bool walkable = true;
-        std::vector<std::string> problems;
+        std::vector<std::string> problems;     // what no detour gets round
+        std::vector<sim::NpcDetour> detours;   // ways round blocked stretches (RFC-0010 steering)
     };
     std::map<std::string, Walkability> walkCache;
     struct NpcDrawing {
@@ -631,6 +632,7 @@ struct Runtime {
     NpcRun *npcRun(const std::string &id);
     void npcWorldLoaded();
     sim::NpcMotionInput npcMotion();
+    std::optional<Vec3> screenFront(const Json &anchor, Vec3 from, const interaction::Body &, const interaction::PlacementScene &);
     std::string npcPaused();
     void npcTick(float dt);
     std::optional<std::pair<std::string, float>> characterAim();
@@ -653,10 +655,15 @@ struct Runtime {
     std::optional<Json> npcsMethod(const std::string &method, const Json &params);
     // The companion (Companion.inc, RFC-0010 companions amendment, IPC 0.25). The chosen ref
     // is user state (companion.json, HYPRUNE_COMPANION_FILE); modes are per world (editor).
+    // {ref, pace}: pace "run" when chosen in its E menu ("walk", the default, is not written).
     interaction::InputFile companionFile{"companion", Json::object(), [](const Json &j) {
-                                             if (!j.is_object() || j.size() > 1 || (j.size() == 1 && !(j.contains("ref") && j["ref"].is_string() &&
-                                                                                                         j["ref"].get<std::string>().size() <= 256)))
-                                                 throw std::runtime_error("companion.json must be {} or {ref}");
+                                             bool ok = j.is_object();
+                                             if (ok)
+                                                 for (auto &[k, v] : j.items())
+                                                     ok = ok && ((k == "ref" && v.is_string() && v.get<std::string>().size() <= 256) ||
+                                                                 (k == "pace" && (v == "walk" || v == "run")));
+                                             if (!ok || (j.contains("pace") && !j.contains("ref")))
+                                                 throw std::runtime_error("companion.json must be {} or {ref, pace?}");
                                              return j;
                                          }};
     sim::Companion companionBrain;
@@ -696,6 +703,8 @@ struct Runtime {
     void companionRecord(Json record);
     void companionBind(const Json &patch);
     void companionSetMode(const std::string &mode);
+    void companionSetPace(const std::string &pace);
+    std::string companionPace() const;
     void companionView(sim::CompanionView &, const interaction::PlacementScene &walk, const interaction::PlacementScene &stand);
     void companionPlanner(const interaction::PlacementScene &walk);
     interaction::PlacementScene companionWalkScene();

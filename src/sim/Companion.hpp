@@ -141,9 +141,13 @@ struct Companion {
     std::vector<std::string> idles; // idle variants (the companion block), played now and then
     enum class Mode { Follow, Stay };
     Mode mode = Mode::Follow;
+    // The pace it keeps while following: walking (the default; it still hurries when it falls
+    // behind) or running alongside. Chosen in its E menu ("Run with me" / "Walk with me").
+    enum class Pace { Walk, Run };
+    Pace pace = Pace::Walk;
     Vec3 stay{};                    // the stay spot
     GridPlanner planner;
-    static constexpr float startDistance = .8f, arriveDistance = .3f, personalSpace = 1.f, runFrom = 4, runUntil = 1.5f,
+    static constexpr float startDistance = .8f, arriveDistance = .3f, personalSpace = 1.f,
                            teleportDistance = 20, blockedSeconds = 1.5f, landedSeconds = 2, stillTeleport = 4;
     // ---- state ----
     enum class State { Idle, Moving, Waiting };
@@ -157,6 +161,10 @@ struct Companion {
     Vec3 plannedTo{1e9f, 0, 0};
     float sincePlan = 1e9f, blocked = 0, sinceAirborne = 1e9f, retry = 0;
     bool running = false, teleport = true, waveOnSight = false, moved = false;
+    // Making way: a resident coming through where it stands; it waits at a spot out of the way.
+    int wayFor = -1;
+    float wayLeft = 0;
+    int madeWay = 0; // times it stepped aside (diagnostics)
     float idleClock = 0, nextIdle = 12;
     uint32_t seed = 0x9e3779b9u;
     int teleports = 0;
@@ -193,8 +201,9 @@ struct Companion {
             interact(a, dt);
         } else if (!v.animate)
             stillTick(a, dt, v);
-        else
-            tick(a, dt, v);
+        else if (!(w.movers && makingWay(a, dt, v, *w.movers)))
+            tick(a, dt, v, w);
+        a.velocity = Vec3{a.position.x - before.x, 0, a.position.z - before.z} / dt;
         moved = state != State::Waiting &&
                 (std::hypot(a.position.x - before.x, a.position.z - before.z) > 1e-4f || std::abs(a.position.y - before.y) > 1e-4f ||
                  std::abs(a.heading - headingBefore) > 1e-4f) &&
@@ -312,7 +321,70 @@ struct Companion {
         }
         teleportTick(a, dt, v);
     }
-    void tick(NpcAgent &a, float dt, const CompanionView &v) {
+    // A resident about to come through where it stands (or waiting there for it): it steps to a
+    // free spot beside that resident's way (or ahead of it and aside) and waits until it has
+    // passed. Residents never give way to the companion first, so a doorway never deadlocks.
+    bool makingWay(NpcAgent &a, float dt, const CompanionView &v, const std::vector<Mover> &movers) {
+        auto find = [&](int id) -> const Mover * {
+            for (auto &m : movers)
+                if (m.id == id)
+                    return &m;
+            return nullptr;
+        };
+        auto inWay = [&](const Mover &m, Vec3 p, float extra) {
+            Vec3 rel = p - m.position;
+            float along = dot(rel, m.facing);
+            float across = std::hypot(rel.x - m.facing.x * along, rel.z - m.facing.z * along);
+            float reach = m.waiting ? 2.5f : flatSpeed(m.velocity) * 2.5f + 1.f;
+            return along > -.2f && along < reach && across < a.radius + m.radius + extra;
+        };
+        if (wayFor >= 0) {
+            wayLeft -= dt;
+            auto *m = find(wayFor);
+            if (!m || wayLeft <= 0 || flatDistance(m->position, a.position) > 5 ||
+                dot(a.position - m->position, m->facing) < -(a.radius + m->radius)) {
+                wayFor = -1, waypoints.clear(), state = State::Idle;
+                return false;
+            }
+            if (!waypoints.empty())
+                walk(a, dt, nullptr);
+            else
+                standAndLook(a, dt, v);
+            return true;
+        }
+        for (auto &m : movers) {
+            if (m.id == a.id || m.priority < a.priority || (!m.waiting && flatSpeed(m.velocity) < .2f) || !inWay(m, a.position, .15f))
+                continue;
+            // Spots beside its way, near first: aside here, then a little ahead of it and aside.
+            Vec3 across{m.facing.z, 0, -m.facing.x};
+            std::optional<std::vector<Vec3>> best;
+            float bestLength = 1e9f;
+            for (float ahead : {0.f, 1.f, 2.f, 3.f})
+                for (float d : {.9f, 1.3f, 1.8f})
+                    for (int side : {1, -1}) {
+                        Vec3 p = a.position + m.facing * ahead + across * (d * float(side));
+                        auto spot = v.free ? v.free(p) : std::optional<Vec3>{p};
+                        if (!spot || inWay(m, *spot, .3f))
+                            continue;
+                        auto path = planner.plan(a.position, *spot, .2f);
+                        if (!path)
+                            continue;
+                        float length = 0;
+                        Vec3 at = a.position;
+                        for (auto &q : *path)
+                            length += flat(at, q), at = q;
+                        if (length < bestLength && length < 6)
+                            bestLength = length, best = path;
+                    }
+            if (!best)
+                continue; // nowhere to go: the resident backs off in the end (sim/Npc.hpp)
+            wayFor = m.id, wayLeft = 6, waypoints = *best, state = State::Moving, ++madeWay;
+            walk(a, dt, nullptr);
+            return true;
+        }
+        return false;
+    }
+    void tick(NpcAgent &a, float dt, const CompanionView &v, const NpcWorld &w) {
         float toPlayer = flat(a.position, v.feet);
         if (mode == Mode::Follow) {
             if (v.warped)
@@ -370,6 +442,7 @@ struct Companion {
             state = State::Idle;
             running = false;
             waypoints.clear();
+            a.speedNow = 0;
             a.idle();
             return;
         }
@@ -394,7 +467,7 @@ struct Companion {
                 }
             }
         }
-        walk(a, dt);
+        walk(a, dt, w.movers);
     }
     void standAndLook(NpcAgent &a, float dt, const CompanionView &v, bool idle = true) {
         Vec3 d = v.feet - a.position;
@@ -403,18 +476,17 @@ struct Companion {
         if (idle)
             a.idle();
     }
-    // Along the waypoints: walk, or run while the way is long; clip rate follows the pace.
-    void walk(NpcAgent &a, float dt) {
+    // Along the waypoints at an eased ground speed, the gait following it (sim/Npc.hpp): its
+    // pace's cruising speed, faster the further behind it is (up to the run clip at 1.8x),
+    // braking to arrive. It slows or waits for a character crossing its way.
+    void walk(NpcAgent &a, float dt, const std::vector<Mover> *movers) {
         float left = 0;
         Vec3 at = a.position;
         for (auto &p : waypoints)
             left += flat(at, p), at = p;
-        if (left > runFrom)
-            running = true;
-        else if (left < runUntil)
-            running = false;
-        float walkSpeed = std::max(.1f, a.walkSpeed), runSpeed = a.runSpeed > 0 ? a.runSpeed : 0;
-        float v = running ? (runSpeed > 0 ? runSpeed : walkSpeed * 1.5f) : walkSpeed;
+        float walkSpeed = std::max(.1f, a.walkSpeed);
+        float cruise = pace == Pace::Run ? (a.runSpeed > walkSpeed ? a.runSpeed : walkSpeed * 1.5f) : walkSpeed * 1.25f;
+        float wanted = std::min({a.topSpeed(), cruise + std::max(0.f, left - 3) * .6f, std::sqrt(2 * NpcAgent::decel * .8f * left) + .05f});
         while (!waypoints.empty()) {
             Vec3 d = waypoints.front() - a.position;
             float dist = std::hypot(d.x, d.z);
@@ -426,20 +498,36 @@ struct Companion {
             float target = std::atan2(d.x, d.z);
             if (std::abs(std::remainder(target - a.heading, 6.2831853f)) > .9f) { // turn in place first
                 a.turnTowards(target, dt);
+                a.speedNow = 0;
                 a.idle();
                 return;
             }
             a.turnTowards(target, dt, NpcAgent::turnRate, 0);
+            Vec3 dir{d.x / dist, 0, d.z / dist};
+            if (movers && anyNear(*movers, a.id, a.position)) { // someone crossing: slow or wait
+                float best = 1e30f, factor = 1;
+                for (float f : {1.f, .5f, 0.f}) {
+                    auto c = predict([&](float time) { return a.position + dir * (wanted * f * time); }, a.radius, *movers, a.id);
+                    float cost = conflictCost(c) + (1 - f) * .5f;
+                    if (cost < best)
+                        best = cost, factor = f;
+                }
+                wanted *= factor;
+            }
+            float v = a.ease(wanted, dt);
+            running = v > walkSpeed * 1.3f;
+            if (v <= 0) {
+                a.idle();
+                return;
+            }
             float step = std::min(dist, v * dt);
             float y0 = a.position.y;
-            a.position = a.position + Vec3{d.x / dist, 0, d.z / dist} * step;
+            a.position = a.position + dir * step;
             a.position.y = y0 + (waypoints.front().y - y0) * std::min(1.f, step / std::max(dist, 1e-3f));
-            if (running && runSpeed > 0)
-                a.play("run", true, v / runSpeed);
-            else
-                a.play("walk", true, v / walkSpeed);
+            a.gait(v, dt);
             return;
         }
+        a.speedNow = 0;
         a.idle();
     }
     // At its slot: idle, the occasional variant, facing the player when looked at.

@@ -68,8 +68,12 @@ std::optional<WalkProblem> checkSpot(const PlacementScene &s, Vec3 root, const B
     if (!floor)
         return WalkProblem{root, "floor", "no walkable floor at " + at(root)};
     Vec3 feet{root.x, *floor, root.z};
-    if (hitsCollision(s, bodyBox(feet, b)))
+    auto body = bodyBox(feet, b);
+    if (hitsCollision(s, body))
         return WalkProblem{feet, "walls", "the body hits collision at " + at(feet)};
+    for (auto &o : s.obstacles)
+        if (boxBox(o, body))
+            return WalkProblem{feet, "walls", "the body hits a placed object at " + at(feet)};
     if (s.playable && !s.playable->cells.empty() && !s.playable->contains(feet + Vec3{0, .05f, 0}, 0))
         return WalkProblem{feet, "playable", "outside the playable volume at " + at(feet)};
     Box probe;
@@ -99,6 +103,7 @@ std::vector<WalkProblem> checkRoute(const PlacementScene &s, const sim::Route &r
             p.y = *previous; // the floor follows the previous sample's, within a step
         auto problem = checkSpot(s, p, b, false, previous ? maxStep : maxStep);
         if (problem) {
+            problem->along = d;
             if (problem->rule == "floor" && previous)
                 problem->rule = "ledge", problem->message = "a drop or gap at " + at(r.at(d));
             out.push_back(*problem);

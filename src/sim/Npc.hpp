@@ -6,6 +6,7 @@
 // Pure logic: no GL, no Hyprland. The runtime poses the character from `pose` and draws it at
 // `model()`; the same numbers travel to the offload worker.
 #include "Route.hpp"
+#include "Steer.hpp"
 #include <functional>
 #include <map>
 #include <optional>
@@ -26,6 +27,16 @@ struct NpcStop {
     std::string clip;   // look_around, wave, nod, idle_fidget ("" none)
     std::optional<Vec3> face;
     int seat = -1;      // NpcAgent::seats index
+    // Where to stand for a stop that faces a screen: in front of it on its normal, outside its
+    // approach zone (the runtime checked the legs there and back). None: on the route point.
+    std::optional<Vec3> spot;
+};
+// A way round something on the route (a placed object, collision): from the route at arc
+// length `enter` along `legs` (the last one is the route at `exit`, enter < exit, both
+// unwrapped forward arc lengths). Walking the route backwards runs it in reverse.
+struct NpcDetour {
+    float enter = 0, exit = 0;
+    std::vector<Vec3> legs;
 };
 // What the agent sees each tick.
 struct NpcWorld {
@@ -34,6 +45,8 @@ struct NpcWorld {
     bool glance = true;     // false while the player reads a window
     // Walkable root position (floor, capsule, playable): sidesteps and legs. Null: walkable.
     std::function<bool(Vec3)> walkable;
+    // Every character as of the start of the tick (steering); null: none.
+    const std::vector<Mover> *movers = nullptr;
 };
 // What posing needs; also the offload packet. Times are clip seconds.
 struct NpcPose {
@@ -46,6 +59,8 @@ struct NpcAgent {
     // ---- configuration ----
     Route route;                     // empty: a standing spot (home)
     std::vector<NpcStop> stops;
+    std::vector<NpcDetour> detours;  // ordered by enter, not overlapping
+    int id = -1, priority = 0;       // its Mover id and priority (sim/Steer.hpp)
     std::vector<NpcSeat> seats;
     int homeSeat = -1;               // a standing character's permanent seat
     std::map<std::string, float> clips; // name -> duration (seconds); presence = the character has it
@@ -70,7 +85,7 @@ struct NpcAgent {
     std::function<bool(int)> reserveSeat;
     std::function<void(int)> releaseSeat;
     // ---- state ----
-    enum class Mode { Idle, Walk, Stop, ToSeat, Align, Sit, Seated, Stand, FromSeat, Interact, Guide, Suspended };
+    enum class Mode { Idle, Walk, Stop, ToSeat, Align, Sit, Seated, Stand, FromSeat, Interact, Guide, Suspended, ToSpot, Detour };
     Mode mode = Mode::Idle;
     Vec3 position{};
     float heading = 0;               // radians; forward = (sin h, 0, cos h) (the character's +Z)
@@ -96,7 +111,17 @@ struct NpcAgent {
     Vec3 guideFrom{};
     int guideSeat = -1; // the seat a guide stood up from; it sits there again after
     bool guideCancelled = false;
-    static constexpr float turnRate = 3.1416f, alignSeconds = .25f, fadeSeconds = .25f;
+    // Locomotion: the ground speed now (eased towards the wanted one), the gait cycle's phase
+    // (0-1, shared by walk and run so a blend keeps the feet in step) and the velocity over the
+    // last tick (what the others see).
+    float speedNow = 0, gaitPhase = 0;
+    Vec3 velocity{};
+    // Steering: the motion chosen last tick, how long a mover has held it up, and a back-off
+    // (walking its route the other way to let a higher-priority character through).
+    float steerLateral = 0, steerFactor = 1, blockedFor = 0, backoffLeft = 0;
+    int blockedBy = -1, backoffFrom = 0, detour = -1;
+    static constexpr float turnRate = 3.1416f, alignSeconds = .25f, fadeSeconds = .25f, accel = 2.5f, decel = 4.f,
+                           maxRunRate = 1.8f, minWalkRate = .3f;
     // Root lift for an anchor, if the character fits it.
     std::optional<float> seatLift(const NpcSeat &h) const {
         if (!seatKnown || !has("sit"))
@@ -120,7 +145,9 @@ struct NpcAgent {
         case Mode::Walk: return yielding ? "stopped" : running() ? "running" : "walking";
         case Mode::Stop: return "stopped";
         case Mode::ToSeat:
-        case Mode::FromSeat: return "walking";
+        case Mode::FromSeat:
+        case Mode::ToSpot:
+        case Mode::Detour: return "walking";
         case Mode::Align:
         case Mode::Sit:
         case Mode::Seated:
@@ -154,6 +181,8 @@ struct NpcAgent {
 
     void start() {
         lateral = lateralTarget = 0;
+        speedNow = gaitPhase = 0, velocity = {};
+        steerLateral = 0, steerFactor = 1, blockedFor = backoffLeft = 0, blockedBy = detour = -1;
         seatOffset = 0;
         legs.clear();
         stop = seat = -1;
@@ -175,6 +204,8 @@ struct NpcAgent {
         }
         direction = reverse ? -1 : 1;
         s = route.wrap(phase * route.length());
+        if (int d = detourAt(s); d >= 0) // starting inside a blocked stretch: past it
+            s = route.closed ? route.wrap(detours[d].exit) : std::min(detours[d].exit, route.length());
         position = route.at(s);
         Vec3 t = route.tangent(s) * float(direction);
         heading = std::atan2(t.x, t.z);
@@ -279,6 +310,60 @@ struct NpcAgent {
         if (dt <= 0)
             return;
         dt = std::min(dt, .1f);
+        Vec3 before = position;
+        step(dt, w);
+        velocity = Vec3{position.x - before.x, 0, position.z - before.z} / dt;
+    }
+    // The fastest it goes: the run clip played at most maxRunRate (feet still in step).
+    float topSpeed() const { return (runSpeed > walkSpeed ? runSpeed : walkSpeed) * maxRunRate; }
+    // Locomotion at ground speed v: walk below the walk clip's speed (slower steps), a walk-run
+    // blend in between and run above the run clip's speed (faster steps, up to maxRunRate).
+    // The two clips share one cycle phase advanced by v over the blended stride, so the planted
+    // foot moves with the ground whatever the speed: no sliding when speeding up or slowing down.
+    void gait(float v, float dt) {
+        float wv = std::max(.1f, walkSpeed);
+        bool locomoting = pose.clip == "walk" || pose.clip == "run";
+        bool crossfading = pose.fade < 1 && pose.previous != "walk" && pose.previous != "run";
+        if (v < .05f) {
+            idle();
+            return;
+        }
+        bool blend = has("run") && runSpeed > wv + .05f;
+        float t = blend ? std::clamp((v - wv) / (runSpeed - wv), 0.f, 1.f) : 0.f;
+        float walkCycle = std::max(.1f, duration("walk")), runCycle = blend ? std::max(.1f, duration("run")) : walkCycle;
+        if (!locomoting || crossfading) { // from idle, a stop or a seat: the usual crossfade
+            if (!locomoting)
+                gaitPhase = 0;
+            play(t > .5f ? "run" : "walk", true, t > .5f ? v / runSpeed : std::max(minWalkRate, v / wv));
+            return;
+        }
+        float stride = (1 - t) * wv * walkCycle + t * (blend ? runSpeed * runCycle : wv * walkCycle);
+        if (pose.fade >= 1 && pose.clipTime > 0 && gaitPhase == 0) // joined from a plain clip: keep its phase
+            gaitPhase = std::fmod(pose.clipTime / (pose.clip == "run" ? runCycle : walkCycle), 1.f);
+        gaitPhase = std::fmod(gaitPhase + v * dt / std::max(.05f, stride), 1.f);
+        if (t <= 0 || t >= 1) {
+            auto clip = t >= 1 ? "run" : "walk";
+            if (pose.clip != clip) // past the blend: settle on one clip, from the other in step
+                pose.previous = pose.clip, pose.previousLoop = true, pose.fade = 0;
+            pose.clip = clip, pose.loop = true;
+            pose.fade = std::max(pose.fade, pose.previous == "walk" || pose.previous == "run" ? 1.f : pose.fade);
+        } else {
+            pose.previous = "walk", pose.clip = "run", pose.loop = pose.previousLoop = true;
+            pose.fade = t;
+        }
+        pose.previousTime = gaitPhase * (pose.previous == "run" ? runCycle : walkCycle);
+        pose.clipTime = gaitPhase * (pose.clip == "run" ? runCycle : walkCycle);
+        clipRate = previousRate = 0; // the phase drives both
+    }
+    // Eases the ground speed towards a wanted one (no instant starts or stops).
+    float ease(float wanted, float dt) {
+        float d = wanted - speedNow;
+        speedNow += std::clamp(d, -decel * dt, accel * dt);
+        if (speedNow < .02f && wanted <= 0)
+            speedNow = 0;
+        return speedNow;
+    }
+    void step(float dt, const NpcWorld &w) {
         advance(dt, w);
         switch (mode) {
         case Mode::Idle: standIdle(dt, w); break;
@@ -293,12 +378,28 @@ struct NpcAgent {
         case Mode::Interact: interactTick(dt); break;
         case Mode::Guide: guideTick(dt, w); break;
         case Mode::Suspended: idle(); break;
+        case Mode::ToSpot: toSpot(dt); break;
+        case Mode::Detour: detourTick(dt, w); break;
         }
+        if (mode != Mode::Walk && mode != Mode::Detour && mode != Mode::Guide && mode != Mode::ToSpot &&
+            mode != Mode::ToSeat && mode != Mode::FromSeat)
+            speedNow = 0;
     }
 
     // Turns towards a heading at most `rate` rad/s; true when within tolerance.
     bool turnTowards(float target, float dt, float rate = turnRate, float tolerance = .05f) { return turn(target, dt, tolerance, rate); }
 
+    // The detour a route position falls inside (enter < s < exit, wrapped), or -1.
+    int detourAt(float at) const {
+        float l = route.length();
+        for (size_t i = 0; i < detours.size(); ++i) {
+            float a = detours[i].enter, b = detours[i].exit;
+            float u = route.closed && at < a ? at + l : at;
+            if (u > a && u < b)
+                return int(i);
+        }
+        return -1;
+    }
   private:
     float eye() const { return height * .93f; }
     static float angleTo(float from, float to) { return std::remainder(to - from, 6.2831853f); }
@@ -375,6 +476,125 @@ struct NpcAgent {
         }
         return std::nullopt;
     }
+    struct SteerChoice {
+        float lateral = 0, factor = 1;
+        Conflict conflict; // of the chosen motion at its speed
+        Conflict ahead;    // of going on at full speed at the chosen offset (who holds it up)
+    };
+    // The motion that keeps clear of the other characters: a lateral offset from the route's
+    // line (walkable ahead) and a speed factor, scored over the next two seconds. `fixed`: the
+    // player's sidestep already chose the offset; only the speed is free.
+    SteerChoice steer(const NpcWorld &w, Vec3 travel, std::optional<float> fixed, float v0) {
+        SteerChoice none{fixed.value_or(0.f), 1, {}};
+        if (!w.movers || !anyNear(*w.movers, id, position))
+            return none;
+        std::vector<float> laterals;
+        if (fixed)
+            laterals = {*fixed};
+        else
+            for (float l : {steerLateral, 0.f, -.45f, .45f, -.9f, .9f})
+                if (std::find(laterals.begin(), laterals.end(), l) == laterals.end())
+                    laterals.push_back(l);
+        Vec3 right{travel.z, 0, -travel.x};
+        float l = route.length();
+        auto arc = [&](float d) { return route.closed ? route.wrap(d) : std::clamp(d, 0.f, l); };
+        bool backing = backoffLeft > 0;
+        float best = 1e30f, kept = 1e30f;
+        SteerChoice out = none;
+        for (float lat : laterals) {
+            if (lat != 0 && !fixed && w.walkable) { // room to the side, here and a little way ahead
+                bool ok = true;
+                for (float a : {0.f, .5f, 1.2f, 2.f})
+                    if (!w.walkable(route.at(arc(s + direction * a)) + right * lat))
+                        ok = false;
+                if (!ok)
+                    continue;
+            }
+            for (float f : {1.f, .5f, 0.f}) {
+                auto own = [&](float time) {
+                    float at = arc(s + direction * v0 * f * time);
+                    Vec3 tt = route.tangent(at) * float(direction);
+                    float side = lateral + std::clamp(lat - lateral, -time, time);
+                    return route.at(at) + Vec3{tt.z, 0, -tt.x} * side;
+                };
+                auto c = predict(own, radius, *w.movers, id);
+                bool lower = c.any() && (*w.movers)[c.mover].priority > priority;
+                // Off the line costs a little (keep right: the negative side), slowing more
+                // (less for the lower priority, who gives way); backing off, it wants to stand aside.
+                float cost = conflictCost(c) + .6f * std::abs(lat) + (backing ? 0.f : (1 - f) * (lower ? .4f : 1.2f)) +
+                             .3f * std::abs(lat - steerLateral) + (lat > 0 ? .08f : 0.f);
+                if (backing) // stand aside and wait there once there is room; along the line, keep going
+                    cost += std::abs(lat) < .4f ? 1.f : -.4f + f * .8f;
+                if (cost < best)
+                    best = cost, out = {lat, f, c};
+                if (lat == steerLateral && f == steerFactor)
+                    kept = cost;
+            }
+        }
+        { // who would be in the way at full speed
+            float lat = out.lateral;
+            out.ahead = predict(
+                [&](float time) {
+                    float at = arc(s + direction * v0 * time);
+                    Vec3 tt = route.tangent(at) * float(direction);
+                    return route.at(at) + Vec3{tt.z, 0, -tt.x} * (lateral + std::clamp(lat - lateral, -time, time));
+                },
+                radius, *w.movers, id);
+        }
+        if (kept <= best + .25f && kept < 1e29f) { // hysteresis: keep last tick's choice unless clearly worse
+            for (float lat : {steerLateral})
+                if (std::find(laterals.begin(), laterals.end(), lat) != laterals.end()) {
+                    auto own = [&](float time) {
+                        float at = arc(s + direction * v0 * steerFactor * time);
+                        Vec3 tt = route.tangent(at) * float(direction);
+                        return route.at(at) + Vec3{tt.z, 0, -tt.x} * (lateral + std::clamp(lat - lateral, -time, time));
+                    };
+                    out = {lat, steerFactor, predict(own, radius, *w.movers, id), out.ahead};
+                }
+        }
+        return out;
+    }
+    // Held up by a mover: after a while the lower priority (or, much later, either) walks its
+    // route the other way until the other has passed; the delay differs per character.
+    void yieldRule(const SteerChoice &c, const NpcWorld &w, float dt, Vec3 travel) {
+        if (backoffLeft > 0) {
+            backoffLeft -= dt;
+            const Mover *b = nullptr;
+            for (auto &m : *w.movers)
+                if (m.id == blockedBy)
+                    b = &m;
+            // The original travel is the reverse of now: passed once it is behind on it.
+            bool passed = !b || dot(b->position - position, travel * -1.f) < -(radius + b->radius + .2f) ||
+                          flatDistance(b->position, position) > 5;
+            if (passed || backoffLeft <= 0) {
+                backoffLeft = 0, blockedFor = 0, blockedBy = -1;
+                if (direction != backoffFrom)
+                    turnBack();
+            }
+            return;
+        }
+        const Mover *b = c.ahead.any() ? &(*w.movers)[c.ahead.mover] : nullptr;
+        bool stuck = c.factor == 0 && speedNow < .05f && b && flatSpeed(b->velocity) < .2f &&
+                     flatDistance(b->position, position) < radius + b->radius + 2.5f && dot(b->position - position, travel) > 0;
+        if (!stuck) {
+            blockedFor = std::max(0.f, blockedFor - dt);
+            return;
+        }
+        blockedFor += dt;
+        blockedBy = b->id;
+        float after = b->priority > priority ? 1.f : 3.f + .37f * float(((id % 8) + 8) % 8);
+        if (blockedFor > after) {
+            backoffFrom = direction;
+            turnBack();
+            backoffLeft = 10;
+            steerFactor = 1;
+        }
+    }
+    // Walk the route the other way: offsets from the line keep their side in the world.
+    void turnBack() {
+        direction = -direction;
+        lateral = -lateral, lateralTarget = -lateralTarget, steerLateral = -steerLateral;
+    }
     void walk(float dt, const NpcWorld &w) {
         if (route.empty()) {
             mode = Mode::Idle;
@@ -383,35 +603,62 @@ struct NpcAgent {
         Vec3 travel = route.tangent(s) * float(direction);
         float desired = std::atan2(travel.x, travel.z);
         float diff = angleTo(heading, desired);
-        if (std::abs(diff) > 1.f) { // a sharp corner: turn in place before walking on
+        if (std::abs(diff) > 1.f) { // a sharp corner or turning back: turn in place before walking on
             turn(desired, dt);
+            speedNow = 0;
             idle();
             return;
         }
         heading += std::copysign(std::min(std::abs(diff), turnRate * dt), diff);
+        // The player first (never walked through), then the other characters.
         auto side = sidestep(w, travel);
-        yielding = !side;
+        bool playerAside = side && *side != 0;
+        float base = pace() * (std::abs(diff) > .35f ? .6f : 1.f);
+        float factor = 1;
+        if (side) {
+            auto choice = steer(w, travel, playerAside ? side : std::nullopt, base);
+            if (!playerAside)
+                side = choice.lateral;
+            factor = choice.factor;
+            steerLateral = choice.lateral, steerFactor = choice.factor;
+            if (w.movers)
+                yieldRule(choice, w, dt, travel);
+        }
+        yielding = !side || factor <= 0;
         if (side)
             lateralTarget = *side;
-        if (yielding) {
+        // Slower round corners, and while still stepping out of the way.
+        float v = ease(yielding ? 0.f : base * factor * (std::abs(lateralTarget - lateral) > .3f ? .5f : 1.f), dt);
+        lateral += std::clamp(lateralTarget - lateral, -dt, dt); // 1 m/s sideways, standing too
+        if (v <= 0) {
+            place();
             idle();
             return;
         }
-        // Slower round corners, and while still stepping out of the player's way.
-        float v = pace() * (std::abs(diff) > .35f ? .6f : 1.f) * (std::abs(lateralTarget - lateral) > .3f ? .5f : 1.f);
         float step = v * dt;
-        // The next stop on the way (exactly at it: leaving it).
+        // The next stop or detour on the way (exactly at it: leaving it).
         float l = route.length();
-        int hit = -1;
+        int hit = -1, hitDetour = -1;
         float hitAt = 1e30f;
-        for (size_t i = 0; i < stops.size(); ++i) {
-            float d = (stops[i].at - s) * float(direction);
+        auto ahead = [&](float at) {
+            float d = (at - s) * float(direction);
             if (route.closed)
                 d = std::fmod(std::fmod(d, l) + l, l);
-            if (d > 1e-5f && d <= step + 1e-4f && d < hitAt)
+            return d;
+        };
+        for (size_t i = 0; i < stops.size(); ++i)
+            if (float d = ahead(stops[i].at); d > 1e-5f && d <= step + 1e-4f && d < hitAt)
                 hit = int(i), hitAt = d;
+        for (size_t i = 0; i < detours.size(); ++i) {
+            float entry = direction > 0 ? detours[i].enter : detours[i].exit;
+            if (float d = ahead(route.closed ? route.wrap(entry) : entry); d > 1e-5f && d <= step + 1e-4f && d < hitAt)
+                hit = -1, hitDetour = int(i), hitAt = d;
         }
         Vec3 before = position;
+        if (hitDetour >= 0) {
+            enterDetour(hitDetour);
+            return;
+        }
         if (hit >= 0) {
             s = stops[hit].at;
             place();
@@ -420,22 +667,57 @@ struct NpcAgent {
             float next = s + direction * step;
             if (!route.closed && (next < 0 || next > l)) {
                 s = std::clamp(next, 0.f, l);
-                direction = -direction; // open routes: to the end and back
+                turnBack(); // open routes: to the end and back
+                if (backoffLeft > 0)
+                    backoffFrom = -backoffFrom;
             } else
                 s = route.wrap(next);
-            float lstep = 1.f * dt;
-            lateral += std::clamp(lateralTarget - lateral, -lstep, lstep);
             place();
         }
         float moved = std::hypot(position.x - before.x, position.z - before.z) / dt;
         if (mode != Mode::Walk)
             return;
-        if (moved < .05f)
-            idle();
-        else if (running())
-            play("run", true, moved / std::max(.1f, runSpeed));
-        else
-            play("walk", true, moved / std::max(.1f, walkSpeed));
+        gait(moved, dt);
+    }
+    // ---- detours ----
+    void enterDetour(int index) {
+        auto &d = detours[index];
+        detour = index;
+        float entry = direction > 0 ? d.enter : d.exit;
+        s = route.closed ? route.wrap(entry) : entry;
+        lateral = lateralTarget = 0;
+        place();
+        if (direction > 0)
+            legs = d.legs;
+        else { // the same way round, backwards: to the enter point
+            legs.assign(d.legs.rbegin() + 1, d.legs.rend());
+            legs.push_back(route.at(route.closed ? route.wrap(d.enter) : d.enter));
+        }
+        mode = Mode::Detour;
+    }
+    void detourTick(float dt, const NpcWorld &w) {
+        // Others still count: it slows or waits for someone in the way.
+        float factor = 1;
+        if (w.movers && !legs.empty() && anyNear(*w.movers, id, position)) {
+            Vec3 to = legs.front() - position;
+            float dist = std::max(1e-3f, std::hypot(to.x, to.z));
+            Vec3 dir{to.x / dist, 0, to.z / dist};
+            float best = 1e30f;
+            for (float f : {1.f, .5f, 0.f}) {
+                auto c = predict([&](float time) { return position + dir * (pace() * f * time); }, radius, *w.movers, id);
+                float cost = conflictCost(c) + (1 - f);
+                if (cost < best)
+                    best = cost, factor = f;
+            }
+        }
+        if (!walkLegs(dt, pace() * factor))
+            return;
+        auto &d = detours[detour];
+        float exit = direction > 0 ? d.exit : d.enter;
+        s = route.closed ? route.wrap(exit) : std::clamp(exit, 0.f, route.length());
+        detour = -1;
+        place();
+        mode = Mode::Walk;
     }
     void place() {
         Vec3 t = route.tangent(s) * float(direction);
@@ -460,11 +742,24 @@ struct NpcAgent {
                 return;
             }
         }
+        if (st.spot) { // facing a screen: in front of it first
+            legs = {*st.spot};
+            mode = Mode::ToSpot;
+            return;
+        }
+        beginStop();
+    }
+    void beginStop() {
+        auto &st = stops[stop];
         mode = Mode::Stop;
         if (!st.clip.empty() && has(st.clip))
             play(st.clip, false);
         else
             idle();
+    }
+    void toSpot(float dt) {
+        if (walkLegs(dt, walkSpeed * .8f))
+            beginStop();
     }
     void stopTick(float dt, const NpcWorld &w) {
         if (faceTarget) {
@@ -480,10 +775,15 @@ struct NpcAgent {
         stopLeft -= dt;
         if (stopLeft <= 0 && (pose.loop || clipDone())) {
             faceTarget.reset();
-            mode = Mode::Walk;
+            if (stop >= 0 && stop < int(stops.size()) && stops[stop].spot) { // back to the route point
+                legs = {route.at(s)};
+                mode = Mode::FromSeat;
+            } else
+                mode = Mode::Walk;
         }
     }
-    // Walk the straight legs at a careful pace; true when the last one is reached.
+    // Walk the straight legs at a careful pace (eased, braking for the last); true when the last
+    // one is reached. v 0: wait where it is.
     bool walkLegs(float dt, float v, bool lastIsExact = true) {
         while (!legs.empty()) {
             Vec3 d = legs.front() - position;
@@ -498,16 +798,25 @@ struct NpcAgent {
             float target = std::atan2(d.x, d.z);
             if (std::abs(angleTo(heading, target)) > .9f) {
                 turn(target, dt);
+                speedNow = 0;
                 idle();
                 return false;
             }
             heading += std::clamp(angleTo(heading, target), -turnRate * dt, turnRate * dt);
-            float step = std::min(dist, v * dt);
+            float remaining = dist;
+            for (size_t i = 1; i < legs.size(); ++i)
+                remaining += std::hypot(legs[i].x - legs[i - 1].x, legs[i].z - legs[i - 1].z);
+            float sp = ease(std::min(v, std::sqrt(2 * decel * .8f * remaining) + .05f) * (v > 0 ? 1.f : 0.f), dt);
+            if (sp <= 0) {
+                idle();
+                return false;
+            }
+            float step = std::min(dist, sp * dt);
             Vec3 dir = d / dist;
             float y0 = position.y;
             position = position + dir * step;
             position.y = y0 + (legs.front().y - y0) * std::min(1.f, step / std::max(dist, 1e-3f));
-            play("walk", true, v / std::max(.1f, walkSpeed));
+            gait(sp, dt);
             return false;
         }
         return true;
@@ -650,12 +959,13 @@ struct NpcAgent {
             if (playerDistance > 6) {
                 Vec3 d = w.player - position;
                 turn(std::atan2(d.x, d.z), dt, .1f, turnRate * .5f);
+                speedNow = 0;
                 idle();
                 if (guideIdle > 60)
                     guideCancelled = true;
                 return;
             }
-            float step = pace() * dt;
+            float sp = ease(pace(), dt), step = sp * dt;
             float l = guide.length();
             guideS = std::min(l, guideS + step);
             Vec3 t = guide.tangent(guideS);
@@ -663,7 +973,7 @@ struct NpcAgent {
             position = guide.at(guideS);
             if (guideS > guideBest + .5f)
                 guideBest = guideS, guideIdle = 0;
-            play("walk", true, pace() / std::max(.1f, walkSpeed));
+            gait(sp, dt);
             if (guideS >= l - 1e-3f) {
                 guidePhase = 2;
                 if (has("wave"))
@@ -687,11 +997,12 @@ struct NpcAgent {
             back();
             return;
         case 3: { // back along the guide path
-            guideS = std::max(0.f, guideS - pace() * dt);
+            float sp = ease(pace(), dt);
+            guideS = std::max(0.f, guideS - sp * dt);
             Vec3 t = guide.tangent(guideS) * -1.f;
             turn(std::atan2(t.x, t.z), dt, .05f);
             position = guide.at(guideS);
-            play("walk", true, pace() / std::max(.1f, walkSpeed));
+            gait(sp, dt);
             if (guideS <= 1e-3f) {
                 guidePhase = 4;
                 legs = {guideFrom};

@@ -46,11 +46,22 @@ int main() {
         // Walks by arc length at the walk clip's speed, playing walk at speed / clip speed.
         {
             auto a = agent(line({{0, 0, 0}, {0, 0, 10}}));
+            run(a, far, 1); // eases in from a standstill (accel 2.5 m/s²): 0.8 m in the first second
+            check(a.position.z > .75f && a.position.z < .85f, std::format("eases in, at {}", a.position.z));
+            float z0 = a.position.z;
             run(a, far, 1);
-            check(a.pose.clip == "walk" && a.position.z > .95f && a.position.z < 1.05f, std::format("walks 1 m/s, at {}", a.position.z));
+            check(a.pose.clip == "walk" && a.position.z - z0 > .95f && a.position.z - z0 < 1.05f,
+                  std::format("walks 1 m/s, {} m", a.position.z - z0));
             a.rate = 1.5f;
+            float z2 = a.position.z;
             run(a, far, 1);
-            check(a.position.z > 2.4f && a.position.z < 2.6f && std::abs(a.clipRate - 1.5f) < .05f, "instance speed scales pace and clip rate");
+            check(a.position.z - z2 > 1.4f && a.position.z - z2 < 1.55f, std::format("instance speed scales pace: {} m", a.position.z - z2));
+            // The walk cycle (1 m stride: 1 m/s x 1 s clip) advances with the ground: 0.75 of a cycle in 0.5 s.
+            float phase = a.gaitPhase, z1 = a.position.z;
+            run(a, far, .5f);
+            float cycles = std::fmod(a.gaitPhase - phase + 1, 1.f);
+            check(std::abs(cycles - (a.position.z - z1)) < .02f && std::abs(cycles - .75f) < .03f,
+                  std::format("feet keep step with the ground: {} cycles for {} m", cycles, a.position.z - z1));
         }
         // Phase: starts at that fraction of a closed route; a loop takes length / speed.
         {

@@ -36,15 +36,40 @@ Json Runtime::pathRecord(const std::string &ref) const {
     return nullptr;
 }
 // The walkability scene: collision, the playable union, approach zones and keepClear
-// volumes (placementScene without windows or the player).
+// volumes (placementScene without windows or the player), and user-placed objects without a
+// collision proxy as their bounds (characters walk round them too).
 interaction::PlacementScene Runtime::npcScene() {
     auto s = placementScene();
     s.ignore = {};
     s.windows.clear();
     s.player = false;
+    if (world)
+        for (auto &info : objectInfos) {
+            if (info.source != "user" || info.character || info.index < 0 || size_t(info.index) >= world->objectInstances.size())
+                continue;
+            auto &inst = world->objectInstances[info.index];
+            if (inst.hidden || inst.collisionCount > 0 || inst.asset >= world->objectAssets.size())
+                continue;
+            auto &asset = world->objectAssets[inst.asset];
+            interaction::Box b;
+            b.centre = inst.model.point((asset.low + asset.high) * .5f);
+            Vec3 half = (asset.high - asset.low) * .5f;
+            for (int k = 0; k < 3; ++k) {
+                Vec3 axis{inst.model.v[k * 4], inst.model.v[k * 4 + 1], inst.model.v[k * 4 + 2]};
+                float scale = length(axis);
+                b.axes[k] = scale > 1e-6f ? axis / scale : Vec3{float(k == 0), float(k == 1), float(k == 2)};
+                (k == 0 ? half.x : k == 1 ? half.y : half.z) *= scale;
+            }
+            b.half = half;
+            s.obstacles.push_back(b);
+        }
     return s;
 }
-// Route problems, cached by the path record and the collision they were checked against.
+// Route problems, cached by the path record and the collision they were checked against. A
+// stretch where the body hits collision (a placed object, a pillar) gets a detour: planned on
+// the standing-spot grid from 0.6 m before it to 0.6 m after it. Other problems (no floor, a
+// ledge, outside the playable volume, a screen approach), or a stretch with no way round,
+// leave the route unwalkable.
 const Runtime::Walkability &Runtime::routeWalkability(const Json &path, const interaction::Body &body) {
     auto key = path.dump() + "\n" + std::to_string(builtObjects) + "\n" + std::to_string(body.radius) + std::to_string(body.height);
     auto it = walkCache.find(key);
@@ -59,8 +84,59 @@ const Runtime::Walkability &Runtime::routeWalkability(const Json &path, const in
     if (shape.empty()) {
         auto scene = npcScene();
         auto route = world::routeOf(path);
-        for (auto &p : interaction::checkRoute(scene, route, body))
-            w.problems.push_back(p.message);
+        std::vector<float> blocked;
+        for (auto &p : interaction::checkRoute(scene, route, body, 256)) {
+            if (p.rule == "walls" && p.along >= 0)
+                blocked.push_back(p.along);
+            else if (w.problems.size() < 8)
+                w.problems.push_back(p.message);
+        }
+        // Runs of blocked samples (0.25 m apart); a closed route's last run joins its first.
+        float l = route.length();
+        std::vector<std::pair<float, float>> spans;
+        for (float d : blocked)
+            if (!spans.empty() && d - spans.back().second <= interaction::walkStep * 1.6f)
+                spans.back().second = d;
+            else
+                spans.push_back({d, d});
+        if (route.closed && spans.size() > 1 && spans.front().first < interaction::walkStep * 1.6f &&
+            l - spans.back().second < interaction::walkStep * 1.6f) {
+            spans.front().first = spans.back().first - l;
+            spans.pop_back();
+        }
+        sim::GridPlanner planner;
+        planner.range = 12;
+        planner.budget = 800;
+        planner.stand = [&](Vec3 p) -> std::optional<Vec3> {
+            auto floor = interaction::floorAt(scene, p);
+            if (!floor)
+                return std::nullopt;
+            Vec3 root{p.x, *floor, p.z};
+            if (interaction::checkSpot(scene, root, body))
+                return std::nullopt;
+            return root;
+        };
+        planner.leg = [&](Vec3 a, Vec3 b) { return interaction::checkLeg(scene, a, b, body, 1).empty(); };
+        auto at = [&](float d) { return route.at(route.closed ? route.wrap(d) : d); };
+        auto clear = [&](float d) { return !interaction::checkSpot(scene, at(d), body); };
+        for (auto [first, last] : spans) {
+            float enter = first - .6f, exit = last + .6f;
+            while (!clear(enter) && enter > first - 2.5f)
+                enter -= interaction::walkStep;
+            while (!clear(exit) && exit < last + 2.5f)
+                exit += interaction::walkStep;
+            std::optional<std::vector<Vec3>> legs;
+            if ((route.closed || (enter >= 0 && exit <= l)) && clear(enter) && clear(exit))
+                legs = planner.plan(at(enter), at(exit), .1f);
+            if (legs && !legs->empty() && std::hypot(legs->back().x - at(exit).x, legs->back().z - at(exit).z) < .05f) {
+                if (route.closed && enter < 0)
+                    enter += l, exit += l;
+                w.detours.push_back({enter, exit, *legs});
+            } else if (w.problems.size() < 8)
+                w.problems.push_back("blocked with no way round at " +
+                                     std::format("({:.2f}, {:.2f}, {:.2f})", at(first).x, at(first).y, at(first).z));
+        }
+        std::sort(w.detours.begin(), w.detours.end(), [](auto &a, auto &b) { return a.enter < b.enter; });
     }
     w.walkable = w.problems.empty();
     return walkCache[key] = std::move(w);
@@ -175,6 +251,34 @@ bool Runtime::reserveSeat(const std::string &ref) {
 // Rebuilds agents whose configuration changed (instance, overlay record, path, seats,
 // collision); unchanged ones keep their state. Characters that are hidden, missing or
 // blocked have no agent.
+// Where a resident stands to look at a screen (a stop facing an anchor): on the screen's
+// normal through its centre, just outside its approach zone (1.5 m deep, kept free), on the
+// floor; walkable, with straight legs from the route point and back. None: it stops on the
+// route point and turns to the screen from there.
+std::optional<Vec3> Runtime::screenFront(const Json &anchor, Vec3 from, const interaction::Body &body,
+                                         const interaction::PlacementScene &scene) {
+    if (!anchor.contains("pose"))
+        return std::nullopt;
+    Vec3 centre = vec3(anchor["pose"]["position"]);
+    auto q = anchor["pose"]["rotation"].get<std::array<float, 4>>();
+    Vec3 n = rotate(q, {0, 0, 1});
+    n.y = 0;
+    if (length(n) < .5f)
+        return std::nullopt; // a floor or ceiling screen has no front to stand at
+    n = normalized(n);
+    for (float d : {1.5f + body.radius + .15f, 2.3f, 2.8f}) {
+        Vec3 p = centre + n * d;
+        p.y = from.y;
+        auto floor = interaction::floorAt(scene, p, 1.5f);
+        if (!floor)
+            continue;
+        Vec3 root{p.x, *floor, p.z};
+        if (!interaction::checkSpot(scene, root, body) && interaction::checkLeg(scene, from, root, body, 1).empty() &&
+            interaction::checkLeg(scene, root, from, body, 1).empty())
+            return root;
+    }
+    return std::nullopt;
+}
 void Runtime::npcSync() {
     auto section = timed("npcs.sync");
     npcSynced = {instanceRevision, pathRevision, builtObjects, companionRevision};
@@ -271,6 +375,7 @@ void Runtime::npcSync() {
             a.speed = pathJson.value("speed", 0.f);
             auto &walk = routeWalkability(pathJson, body);
             suspended = !walk.walkable;
+            a.detours = walk.detours;
             if (suspended)
                 objectNotice("npc.suspended", info.name + " stands still: its route is not walkable (" +
                                                   (walk.problems.empty() ? std::string("unknown") : walk.problems[0]) + ")",
@@ -286,6 +391,8 @@ void Runtime::npcSync() {
                 stop.at = distances[point];
                 stop.seconds = s.value("seconds", 3.f);
                 stop.clip = s.value("clip", std::string());
+                if (a.detourAt(stop.at) >= 0)
+                    continue; // inside a blocked stretch: walked round, not stopped at
                 Vec3 at = a.route.at(stop.at);
                 if (s.contains("face")) {
                     auto &f = s["face"];
@@ -296,8 +403,14 @@ void Runtime::npcSync() {
                             stop.face = o->position;
                     } else if (f.contains("anchor"))
                         for (auto &an : world->anchors)
-                            if (Json(an.value("id", "")) == f["anchor"] && an.contains("pose"))
+                            if (Json(an.value("id", "")) == f["anchor"] && an.contains("pose")) {
                                 stop.face = vec3(an["pose"]["position"]);
+                                stop.spot = screenFront(an, at, body, scene);
+                                if (!stop.spot)
+                                    objectNotice("npc.suspended", info.name + " stops beside " + f["anchor"].get<std::string>() +
+                                                                      ": there is no walkable spot in front of it",
+                                                 "front:" + info.id + f["anchor"].get<std::string>() + signature);
+                            }
                 }
                 if (s.contains("seat"))
                     if (auto seat = resolveSeat(s["seat"], at)) {
@@ -433,6 +546,21 @@ void Runtime::npcTick(float dt) {
     w.present = present;
     w.glance = present;
     w.walkable = [&](Vec3 p) { return !interaction::checkSpot(scene, p, {}).has_value(); };
+    // Steering (sim/Steer.hpp): every character as of now, so the update order changes
+    // nothing. Priorities: residents and user characters in order, the companion last.
+    std::vector<sim::Mover> movers;
+    for (size_t i = 0; i < npcs.size(); ++i) {
+        auto &n = npcs[i];
+        auto &a = n.agent;
+        a.id = int(i);
+        a.priority = n.companion ? -1 : 1000 - int(i);
+        if (n.state != "active" || n.id == carried || (n.companion && companionBrain.hidden()))
+            continue;
+        bool waiting = (a.mode == sim::NpcAgent::Mode::Walk && a.yielding) || (a.mode == sim::NpcAgent::Mode::Detour && a.speedNow <= 0);
+        movers.push_back({a.id, a.position, animate ? a.velocity : Vec3{}, a.radius, a.priority,
+                          Vec3{std::sin(a.heading), 0, std::cos(a.heading)}, waiting});
+    }
+    w.movers = &movers;
     npcInteractionTick();
     renderer.npcs.resize(npcs.size());
     auto now = std::chrono::steady_clock::now();
@@ -626,11 +754,14 @@ void Runtime::beginInteraction(const std::string &objectId, const std::string &i
         return;
     }
     auto &action = (*chosen)["action"];
-    if (action["type"] == "companion") { // Stay or Follow: done at once
+    if (action["type"] == "companion") { // Stay or Follow, or its pace: done at once
         n->agent.endInteract();
         if (npcInteraction && npcInteraction->objectId == objectId)
             npcInteraction.reset();
-        companionSetMode(action["mode"]);
+        if (action.contains("pace"))
+            companionSetPace(action["pace"]);
+        else
+            companionSetMode(action["mode"]);
         ++npcRevision;
         return;
     }
@@ -668,7 +799,7 @@ void Runtime::beginInteraction(const std::string &objectId, const std::string &i
         auto route = world::routeOf(path);
         auto scene = npcScene();
         interaction::Body body{n->agent.radius, n->agent.height};
-        if (!routeWalkability(path, body).walkable ||
+        if (!routeWalkability(path, body).walkable || !routeWalkability(path, body).detours.empty() ||
             !interaction::checkLeg(scene, n->agent.guideStart(), route.at(0), body, 1).empty()) {
             n->agent.endInteract();
             throw ipc::Error(-32007, n->name + " can't walk there", Json{{"retryable", false}, {"rule", "walkable"}});
@@ -1322,6 +1453,13 @@ Json Runtime::npcDiagnostics() {
                           {"seatFit", {{"known", a.seatKnown}, {"seatHeight", a.seatHeight}, {"sink", a.seatSink}}},
                           {"s", a.s},
                           {"routeLength", a.route.length()},
+                          {"speed", a.speedNow},
+                          {"gait", {{"phase", a.gaitPhase}, {"previous", a.pose.previous}, {"fade", a.pose.fade},
+                                    {"clipTime", a.pose.clipTime}, {"previousTime", a.pose.previousTime}}},
+                          {"detours", a.detours.size()},
+                          {"detour", a.detour},
+                          {"backingOff", a.backoffLeft > 0},
+                          {"blockedFor", a.blockedFor},
                           {"stops", a.stops.size()},
                           {"seats", a.seats.size()},
                           {"interactions", n.interactions.size()}});
