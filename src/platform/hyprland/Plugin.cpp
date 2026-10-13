@@ -5727,7 +5727,7 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     part("camera");
     // NPCs: shown/hidden, placed and posed (a paused or still NPC keeps the key stable; an
     // animating one out of view doesn't change the image, and in view frames are forced).
-    h(r.npcs.size());
+    h(r.npcs.size())(r.charactersReady()); // a character's first frame once its upload is done
     // Occlusion changes once per crossing: the frame after a character goes fully behind a
     // wall draws it gone, instead of leaving its last frame at the wall's edge. Only drawn
     // ones count: an off-screen resident walking behind walls changes nothing on screen.

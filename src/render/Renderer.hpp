@@ -142,7 +142,11 @@ class Renderer {
     void releaseCharacters(); // GL context current
     // Uploads the characters in `npcs` that have no GPU copy yet (in the tick, GL state
     // saved and restored), so drawing never uploads inside the render pass. True if any.
-    bool prepareCharacters();
+    // Uploads characters new to the renderer, a few MiB per call (call it each tick, never
+    // in the render pass): spawning several no longer uploads all of them in one frame. A
+    // character is drawn once all of it is on the GPU. Returns true when one became ready.
+    bool prepareCharacters(size_t byteBudget = 4 * 1024 * 1024);
+    size_t charactersReady() const; // characters on the GPU (frame key: the first frame with one)
     struct Reticle {
         enum Style { CrossDot, TDot, CircleDot, Dot, Cross, Chevron };
         enum State { Neutral, Target, Valid, OutOfRange, Invalid, Holding, Typing };
@@ -261,10 +265,16 @@ class Renderer {
         std::vector<Primitive> primitives;
         std::vector<GLuint> textures;
         GLuint materials = 0; // MaterialStd140 ranges, one per material
+        // Upload cursor: images (and, for KTX2, mip levels) then the primitives, then the
+        // materials. Drawn only once ready.
+        size_t image = 0, level = 0, primitive = 0;
+        bool ready = false;
     };
     std::map<const world::Character *, CharacterGPU> characterGPU_;
     GLuint skinned_ = 0, jointUbo_ = 0;
-    CharacterGPU &characterGPU(const world::Character &);
+    // Uploads the next pieces of one character within `budget` bytes (at least one piece);
+    // true once it is ready.
+    bool uploadCharacter(const world::Character &, CharacterGPU &, size_t &budget);
     void drawNpcs(const std::array<std::array<float, 4>, 6> &planes, const std::vector<bool> &areas, bool regions, int tone, float exposure);
     GLuint scene_ = 0, tone_ = 0, reticle_ = 0, quadVao_ = 0, quadVbo_ = 0, screenVao_ = 0, repeat_ = 0, clamp_ = 0, mipClamp_ = 0;
     GLuint environment_ = 0, bloom_ = 0, sky_ = 0, native_ = 0, depthProgram_ = 0;

@@ -409,7 +409,7 @@ int main(int argc, char **argv) {
             p["machinesRevision"] = machines.revision();
             // Characters: posed here from the plugin's pose inputs, uploaded before drawing.
             offload::applyCharacters(p.value("characters", Json::array()), *scene, renderer);
-            renderer.prepareCharacters();
+            renderer.prepareCharacters(SIZE_MAX); // the worker's own process: no compositor frame to protect
             p.erase("characters");
             if (p.contains("clock") && p["clock"].is_number())
                 renderer.animationClock = p["clock"].get<double>();

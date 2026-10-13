@@ -968,6 +968,32 @@ int main(int argc, char **argv) {
                 check(covered > 500, "textured character not drawn");
                 check(worst <= 6, std::format("compressed character texture drew differently (max channel delta {})", worst).c_str());
                 check(glGetError() == GL_NO_ERROR, "compressed character upload GL error");
+                // A small per-tick budget spreads a character's upload over several calls; it
+                // is not drawn until all of it is up, then draws as before.
+                renderer.npcs.clear();
+                renderer.releaseCharacters();
+                {
+                    render::Renderer::Npc npc;
+                    npc.character = blocks;
+                    npc.model.v[13] = 1.2f, npc.model.v[14] = 1.5f;
+                    blocks->evaluate({nullptr, blocks->clip("idle")}, npc.skin);
+                    renderer.npcs.push_back(std::move(npc));
+                    int calls = 1;
+                    bool ready = renderer.prepareCharacters(1);
+                    std::vector<unsigned char> early(320 * 180 * 4);
+                    renderer.draw(fbo, 320, 180, camera, {}, false);
+                    glFinish();
+                    glReadPixels(0, 0, 320, 180, GL_RGBA, GL_UNSIGNED_BYTE, early.data());
+                    check(!ready && renderer.charactersReady() == 0 && early == none, "a partly uploaded character was drawn");
+                    while (!ready && calls < 100)
+                        ready = renderer.prepareCharacters(1), ++calls;
+                    check(ready && calls > 2 && renderer.charactersReady() == 1, std::format("budgeted character upload took {} calls", calls).c_str());
+                    renderer.draw(fbo, 320, 180, camera, {}, false);
+                    glFinish();
+                    std::vector<unsigned char> late(320 * 180 * 4);
+                    glReadPixels(0, 0, 320, 180, GL_RGBA, GL_UNSIGNED_BYTE, late.data());
+                    check(late == kept, "a character uploaded in pieces drew differently");
+                }
                 renderer.npcs.clear();
                 renderer.releaseCharacters();
             }

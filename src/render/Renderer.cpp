@@ -3395,34 +3395,45 @@ Renderer::Pixels Renderer::snapshot() {
     pixels.readbackMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
     return pixels;
 }
-Renderer::CharacterGPU &Renderer::characterGPU(const world::Character &c) {
-    auto [it, fresh] = characterGPU_.try_emplace(&c);
-    auto &gpu = it->second;
-    if (!fresh)
-        return gpu;
-    for (size_t i = 0; i < c.images.size(); ++i) {
-        auto &image = c.images[i];
-        bool linear = i < c.linearImages.size() && c.linearImages[i];
-        GLuint t;
-        glGenTextures(1, &t);
-        glBindTexture(GL_TEXTURE_2D, t);
+bool Renderer::uploadCharacter(const world::Character &c, CharacterGPU &gpu, size_t &budget) {
+    auto spend = [&](size_t bytes) { budget = bytes >= budget ? 0 : budget - bytes; };
+    while (gpu.image < c.images.size()) {
+        if (!budget)
+            return false;
+        auto &image = c.images[gpu.image];
+        bool linear = gpu.image < c.linearImages.size() && c.linearImages[gpu.image];
+        if (gpu.textures.size() == gpu.image) {
+            GLuint t;
+            glGenTextures(1, &t);
+            gpu.textures.push_back(t);
+        }
+        glBindTexture(GL_TEXTURE_2D, gpu.textures[gpu.image]);
         if (!image.levels.empty()) {
             // Transcoded KTX2, as world images: the block format (sRGB twin for colour) and the
-            // package's own mip chain.
+            // package's own mip chain, a level at a time.
             GLenum format = linear ? image.compressedFormat : srgbVariant(image.compressedFormat);
-            glTexStorage2D(GL_TEXTURE_2D, GLsizei(image.levels.size()), format, image.width, image.height);
-            for (size_t level = 0; level < image.levels.size(); ++level)
-                glCompressedTexSubImage2D(GL_TEXTURE_2D, GLint(level), 0, 0, std::max(1, image.width >> level),
-                                          std::max(1, image.height >> level), format, GLsizei(image.levels[level].size()),
-                                          image.levels[level].data());
+            if (gpu.level == 0)
+                glTexStorage2D(GL_TEXTURE_2D, GLsizei(image.levels.size()), format, image.width, image.height);
+            for (; gpu.level < image.levels.size() && budget; ++gpu.level) {
+                glCompressedTexSubImage2D(GL_TEXTURE_2D, GLint(gpu.level), 0, 0, std::max(1, image.width >> gpu.level),
+                                          std::max(1, image.height >> gpu.level), format, GLsizei(image.levels[gpu.level].size()),
+                                          image.levels[gpu.level].data());
+                spend(image.levels[gpu.level].size());
+            }
+            if (gpu.level < image.levels.size())
+                return false;
         } else {
             glTexImage2D(GL_TEXTURE_2D, 0, linear ? GL_RGBA8 : GL_SRGB8_ALPHA8, image.width, image.height, 0, GL_RGBA,
                          GL_UNSIGNED_BYTE, image.rgba.data());
             glGenerateMipmap(GL_TEXTURE_2D);
+            spend(image.rgba.size());
         }
-        gpu.textures.push_back(t);
+        ++gpu.image, gpu.level = 0;
     }
-    for (auto &prim : c.primitives) {
+    for (; gpu.primitive < c.primitives.size(); ++gpu.primitive) {
+        if (!budget)
+            return false;
+        auto &prim = c.primitives[gpu.primitive];
         CharacterGPU::Primitive p;
         glGenVertexArrays(1, &p.vao);
         glGenBuffers(1, &p.vbo);
@@ -3447,6 +3458,7 @@ Renderer::CharacterGPU &Renderer::characterGPU(const world::Character &c) {
         p.count = GLsizei(prim.indices.size());
         p.material = prim.material;
         gpu.primitives.push_back(p);
+        spend(prim.vertices.size() * sizeof(V) + prim.indices.size() * 4);
     }
     glGenBuffers(1, &gpu.materials);
     glBindBuffer(GL_UNIFORM_BUFFER, gpu.materials);
@@ -3455,7 +3467,10 @@ Renderer::CharacterGPU &Renderer::characterGPU(const world::Character &c) {
         auto m = std140(c.materials[i]);
         glBufferSubData(GL_UNIFORM_BUFFER, GLintptr(i * materialStride_), sizeof m, &m);
     }
-    return gpu;
+    return gpu.ready = true;
+}
+size_t Renderer::charactersReady() const {
+    return size_t(std::count_if(characterGPU_.begin(), characterGPU_.end(), [](auto &e) { return e.second.ready; }));
 }
 void Renderer::drawNpcs(const std::array<std::array<float, 4>, 6> &planes, const std::vector<bool> &areas, bool regions, int tone,
                         float exposure) {
@@ -3480,7 +3495,10 @@ void Renderer::drawNpcs(const std::array<std::array<float, 4>, 6> &planes, const
         auto &c = *npc.character;
         if (!npcVisible(npc, planes, areas, regions))
             continue;
-        auto &gpu = characterGPU(c);
+        auto found = characterGPU_.find(&c);
+        if (found == characterGPU_.end() || !found->second.ready)
+            continue; // still uploading (prepareCharacters, between frames)
+        auto &gpu = found->second;
         glBindBuffer(GL_UNIFORM_BUFFER, jointUbo_);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, npc.skin.size() * sizeof(Mat4), npc.skin.data());
         auto normals = normalMatrix(npc.model);
@@ -3523,17 +3541,28 @@ void Renderer::drawNpcs(const std::array<std::array<float, 4>, 6> &planes, const
     glBindVertexArray(0);
     glDisable(GL_CULL_FACE);
 }
-bool Renderer::prepareCharacters() {
-    bool any = false;
+bool Renderer::prepareCharacters(size_t byteBudget) {
+    bool pending = false;
     for (auto &npc : npcs)
-        any = any || (npc.character && !characterGPU_.contains(npc.character.get()));
-    if (!any)
+        if (npc.character) {
+            auto found = characterGPU_.find(npc.character.get());
+            pending = pending || found == characterGPU_.end() || !found->second.ready;
+        }
+    if (!pending)
         return false;
     GLState state;
-    for (auto &npc : npcs)
-        if (npc.character)
-            characterGPU(*npc.character);
-    return true;
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    bool ready = false;
+    size_t budget = std::max<size_t>(byteBudget, 1);
+    for (auto &npc : npcs) {
+        if (!npc.character || !budget)
+            continue;
+        auto &gpu = characterGPU_[npc.character.get()];
+        if (!gpu.ready)
+            ready = uploadCharacter(*npc.character, gpu, budget) || ready;
+    }
+    return ready;
 }
 void Renderer::releaseCharacters() {
     for (auto &[character, gpu] : characterGPU_) {
