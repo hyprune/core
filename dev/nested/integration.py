@@ -8,19 +8,6 @@ import cinema
 import session
 
 def keys(*args): subprocess.run([str(HERE/'ctl.py'),'env','wtype',*args],check=True)
-def map_click_research():
-    # The deterministic 1920x1080 Director fits Switchyard's 900x1000 SVG
-    # in a 585x650 rectangle at (503,282); use the package affine coordinates.
-    output=next(m for m in json.loads(ctl('monitors','-j')) if m['name']=='HEADLESS-1')
-    target=(output['x']+763,output['y']+470)
-    for _ in range(4):
-        current=[float(v.strip()) for v in ctl('cursorpos').split(',')]
-        dx,dy=target[0]-current[0],target[1]-current[1]
-        if abs(dx)+abs(dy)<3:break
-        subprocess.run([str(HERE/'ctl.py'),'env',str(ROOT/'build/nested-pointer'),str(dx),str(dy)],check=True)
-        time.sleep(.06)
-    subprocess.run([str(HERE/'ctl.py'),'env',str(ROOT/'build/nested-pointer')],check=True)
-
 def shot(name): subprocess.run([str(HERE/'ctl.py'),'shot',str(STATE/name)],check=True)
 def wait_for(check, timeout=10):
     end=time.monotonic()+timeout
@@ -200,7 +187,10 @@ def showcase(client,state,ui,status,pos):
         live=camera()['captures'];workpos=next(s['position'] for s in live if 'Build terminal' in s['title'])
         glide([-9,2.1,-1.6],[workpos[0],2.25,workpos[2]+4.1],2,-.32,0)
         subprocess.run([str(HERE/'ctl.py'),'env',str(ROOT/'build/nested-pointer')],check=True)
-        keys('-d','40',"printf '\\nHello from inside Hyprune.\\nThis terminal receives real keyboard input.\\n'");keys('-k','Return');pause(2.2);keys('-k','Escape')
+        # A click only aims since M3B: E uses the terminal in place, Super+Tab leaves it.
+        keys('-k','e');wait_for(lambda:camera()['mode']=='typing')
+        keys('-d','40',"printf '\\nHello from inside Hyprune.\\nThis terminal receives real keyboard input.\\n'");keys('-k','Return');pause(2.2)
+        keys('-M','logo','-P','Super_L','-k','Tab','-p','Super_L','-m','logo');wait_for(lambda:camera()['mode']!='typing')
         btop=next((s['position'] for s in live if 'btop' in s['title']),None)
         if btop:
             glide([workpos[0],2.25,workpos[2]+4.1],[btop[0],2.25,btop[2]+4.1],2);pause(2)
@@ -209,7 +199,7 @@ def showcase(client,state,ui,status,pos):
             glide([btop[0],2.25,btop[2]+4.1] if btop else [workpos[0],2.25,workpos[2]+4.1],[browser[0],2.25,browser[2]+4.1],1.8);pause(1.5)
         # Core-owned hold opens the real shell. Set the waypoint from its Map.
         pose([-4,1.7,4.5]);keys('-P','Tab','-s','1150','-p','Tab');wait_for(lambda:status().get('director'))
-        ui('tabNamed','map');pause(2);map_click_research();wait_for(lambda:state()['location']['waypoint'] and state()['location']['waypoint']['id']=='research');pause(2.5);shot('showcase-map.png')
+        ui('tabNamed','map');pause(2);ui('select',research);wait_for(lambda:state()['location']['waypoint'] and state()['location']['waypoint']['id']=='research');pause(2.5);shot('showcase-map.png')
         ui('travel',research);wait_for(lambda:status().get('warp'));pause(3);shot('showcase-travel.png')
         wait_for(lambda:state()['location']['transition']['phase']=='arrived',10);pause(2)
         # Workspace location change, then the genuine compositor switch home.
