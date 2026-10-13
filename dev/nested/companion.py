@@ -10,6 +10,8 @@ companion-capable character; required). Checks, in Switchyard:
     teleport while it can keep up, never popping in view; it ran to catch up.
  3. Frames: walking in view keeps frames coming; at rest beside the still player, none.
  4. Stay and Follow (E menu choices): stays put while the player walks off; comes back.
+    Motion `auto` (the default, used throughout): after 32 s standing still it follows the next
+    walk; `npc_motion` off refuses Stay (-32005, the reason in the message).
  5. Talk: the aimed companion offers Talk and Stay; Talk shows a say line, the next one each time.
  6. Tool 3: paths.draw {bind: companion}, points on the floor, paths.finish binds it; it walks
     the route; Follow returns it to the player.
@@ -177,7 +179,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('companion.set refuses an unknown ref', ok, text)
     client.call('world.load', {'worldId': YARD})
     s.ctl('eval', 'hl.plugin.hyprune.toggle("HEADLESS-1")'); wait(lambda: s.camera()['active'], timeout=60); time.sleep(1)
-    client.call('graphics.set', {'patch': {'offload': 'off', 'npc_motion': 'always'}})
+    client.call('graphics.set', {'patch': {'offload': 'off', 'npc_motion': 'auto'}})  # the default: no power or idle pause
     client.call('movement.set', {'modeId': 'com.hyprune.walk'})
     center()
     camera([-10, 1.7, 9.5], math.pi / 2)  # looking east along the north edge of the loop
@@ -235,6 +237,17 @@ def acceptance(client, children, args, shell_token, socketpath):
         client.call('interaction.choose', {'objectId': 'companion', 'interactionId': 'follow'})
         wait(lambda: flat(pos(), feet()) < 3 and comp()['state']['activity'] == 'idle', timeout=30)
         check('Follow: it comes back', comp()['state']['mode'] == 'follow', comp()['state'])
+
+        # 4b. Motion policy: `auto` never pauses it while the world is shown (a player standing
+        # still past the old 30 s idle pause, any power supply); `off` refuses its requests.
+        time.sleep(32)
+        r = walk_check('after-idle', [[-8, 0, 9.5], [-2, 0, 9.5]], 1.3)  # north, away from where it stands
+        check('auto: after 32 s standing still it follows the next walk', state()['npcs']['state'] == 'animating' and
+              r['teleports'] == 0 and r['pops'] == 0 and r['min'] >= .95 and r['end'] <= 3.0, {**r, 'npcs': state()['npcs']['state']})
+        client.call('graphics.set', {'patch': {'npc_motion': 'off'}}); time.sleep(.4)
+        ok, text = refused(-32005, 'interaction.choose', {'objectId': 'companion', 'interactionId': 'stay'})
+        check('motion off: Stay is refused with the reason', ok and 'motion off' in text and comp()['state']['mode'] == 'follow', text)
+        client.call('graphics.set', {'patch': {'npc_motion': 'auto'}}); time.sleep(.4)
 
         # 5. Talk.
         c = comp(); p = c['position']; f = feet()
@@ -451,7 +464,7 @@ def offload_parity(client, check, comp, look, out):
         path = out / f'companion-8-{name}.png'
         subprocess.run([str(s.HERE / 'ctl.py'), 'shot', str(path)], check=True)
         shots[name] = path
-    offload('off'); motion('always')
+    offload('off'); motion('auto')
     img = Image.open(shots['in-process']); w, h = img.size
     box = (w // 2 - w // 8, h // 4, w // 2 + w // 8, h - h // 10)
     region = lambda path: np.asarray(Image.open(path).convert('RGB'), dtype=np.int16)[box[1]:box[3], box[0]:box[2]]

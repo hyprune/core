@@ -28,8 +28,13 @@ Checks:
     the tool 3 spot and from the yard's side behind the research dock wall; in the open, drawn.
 10. Disable/remove: authored characters disable (and enable), never remove; user ones remove.
 11. Persistence: a world reload keeps the user character on its route and a disabled one off.
+Motion policy (9c): with `auto` a guide is refused under still, reduced motion and off (and
+    talk under off) with the reason; a player standing still 32 s doesn't pause residents; a
+    guide with no movement input runs to its end and back onto its route.
 12. Offload parity (HYPRUNE_NPCS_OFFLOAD != 0): characters posed still, stills with offload
     off and on compared per pixel; the worker draws them (a still with characters off differs).
+13. Lumen Reach (HYPRUNE_LUMEN_PACKAGE) under auto: at each spawn pose, facing away from every
+    resident, a still player costs 0 fps while they animate; facing one, frames come.
 Evidence: docs/evidence/npcs.json; stills in the state dir (HYPRUNE_NPCS_SHOTS: elsewhere).
 """
 import hashlib, json, math, os, pathlib, shutil, subprocess, sys, time
@@ -37,6 +42,8 @@ import session as s
 from m2 import wait, keys, pose
 
 WORLD = 'org.hyprune.npc-yard'
+LUMEN = 'com.hyprune.lumen-reach'   # step 13 (HYPRUNE_LUMEN_PACKAGE, else the worlds checkout's dist)
+LUMEN_POSES = {'arrival': [-8, 1.7, 12], 'array-hall': [8, 1.7, -34], 'rime-vault': [38, -4.3, -79], 'signal-rise': [54, 1.7, -125]}
 ARCHIVE = s.starter_archive('HYPRUNE_NPCS_LIBRARY')
 LIBRARY = s.library_of(ARCHIVE, 'com.hyprune.starter@0.1.0')  # the archive's own id@version
 EMBER = f'library/{LIBRARY}/resident-ember'
@@ -72,6 +79,10 @@ def prepare(installed):
     bench['nodes'] = [dict(n, scale=[1, 2 / 3, 1]) for n in bench['nodes']]
     (target / 'objects/bench.gltf').write_text(json.dumps(bench))
     shutil.copy2(s.ROOT / 'tests/fixtures/npcs/objects/bench.bin', target / 'objects/bench.bin')
+    lumen = pathlib.Path(os.environ.get('HYPRUNE_LUMEN_PACKAGE', str(s.ROOT.parent / 'worlds/dist' / LUMEN)))
+    if (lumen / 'world.json').is_file():
+        shutil.rmtree(installed / LUMEN, ignore_errors=True)
+        shutil.copytree(lumen, installed / LUMEN)
     w = json.loads((target / 'world.json').read_text())
     pt = lambda p, t='line': {'position': [p[0], 0, p[1]], 'type': t}
     # The second line is 150 characters: a caption wraps (up to four lines), never cut.
@@ -367,6 +378,47 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('waypoint sets the waypoint', wp is not None, wp)
     motion('always')
 
+    # 9c. Motion policy: auto animates whenever the world is shown (no power, idle, typing or
+    # free-cursor pause); only the user's settings stop characters, and they refuse a guide
+    # (-32005, the reason in the message) instead of accepting it and never walking.
+    client.call('interaction.choose', {'objectId': 'blue-walker', 'interactionId': None})  # the waypoint's
+    for name, patch, words in (('still', {'npc_motion': 'still'}, 'motion still'),
+                               ('reduced motion', {'npc_motion': 'auto', 'reduced_motion': True}, 'reduced motion'),
+                               ('off', {'npc_motion': 'off', 'reduced_motion': False}, 'motion off')):
+        client.call('graphics.set', {'patch': patch}); time.sleep(.4)
+        ok, text = refused(None, -32005, 'interaction.choose', {'objectId': 'blue-walker', 'interactionId': 'show'})
+        check(f'{name}: a guide is refused with the reason ({words})', ok and words in text and state()['npcs']['interaction'] is None, text)
+    ok, text = refused(None, -32005, 'interaction.choose', {'objectId': 'blue-walker', 'interactionId': 'talk'})
+    check('off: talk is refused too (characters are hidden)', ok and 'motion off' in text, text)
+    client.call('graphics.set', {'patch': {'npc_motion': 'auto', 'reduced_motion': False}}); time.sleep(.4)
+    facing('crimson-walker', -5., height=2.2)
+    p0 = agent('crimson-walker')['position']; seen = set(); t0 = time.monotonic()
+    while time.monotonic() - t0 < 32:  # no input at all: past the old 30 s idle pause
+        n = state()['npcs']; seen.add((n['state'], n['reason'])); time.sleep(1)
+    p1 = agent('crimson-walker')['position']
+    check('auto: a player standing still for 32 s does not pause them', seen == {('animating', None)} and math.dist(p0, p1) > 5,
+          {'states': sorted(map(str, seen)), 'walkedM': round(math.dist(p0, p1), 2)})
+    # A guide under auto with no movement input (the eye is placed, not walked) runs to the
+    # end of its path and back onto its route; the bench at the guide's start is its seat stop.
+    look([0, 6, 9], [3, 0, 3])
+    wait(lambda: (lambda b: b if b and b['activity'] == 'sitting' and b['clip'] == 'sit_idle' else None)(agent('blue-walker')), timeout=120)
+    client.call('interaction.choose', {'objectId': 'blue-walker', 'interactionId': 'show'})
+    t0 = time.monotonic(); end = SOUTH[-1]; nearest = 99.; guided = False; reasons = set()
+    while time.monotonic() - t0 < 150:
+        b = agent('blue-walker'); reasons.add(state()['npcs']['reason'])
+        guided |= b['activity'] == 'guiding'
+        nearest = min(nearest, math.dist(b['position'][::2], end))
+        if guided and b['activity'] != 'guiding':
+            break
+        p = b['position']; look([p[0] + .5, 1.7, p[2] + 2.5], [p[0], 1, p[2]])  # the player keeps up
+        time.sleep(.5)
+    b = agent('blue-walker'); elapsed = time.monotonic() - t0
+    check('auto: a guide runs to completion with no movement input (over 30 s), back on its route',
+          guided and nearest < .5 and b['activity'] != 'guiding' and elapsed > 30 and reasons == {None} and
+          state()['npcs']['interaction'] is None, {'seconds': round(elapsed, 1), 'nearestEnd': round(nearest, 2), 'agent': b,
+                                                   'reasons': sorted(map(str, reasons))})
+    motion('always')
+
     # 9b. Occlusion: alone on its walk (the others disabled), the resident behind the yard's
     # opaque geometry is not drawn and keeps no frames coming; in the open again it is both.
     for other in ('blue-walker', user_id):
@@ -430,6 +482,32 @@ def acceptance(client, children, args, shell_token, socketpath):
     # 12. Offload parity for skinned characters.
     if os.environ.get('HYPRUNE_NPCS_OFFLOAD', '1') != '0':
         offload_parity(client, check, perf, look, agent, motion, out)
+
+    # 13. Lumen Reach under auto: at each spawn pose a still player with no resident in view
+    # costs no frames while the residents keep animating (render on demand and occlusion, not
+    # a pause); looking at one, frames come.
+    if (s.STATE / 'worlds' / LUMEN / 'world.json').is_file():
+        client.call('world.load', {'worldId': LUMEN}); wait(lambda: s.camera()['active'] and not s.camera().get('loading'), timeout=90)
+        motion('auto'); wait(lambda: len(diag()['agents']) >= 4, timeout=30); time.sleep(2)
+        poses = {}
+        for name, eye in LUMEN_POSES.items():
+            best = None
+            for k in range(8):  # the first heading with no resident drawn
+                camera(eye, k * math.pi / 4); time.sleep(1.2)
+                if diag()['drawn'] == 0 and not diag()['animationVisible']:
+                    best = k * math.pi / 4; break
+            if best is None:
+                poses[name] = {'noView': True}; continue
+            f = fps(3.)
+            poses[name] = {'yaw': round(best, 3), 'fps': f, 'state': state()['npcs']['state'], 'drawn': diag()['drawn']}
+        check('Lumen poses: a still player with no resident in view stays at 0 fps (residents animating)',
+              all(not v.get('noView') and v['fps'] < .5 and v['state'] == 'animating' for v in poses.values()), poses)
+        resident = next(a for a in diag()['agents'] if a['id'] == 'sun-court-resident')
+        facing('sun-court-resident', 4.)
+        looked = fps()
+        check('Lumen: a resident in view keeps frames coming', looked > 20 and diag()['drawn'] >= 1, {'fps': looked, 'agent': resident['id']})
+        shot('npcs-8-lumen-resident.png')
+        motion('always')
     (s.ROOT / 'docs/evidence/npcs.json').write_text(json.dumps({'nestedOnly': True, 'world': 'Switchyard as world format 0.9',
                                                                 'library': LIBRARY, 'checks': checks}, indent=1) + '\n')
     print('PASS npcs:', len(checks), 'checks', flush=True)
