@@ -5103,7 +5103,8 @@ void Runtime::tick() {
     auto now = std::chrono::steady_clock::now();
     float dt = std::chrono::duration<float>(now - lastTick).count();
     lastTick = now;
-    if (frameExport.active()) {
+    // Nothing presented for a while (the world not shown): wall time, so paths still end.
+    if (frameExport.active() && (presents != presentsTicked || now - lastPresented < std::chrono::milliseconds(100))) {
         if (presents - presentsTicked > 1)
             exportUnticked += presents - presentsTicked - 1;
         dt = float(double(std::min<uint64_t>(presents - presentsTicked, 6)) * refreshInterval());
@@ -5164,6 +5165,7 @@ void Runtime::tick() {
     if (active && capture.prune(&layout))
         publish();
     animationFrames = false;
+    bool cinemaTicked = false;
     if (active && monitor && layout.desktop.is_null() && fullscreen.phase != 2) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         if (!ownsInput()) {
@@ -5277,6 +5279,7 @@ void Runtime::tick() {
         if (cinema.active()) {
             auto section = timed("cinema");
             cinemaTick(dt);
+            cinemaTicked = true;
         }
         {
             auto section = timed("hands");
@@ -5391,6 +5394,8 @@ void Runtime::tick() {
             monitor->scheduleFrame();
         }
     }
+    if (cinema.active() && !cinemaTicked) // the world is not shown: the driver's time still runs
+        cinemaTick(dt);
     replayAfterTick();
     renderer.updateMs =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - updateStarted).count();
