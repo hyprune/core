@@ -229,7 +229,10 @@ const std::map<std::string, std::string> &objectMethods() {
         {"npcs.disable", "objects.control"},       {"npcs.remove", "objects.control"},
         {"paths.list", "state.read"},              {"paths.set", "objects.control"},
         {"paths.remove", "objects.control"},       {"paths.draw", "objects.control"},
-        {"paths.finish", "objects.control"},       {"interaction.choose", "world.control"}};
+        {"paths.finish", "objects.control"},       {"interaction.choose", "world.control"},
+        // IPC 0.25 (RFC-0010 companions amendment).
+        {"companion.set", "objects.control"},      {"companion.clear", "objects.control"},
+        {"companion.mode", "objects.control"}};
     return methods;
 }
 std::optional<ObjectRef> parseRef(const std::string &ref) {

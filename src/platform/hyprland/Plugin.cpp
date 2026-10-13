@@ -68,6 +68,7 @@ extern "C" {
 #include "offload/Machines.hpp"
 #include "offload/Objects.hpp"
 #include "offload/Supervisor.hpp"
+#include "sim/Companion.hpp"
 #include "sim/Npc.hpp"
 #include "interaction/Walkability.hpp"
 #include "world/Paths.hpp"
@@ -571,7 +572,7 @@ struct Runtime {
     // NPCs (RFC-0010, RFC-0011 P2; Npcs.inc): an agent per active character instance.
     struct NpcRun {
         std::string id, name, signature, path, state = "active", activity, seat;
-        bool user = false;
+        bool user = false, companion = false;
         unsigned asset = 0;
         sim::NpcAgent agent;
         std::shared_ptr<const world::Character> character;
@@ -592,7 +593,7 @@ struct Runtime {
     std::vector<NpcRun> npcs;
     std::string npcState = "none", npcReason, npcPower;
     std::chrono::steady_clock::time_point npcLastActive = std::chrono::steady_clock::now(), npcSupplyChecked{};
-    std::array<uint64_t, 3> npcSynced{}; // instanceRevision, pathRevision, builtObjects agents were built from
+    std::array<uint64_t, 4> npcSynced{}; // instanceRevision, pathRevision, builtObjects, companionRevision agents were built from
     uint64_t npcRevision = 0, pathRevision = 0, npcProtected = 0;
     std::set<std::string> seatTaken;     // occupied seat anchors (refs)
     std::map<const world::Character *, world::Character::SeatFit> seatFits;
@@ -646,6 +647,52 @@ struct Runtime {
     Json finishDrawing();
     void bindCharacter(const std::string &id, const Json &patch);
     std::optional<Json> npcsMethod(const std::string &method, const Json &params);
+    // The companion (Companion.inc, RFC-0010 companions amendment, IPC 0.25). The chosen ref
+    // is user state (companion.json, HYPRUNE_COMPANION_FILE); modes are per world (editor).
+    interaction::InputFile companionFile{"companion", Json::object(), [](const Json &j) {
+                                             if (!j.is_object() || j.size() > 1 || (j.size() == 1 && !(j.contains("ref") && j["ref"].is_string() &&
+                                                                                                         j["ref"].get<std::string>().size() <= 256)))
+                                                 throw std::runtime_error("companion.json must be {} or {ref}");
+                                             return j;
+                                         }};
+    sim::Companion companionBrain;
+    std::string companionStatus = "none", companionReason, companionName;
+    Json companionBlock = nullptr; // the chosen object's companion block
+    interaction::Body companionBody;
+    std::map<const world::Character *, std::string> companionChecked; // core's character check, first error
+    uint64_t companionRevision = 0;
+    Vec3 companionFeet{}, companionPublished{}, companionCarryFrom{};
+    float companionHeading = 0, companionTravel = 0, companionCarryHeading = 0, companionCarryDistance = 2;
+    bool companionCarry = false, companionFocused = false, companionMoving = false;
+    size_t companionLine = 0;
+    struct CompanionDrop {
+        Vec3 at{};
+        bool valid = false;
+        std::string route;
+        float s = 0, length = 0;
+        std::vector<Vec3> samples;
+    };
+    CompanionDrop companionDrop;
+    std::string methodProtocol = "0.1"; // the peer protocol of the method being run
+    Json companionCapability(const world::CatalogEntry &) const;
+    std::string companionRef() const;
+    Json companionConfig();
+    std::string companionMode() const;
+    void companionInject(std::vector<ObjectInfo> &);
+    Json companionInteractions() const;
+    std::vector<std::string> companionLines() const;
+    void companionRecord(Json record);
+    void companionBind(const Json &patch);
+    void companionSetMode(const std::string &mode);
+    void companionView(sim::CompanionView &, const interaction::PlacementScene &walk, const interaction::PlacementScene &stand);
+    bool companionStep(NpcRun &, float dt, const sim::NpcWorld &, const std::string &paused);
+    bool companionPickUp();
+    void companionCarryTick();
+    void companionDraw();
+    void companionPutDown();
+    std::optional<Json> companionMethod(const std::string &method, const Json &params);
+    Json companionState();
+    Json companionDiagnostics();
     Json npcDiagnostics();
     Json offloadCharacters() const;
     // Machines (RFC-0013 draft prototype): data-channel values drive every placed
@@ -1722,6 +1769,7 @@ void Runtime::publish() {
     publication["objects"] = objectsState();
     publication["npcs"] = npcsState();
     publication["live"] = {{"instances", machines.live()}};
+    publication["companion"] = companionState();
     for (auto &e : capture.entries)
         if (world && editor.locked(world->id, e.instance))
             publication["editor"]["locked"].push_back(e.surface.id);
@@ -3255,6 +3303,13 @@ void Runtime::action(interaction::Action a) {
                                           : config["input"]["resize_button"].get<uint32_t>();
         // Carry needs no particular tool for movable world objects (RFC-0011); scene nodes
         // that own collision stay tool 4 targets.
+        // The companion is the one character carry picks up (to set it down on a route or spot).
+        if (a.name == "carry" && a.pressed && a.edge && !aim() && !gizmo.dragging() && !instanceAim() && companionPickUp())
+            return;
+        if (a.name == "carry" && !a.pressed && companionCarry) {
+            companionPutDown();
+            return;
+        }
         if (a.name == "carry" && a.pressed && a.edge && !aim() && !gizmo.dragging() && !instanceAim() &&
             protectCharacter("Carry", "grab"))
             return;
@@ -3499,6 +3554,7 @@ Vec3 objectOrigin(const world::World &w, const std::string &id) {
 #include "Objects.inc"
 #include "Paths.inc"
 #include "Npcs.inc"
+#include "Companion.inc"
 void Runtime::saveEditor() {
     if (session.playing) return;
     auto value = editor.saved();
@@ -4190,6 +4246,8 @@ void Runtime::toolsTick() {
             }
         }
     pathDraw();
+    companionCarryTick();
+    companionDraw();
     for (auto &e : capture.entries)
         if (editor.locked(world->id, e.instance) && e.visible) {
             auto &s = e.surface;
@@ -4232,6 +4290,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     params.erase("_client");
     int peerPid = params.value("_pid", -1);
     auto protocol = params.value("_protocol", "0.1");
+    methodProtocol = protocol;
     params.erase("_pid");
     params.erase("_protocol");
     if (method == "replay.start" && control.photoHeld()) throw ipc::Error(-32005,"release photo camera before replay");
@@ -4919,6 +4978,10 @@ void Runtime::tick() {
         applyGraphics(*next);
     if (auto next = playerFile.poll())
         applyPlayer(*next);
+    if (companionFile.poll()) { // edited by hand or another client: choose again
+        ++companionRevision;
+        objectsDirty = true;
+    }
     if (!session.playing) if (auto next = inputFile.poll())
         applyInput(*next);
     renderer.debug = debug;
@@ -5679,6 +5742,7 @@ int luaCamera(lua_State *state) {
              d["forcesFrames"] = runtime->animationFrames && d["animationVisible"].get<bool>();
              return d;
          }()},
+        {"companion", runtime->companionDiagnostics()},
         {"machines",
          [] {
              auto m = runtime->monitor.lock();

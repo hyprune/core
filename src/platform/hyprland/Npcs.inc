@@ -6,6 +6,7 @@
 // Included by Plugin.cpp after Objects.inc.
 namespace {
 constexpr float npcPublishSeconds = .5f; // moving characters' positions: at most twice a second
+constexpr const char *companionId = "companion"; // the companion's reserved object id (Companion.inc)
 float yawOf(const std::array<float, 4> &q) {
     auto f = rotate(q, {0, 0, 1});
     return std::atan2(f.x, f.z);
@@ -73,7 +74,7 @@ Json Runtime::pathsList() {
         std::string ref = source + "/" + p["id"].get<std::string>();
         Json bound = Json::array();
         for (auto &n : npcs)
-            if (n.path == ref && bound.size() < 8)
+            if (n.path == ref && bound.size() < 8 && (!n.companion || ipc::protocol::atLeast(methodProtocol, "0.25")))
                 bound.push_back(n.id);
         bool route = world::pathUse(p) == "route";
         Json walkable = nullptr, problems = Json::array();
@@ -176,7 +177,7 @@ bool Runtime::reserveSeat(const std::string &ref) {
 // blocked have no agent.
 void Runtime::npcSync() {
     auto section = timed("npcs.sync");
-    npcSynced = {instanceRevision, pathRevision, builtObjects};
+    npcSynced = {instanceRevision, pathRevision, builtObjects, companionRevision};
     if (!world) {
         npcs.clear();
         return;
@@ -192,10 +193,17 @@ void Runtime::npcSync() {
             continue;
         // Configuration: the authored objects[] entry or the user record.
         Json config = Json::object();
+        bool companion = info.source == "companion";
         if (info.source == "authored") {
             for (auto &o : world->manifest.value("objects", Json::array()))
                 if (o["id"] == info.id)
                     config = o;
+        } else if (companion) {
+            // A route, a stay spot or (follow) where it is now.
+            config = companionConfig();
+            if (!config.is_object())
+                config = Json{{"mode", "follow"}};
+            config["interactions"] = companionInteractions();
         } else
             config = editor.placement(world->id, info.id);
         std::string path = config.contains("path") && config["path"].is_string() ? qualifiedPath(config["path"]) : "";
@@ -203,7 +211,7 @@ void Runtime::npcSync() {
         Json traits = asset.traits.contains("character") ? asset.traits["character"] : Json::object();
         interaction::Body body{traits.value("radius", .35f), traits.value("height", 1.75f)};
         auto signature = config.dump() + "\n" + pathJson.dump() + "\n" + std::to_string(builtObjects) + "\n" +
-                         std::to_string(inst.asset) + "\n" + std::to_string(instanceRevision);
+                         std::to_string(inst.asset) + "\n" + (companion ? "companion" : std::to_string(instanceRevision));
         auto old = std::find_if(npcs.begin(), npcs.end(), [&](auto &n) { return n.id == info.id; });
         if (old != npcs.end() && old->signature == signature) {
             next.push_back(std::move(*old));
@@ -215,6 +223,7 @@ void Runtime::npcSync() {
         n.id = info.id;
         n.name = info.name;
         n.user = info.source == "user";
+        n.companion = companion;
         n.asset = inst.asset;
         n.character = asset.character;
         n.signature = signature;
@@ -305,8 +314,9 @@ void Runtime::npcSync() {
                 a.stops.push_back(stop);
             }
         } else {
-            a.home = info.source == "user" ? vec3(config["pose"]["position"]) : inst.position;
-            a.homeHeading = yawOf(info.source == "user" ? config["pose"]["rotation"].get<std::array<float, 4>>() : inst.rotation);
+            bool posed = info.source == "user" || (companion && config.contains("pose"));
+            a.home = posed ? vec3(config["pose"]["position"]) : inst.position;
+            a.homeHeading = yawOf(posed ? config["pose"]["rotation"].get<std::array<float, 4>>() : inst.rotation);
             if (config.contains("seat") && config["seat"].is_string())
                 if (auto seat = resolveSeat(config["seat"], a.home); seat && reserveSeat(seat->ref)) {
                     a.homeSeat = int(a.seats.size());
@@ -324,6 +334,18 @@ void Runtime::npcSync() {
             a.direction = old->agent.direction;
             a.heading = old->agent.heading;
             a.position = a.route.at(a.s);
+        } else if (companion && old != npcs.end()) {
+            // The companion keeps its place and pose across a mode change; put on a route, it
+            // walks to its starting point first (a leg like a seat's return).
+            a.position = old->agent.position, a.heading = old->agent.heading, a.pose = old->agent.pose;
+            if (!a.route.empty() && !suspended) {
+                Vec3 join = a.route.at(a.s);
+                if (std::hypot(join.x - a.position.x, join.z - a.position.z) > .05f) {
+                    auto legs = companionBrain.planner.plan(a.position, join);
+                    a.legs = legs ? *legs : std::vector<Vec3>{join};
+                    a.mode = sim::NpcAgent::Mode::FromSeat;
+                }
+            }
         }
         n.state = suspended ? "suspended" : "active";
         n.light = std::nullopt;
@@ -354,6 +376,10 @@ void Runtime::npcWorldLoaded() {
     npcDrawing.reset();
     npcAimed = nullptr;
     npcSynced = {};
+    companionBrain.rejoin(true); // comes along: out of view, a wave when seen
+    companionCarry = false;
+    companionFocused = false;
+    companionFeet = camera.position - Vec3{0, camera.eyeHeight, 0};
     renderer.npcs.clear();
     renderer.releaseCharacters();
 }
@@ -390,7 +416,7 @@ void Runtime::npcTick(float dt) {
         renderer.npcs.clear();
         return;
     }
-    if (npcSynced != std::array<uint64_t, 3>{instanceRevision, pathRevision, builtObjects})
+    if (npcSynced != std::array<uint64_t, 4>{instanceRevision, pathRevision, builtObjects, companionRevision})
         npcSync();
     if (npcs.empty()) {
         npcState = "none", npcReason.clear();
@@ -429,7 +455,11 @@ void Runtime::npcTick(float dt) {
         auto &n = npcs[i];
         auto &a = n.agent;
         auto &c = *n.character;
-        if (animate && n.state == "active")
+        bool moving = animate && n.state == "active";
+        if (n.companion) {
+            moving = n.state == "active" && companionStep(n, dt, w, paused);
+            companionMoving = moving;
+        } else if (animate && n.state == "active")
             a.update(dt, w);
         if (animate || still || n.skin.empty() || n.stillPosed != still) {
             world::Character::PoseInput in;
@@ -475,12 +505,15 @@ void Runtime::npcTick(float dt) {
             n.probe = {inst.ambientUp.x, inst.ambientUp.y, inst.ambientUp.z, inst.sun,
                        inst.ambientDown.x, inst.ambientDown.y, inst.ambientDown.z, inst.sunVisibility};
             // Published positions: at most twice a second, when they changed.
+            std::string activity = n.companion ? companionBrain.activity(a) + (companionCarry ? "c" : "") : a.activity();
             if (std::chrono::duration<float>(now - n.published).count() >= npcPublishSeconds &&
-                (length(a.position - info->position) > .05f || n.activity != a.activity() || n.seat != a.seatRef())) {
+                (length(a.position - info->position) > .05f || n.activity != activity || n.seat != a.seatRef())) {
                 info->position = a.position;
+                if (n.companion)
+                    companionPublished = a.position;
                 info->rotation = {0, std::sin(a.heading * .5f), 0, std::cos(a.heading * .5f)};
                 n.published = now;
-                n.activity = a.activity();
+                n.activity = activity;
                 n.seat = a.seatRef();
                 moved = true;
             }
@@ -493,7 +526,8 @@ void Runtime::npcTick(float dt) {
             n.occludedEye = camera.position, n.occludedAt = a.position;
             n.occluded = world::characterOccluded(*world, camera.position, model, c.lo, c.hi);
         }
-        renderer.npcs[i] = {n.character, model, n.skin, n.accent, animate && n.state == "active", n.probe, n.occluded};
+        bool hidden = n.companion && companionBrain.hidden() && !companionCarry && companionMode() != "route";
+        renderer.npcs[i] = {hidden ? nullptr : n.character, model, n.skin, n.accent, moving, n.probe, n.occluded};
     }
     // New characters upload here, never in the render pass.
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
@@ -595,10 +629,21 @@ void Runtime::beginInteraction(const std::string &objectId, const std::string &i
         return;
     }
     auto &action = (*chosen)["action"];
+    if (action["type"] == "companion") { // Stay or Follow: done at once
+        n->agent.endInteract();
+        if (npcInteraction && npcInteraction->objectId == objectId)
+            npcInteraction.reset();
+        companionSetMode(action["mode"]);
+        ++npcRevision;
+        return;
+    }
     it.interactionId = (*chosen)["id"];
     it.label = (*chosen)["label"];
     it.type = action["type"];
-    if (it.type == "say")
+    if (it.type == "say" && n->companion) { // the next of its lines, each time
+        auto lines = companionLines();
+        it.lines = lines.empty() ? action["lines"] : Json::array({lines[companionLine++ % lines.size()]});
+    } else if (it.type == "say")
         it.lines = action["lines"];
     else if (it.type == "panel")
         it.panel = action["panel"];
@@ -714,7 +759,7 @@ void Runtime::npcInteractionTick() {
 Json Runtime::npcsState() {
     size_t authored = 0, user = 0;
     for (auto &i : objectInfos)
-        if (i.character)
+        if (i.character && i.source != "companion")
             (i.source == "user" ? user : authored) += 1;
     Json interaction = nullptr;
     if (npcInteraction) {
@@ -910,6 +955,10 @@ Json Runtime::finishDrawing() {
     return {{"id", drawing.pathId}, {"bound", bound}};
 }
 void Runtime::bindCharacter(const std::string &id, const Json &patch) {
+    if (id == companionId) {
+        companionBind(patch);
+        return;
+    }
     auto *info = objectInfo(id);
     if (!info || !info->character)
         throw ipc::Error(-32004, "unknown character " + id);
@@ -1030,6 +1079,8 @@ std::optional<Json> Runtime::npcsMethod(const std::string &method, const Json &p
         auto *info = objectInfo(params["id"]);
         if (!info || !info->character)
             throw ipc::Error(-32004, "unknown character " + params["id"].get<std::string>());
+        if (info->source == "companion")
+            throw ipc::Error(-32005, "the companion is not disabled; use companion.clear");
         bool disabled = params["disabled"];
         auto id = info->id, name = info->name;
         if (info->source == "authored") {
@@ -1074,6 +1125,8 @@ std::optional<Json> Runtime::npcsMethod(const std::string &method, const Json &p
         auto *info = objectInfo(params["id"]);
         if (!info || !info->character)
             throw ipc::Error(-32004, "unknown character " + params["id"].get<std::string>());
+        if (info->source == "companion")
+            throw ipc::Error(-32005, "the companion is not removed; use companion.clear");
         if (info->source != "user")
             throw ipc::Error(-32005, "authored characters are never removed; disable them instead");
         auto id = info->id, name = info->name;
@@ -1210,7 +1263,7 @@ std::optional<Json> Runtime::npcsMethod(const std::string &method, const Json &p
             auto *info = objectInfo(params["bind"]);
             if (!info || !info->character)
                 throw ipc::Error(-32004, "unknown character " + params["bind"].get<std::string>());
-            if (info->source != "user")
+            if (info->source != "user" && info->source != "companion")
                 throw ipc::Error(-32005, "authored characters can only be disabled");
             bind = params["bind"];
         }

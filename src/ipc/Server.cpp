@@ -122,6 +122,15 @@ Json Server::visibleState(const Peer &p) const {
     // IPC 0.24 (RFC-0013): the live state of bound machines.
     if (!protocol::atLeast(p.protocol, "0.24") && state.is_object())
         state.erase("live");
+    // IPC 0.25 (RFC-0010 companions amendment): the companion key; older peers never see the
+    // companion as the aimed character or in a running interaction.
+    if (!protocol::atLeast(p.protocol, "0.25") && state.is_object()) {
+        state.erase("companion");
+        if (state.contains("npcs") && state["npcs"].is_object())
+            for (auto key : {"aimed", "interaction"})
+                if (state["npcs"].contains(key) && state["npcs"][key].is_object() && state["npcs"][key].value("objectId", "") == "companion")
+                    state["npcs"][key] = nullptr;
+    }
     // IPC 0.23 (RFC-0011 P2): NPC state, character fields of object instances, path fields
     // of editor paths and the `interact` reticle action; older peers keep the 0.22 shapes.
     if (!protocol::atLeast(p.protocol, "0.23") && state.is_object()) {

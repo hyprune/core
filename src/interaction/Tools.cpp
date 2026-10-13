@@ -315,8 +315,11 @@ void Tools::toggleLock(const std::string &world, const surfaces::Instance &i) {
     }
 }
 Json Tools::saved() const {
-    return {{"version", 2}, {"paths", paths}, {"objects", objects}, {"locks", locks}, {"placements", placements},
-            {"overrides", overrides}};
+    Json j{{"version", 2}, {"paths", paths}, {"objects", objects}, {"locks", locks}, {"placements", placements},
+           {"overrides", overrides}};
+    if (!companions.empty())
+        j["companions"] = companions;
+    return j;
 }
 namespace {
 Json find(const Json &list, const char *key, const std::string &world, const std::string &id) {
@@ -343,9 +346,25 @@ void Tools::setPlacement(const std::string &world, const std::string &id, Json r
 void Tools::setOverride(const std::string &world, const std::string &objectId, Json record) {
     put(overrides, "objectId", world, objectId, std::move(record));
 }
+Json Tools::companion(const std::string &world) const {
+    for (auto &r : companions)
+        if (r.value("worldId", Json()) == world)
+            return r;
+    return nullptr;
+}
+void Tools::setCompanion(const std::string &world, Json record) {
+    auto &a = companions.get_ref<Json::array_t &>();
+    std::erase_if(a, [&](auto &r) { return r["worldId"] == world; });
+    if (!record.is_null()) {
+        if (a.size() >= companionLimit)
+            a.erase(a.begin()); // the oldest world's record goes
+        a.push_back(std::move(record));
+    }
+}
 void Tools::restore(const Json &input) {
+    bool companionKey = input.is_object() && input.value("version", Json()) == 2 && input.contains("companions");
     if (!input.is_object() || !input.contains("version") || (input["version"] != 1 && input["version"] != 2) ||
-        input.size() != (input["version"] == 1 ? 4u : 6u))
+        input.size() != (input["version"] == 1 ? 4u : companionKey ? 7u : 6u))
         throw std::runtime_error("invalid editor state");
     Json j = input;
     bool upgrade = j["version"] == 1;
@@ -472,6 +491,30 @@ void Tools::restore(const Json &input) {
         if (!overrideIds.insert({r["worldId"].get<std::string>(), r["objectId"].get<std::string>()}).second)
             throw std::runtime_error("duplicate override");
     }
+    Json companionRecords = companionKey ? j["companions"] : Json::array();
+    if (!companionRecords.is_array() || companionRecords.size() > companionLimit)
+        throw std::runtime_error("editor state budget");
+    std::set<std::string> companionWorlds;
+    for (auto &r : companionRecords) {
+        if (!r.is_object() || !r.contains("worldId") || (r.contains("path") == r.contains("pose")))
+            throw std::runtime_error("invalid companion record");
+        for (auto &[k, v] : r.items()) {
+            if (k == "worldId" || k == "path")
+                text(v);
+            else if (k == "pose")
+                pose(v);
+            else if (k == "phase" || k == "speed") {
+                if (!v.is_number() || !std::isfinite(v.get<double>()) || v.get<double>() < 0 || v.get<double>() > 10)
+                    throw std::runtime_error("invalid companion record");
+            } else if (k == "reverse") {
+                if (!v.is_boolean())
+                    throw std::runtime_error("invalid companion record");
+            } else
+                throw std::runtime_error("invalid companion field");
+        }
+        if (!companionWorlds.insert(r["worldId"].get<std::string>()).second)
+            throw std::runtime_error("duplicate companion record");
+    }
     size_t total = 0;
     for (auto &path : j["paths"])
         total += path["points"].size();
@@ -482,6 +525,7 @@ void Tools::restore(const Json &input) {
     locks = j["locks"];
     placements = j["placements"];
     overrides = j["overrides"];
+    companions = companionRecords;
     migrated = upgrade;
     liveLocks.clear();
     selected.clear();

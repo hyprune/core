@@ -162,7 +162,7 @@ struct Companion {
     int teleports = 0;
 
     bool hidden() const { return state == State::Waiting; }
-    // Activity for the companion state (IPC 0.24).
+    // Activity for the companion state (IPC 0.25).
     std::string activity(const NpcAgent &a) const {
         if (state == State::Waiting)
             return "waiting";

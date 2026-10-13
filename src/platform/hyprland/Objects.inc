@@ -467,6 +467,7 @@ void Runtime::objectsSync() {
         }
         infos.push_back(info);
     }
+    companionInject(infos);
     objectInfos = std::move(infos);
     // Collision, visibility and frames follow only a real change (a catalog rescan that
     // resolves the same objects changes nothing).
@@ -1002,6 +1003,8 @@ Json Runtime::objectsState() {
     for (auto &i : objectInfos) {
         if (instances.size() >= 512)
             break;
+        if (i.source == "companion") // its own state key (IPC 0.25)
+            continue;
         auto q = normalizedRotation(i.rotation);
         auto clamp = [](float v) { return std::clamp(v, -100000.f, 100000.f); };
         instances.push_back({{"id", i.id},
@@ -1079,6 +1082,8 @@ std::set<std::string> Runtime::objectWaived(int asset, const interaction::Transf
 std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json &params) {
     if (method.starts_with("npcs.") || method.starts_with("paths.") || method == "interaction.choose")
         return npcsMethod(method, params);
+    if (method.starts_with("companion."))
+        return companionMethod(method, params);
     auto only = [&](std::initializer_list<const char *> required, std::initializer_list<const char *> optional = {}) {
         if (!params.is_object())
             throw ipc::Error(-32602, "params must be an object");
@@ -1126,6 +1131,8 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         auto *i = objectInfo(params[key].get<std::string>());
         if (!i)
             throw ipc::Error(-32004, "unknown object " + params[key].get<std::string>());
+        if (i->source == "companion")
+            throw ipc::Error(-32005, "the companion is protected; use companion.clear");
         return *i;
     };
     auto editable = [&](ObjectInfo &i) {
@@ -1146,6 +1153,13 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
                 auto *entry = catalogEntry(e["ref"]);
                 e["machine"] = entry ? world::machineInputs(entry->manifest) : Json(nullptr);
             }
+        // IPC 0.25: each entry's companion capability.
+        if (ipc::protocol::atLeast(methodProtocol, "0.25"))
+            for (auto &entry : entries)
+                if (auto *e = catalogEntry(entry["ref"]))
+                    entry["companion"] = companionCapability(*e);
+                else
+                    entry["companion"] = nullptr;
         return Json{{"revision", catalogRevision}, {"entries", entries}};
     }
     if (method == "libraries.list") {

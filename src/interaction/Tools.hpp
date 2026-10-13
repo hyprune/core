@@ -42,6 +42,13 @@ class Tools {
     // RFC-0011 overlay (editor.json version 2): user placements and overrides of
     // authored world objects, per world id. objects keeps scene-node transforms only.
     Json placements = Json::array(), overrides = Json::array();
+    // The companion's per-world mode (RFC-0010 companions amendment): at most one record per
+    // world, {worldId, path, phase?, speed?, reverse?} or {worldId, pose}. Saved only when not
+    // empty, so editor.json stays readable by cores without companions.
+    Json companions = Json::array();
+    static constexpr size_t companionLimit = 256;
+    Json companion(const std::string &world) const;
+    void setCompanion(const std::string &world, Json record); // null removes
     bool migrated = false; // restore() upgraded a version 1 file (instance records moved)
     static constexpr size_t placementsPerWorld = 128, placementLimit = 1024, overrideLimit = 1024;
     bool localAxes = false, snap = false;
