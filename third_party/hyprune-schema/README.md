@@ -28,3 +28,6 @@ World 0.9 (characters, paths, seats, keepClear) and IPC 0.23 (NPC state and meth
 are pinned to the schema commit recorded in `v0.9/WORLD-SOURCE.json` and
 `ipc-source.json`. The 0.9 world schema keeps its definitions in local `$defs`, so the
 embedded validator resolves them against the world schema itself.
+
+IPC 0.25 (companions, draft) and the object format 0.10 companion block are pinned to the
+schema commit recorded in `ipc-source.json` and `OBJECT-SOURCE.json`.
