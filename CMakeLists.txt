@@ -36,7 +36,7 @@ target_link_libraries(hyprune_runtime PUBLIC PkgConfig::SPATIAL PkgConfig::PLATF
 target_include_directories(hyprune_runtime PUBLIC src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_include_directories(hyprune_runtime SYSTEM PUBLIC third_party)
 target_compile_definitions(hyprune_runtime PUBLIC BASISD_SUPPORT_KTX2=1 BASISD_SUPPORT_KTX2_ZSTD=1)
-add_library(hyprune-core SHARED src/platform/hyprland/Plugin.cpp src/platform/hyprland/Capture.cpp src/render/Renderer.cpp src/render/MarkerOverlay.cpp)
+add_library(hyprune-core SHARED src/platform/hyprland/Plugin.cpp src/platform/hyprland/Capture.cpp src/render/FrameExport.cpp src/render/Renderer.cpp src/render/MarkerOverlay.cpp)
 set_target_properties(hyprune-core PROPERTIES PREFIX "")
 target_link_libraries(hyprune-core PRIVATE hyprune_runtime PkgConfig::HYPRLAND PkgConfig::PLATFORM GLESv2 EGL)
 add_executable(hypruned src/daemon/Main.cpp)

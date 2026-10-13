@@ -68,6 +68,9 @@ extern "C" {
 #include "offload/Machines.hpp"
 #include "offload/Objects.hpp"
 #include "offload/Supervisor.hpp"
+#include "render/FrameExport.hpp"
+#include "render/GLState.hpp"
+#include "sim/Cinema.hpp"
 #include "sim/Companion.hpp"
 #include "sim/Npc.hpp"
 #include "sim/NpcMotion.hpp"
@@ -771,7 +774,29 @@ struct Runtime {
     CHyprSignalListener presentedListener;
     PHLMONITORREF presentedMonitor;
     std::chrono::steady_clock::time_point lastPresented{};
-    void framePresented();
+    std::chrono::steady_clock::time_point presentedAt{}; // the backend's presentation time
+    void framePresented(std::chrono::steady_clock::time_point);
+    // Demo camera driver (Cinema.inc, nested dev hook): paths and follow shots moved per
+    // presented frame.
+    sim::cinema::Director cinema;
+    std::chrono::steady_clock::time_point cinemaClock{};
+    double cinemaVsync = 0; // virtual vblank (s), phase-locked to presents: the camera moves whole refresh intervals
+    render::FrameExport frameExport; // every presented frame of the world's output, for recordings
+    uint64_t exportPasses = 0;
+    // While exporting, time is counted in presented frames: every tick moves the world (and
+    // the camera, characters and animations) by one refresh interval per frame presented
+    // since the last tick, so each exported frame advances by the same amount.
+    uint64_t presents = 0, presentsTicked = 0;
+    double exportAnimation = 0;
+    bool exportPinnedAnimation = false;
+    double refreshInterval();
+    void exportStart(const std::string &path, int width, int height, size_t queue);
+    void exportStop();
+    bool cinemaCollide = false, cinemaTracing = false;
+    std::vector<std::array<double, 8>> cinemaTrace; // t, dt, tick dt, eye, yaw, pitch
+    std::optional<sim::cinema::Subject> cinemaSubject(const std::string &);
+    void cinemaTick(float dt);
+    Json cinemaCommand(const Json &);
     std::string focused, focusedParent, lastError, grabbed;
     std::set<uint32_t> buttons, appKeys;
     WP<CWLSurfaceResource> appKeyResource;
@@ -1869,6 +1894,8 @@ void Runtime::finishLoad() {
         renderer.profile = graphicsBaseProfile;
         applyGraphics(graphicsFile.current);
         world = std::move(candidate);
+        cinema.stop();
+        cinemaTracing = false;
         loadStep = "characters";
         npcWorldLoaded();
         loadStep = "machines";
@@ -2064,6 +2091,9 @@ void Runtime::toggle(const std::string &output) {
     publish();
 }
 void Runtime::exit() {
+    cinema.stop();
+    cinemaTracing = false;
+    exportStop();
     control.releasePhoto(camera);
     climbing.reset(camera);
     if (renderPass.active())
@@ -4961,6 +4991,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
 }
 #include "Replay.inc"
 #include "Quests.inc"
+#include "Cinema.inc"
 void Runtime::tick() {
     if (renderPass.active())
         throw std::runtime_error("deferred work inside compositor render pass");
@@ -5059,15 +5090,21 @@ void Runtime::tick() {
     if (locked() && active)
         exit();
     if (auto m = monitor.lock(); m && presentedMonitor != monitor) {
-        presentedListener = m->m_events.presented.listen([](Time::steady_tp) {
+        presentedListener = m->m_events.presented.listen([](Time::steady_tp when) {
             if (runtime)
-                runtime->framePresented();
+                runtime->framePresented(when);
         });
         presentedMonitor = monitor;
     }
     auto now = std::chrono::steady_clock::now();
     float dt = std::chrono::duration<float>(now - lastTick).count();
     lastTick = now;
+    if (frameExport.active()) {
+        dt = float(double(std::min<uint64_t>(presents - presentsTicked, 6)) * refreshInterval());
+        if (exportPinnedAnimation)
+            renderer.animationClock = exportAnimation += dt;
+    }
+    presentsTicked = presents;
     if (session.recording || session.playing) dt = session.playing && session.mode == "camera" ? 0.f : replay::Session::Step;
     for (auto it = bindings.begin(); it != bindings.end();) {
         bool live = false;
@@ -5179,7 +5216,8 @@ void Runtime::tick() {
         accumulator = fixedSteps ? std::min(accumulator + double(dt), 4.0 / 60.0) : std::min(double(dt), 4.0 / 60.0);
         while (fixedSteps ? accumulator >= 1.0 / 60.0 : accumulator > 1e-6) {
             const float h = fixedSteps ? 1.f / 60.f : float(std::min(accumulator, .05));
-            if (!layerCursor && !loading && !control.driving() && !control.uiVisible() && !handover.phase && fullscreen.phase == 0) {
+            if (!layerCursor && !loading && !control.driving() && !control.uiVisible() && !handover.phase && fullscreen.phase == 0 &&
+                !cinema.active()) {
                 const auto beforeMove = camera.position;
                 if (noclip) {
                     auto speed = intent.speed;
@@ -5207,7 +5245,7 @@ void Runtime::tick() {
                                            {"code", "world.bounds.left"},
                                            {"message", "Leaving world bounds · noclip is unbounded"}});
         outsidePlayable = outside;
-        if (!noclip && !control.photoHeld() && config["player"]["respawn_below"].get<float>() > 0 &&
+        if (!noclip && !control.photoHeld() && !cinema.active() && config["player"]["respawn_below"].get<float>() > 0 &&
             camera.position.y < world->spawn().position.y + 1.7f - config["player"]["respawn_below"].get<float>()) {
             auto s = world->spawn();
             climbing.reset(camera);
@@ -5229,6 +5267,10 @@ void Runtime::tick() {
         {
             auto section = timed("machines");
             machinesTick(dt);
+        }
+        if (cinema.active()) {
+            auto section = timed("cinema");
+            cinemaTick(dt);
         }
         {
             auto section = timed("hands");
@@ -5430,9 +5472,11 @@ struct FrameHash {
     FrameHash &operator()(const Json &j) { return (*this)(j.dump()); }
 };
 } // namespace
-void Runtime::framePresented() {
+void Runtime::framePresented(std::chrono::steady_clock::time_point when) {
     // Called from the backend's presentation feedback: never tick here, defer it.
     lastPresented = std::chrono::steady_clock::now();
+    presentedAt = when;
+    ++presents;
     if (frameLog.file)
         frameLog.line({{"kind", "present"}, {"t", FrameLog::now()}});
     if (!tickDeferred)
@@ -5448,7 +5492,8 @@ bool Runtime::frameForced() {
     // switch keeps GPU clocks steady for fixed-scale profiling (dev/nested/perf.py).
     static const bool continuous = getenv("HYPRUNE_CONTINUOUS_RENDER");
     return continuous || debug || animationFrames || loading || handover.phase || fullscreen.phase || capturePending || renderer.captureRequested ||
-           offload.connected() || session.recording || session.playing || control.driving() || !renderer.frames;
+           offload.connected() || session.recording || session.playing || control.driving() || cinema.moving() ||
+           frameExport.active() || !renderer.frames;
 }
 uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     FrameHash h;
@@ -5606,6 +5651,30 @@ class Pass final : public IPassElement {
     bool needsLiveBlur() override { return false; }
     bool needsPrecomputeBlur() override { return false; }
     const char *passName() override { return "Hyprune"; }
+    ePassElementType type() override { return EK_CUSTOM; }
+    bool undiscardable() override { return true; }
+    bool disableSimplification() override { return true; }
+};
+// The frame export's grab: last in the output's pass, after layers and cursors.
+class ExportPass final : public IPassElement {
+  public:
+    std::vector<UP<IPassElement>> draw() override {
+        safe([] {
+            if (!runtime || !runtime->frameExport.active())
+                return;
+            auto &data = g_pHyprRenderer->m_renderData;
+            auto *fb = dynamic_cast<Render::GL::CGLFramebuffer *>(data.currentFB.get());
+            if (!fb)
+                return;
+            render::GLState guard;
+            runtime->frameExport.grab(fb->getFBID(), int(data.currentFB->m_size.x), int(data.currentFB->m_size.y));
+            ++runtime->exportPasses;
+        });
+        return {};
+    }
+    bool needsLiveBlur() override { return false; }
+    bool needsPrecomputeBlur() override { return false; }
+    const char *passName() override { return "HypruneExport"; }
     ePassElementType type() override { return EK_CUSTOM; }
     bool undiscardable() override { return true; }
     bool disableSimplification() override { return true; }
@@ -6061,6 +6130,21 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     });
     HyprlandAPI::addLuaFunction(handle, "hyprune", "toggle", luaToggle);
     HyprlandAPI::addLuaFunction(handle, "hyprune", "camera", luaCamera);
+#ifndef HYPRUNE_LIVE_BUILD
+    // Nested demo camera driver (Cinema.inc): one JSON request in, one JSON reply out.
+    HyprlandAPI::addLuaFunction(handle, "hyprune", "cinema", [](lua_State *state) {
+        Json reply;
+        try {
+            if (!runtime)
+                throw std::runtime_error("not running");
+            reply = runtime->cinemaCommand(Json::parse(luaL_checkstring(state, 1)));
+        } catch (const std::exception &e) {
+            reply = {{"error", e.what()}};
+        }
+        lua_pushstring(state, reply.dump().c_str());
+        return 1;
+    });
+#endif
 #ifdef HYPRUNE_LIVE_BUILD
     HyprlandAPI::addLuaFunction(handle, "hyprune", "live_stop", [](lua_State *) {
         runtime->deferInput([] {
@@ -6187,6 +6271,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
             if (stage == RENDER_POST_WINDOWS && runtime->active && !locked() &&
                 g_pHyprRenderer->m_renderData.pMonitor == runtime->monitor)
                 g_pHyprRenderer->addPassElement(makeUnique<Pass>());
+            if (stage == RENDER_LAST_MOMENT && runtime->frameExport.active() &&
+                g_pHyprRenderer->m_renderData.pMonitor == runtime->monitor)
+                g_pHyprRenderer->addPassElement(makeUnique<ExportPass>());
         });
     }));
     runtime->listeners.push_back(
