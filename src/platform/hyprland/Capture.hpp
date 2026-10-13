@@ -79,12 +79,16 @@ class Capture {
     std::vector<WorkspaceFrame> workspaces;
     void refresh(PHLMONITOR monitor, const world::World *world = nullptr, surfaces::Layout *layout = nullptr,
                  const sim::Camera *camera = nullptr);
+    // Drops the records of clients that are gone. Runs every tick: refresh pauses while a
+    // window is focused full screen or a home workspace is worked natively. True if any.
+    bool prune(surfaces::Layout *layout);
     std::vector<surfaces::Surface> visible() const;
     WorkspaceFrame *workspace(const std::string &);
     void release();
     Entry *find(const std::string &id);
 
   private:
+    static void forget(surfaces::Layout &, const std::string &id);
     std::vector<PHLWINDOWREF> knownWindows_;
     // Windows the world shows (room and home workspaces), kept presenting while their
     // workspace is hidden; one that leaves the set gets the compositor's own state back.

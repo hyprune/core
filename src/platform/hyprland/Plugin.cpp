@@ -2900,7 +2900,7 @@ void Runtime::transitionTick(float dt) {
             if (fullscreen.phase == 1) {
                 fullscreen.phase = 2;
                 for (auto &e : capture.entries)
-                    if (e.surface.id != fullscreen.id && e.parentId.empty()) {
+                    if (e.surface.id != fullscreen.id && e.parentId.empty() && e.window) {
                         fullscreen.covering.push_back({e.window, e.window->m_allowedOverFullscreen});
                         e.window->m_allowedOverFullscreen = false;
                     }
@@ -5118,6 +5118,8 @@ void Runtime::tick() {
     }
     if (active && monitor)
         transitionTick(dt);
+    if (active && capture.prune(&layout))
+        publish();
     animationFrames = false;
     if (active && monitor && layout.desktop.is_null() && fullscreen.phase != 2) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();

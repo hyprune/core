@@ -32,6 +32,23 @@ PHLWINDOW attachmentParent(const PHLWINDOW &w) {
     return parent == w ? nullptr : parent;
 }
 } // namespace
+void Capture::forget(surfaces::Layout &layout, const std::string &id) {
+    layout.forget(id);
+    layout.occupiedPoses.erase(id);
+    layout.freePoses.erase(id);
+    layout.unplaced.erase(id);
+    layout.content.erase(id);
+    std::erase(layout.pocketOrder, id);
+}
+bool Capture::prune(surfaces::Layout *layout) {
+    return std::erase_if(entries, [&](Entry &e) {
+        if (e.window && e.window->m_isMapped)
+            return false;
+        if (layout)
+            forget(*layout, e.surface.id);
+        return true;
+    }) > 0;
+}
 // Runs on the event loop, never from IPassElement::draw. Read-only texture
 // leases avoid snapshot FBOs and compositor recursion entirely for M0.
 void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::Layout *layout,
@@ -47,14 +64,8 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             identity.workspaceId = e.window->m_workspace->m_id;
             remove = !layout->binding(identity.workspaceId, world) && !layout->hasPlacement(identity, world);
         }
-        if (remove && layout) {
-            layout->forget(e.surface.id);
-            layout->occupiedPoses.erase(e.surface.id);
-            layout->freePoses.erase(e.surface.id);
-            layout->unplaced.erase(e.surface.id);
-            layout->content.erase(e.surface.id);
-            std::erase(layout->pocketOrder, e.surface.id);
-        }
+        if (remove && layout)
+            forget(*layout, e.surface.id);
         if (remove && e.window && e.window->m_isMapped) {
             auto ws = e.window->m_workspace;
             e.window->setSuspended(ws && !ws->isVisible());
