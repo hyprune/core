@@ -368,6 +368,21 @@ RFC-0005 "Amendment: reachable spawns, home windows and world switches":
 - New room windows spawn ahead of the player on reachable floor (unchanged).
 - `mounts.instances` lists a taken window with `workspaceId` 20 and its home area.
 
+## Window records (no wire change)
+
+- Every client on the room and home workspaces has a surface record. The former
+  16-window capture limit and the 256 MiB texture gate are gone (records are bounded
+  only by the 128 `apps`); clients past them used to open invisible and appear in
+  `surfaces` as `desktop-window-*` ids that `surface.pocket` rejected with -32003.
+- A client with no usable buffer for a moment keeps its record, id, pose and pocket
+  slot. Records of closed clients are dropped at once, also while a window is focused
+  full screen or a home workspace is worked natively.
+- A client that reaches the room natively (moved from a home or another workspace)
+  arrives ahead of the player like a new one, or in the pocket when no spot fits.
+- `editor.unplaced.windows` and `mounts.instances` stay within their 16-item schema
+  bounds: `count` covers every pocketed window and the selected one stays listed; the
+  carried window is listed first.
+
 ## World format versions
 
 - **0.1** Initial manifest, glTF scene, explicit collision, spawns, PNG lightmaps.
