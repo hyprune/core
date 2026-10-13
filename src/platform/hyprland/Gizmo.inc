@@ -560,6 +560,13 @@ bool Runtime::gizmoBegin() {
         preview.pose = dragStart;
         preview.startSupported = placementCheck(dragStart).supported;
         preview.waived = waivedRules(dragStart);
+        // Resting on a floor (base within 8 cm of it): a scale keeps it there (gizmoTransform).
+        dragFloor.reset();
+        auto box = selectionBox(dragStart);
+        float base = box.centre.y - box.extent({0, 1, 0});
+        if (auto f = interaction::floorBelow(placementScene(), Vec3{box.centre.x, base + .1f, box.centre.z}, .25f);
+            f && std::abs(*f - base) < .08f)
+            dragFloor = *f;
     } else if (auto e = capture.find(editor.selected)) {
         editBefore = windowPose(*e);
         dragPixelWidth = e->surface.pixelWidth;
@@ -590,6 +597,13 @@ interaction::Transform Runtime::gizmoTransform(const interaction::Gizmo::Result 
     if (auto *i = selectedInfo()) { // uniform, within the asset's movable.scale range
         float s = std::clamp(t.scale.x, i->scaleMin, i->scaleMax);
         t.scale = {s, s, s};
+    }
+    // An object resting on a floor stays on it while it is scaled: its base settles on that
+    // floor (scaled up it rises out of it, scaled down it drops onto it), so a size is never
+    // refused for "Needs a floor under it". The other placement rules still apply.
+    if (interaction::isScale(part) && editor.kind == "object" && dragFloor) {
+        auto box = selectionBox(t);
+        t.position.y += *dragFloor - (box.centre.y - box.extent({0, 1, 0}));
     }
     return t;
 }

@@ -173,6 +173,7 @@ struct Runtime {
     std::vector<Triangle> originalCollision;
     std::map<unsigned, Mat4> objectModels;
     interaction::Transform selectedTransform, dragStart;
+    std::optional<float> dragFloor; // the floor an object rested on when a gizmo drag began (scale settles on it)
     int dragPixelWidth = 0, dragPixelHeight = 0;
     Vec3 dragPoint{}, dragNormal{};
     bool objectCarry = false;
