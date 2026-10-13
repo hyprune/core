@@ -452,6 +452,10 @@ def bootstrap(args,path):
     protocol=shell_protocol(maximum=rpc.hello["protocol"])
     print(f'IPC: launcher {rpc.hello["protocol"]}; shell {protocol}',flush=True)
     env=env_for(s);env.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_TOKEN_REFRESH="1",HYPRUNE_PROTOCOL=protocol,HYPRUNE_SOCKET=str(sock))
+    # The Director's Library runs the hyprune CLI: use the SDK checkout beside core when it isn't on PATH.
+    cli=ROOT.parent/'sdk/dist/src/cli.js'
+    if 'HYPRUNE_CLI' not in env and not shutil.which('hyprune',path=env.get('PATH')) and cli.is_file() and shutil.which('node'):
+        env['HYPRUNE_CLI']=f'node {cli}'
     log=open(path.parent/'shell.log','a')
     log_start=log.tell()
     child=subprocess.Popen([sys.executable,str(SHELL/'bridge/launch.py'),'--protocol',protocol,*shell_world_args(state['worlds'])],env=env,pass_fds=(read,),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT);recipient.close()
