@@ -18,11 +18,13 @@ re-reads it), each running dev/machines/scripts/gauge-sim.py. Checks:
 5. Offload parity (HYPRUNE_GAUGES_OFFLOAD=1; a host with a second GPU): the offload worker draws the gauges like the
    in-process renderer, before and after a change made while it renders (a machines.json
    rebind to this test's own source, then a published value); power-capped and short.
-Stills (close and 3 m) and, with HYPRUNE_GAUGES_RECORD=1, a 1080p clip in the state
-dir. Evidence: docs/evidence/gauges.json.
+Stills (close and 3 m) and, with HYPRUNE_GAUGES_RECORD=1, a 1080p60 clip in the state dir
+(gauges.mp4 and its smoothness gate): a slow arc round the three gauges moved by core per
+presented frame (cinema.py), every presented frame exported. Evidence: docs/evidence/gauges.json.
 """
 import hashlib, json, math, os, pathlib, secrets, shutil, signal, subprocess, sys, time
 import session as s
+import cinema
 from m2 import wait
 
 WORLD = 'com.hyprune.lumen-reach'
@@ -240,12 +242,21 @@ def checks(client, children, source):
     wait(lambda: all(inst(i)['inputs']['value']['condition'] == 'fresh' for i in ids.values()) or None, 20)
     recorder = None
     if os.environ.get('HYPRUNE_GAUGES_RECORD') == '1':
-        middle = [p0[0], 0, p0[2]]
-        look([middle[0], 1.45, middle[2] + 3.2], [middle[0], .75, middle[2]]); time.sleep(.5)
-        log = open(s.STATE / 'recorder.log', 'w')
-        recorder = s.envrun('wf-recorder', '-o', 'HEADLESS-1', '-r', '30', '-D', '--no-dmabuf', '-c', 'libx264', '-x', 'yuv420p',
-                            '-p', 'preset=veryfast', '-p', 'crf=18', '-f', str(out / 'gauges.mp4'), stdout=log, stderr=subprocess.STDOUT)
-        children.append(recorder)
+        # A slow arc round the gauges, pausing on the front view (the 3 m still) at 2.5 periods.
+        cam = cinema.Cinema(s)
+        aim = [p0[0], .75, p0[2]]
+        arc = lambda deg, r, h: [p0[0] + r * math.sin(math.radians(deg)), h, p0[2] + r * math.cos(math.radians(deg))]
+        cam.hold(arc(-28, 4.0, 1.6), aim); time.sleep(.8)
+        recorder = cam.recording(out / 'gauges.capture.mkv', warmup=.5)
+        began = recorder.__enter__()
+        front = max(6., epoch + PERIOD * 2.5 - time.time())  # path time of the still
+        cam.path([{'t': 0, 'eye': arc(-28, 4.0, 1.6), 'target': aim, 'ease': 'in'},
+                  {'t': front * .5, 'eye': arc(-15, 3.6, 1.52), 'target': aim},
+                  {'t': front - 1.0, 'eye': arc(0, 3.2, 1.45), 'target': aim, 'ease': 'out'},
+                  {'t': front + 1.5, 'eye': arc(0, 3.2, 1.45), 'target': aim, 'ease': 'in'},
+                  {'t': front + 10, 'eye': arc(14, 3.3, 1.5), 'target': aim},
+                  {'t': front + 22, 'eye': arc(26, 3.7, 1.62), 'target': aim, 'ease': 'out'},
+                  {'t': front + 24, 'eye': arc(26, 3.7, 1.62), 'target': aim}])
     ring = {g: next(d['target'].split(':', 1)[1] for d in manifests[g]['traits']['machine']['drives'] if (d.get('map') or {}).get('average'))
             for g, _, _ in GAUGES}
     samples = {g: [] for g, _, _ in GAUGES}
@@ -270,7 +281,8 @@ def checks(client, children, source):
                 if got is not None and b['inputs']['value']['raw'] == inst(ids[g])['inputs']['value']['raw']:
                     assert abs(got - expected) < 1e-6, (g, d['target'], v, got, expected)
         if not stills and time.time() > epoch + PERIOD * 2.5:
-            look([p0[0], 1.45, p0[2] + 3.2], [p0[0], .75, p0[2]]); time.sleep(.6)
+            if recorder is None:
+                look([p0[0], 1.45, p0[2] + 3.2], [p0[0], .75, p0[2]]); time.sleep(.6)
             stills.append(shot('gauges-3m.png'))
         time.sleep(.5)
     published = {g: sorted({t['value'] for t in timeline[g]}) for g in timeline}
@@ -287,7 +299,12 @@ def checks(client, children, source):
           {g: moved[g][:12] for g in moved})
     if recorder is not None:
         time.sleep(WINDOW + 3)
-        recorder.send_signal(signal.SIGINT); recorder.wait(timeout=20)
+        recorder.__exit__(None, None, None)
+        cam.stop()
+        cinema.encode([out / 'gauges.capture.mkv'], out / 'gauges.mp4', trim=.5)
+        gate = cinema.gate(out / 'gauges.mp4')
+        (out / 'gauges.gate.json').write_text(json.dumps(gate, indent=1) + '\n')
+        print('gauges recording:', cinema.gate_summary(gate), 'export', json.dumps(cam.last_export), flush=True)
     # 3. Hold: the average catches up with the last value, then nothing moves.
     hold = wait(lambda: all(abs(inst(ids[g])['levels'][ring[g]]['level'] - finals[g]['value'] / 100) < 1e-6 for g in ids) or None,
                 WINDOW + 10)
