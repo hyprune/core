@@ -81,33 +81,40 @@ def _shift(a, b, window):
     return math.hypot(dx, dy), float(r[py, px])
 
 
-def measure(video, start=None, end=None, width=640, height=360, grid=(4, 3), matches=False):
-    """Per-frame camera step (median tile shift, pixels at 640x360), mean absolute difference
-    and (matches=True) the share of textured tiles whose shift was found."""
+def measure(video, start=None, end=None, width=640, height=360, grid=(4, 3), matches=False, tiles=False):
+    """Per-frame camera step (median tile shift, pixels at 640x360), mean absolute difference,
+    (matches=True) the share of textured tiles whose shift was found and (tiles=True) every
+    tile's shift (NaN where flat or unmatched)."""
     import numpy as np
     tw, th = width // grid[0], height // grid[1]
     window = np.outer(np.hanning(th), np.hanning(tw)).astype(np.float32)
-    steps, mads, found, prev = [], [], [], None
+    steps, mads, found, series, prev = [], [], [], [], None
     for f in _frames(video, width, height, start, end):
         if prev is not None:
             mads.append(float(np.abs(f - prev).mean()))
-            shifts, textured = [], 0
+            shifts, textured, row = [], 0, []
             for gy in range(grid[1]):
                 for gx in range(grid[0]):
                     sl = (slice(gy * th, (gy + 1) * th), slice(gx * tw, (gx + 1) * tw))
                     a, b = prev[sl], f[sl]
                     if a.std() < 2 and b.std() < 2:  # flat tile (sky, wall): no information
+                        row.append(np.nan)
                         continue
                     textured += 1
                     d, peak = _shift(a, b, window)
+                    row.append(d if peak > .08 else np.nan)
                     if peak > .08:
                         shifts.append(d)
             steps.append(float(np.median(shifts)) if shifts else 0.)
             found.append(len(shifts) / textured if textured else 1.)
+            series.append(row)
         prev = f
+    out = [np.array(steps), np.array(mads)]
     if matches:
-        return np.array(steps), np.array(mads), np.array(found)
-    return np.array(steps), np.array(mads)
+        out.append(np.array(found))
+    if tiles:
+        out.append(np.array(series, dtype=float).reshape(len(steps), grid[0] * grid[1]))
+    return tuple(out)
 
 
 def _rolling(x, n):
@@ -125,11 +132,12 @@ def gate(video, start=None, end=None, max_duplicate=MAX_DUPLICATE, max_cv=MAX_ST
     at cuts (a large difference that most tiles cannot match as a shift); segments under 0.5 s
     are ignored and 0.15 s is trimmed at both ends so starts and stops may ease. There, a
     frame is a duplicate when its step is under a quarter of the local (0.25 s) mean, and
-    the step CV is the spread of step / local mean."""
+    the step CV is the spread of step / local mean, both per tile (each against its own
+    0.25 s mean), the frame taking the median over tiles."""
     import numpy as np
     from numpy.lib.stride_tricks import sliding_window_view as windows
     fps = _fps(video)
-    steps, mads, found = measure(video, start, end, matches=True)
+    steps, mads, found, tiles = measure(video, start, end, matches=True, tiles=True)
     if not len(steps):
         return {'video': str(video), 'error': 'no frames'}
     n = len(steps)
@@ -150,14 +158,22 @@ def gate(video, start=None, end=None, max_duplicate=MAX_DUPLICATE, max_cv=MAX_ST
         if last + 1 - i >= shortest:
             segments.append((i + edge, last + 1 - edge))
         i = max(last + 1, j if j < n and cut[j] else last + 1)
-    clean = np.where(cut, np.nan, steps)
+    # Each tile against its own recent motion (a near floor and far hills move at different
+    # rates), then the median over tiles: the frame's step relative to the local mean.
     w = max(3, int(round(fps * .25)) | 1)
-    local = np.nanmean(windows(np.pad(clean, w // 2, mode='edge'), w), axis=1)
+    clean = np.where(cut[:, None], np.nan, tiles)
+    with np.errstate(all='ignore'):
+        import warnings
+        warnings.simplefilter('ignore', RuntimeWarning)
+        local = np.nanmean(windows(np.pad(clean, ((w // 2, w // 2), (0, 0)), mode='edge'), w, axis=0), axis=2)
+        per = np.where(local > .08, np.nan_to_num(clean, nan=np.nan) / local, np.nan)
+        frame_ratio = np.nanmedian(per, axis=1)
     idx = np.concatenate([np.arange(a, b) for a, b in segments if b > a]) if segments else np.array([], int)
+    idx = idx[~np.isnan(frame_ratio[idx])] if len(idx) else idx
     out = {'video': str(video), 'fps': f'{fps:g}', 'frames': int(n + 1), 'cuts': int(cut.sum()),
            'motionFrames': int(len(idx)), 'segments': [[round(a / fps + (start or 0), 2), round(b / fps + (start or 0), 2)] for a, b in segments]}
     if len(idx):
-        ratio = steps[idx] / np.maximum(local[idx], 1e-6)
+        ratio = frame_ratio[idx]
         dup = ratio < .25
         out['duplicatePct'] = round(100 * float(dup.mean()), 2)
         out['identicalPct'] = round(100 * float((mads[idx] < .25).mean()), 2)
