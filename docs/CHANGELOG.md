@@ -268,6 +268,21 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Core 0.8.2 fixes (no wire change)
+
+- Offload power policy: a GPU that enforces less than 20 W no longer makes the configured
+  cap's clamp range invalid (undefined behaviour; an abort in assert builds). The cap's
+  floor is min(20 W, the GPU's limit).
+- Characters upload to the GPU over several ticks (a 4 MiB budget per tick, like object
+  assets) and draw once fully uploaded; spawning several no longer hitches one frame,
+  and nothing uploads inside the render pass.
+- The per-frame interaction-hint ray and the travel/route capsule probes use the world's
+  collision index instead of testing every triangle.
+- Characters exported with KHR_materials_pbrSpecularGlossiness (no metallic-roughness
+  block) take their diffuse factor and texture as the base colour.
+- X11 menus without a transient-for attach to a window of their own client (the one they
+  open over), not to whichever window has focus.
+
 ## Input recordings take every current tool (no wire change)
 
 - Session recordings (`hyprune.session` version 1, core's own file format) record and
