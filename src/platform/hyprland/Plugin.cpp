@@ -791,7 +791,7 @@ struct Runtime {
     double exportAnimation = 0;
     bool exportPinnedAnimation = false;
     double refreshInterval();
-    void exportStart(const std::string &path, int width, int height, size_t queue);
+    void exportStart(const std::string &path, int width, int height, size_t queueBytes, int every = 1);
     void exportStop();
     bool cinemaCollide = false, cinemaTracing = false;
     std::vector<std::array<double, 8>> cinemaTrace; // t, dt, tick dt, eye, yaw, pitch

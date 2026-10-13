@@ -299,8 +299,9 @@ class Cinema:
         method 'export' (default): core hands over every presented frame (FIFO, raw RGBX)
         and ffmpeg encodes them at exactly fps (the output's refresh rate), one video
         frame per presented frame; encoder replaces the x264 options (e.g. NVENC for 4K),
-        out_fps keeps every n-th frame. 'wf-recorder': the screen-capture client (misses
-        frames on the headless host)."""
+        out_fps that divides fps has core export every n-th presented frame (less data,
+        e.g. 4K at 30). 'wf-recorder': the screen-capture client (misses frames on the
+        headless host)."""
         clip = pathlib.Path(clip)
         method = method or os.environ.get('HYPRUNE_CINEMA_RECORDER', 'export')
         log = open(clip.with_suffix('.rec.log'), 'w')
@@ -319,17 +320,22 @@ class Cinema:
         mon = next(m for m in json.loads(self.s.ctl('monitors', '-j')) if m['name'] == 'HEADLESS-1')
         w, h = mon['width'], mon['height']
         codec = encoder or ['-c:v', 'libx264', '-preset', preset, '-crf', str(crf), '-pix_fmt', 'yuv420p', '-color_range', 'tv']
-        rate = ['-r', str(out_fps)] if out_fps else []
+        every = fps // out_fps if out_fps and fps % out_fps == 0 else 1
+        rate = ['-r', str(out_fps)] if out_fps and every == 1 else []
         enc = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb0', '-s', f'{w}x{h}',
-                                '-framerate', str(fps), '-thread_queue_size', '512', '-i', str(fifo), '-an', *rate, *codec, str(clip)],
+                                '-framerate', str(fps // every), '-thread_queue_size', '512', '-i', str(fifo), '-an', *rate, *codec, str(clip)],
                                stdout=log, stderr=subprocess.STDOUT)
-        self._call({'op': 'export', 'path': str(fifo), 'width': w, 'height': h})
+        self._call({'op': 'export', 'path': str(fifo), 'width': w, 'height': h, 'every': every})
         time.sleep(warmup)
         t0 = time.monotonic()
         try:
             yield t0
         finally:
             st = self._call({'op': 'exportStop'})['export']
+            deadline = time.monotonic() + 600
+            while st['draining'] and time.monotonic() < deadline:  # the writer empties its queue
+                time.sleep(.2)
+                st = self.status()['export']
             enc.wait(timeout=120)
             log.close()
             fifo.unlink(missing_ok=True)

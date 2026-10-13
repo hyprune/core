@@ -7,17 +7,24 @@
 #include <pthread.h>
 #include <unistd.h>
 namespace hyprune::render {
-void FrameExport::start(const std::string &target, int w, int h, size_t limit) {
+void FrameExport::start(const std::string &target, int w, int h, size_t limitBytes, int n) {
     stop();
+    join();
+    every = std::max(n, 1);
+    presented = 0;
     path = target;
     width = w;
     height = h;
-    maxQueue = std::max<size_t>(limit, 4);
+    maxQueue = std::max<size_t>(limitBytes / (size_t(std::max(w, 1)) * std::max(h, 1) * 4), 4);
     error.clear();
     closing = false;
     grabbed = written = skipped = stalls = 0;
     running = true;
-    writer = std::thread([this] { write(); });
+    writing = true;
+    writer = std::thread([this] {
+        write();
+        writing = false;
+    });
 }
 void FrameExport::write() {
     // A reader that goes away must not kill the compositor: EPIPE instead of SIGPIPE here.
@@ -120,7 +127,7 @@ void FrameExport::collect(bool wait) {
     }
 }
 void FrameExport::grab(GLuint fbo, int w, int h) {
-    if (!running)
+    if (!running || presented++ % uint64_t(every))
         return;
     if (w != width || h != height) {
         ++skipped;
@@ -174,14 +181,16 @@ void FrameExport::stop() {
         closing = true;
     }
     changed.notify_all();
+    running = false;
+}
+void FrameExport::join() {
     if (writer.joinable())
         writer.join();
-    running = false;
     queue.clear();
     spare.clear();
 }
 FrameExport::Status FrameExport::status() {
     std::lock_guard g(lock);
-    return {grabbed, written, skipped, stalls, queue.size(), width, height, path, error, running};
+    return {grabbed, written, skipped, stalls, queue.size(), width, height, path, error, running, writing};
 }
 } // namespace hyprune::render

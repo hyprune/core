@@ -18,9 +18,9 @@ double Runtime::refreshInterval() {
     auto m = monitor.lock();
     return 1. / (m && m->m_refreshRate > 1 ? double(m->m_refreshRate) : 60.);
 }
-void Runtime::exportStart(const std::string &path, int width, int height, size_t queue) {
+void Runtime::exportStart(const std::string &path, int width, int height, size_t queueBytes, int every) {
     exportStop();
-    frameExport.start(path, width, height, queue);
+    frameExport.start(path, width, height, queueBytes, every);
     exportPasses = 0;
     exportUnticked = 0;
     presentsTicked = presents;
@@ -161,7 +161,7 @@ Json Runtime::cinemaCommand(const Json &request) {
         if (!m)
             throw std::invalid_argument("no output");
         int w = request.value("width", int(m->m_pixelSize.x)), h = request.value("height", int(m->m_pixelSize.y));
-        exportStart(request.at("path").get<std::string>(), w, h, request.value("queue", 240));
+        exportStart(request.at("path").get<std::string>(), w, h, size_t(request.value("queueMB", 2048)) << 20, request.value("every", 1));
     } else if (op == "exportStop") {
         exportStop();
     } else if (op == "stop") {
@@ -189,6 +189,7 @@ Json Runtime::cinemaCommand(const Json &request) {
     auto e = frameExport.status();
     out["export"] = {{"active", e.active}, {"grabbed", e.grabbed}, {"written", e.written}, {"skipped", e.skipped},
                      {"stalls", e.stalls}, {"queued", e.queued}, {"passes", exportPasses}, {"unticked", exportUnticked}, {"error", e.error},
+                     {"draining", e.draining},
                      {"size", {e.width, e.height}}};
     out["progress"] = cinema.duration() > 0 ? std::min(1., cinema.time() / cinema.duration()) : cinema.done() ? 1. : 0.;
     if (auto p = cinema.pose())

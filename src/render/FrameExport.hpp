@@ -19,11 +19,17 @@
 namespace hyprune::render {
 class FrameExport {
   public:
-    ~FrameExport() { stop(); }
+    ~FrameExport() {
+        stop();
+        join();
+    }
     // Opens path for writing on the writer thread (a FIFO blocks there until its reader
-    // opens). Frames of another size than width x height are counted and skipped.
-    void start(const std::string &path, int width, int height, size_t maxQueue = 240);
-    // Writes out every frame grabbed so far, then closes. GL context current.
+    // opens). Frames of another size than width x height are counted and skipped. The
+    // queue holds at most maxQueueBytes of frames (at least four).
+    // every: export every n-th presented frame (a lower frame rate; the others are presented only).
+    void start(const std::string &path, int width, int height, size_t maxQueueBytes = size_t(1) << 31, int every = 1);
+    // Stops grabbing (GL context current): the frames in flight are queued, and the writer
+    // thread writes out the queue and closes in the background (status().draining).
     void stop();
     bool active() const { return running; }
     // Inside the compositor render pass, GL context current, state saved by the caller.
@@ -33,7 +39,7 @@ class FrameExport {
         size_t queued = 0;
         int width = 0, height = 0;
         std::string path, error;
-        bool active = false;
+        bool active = false, draining = false;
     };
     Status status();
 
@@ -46,7 +52,11 @@ class FrameExport {
     size_t next = 0, oldest = 0, inFlight = 0;
     int width = 0, height = 0;
     size_t maxQueue = 240;
+    int every = 1;
+    uint64_t presented = 0;
     bool running = false;
+    std::atomic<bool> writing{false};
+    void join();
     void collect(bool wait); // maps finished slots, oldest first
     void release();
     std::thread writer;
