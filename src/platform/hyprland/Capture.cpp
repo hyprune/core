@@ -69,7 +69,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
     std::erase_if(knownWindows_, [](auto &w) { return !w || !w->m_isMapped; });
     std::erase_if(adoptedWindows_, [](auto &w) { return !w.window || !w.window->m_isMapped; });
     std::set<std::string> refreshed;
-    size_t leasedBytes = 0;
+    leasedBytes = 0;
     skipped.clear();
     auto skip = [&](const PHLWINDOW &w, const char *why) {
         skipped.push_back({ipc::boundedText(w->m_title, ipc::TitleLimit), why,
@@ -113,14 +113,22 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         present(w);
         auto surface = w->resource();
         auto texture = surface->m_current.texture;
+        auto it = std::find_if(entries.begin(), entries.end(), [&](auto &e) { return e.window == w; });
+        // A client with nothing to show this pass keeps its record (and last frame) while it
+        // lives: dropping it lost its id, pose and pocket slot, and left its volume behind.
+        auto unavailable = [&](const char *why) {
+            skip(w, why);
+            if (it != entries.end())
+                refreshed.insert(it->surface.id);
+        };
         if (!texture || !texture->m_texID || texture->m_type == Render::TEXTURE_EXTERNAL) {
-            skip(w, !texture || !texture->m_texID ? "no texture" : "external texture");
+            unavailable(!texture || !texture->m_texID ? "no texture" : "external texture");
             continue;
         }
         // Unsupported source geometry is unavailable instead of silently
         // routing a click using mismatched texture coordinates.
         if (surface->m_current.transform != WL_OUTPUT_TRANSFORM_NORMAL) {
-            skip(w, "buffer transform");
+            unavailable("buffer transform");
             continue;
         }
         // A wp_viewporter source crop (Chromium uses one around resizes, on oversized
@@ -137,13 +145,9 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             if (uvRect[2] - uvRect[0] < .01f || uvRect[3] - uvRect[1] < .01f)
                 uvRect = {0, 0, 1, 1};
         }
-        size_t bytes = size_t(texture->m_size.x) * size_t(texture->m_size.y) * 4;
-        if (bytes > 256 * 1024 * 1024 - leasedBytes) {
-            skip(w, "texture budget");
-            continue;
-        }
-        leasedBytes += bytes;
-        auto it = std::find_if(entries.begin(), entries.end(), [&](auto &e) { return e.window == w; });
+        // Measured, not a gate: these are the clients' own textures (the compositor keeps
+        // them anyway), and a budget that skipped clients hid windows that exist.
+        leasedBytes += size_t(texture->m_size.x) * size_t(texture->m_size.y) * 4;
         if (it == entries.end() && spawnNew && !attached && inRoom && !w->m_isFloating &&
             !Fullscreen::controller()->isFullscreen(w)) {
             // Arrived tiled during the session (moved or dragged in): adopted once floating, at
@@ -155,8 +159,8 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             continue;
         }
         if (it == entries.end()) {
-            if (entries.size() >= 16) {
-                skip(w, "capture limit");
+            if (entries.size() >= recordLimit) {
+                skip(w, "record limit");
                 continue;
             }
             Entry e;

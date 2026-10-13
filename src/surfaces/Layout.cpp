@@ -917,13 +917,22 @@ Json Layout::state(const world::World *w) const {
     auto areas = w ? w->areas : Json::array();
     // Authoring-only gameplay geometry is not part of the IPC area contract.
     for (auto &area : areas) area.erase("playable");
+    // The wire lists at most 16 window instances (IPC schema); core keeps every record, the
+    // carried window first.
+    auto listed = Json::array();
+    for (auto &i : instances)
+        if (i.at("surfaceId") == carried)
+            listed.push_back(i);
+    for (auto &i : instances)
+        if (listed.size() < 16 && i.at("surfaceId") != carried)
+            listed.push_back(i);
     return {{"areas", areas},
             {"anchors", w ? w->anchors : Json::array()},
             {"objects", w ? w->objects : Json::array()},
             {"bindings", effectiveBindings()},
             {"placements", placements},
             {"placementZones", w ? w->placementZones : Json::array()},
-            {"instances", instances},
+            {"instances", listed},
             {"carriedSurfaceId", carried.empty() ? Json(nullptr) : Json(carried)},
             {"desktopWorkspaceId", desktop}};
 }

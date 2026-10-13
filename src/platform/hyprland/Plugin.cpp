@@ -3685,8 +3685,17 @@ Json Runtime::unplacedState() {
                            : !pocketObjects.empty() ? pocketObjects.back().itemId
                                                     : "";
     bool any = !windows.empty() || !pocketObjects.empty();
+    auto count = windows.size() + pocketObjects.size();
+    // The wire lists at most 16 pocketed windows (IPC schema), in pocket order; the count and
+    // the Placement tool's cycle cover all of them.
+    if (windows.size() > 16) {
+        auto chosen = std::find_if(windows.begin(), windows.end(), [&](auto &v) { return v["surfaceId"] == unplacedSelected; });
+        if (chosen != windows.end() && chosen - windows.begin() >= 16)
+            std::rotate(windows.begin() + 15, chosen, chosen + 1); // the selected one stays listed
+        windows.erase(windows.begin() + 16, windows.end());
+    }
     return {{"preview", active && editor.slot == 5 && !freeCursor && any},
-            {"count", windows.size() + pocketObjects.size()},
+            {"count", count},
             {"windows", windows},
             {"objects", pocketObjectsJson()},
             {"selectedId", unplacedSelected.empty() ? Json(nullptr) : Json(unplacedSelected)}};
@@ -5834,6 +5843,7 @@ int luaCamera(lua_State *state) {
                  {"alpha", workspace->m_alpha->value()},
                  {"animating", workspace->m_renderOffset->isBeingAnimated() || workspace->m_alpha->isBeingAnimated()}});
         }
+    j["captureBytes"] = runtime->capture.leasedBytes;
     j["uncaptured"] = Json::array();
     for (auto &skipped : runtime->capture.skipped)
         j["uncaptured"].push_back({{"title", skipped.title}, {"reason", skipped.reason}, {"address", skipped.address}});

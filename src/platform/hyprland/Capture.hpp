@@ -60,6 +60,10 @@ class Capture {
     };
     std::optional<Target> target(const std::string &, float u, float v);
     surfaces::Surface *plane(const std::string &);
+    // Every client on the room and home workspaces gets a record; this only bounds a
+    // runaway client (state lists at most 128 apps).
+    static constexpr size_t recordLimit = 128;
+    size_t leasedBytes = 0; // estimate of the captured textures (diagnostics)
     float spawnDistance = 5, windowScale = .002;
     bool spawnNew = false;
     int worldWorkspace = 20;
