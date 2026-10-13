@@ -22,6 +22,7 @@ void Runtime::exportStart(const std::string &path, int width, int height, size_t
     exportStop();
     frameExport.start(path, width, height, queue);
     exportPasses = 0;
+    exportUnticked = 0;
     presentsTicked = presents;
     // World animations follow the frame count too (unless a test pinned their clock).
     exportPinnedAnimation = !renderer.animationClock;
@@ -187,7 +188,7 @@ Json Runtime::cinemaCommand(const Json &request) {
                 {"traced", cinemaTrace.size()}};
     auto e = frameExport.status();
     out["export"] = {{"active", e.active}, {"grabbed", e.grabbed}, {"written", e.written}, {"skipped", e.skipped},
-                     {"stalls", e.stalls}, {"queued", e.queued}, {"passes", exportPasses}, {"error", e.error},
+                     {"stalls", e.stalls}, {"queued", e.queued}, {"passes", exportPasses}, {"unticked", exportUnticked}, {"error", e.error},
                      {"size", {e.width, e.height}}};
     out["progress"] = cinema.duration() > 0 ? std::min(1., cinema.time() / cinema.duration()) : cinema.done() ? 1. : 0.;
     if (auto p = cinema.pose())

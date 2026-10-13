@@ -787,6 +787,7 @@ struct Runtime {
     // the camera, characters and animations) by one refresh interval per frame presented
     // since the last tick, so each exported frame advances by the same amount.
     uint64_t presents = 0, presentsTicked = 0;
+    uint64_t exportUnticked = 0; // exported frames rendered without a tick since the last one (camera held, then doubled)
     double exportAnimation = 0;
     bool exportPinnedAnimation = false;
     double refreshInterval();
@@ -5100,6 +5101,8 @@ void Runtime::tick() {
     float dt = std::chrono::duration<float>(now - lastTick).count();
     lastTick = now;
     if (frameExport.active()) {
+        if (presents - presentsTicked > 1)
+            exportUnticked += presents - presentsTicked - 1;
         dt = float(double(std::min<uint64_t>(presents - presentsTicked, 6)) * refreshInterval());
         if (exportPinnedAnimation)
             renderer.animationClock = exportAnimation += dt;
