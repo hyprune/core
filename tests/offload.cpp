@@ -394,6 +394,14 @@ int main(int argc, char **argv) {
     assert(p.cap == 80 && p.capSource == "fallback");
     p = policy(mains, "on", 60, 500., 350);
     assert(p.cap == 350 && p.capSource == "configured" && policy(mains, "on", 60, 30., 350).cap == 30);
+    // A GPU enforcing less than the 20 W floor: the cap is its limit (the clamp range
+    // stays ordered); an unknown (0 W) limit keeps the configured cap and the automatic fallback.
+    for (double want : {5., 18., 300.}) {
+        p = policy(mains, "on", 60, want, 15);
+        assert(p.cap == 15 && p.capSource == "configured"); // the floor is the device limit itself
+    }
+    assert(policy(mains, "on", 60, 30., 0).cap == 30 && policy(mains, "on", 60, std::nullopt, 0).cap == 80);
+    assert(policy(mains, "on", 60, std::nullopt, 15).cap == 11 && policy(mains, "on", 60, std::nullopt, 15).capSource == "device");
     // Offload GPU: an explicit address, else not the compositor's GPU, then the least utilised.
     std::vector<Device> gpus{{"/dev/dri/renderD128", "0000:65:00.0"}, {"/dev/dri/renderD129", "0000:b3:00.0"}};
     auto idle = [](const std::string &pci) { return std::optional<unsigned>(pci == "0000:65:00.0" ? 50 : 10); };

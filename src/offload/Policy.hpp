@@ -31,7 +31,9 @@ inline Policy policy(const Supply &s, const std::string &mode, int fps, std::opt
     const bool full = p.profile == "full-ac" && !s.discharging;
     if (s.mains) {
         if (configured) {
-            p.cap = limitW > 0 ? std::clamp(*configured, 20., limitW) : *configured;
+            // 20 W floor, but never above the device's own limit (a GPU may enforce < 20 W:
+            // clamp's range must stay ordered).
+            p.cap = limitW > 0 ? std::clamp(*configured, std::min(20., limitW), limitW) : *configured;
             p.capSource = "configured";
         } else if (limitW > 0) {
             p.cap = std::round(limitW * MainsCapFraction);
