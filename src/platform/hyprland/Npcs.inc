@@ -386,34 +386,15 @@ void Runtime::npcWorldLoaded() {
     renderer.npcs.clear();
     renderer.releaseCharacters();
 }
-// Motion policy (RFC-0010 "Frames only when someone is looking"): the reason agents are
-// paused, or "" when they animate.
-std::string Runtime::npcPaused() {
-    auto now = std::chrono::steady_clock::now();
-    if (motionSpeed > .05f || motionTurn > .05f || !keys.empty())
-        npcLastActive = now;
-    if (now - npcSupplyChecked > std::chrono::seconds(5)) { // sysfs, a few small reads
-        auto supply = offload::supply();
-        auto policy = offload::policy(supply, "auto", 60, std::nullopt);
-        npcPower = policy.profile == "battery" ? "battery"
-                   : policy.profile == "usb-c" ? "usb-c power"
-                   : policy.profile == "unknown" ? "power unknown"
-                   : supply.discharging      ? "battery"
-                                             : "";
-        npcSupplyChecked = now;
-    }
-    std::string motion = config["npc"]["motion"];
-    bool reduced = config["graphics"]["reduced_motion"] == true;
-    return motion == "off" || motion == "still" ? motion
-           : reduced                            ? "reduced motion"
-           : !active || loading                 ? "inactive"
-           : motion == "always"                 ? ""
-           : typing                             ? "typing"
-           : !layout.desktop.is_null() || fullscreen.phase ? "focus"
-           : layerCursor || freeCursor          ? "free cursor"
-           : now - npcLastActive > std::chrono::seconds(30) ? "idle"
-                                                            : npcPower;
+// Motion policy (RFC-0010 "Frames only when someone is looking", sim/NpcMotion.hpp).
+sim::NpcMotionInput Runtime::npcMotion() {
+    return {.motion = config["npc"]["motion"],
+            .reducedMotion = config["graphics"]["reduced_motion"] == true,
+            .shown = active && !loading,
+            .focus = !layout.desktop.is_null() || fullscreen.phase};
 }
+// The reason agents are paused, or "" when they animate.
+std::string Runtime::npcPaused() { return sim::npcPauseReason(npcMotion()); }
 void Runtime::npcTick(float dt) {
     if (!world || loading) {
         renderer.npcs.clear();
@@ -436,12 +417,14 @@ void Runtime::npcTick(float dt) {
         npcState = state, npcReason = reason, ++npcRevision;
     if (motion == "off") {
         renderer.npcs.clear();
-        npcInteraction.reset();
+        endInteraction(); // a guide is cancelled: it walks back when motion returns
         npcAimed = nullptr;
         return;
     }
     bool animate = paused.empty();
     bool still = motion == "still" || config["graphics"]["reduced_motion"] == true;
+    if (still && npcInteraction && npcInteraction->type == "guide") // set to still mid-guide: it ends
+        endInteraction();
     bool present = active && !typing && layout.desktop.is_null() && !freeCursor && !layerCursor;
     auto scene = npcScene();
     sim::NpcWorld w;
@@ -606,6 +589,10 @@ Json Runtime::interactionList(const NpcRun &n) const {
 // Starts an interaction of a character (or the choice list when it has several and none is named).
 void Runtime::beginInteraction(const std::string &objectId, const std::string &interactionId) {
     auto *n = npcRun(objectId);
+    // Only the user's settings stop a request: refused, not accepted and never carried out.
+    auto motion = npcMotion();
+    if (auto refusal = sim::npcRefusal(motion, false); n && !refusal.empty())
+        throw ipc::Error(-32005, refusal);
     if (!n || n->interactions.empty() || n->state != "active")
         throw ipc::Error(-32004, "no interaction for " + objectId);
     if (typing || !layout.desktop.is_null())
@@ -619,6 +606,8 @@ void Runtime::beginInteraction(const std::string &objectId, const std::string &i
             throw ipc::Error(-32004, "unknown interaction " + interactionId);
     } else if (n->interactions.size() == 1)
         chosen = &n->interactions[0];
+    if (auto refusal = sim::npcRefusal(motion, chosen && (*chosen)["action"]["type"] == "guide"); !refusal.empty())
+        throw ipc::Error(-32005, refusal);
     if (npcInteraction && npcInteraction->objectId != objectId)
         endInteraction();
     NpcInteraction it;

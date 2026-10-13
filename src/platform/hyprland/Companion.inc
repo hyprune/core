@@ -400,8 +400,8 @@ bool Runtime::companionStep(NpcRun &n, float dt, const sim::NpcWorld &w, const s
         companionLastStep = "no collision";
         return false;
     }
-    bool still = paused == "still" || paused == "reduced motion" || paused == "battery" || paused == "usb-c power" || paused == "power unknown";
-    if (!paused.empty() && !still) { // typing, free cursor, idle, inactive: it stands where it is
+    bool still = paused == "still" || paused == "reduced motion";
+    if (!paused.empty() && !still) { // inactive: it stands where it is
         companionLastStep = "paused";
         return false;
     }

@@ -252,6 +252,30 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Character motion: `auto` animates whenever the world is shown (no wire change)
+
+RFC-0010 amendment "motion follows the user's settings":
+
+- `npc_motion` `auto` no longer pauses residents or the companion for the power supply
+  (battery, USB-C, unknown), after 30 s without input, while typing or in the free cursor.
+  Characters animate whenever the world is shown; they pause only while it is inactive or
+  loading (`reason` `inactive`) and in focus (`focus`). `auto` and `always` now behave the
+  same (`always` also pauses in focus, where the world is covered); both values stay in the
+  enum. Render on demand and the occlusion test keep the cost to characters in view: a
+  still player with none in view gets no frames.
+- `still`, `off` and reduced motion are how the user stops characters. They refuse a
+  request that can't be carried out instead of accepting it and never doing it:
+  `interaction.choose` (and E on the aimed character) for a `guide` returns -32005 with the
+  reason in the message (`characters are paused (motion still)`, `… (reduced motion)`,
+  `… (motion off)`; E reports it as `runtime.notice` `interaction.refused`). Under `off`
+  every interaction is refused, including the companion's Talk, Stay and Follow. Talk,
+  waypoints and panels still run under `still` and reduced motion. A guide in progress
+  ends when the setting changes to `still`, reduced motion or `off`; the resident walks
+  back once motion returns. The error codes are the ones already documented for
+  `interaction.choose`.
+- `npcs.reason` therefore only reports `inactive`, `focus` or `reduced motion`; `battery`,
+  `usb-c power`, `power unknown`, `typing`, `free cursor` and `idle` are no longer sent.
+
 ## Carrying characters (no wire change)
 
 Super+LMB (carry) picks up the companion or one of the user's own characters; authored

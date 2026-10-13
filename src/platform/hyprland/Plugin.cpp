@@ -70,6 +70,7 @@ extern "C" {
 #include "offload/Supervisor.hpp"
 #include "sim/Companion.hpp"
 #include "sim/Npc.hpp"
+#include "sim/NpcMotion.hpp"
 #include "interaction/Walkability.hpp"
 #include "world/Paths.hpp"
 #include "world/Machines.hpp"
@@ -591,8 +592,7 @@ struct Runtime {
         std::chrono::steady_clock::time_point published{};
     };
     std::vector<NpcRun> npcs;
-    std::string npcState = "none", npcReason, npcPower;
-    std::chrono::steady_clock::time_point npcLastActive = std::chrono::steady_clock::now(), npcSupplyChecked{};
+    std::string npcState = "none", npcReason;
     std::array<uint64_t, 4> npcSynced{}; // instanceRevision, pathRevision, builtObjects, companionRevision agents were built from
     uint64_t npcRevision = 0, pathRevision = 0, npcProtected = 0;
     std::set<std::string> seatTaken;     // occupied seat anchors (refs)
@@ -627,6 +627,7 @@ struct Runtime {
     void npcSync();
     NpcRun *npcRun(const std::string &id);
     void npcWorldLoaded();
+    sim::NpcMotionInput npcMotion();
     std::string npcPaused();
     void npcTick(float dt);
     std::optional<std::pair<std::string, float>> characterAim();
