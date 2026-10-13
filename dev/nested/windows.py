@@ -13,18 +13,32 @@ core's records are audited against `hyprctl clients`:
 - window volumes (placement refusals) only exist for drawn windows;
 - Surfaces actions (pocket, take out) work on every listed room window.
 
+IPC 0.26: with more than 16 room windows pocketed, editor.unplaced lists every one and its
+count is right (a 0.25 peer gets 16, the selected one kept); the real shell
+(HYPRUNE_SHELL_DIR, default the shell checkout) lists them all in Director > Surfaces.
+HYPRUNE_WINDOWS_SHELL=0 skips the shell.
+
 HYPRUNE_LUMEN_PACKAGE selects the Lumen Reach package (default: the worlds checkout's
 dist); HYPRUNE_WINDOWS_HOMES the home clients ("21:6,22:3,23:1,24:6", the live layout).
 Evidence: docs/evidence/windows.json (stills in the state directory).
 """
-import json,math,os,pathlib,shutil,subprocess,time
+import builtins,json,math,os,pathlib,secrets,shutil,subprocess,time
 import session as s
+from ctl import verified
 from m2 import wait,keys,pointer
 
 LUMEN='com.hyprune.lumen-reach'
 ROOM=20
 HOMES={21:'sun-court',22:'array-hall',23:'rime-vault',24:'signal-rise'}
 GROUP='hyprune-windows'
+SHELL_TOKEN=secrets.token_hex(32)   # the real shell at 0.26
+OLD_PEER=secrets.token_hex(32)      # a 0.25 peer: 16-item pocket list
+EXTRA=14                            # room windows added for the >16 pocket step
+
+def grants():
+    return [{'token':SHELL_TOKEN,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control',
+             'shell.control','runtime.control','input.control','quest.control','objects.control']},
+            {'token':OLD_PEER,'client':'com.example.peer-025','capabilities':['state.read']}]
 
 def prepare(installed):
     source=pathlib.Path(os.environ.get('HYPRUNE_LUMEN_PACKAGE',str(s.ROOT.parent/'worlds/dist'/LUMEN)))
@@ -45,6 +59,31 @@ def acceptance(client,children,args,shell_token,socketpath):
     client.call('world.load',{'worldId':LUMEN})
     sub=client.call('state.subscribe',{'topics':['state']})['subscriptionId']
     def state():return client.call('state.snapshot',{'subscriptionId':sub})['snapshot']['state']
+    # Launch tokens expire in 30 s: the 0.25 peer and the real shell connect now.
+    old=s.Client(str(socketpath),OLD_PEER,'0.25','com.example.peer-025')
+    osub=old.call('state.subscribe',{'topics':['state']})['subscriptionId']
+    ui=None
+    if os.environ.get('HYPRUNE_WINDOWS_SHELL','1')!='0':
+        read,write=os.pipe();os.write(write,(SHELL_TOKEN+'\n').encode());os.close(write)
+        _,environment=verified()
+        environment.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_PROTOCOL='0.26',HYPRUNE_SOCKET=str(socketpath),
+                           HYPRUNE_OUTPUT_SCREEN='HEADLESS-1',HYPRUNE_DEV_AUTOMATION='1')
+        shell_dir=pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR',str(s.ROOT.parent/'shell')))
+        shell=subprocess.Popen(['python3',str(shell_dir/'bridge/launch.py'),'--protocol','0.26'],env=environment,
+                               pass_fds=(read,),stdout=open(s.STATE/'shell.log','w'),stderr=subprocess.STDOUT)
+        os.close(read);children.append(shell)
+        def childpid():
+            assert shell.poll() is None,'shell exited; see shell.log'
+            return builtins.next((int(q) for q in pathlib.Path(f'/proc/{shell.pid}/task/{shell.pid}/children').read_text().split()
+                                  if pathlib.Path(f'/proc/{q}/comm').read_text().strip()=='qs'),None)
+        qpid=wait(childpid,30)
+        def ui(*a):
+            return subprocess.check_output([str(s.HERE/'ctl.py'),'env','qs','ipc','--pid',str(qpid),'call','preview',*map(str,a)],text=True).strip()
+        def status():
+            try:return json.loads(ui('status'))
+            except (subprocess.CalledProcessError,json.JSONDecodeError):return {}
+        wait(lambda:status().get('protocol')=='0.26',30)  # the lease follows once the world is shown
+        print('windows: shell connected at',status().get('protocol'),flush=True)
 
     # One kitty process for every window (as with a single-instance terminal).
     serial=[0]
@@ -135,6 +174,51 @@ def acceptance(client,children,args,shell_token,socketpath):
     client.call('surfaces.recall',{});time.sleep(1)
     shot('windows-recall.png')
     audit('recall all')
+
+    # IPC 0.26: more than 16 room windows in the pocket, all listed (0.25: 16), and the real
+    # shell's Director > Surfaces lists them all.
+    extra=[spawn('Extra',ROOM,'#282038') for _ in range(EXTRA)]
+    time.sleep(1.5)
+    audit(f'{EXTRA} more room windows')
+    for c in s.camera()['captures']:
+        if c['workspaceId']==ROOM and not c['parentId']:
+            try:client.call('surface.pocket',{'surfaceId':c['id']})
+            except Exception as error:failures.append({'step':'pocket > 16','kind':'pocket refused','id':c['id'],'error':str(error)})
+    time.sleep(1)
+    st=state();u=st['editor']['unplaced']
+    room_ids={c['id'] for c in s.camera()['captures'] if c['workspaceId']==ROOM and not c['parentId']}
+    listed=[w['surfaceId'] for w in u['windows']]
+    ou=old.call('state.snapshot',{'subscriptionId':osub})['snapshot']['state']['editor']['unplaced']
+    whole={'room':len(room_ids),'listed':len(listed),'count':u['count'],'objects':len(u['objects']),'old':len(ou['windows']),'oldCount':ou['count'],
+           'oldSelected':ou['selectedId'] in [w['surfaceId'] for w in ou['windows']] if ou['selectedId'] else None}
+    ok=len(room_ids)>16 and set(listed)==room_ids and len(listed)==len(set(listed)) and u['count']==len(listed)+len(u['objects']) and \
+       len(ou['windows'])==16 and ou['count']==min(u['count'],32) and whole['oldSelected'] is not False
+    steps.append({'step':'pocket more than 16 (IPC 0.26)','result':whole})
+    if not ok:failures.append({'step':'pocket > 16','kind':'pocket list cut','result':whole})
+    print(('PASS' if ok else 'MISMATCH')+' windows: whole pocket list',whole,flush=True)
+    audit(f'{len(room_ids)} room windows pocketed')
+    if ui:
+        wait(lambda:status().get('lease'),30)
+        keys('-P','Tab','-s','1100','-p','Tab');wait(lambda:status().get('director'),10)  # a Tab hold opens the Director
+        ui('tabNamed','surfaces');time.sleep(1.5)
+        seen=status().get('surfaces',{})
+        badges=set(seen.get('pocketBadges') or [])
+        director={'pocketed':seen.get('pocketed'),'badges':len(badges),'label':seen.get('pocketLabel'),'tab':status().get('tabName')}
+        ok=seen.get('pocketed')==len(listed) and badges==set(listed) and seen.get('pocketLabel')==f'IN THE POCKET  /  {len(listed)}'
+        steps.append({'step':'Director > Surfaces lists the whole pocket','result':director})
+        if not ok:failures.append({'step':'Director pocket','kind':'shell list cut','result':director})
+        print(('PASS' if ok else 'MISMATCH')+' windows: Director > Surfaces',director,flush=True)
+        shot('windows-director-pocket.png')
+        ui('scrollPage',1);time.sleep(.6);shot('windows-director-pocket-end.png')
+        ui('close');wait(lambda:not status().get('director'),10)
+    # The extra windows close while pocketed: their records go with them.
+    for title in extra:
+        s.ctl('eval','hl.dispatch(hl.dsp.window.close({window='+json.dumps('address:'+native(title)['address'])+'}))')
+    wait(lambda:not any(c['title'] in extra for c in clients()),20)
+    for c in list(state()['editor']['unplaced']['windows']):client.call('surface.unpocket',{'surfaceId':c['surfaceId']})
+    time.sleep(1)
+    audit('closed the pocketed extras, took the rest out')
+    old.close()
 
     # Director > Surfaces: pocket and take out every listed room window.
     room={c['address'] for c in clients() if c['workspace']['id']==ROOM}

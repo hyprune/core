@@ -1,16 +1,19 @@
-"""The companion (RFC-0010 companions amendment, IPC 0.25): dev/nested/run.sh --companion.
+"""The companion (RFC-0010 companions amendment, IPC 0.25; pace on the wire from 0.26):
+dev/nested/run.sh --companion.
 
 Nested only (isolated harness on headless hosts). Worlds: Switchyard and Lumen Reach from the
 worlds checkout's dist packages (HYPRUNE_SWITCHYARD_PACKAGE, HYPRUNE_LUMEN_PACKAGE). The
 companion is a character library archive (HYPRUNE_COMPANION_LIBRARY, a .tar.zst with one
 companion-capable character; required). Checks, in Switchyard:
- 1. IPC 0.25 hello and the companion state key; the library installs and its character is
+ 1. IPC 0.26 hello and the companion state key; the library installs and its character is
     companion-capable in the catalog; companion.set spawns it out of view.
  2. Following a walked route (autodrive, walk mode): behind and beside, never within 1 m, no
     teleport while it can keep up, never popping in view; it ran to catch up.
  3. Frames: walking in view keeps frames coming; at rest beside the still player, none.
  4. Stay and Follow (E menu choices): stays put while the player walks off; comes back.
-    Run with me / Walk with me (E menu) set its pace (companion.json); hurrying after the
+    Run with me / Walk with me (E menu) set its pace (companion.json, companionState.pace);
+    companion.mode {pace} (IPC 0.26, Settings > Companion) sets it too and the pace outlives
+    companion.clear and a new companion.set; a 0.25 peer sees no pace. Hurrying after the
     player its gait cycle keeps step with the ground (walk and run blended, no sliding).
     Motion `auto` (the default, used throughout): after 32 s standing still it follows the next
     walk; `npc_motion` off refuses Stay (-32005, the reason in the message).
@@ -51,10 +54,12 @@ LOOP = [[-10, 9.5], [0, 9.5], [0, 3], [-10, 3], [-10, 9.5]]       # walked by th
 LUMEN_WALK = ['arrival', 'court-junction', 'court-wall', 'hall-entry', 'hall-arrival']
 LUMEN_STAIRS = ['hall-arrival', 'hall-ramp-base', 'hall-balcony']
 OLD_PEER = secrets.token_hex(32)                                  # the 0.24 peer of step 10
+PEER_25 = secrets.token_hex(32)                                   # the 0.25 peer of step 4c (no pace)
 
 
 def grants():
-    return [{'token': OLD_PEER, 'client': 'com.example.older-peer', 'capabilities': ['state.read']}]
+    return [{'token': OLD_PEER, 'client': 'com.example.older-peer', 'capabilities': ['state.read']},
+            {'token': PEER_25, 'client': 'com.example.peer-025', 'capabilities': ['state.read', 'objects.control']}]
 
 
 def prepare(installed):
@@ -194,9 +199,10 @@ def acceptance(client, children, args, shell_token, socketpath):
 
     # 1. Hello, install, capability, set.
     old = s.Client(str(socketpath), OLD_PEER, '0.24', 'com.example.older-peer')  # launch tokens expire in 30 s
+    peer25 = s.Client(str(socketpath), PEER_25, '0.25', 'com.example.peer-025')
     s.ctl('eval', 'hl.dispatch(hl.dsp.focus({ monitor = "HEADLESS-1" }))')
     hello = client.hello
-    check('IPC 0.25 hello advertises the companion methods', hello['protocol'] == '0.25' and
+    check('IPC 0.26 hello advertises the companion methods', hello['protocol'] == '0.26' and
           all(m in hello['methods'] for m in ['companion.set', 'companion.clear', 'companion.mode']), hello['methods'][-6:])
     check('the companion state key: none chosen', state()['companion']['state'] == 'none' and state()['companion']['ref'] is None,
           state()['companion'])
@@ -308,8 +314,36 @@ def acceptance(client, children, args, shell_token, socketpath):
         check('its feet keep step with the ground while it hurries (walk and run blended)', len(steps) >= 10 and median < .1 and
               any(cl == 'run' for _, cl in gaits), {'samples': len(steps), 'medianSlip': round(median, 3), 'gaits': sorted(map(str, gaits))})
         client.call('interaction.choose', {'objectId': 'companion', 'interactionId': 'walk'}); time.sleep(.5)
-        check('Walk with me: back to the walk pace', comp()['pace'] == 'walk' and
+        check('Walk with me: back to the walk pace', comp()['pace'] == 'walk' and state()['companion']['pace'] == 'walk' and
               'pace' not in json.loads((s.STATE / 'companion.json').read_text()), comp()['pace'])
+
+        # 4d. IPC 0.26: companion.mode {pace} (Settings > Companion Walk / Run) keeps the mode,
+        # sets the pace on the wire and in companion.json; the pace outlives companion.clear and a
+        # new companion.set. A 0.25 peer sees no pace and may not send one.
+        client.call('companion.mode', {'mode': 'follow', 'pace': 'run'}); time.sleep(.5)
+        st = state()['companion']
+        check('companion.mode {pace: run}: companionState.pace and companion.json', st['pace'] == 'run' and st['mode'] == 'follow' and
+              comp()['pace'] == 'run' and json.loads((s.STATE / 'companion.json').read_text()).get('pace') == 'run', st)
+        psub = peer25.call('state.subscribe', {'topics': ['state']})['subscriptionId']
+        pst = peer25.call('state.snapshot', {'subscriptionId': psub})['snapshot']['state']['companion']
+        try:
+            peer25.call('companion.mode', {'mode': 'follow', 'pace': 'walk'}); text = 'accepted'
+        except RuntimeError as error:
+            text = str(error)
+        check('a 0.25 peer sees the companion without pace and cannot send one',
+              'pace' not in pst and pst['ref'] == REF and text != 'accepted' and comp()['pace'] == 'run', {'state': sorted(pst), 'error': text})
+        peer25.close()
+        client.call('companion.clear', {}); wait(lambda: state()['companion']['state'] == 'none', timeout=10)
+        check('companion.clear keeps the pace', state()['companion']['pace'] == 'run', state()['companion'])
+        client.call('companion.set', {'ref': REF})
+        wait(lambda: comp()['state']['state'] == 'active' and comp()['position'] is not None, timeout=30)
+        check('a new companion.set walks at the kept pace', state()['companion']['pace'] == 'run' and comp()['pace'] == 'run', comp()['pace'])
+        client.call('companion.mode', {'mode': 'stay', 'pace': 'walk'}); time.sleep(.5)
+        st = state()['companion']
+        check('companion.mode {mode: stay, pace: walk}: both at once', st['mode'] == 'stay' and st['pace'] == 'walk' and
+              'pace' not in json.loads((s.STATE / 'companion.json').read_text()), st)
+        client.call('companion.mode', {'mode': 'follow'}); time.sleep(.5)
+        check('companion.mode without pace keeps it', state()['companion']['pace'] == 'walk', state()['companion'])
         wait(lambda: comp()['brain'] == 'idle', timeout=20)
 
         # 5. Talk.

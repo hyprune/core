@@ -5,14 +5,17 @@ worlds checkout's dist package) with a placed window. Selects tool 9 with its ke
 wheel through every layer (and wraps), takes a still of each from a view that shows it,
 checks the banner, legend, line width and that a still view renders no frames, aims at the
 Sun Court window zone and gets the info card naming it, closes the card, and leaves the tool.
-Peers before IPC 0.26 see the normal tool and no tool9 action. Stills go to
+IPC 0.26 publishes it (editor.tool 9, the layer as editor.submode, editor.debugTool with the
+legend and card, the slot-9 tool definition, the tool9 action); a 0.25 peer sees the normal
+tool, 5 definitions and no tool9 action. Stills go to
 <state>/debug-tool/ and, with DEBUG_TOOL_STILLS=<dir>, are copied there.
 """
-import json, math, os, pathlib, shutil, subprocess, time
+import json, math, os, pathlib, secrets, shutil, subprocess, time
 import session as s
 from m2 import wait, keys
 
 WORLD = 'com.hyprune.lumen-reach'
+OLD_PEER = secrets.token_hex(32)  # the 0.25 peer
 ZONE = 'sun-court-open-work'
 # A view per layer that shows it: eye, target.
 VIEWS = {
@@ -27,6 +30,10 @@ VIEWS = {
     'steering': None,  # looks at the first character
     'placement': ([14, 6, 16], [4, 1, -6]),
 }
+
+
+def grants():
+    return [{'token': OLD_PEER, 'client': 'com.example.peer-025', 'capabilities': ['state.read', 'input.control']}]
 
 
 def prepare(installed):
@@ -45,6 +52,7 @@ def prepare(installed):
 
 def acceptance(client, children, args, shell_token, socketpath):
     results = []
+    old = s.Client(str(socketpath), OLD_PEER, '0.25', 'com.example.peer-025')  # launch tokens expire in 30 s
     out = s.STATE / 'debug-tool'
     out.mkdir(exist_ok=True)
 
@@ -126,12 +134,28 @@ def acceptance(client, children, args, shell_token, socketpath):
           t['banner'] == 'DEBUG 1/10  Window boxes & mounts' and t['legend'][:2] == ['window', 'workspace wall'], t['banner'])
     check('lines are 3 px at 1080p', abs(t['lineWidth'] - 3) < 1e-3, t['lineWidth'])
     st = state()
-    check('IPC 0.25 peers see the normal tool and the debug slots',
-          st['editor']['tool'] == 1 and st['editor']['submode'] == 'normal' and st['interaction']['tool'] == 1 and
+    check('IPC 0.26: tool 9 with the layer as submode, the slot-9 definition and the tool9 action',
+          st['editor']['tool'] == 9 and st['editor']['submode'] == 'windows' and st['interaction']['tool'] == 9 and
           st['editor']['toolSlots']['primary'] == {'action': 'debug.inspect', 'label': 'Inspect'} and
-          len(st['editor']['toolDefinitions']) == 5,
-          {'tool': st['editor']['tool'], 'slots': st['editor']['toolSlots']})
-    check('IPC 0.25 peers see no tool9 action', 'tool9' not in json.dumps(st['keymap']))
+          [d['slot'] for d in st['editor']['toolDefinitions']] == [1, 2, 3, 4, 5, 9] and
+          st['editor']['toolDefinitions'][-1]['slots'] == st['editor']['toolSlots'] and
+          'tool9' in st['keymap']['config']['modes']['world'],
+          {'tool': st['editor']['tool'], 'submode': st['editor']['submode'], 'definition': st['editor']['toolDefinitions'][-1]})
+    def published(st, t):
+        d = st['editor']['debugTool']
+        return (d is not None and d['layer'] == st['editor']['submode'] == t['layer'] and d['label'] == t['label'] and
+                d['index'] == t['index'] and d['count'] == t['count'] and [l['label'] for l in d['legend']] == t['legend'][:8] and
+                all(len(l['colour']) == 3 and all(0 <= c <= 1 for c in l['colour']) for l in d['legend']))
+    check('IPC 0.26 editor.debugTool matches the drawn layer (label, index of count, legend)', published(st, t) and st['editor']['debugTool']['card'] is None,
+          st['editor']['debugTool'])
+    osub = old.call('state.subscribe', {'topics': ['state']})['subscriptionId']
+    ost = old.call('state.snapshot', {'subscriptionId': osub})['snapshot']['state']
+    check('IPC 0.25 peers see the normal tool, 5 definitions and the debug slots',
+          ost['editor']['tool'] == 1 and ost['editor']['submode'] == 'normal' and ost['interaction']['tool'] == 1 and
+          ost['editor']['toolSlots']['primary'] == {'action': 'debug.inspect', 'label': 'Inspect'} and
+          len(ost['editor']['toolDefinitions']) == 5 and 'debugTool' not in ost['editor'],
+          {'tool': ost['editor']['tool'], 'slots': ost['editor']['toolSlots']})
+    check('IPC 0.25 peers see no tool9 action', 'tool9' not in json.dumps(ost['keymap']))
 
     # Every layer: wheel steps through them; a still of each.
     seen = []
@@ -148,6 +172,7 @@ def acceptance(client, children, args, shell_token, socketpath):
         t = tool()
         check(f'layer {index + 1} {layer} draws', t['items'] > 0 and t['strokes'] > 0,
               {'items': t['items'], 'strokes': t['strokes'], 'fills': t['fills'], 'buildMs': round(t['buildMs'], 2)})
+        check(f'layer {index + 1} {layer} is published (editor.submode, editor.debugTool)', published(state(), t), state()['editor']['debugTool'])
         shot(f'debug-tool-{index + 1:02d}-{layer}.png')
         before = tool()['index']
         pointer('scroll', -1); time.sleep(.35)  # wheel up: the next layer (as in every tool)
@@ -175,9 +200,11 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('the card says what it is and why it blocks',
           any('Window zone' in l for l in card) and any('Inside a window zone (rule zone)' in l for l in card) and
           any('Owner: sun-court' in l for l in card), card)
+    wire = state()['editor']['debugTool']['card']
+    check('IPC 0.26 editor.debugTool.card carries the card', wire == [l[:256] for l in card if l][:8], wire)
     shot('debug-tool-card-window-zone.png')
     pointer('button', 273); time.sleep(.1); pointer('button', 273, 0); time.sleep(.4)
-    check('Secondary closes the card', not tool()['card'])
+    check('Secondary closes the card', not tool()['card'] and state()['editor']['debugTool']['card'] is None)
     # Placement rules: the probe on an open floor, and the zone's rule from inside the layer.
     while tool()['layer'] != 'placement':
         pointer('scroll', -1); time.sleep(.3)
@@ -191,6 +218,10 @@ def acceptance(client, children, args, shell_token, socketpath):
     keys('-k', '1'); time.sleep(.5)
     t = tool()
     check('another tool hides the layer, banner and card', not t['shown'] and t['strokes'] == 0 and not t['banner'] and not t['card'], t)
+    st = state()
+    check('IPC 0.26: editor.debugTool is null in another tool', st['editor']['tool'] == 1 and st['editor']['debugTool'] is None,
+          {'tool': st['editor']['tool'], 'debugTool': st['editor']['debugTool']})
+    old.close()
     stills = os.environ.get('DEBUG_TOOL_STILLS')
     if stills:
         pathlib.Path(stills).mkdir(parents=True, exist_ok=True)

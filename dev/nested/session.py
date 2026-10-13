@@ -345,6 +345,12 @@ def run(args):
     if getattr(args,'companion',False):
         from companion import grants as extra
         grants+=extra()
+    if getattr(args,'debug_tool',False):
+        from debug_tool import grants as extra
+        grants+=extra()
+    if getattr(args,'windows',False):
+        from windows import grants as extra
+        grants+=extra()
     read,write=os.pipe();os.write(write,json.dumps(grants).encode());os.close(write)
     environment=os.environ.copy();environment.update(HYPRUNE_VALIDATE_IPC='1',AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read),HYPRUNE_LAYOUT_FILE=str(STATE/"layout.json"),HYPRUNE_INPUT_FILE=str(STATE/"input.json"),HYPRUNE_GRAPHICS_FILE=str(STATE/"graphics.json"),HYPRUNE_PLAYER_FILE=str(STATE/"player.json"),HYPRUNE_MACHINES_FILE=str(STATE/"machines.json"),HYPRUNE_EDITOR_FILE=str(STATE/"editor.json"),HYPRUNE_COMPANION_FILE=str(STATE/"companion.json"),XDG_STATE_HOME=str(STATE/"statehome"),XDG_CACHE_HOME=str(STATE/"cache"/secrets.token_hex(8)))
     if args.integration: environment['HYPRUNE_WORKSPACE_LOCATIONS']=str(STATE/'locations.json')
@@ -403,7 +409,7 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,"0.25" if getattr(args,"companion",False) or getattr(args,"windows",False) or getattr(args,"debug_tool",False) else "0.24" if getattr(args,"data_sources",False) else "0.23" if getattr(args,"npcs",False) else "0.22" if getattr(args,"catalog",False) or getattr(args,"gauges",False) else "0.21" if getattr(args,"quests",False) else "0.19" if getattr(args,"reticle",False) or getattr(args,"gizmo",False) or getattr(args,"live_take",False) else "0.16" if getattr(args,"upscaler",False) or getattr(args,"live_findings",False) else "0.15" if getattr(args,"perf",False) or getattr(args,"autodrive",False) or getattr(args,"static_world",False) or getattr(args,"objects",False) or getattr(args,"feel",False) or getattr(args,"capture_pose",False) or getattr(args,"machines",False) or getattr(args,"handover",False) or getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) or getattr(args,"workspace_homes",False) or getattr(args,"long_titles",False) or getattr(args,"watermark",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
+        client=Client(str(socketpath),token,"0.26" if getattr(args,"companion",False) or getattr(args,"windows",False) or getattr(args,"debug_tool",False) else "0.24" if getattr(args,"data_sources",False) else "0.23" if getattr(args,"npcs",False) else "0.22" if getattr(args,"catalog",False) or getattr(args,"gauges",False) else "0.21" if getattr(args,"quests",False) else "0.19" if getattr(args,"reticle",False) or getattr(args,"gizmo",False) or getattr(args,"live_take",False) else "0.16" if getattr(args,"upscaler",False) or getattr(args,"live_findings",False) else "0.15" if getattr(args,"perf",False) or getattr(args,"autodrive",False) or getattr(args,"static_world",False) or getattr(args,"objects",False) or getattr(args,"feel",False) or getattr(args,"capture_pose",False) or getattr(args,"machines",False) or getattr(args,"handover",False) or getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) or getattr(args,"workspace_homes",False) or getattr(args,"long_titles",False) or getattr(args,"watermark",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1")
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
         if getattr(args,"live_take",False):
             from live_take import acceptance
