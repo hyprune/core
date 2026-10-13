@@ -22,7 +22,7 @@ VIEWS = {
     'playable': ([40, 70, 45], [10, 20, -40]),
     'paths': ([6, 9, 9], [8, 0, -6]),
     'keep-clear': ([8, 6, 2], [8, 1.5, -20]),
-    'seats': ([20, 2.6, -7.5], [20, .4, -12.5]),
+    'seats': ([20, 2.8, -17.5], [20, .4, -12.8]),
     'visibility': ([0, 1.7, 5], [-2, 2.5, -30]),
     'steering': None,  # looks at the first character
     'placement': ([14, 6, 16], [4, 1, -6]),
@@ -107,7 +107,13 @@ def acceptance(client, children, args, shell_token, socketpath):
     time.sleep(.5)
     pointer('button', 272); time.sleep(.6)
     wait(lambda: state()['editor']['unplaced']['count'] == 0, 10)
-    check('window placed in the world', any(c['title'] == title and c['visible'] for c in diag()['captures']))
+    window = next(c for c in diag()['captures'] if c['title'] == title)
+    check('window placed in the world', window['visible'], window['position'])
+    # The windows layer looks at the placed window from 3 m in front, a little to the side.
+    x, y, z, w_ = window['rotation']
+    n = [2 * (x * z + y * w_), 2 * (y * z - x * w_), 1 - 2 * (x * x + y * y)]
+    p = window['position']
+    VIEWS['windows'] = ([p[0] + 3.2 * n[0] + 1.2 * n[2], p[1] + 1.2, p[2] + 3.2 * n[2] - 1.2 * n[0]], p)
 
     # Tool 9 by its key.
     check('the debug tool is hidden in other tools', not tool()['shown'] and tool()['strokes'] == 0)
