@@ -1,6 +1,7 @@
 #include "Characters.hpp"
 #include "Machines.hpp"
 #include "Objects.hpp"
+#include "Pacing.hpp"
 #include "Sandbox.hpp"
 #include "VkContext.hpp"
 #include "Watchdog.hpp"
@@ -298,7 +299,7 @@ int main(int argc, char **argv) {
         };
         send(sock, {{"type", "ready"}});
         note("ready");
-        double nextRender = 0;
+        offload::RateCap cap; // the watchdog's FPS as an average, not a spacing (Pacing.hpp)
         Json lastGraphics, lastProfile;
         uint64_t sequence = 0;
         GLenum layout = GL_LAYOUT_GENERAL_EXT;
@@ -344,7 +345,7 @@ int main(int argc, char **argv) {
             renderer.continueObjectAssets();
             // Keep retiring completed slots while waiting for the next capped
             // submission. Sleeping after dequeue used to delay frame replies.
-            if (now() < nextRender) {
+            if (!cap.ready(now(), fps)) {
                 usleep(500);
                 continue;
             }
@@ -381,8 +382,7 @@ int main(int argc, char **argv) {
             check(p["sequence"].get<uint64_t>() > sequence, "sequence");
             sequence = p["sequence"];
             auto &b = slots[i];
-            const double period = 1000. / fps;
-            nextRender = now() - nextRender > period ? now() + period : nextRender + period;
+            cap.spend();
             if (p.contains("objects") && !p["objects"].is_null()) {
                 objects.apply(p["objects"], scene->objectAssets.size(), loadAsset);
                 renderer.transforms = objects.transforms;

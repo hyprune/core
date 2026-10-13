@@ -2,6 +2,7 @@
 #include "offload/Machines.hpp"
 #include "offload/Objects.hpp"
 #include "offload/Packet.hpp"
+#include "offload/Pacing.hpp"
 #include "offload/Policy.hpp"
 #include "offload/Sandbox.hpp"
 #include "offload/Supervisor.hpp"
@@ -146,6 +147,48 @@ static void objectSync() {
 // Machine draw state in the worker (Machines.hpp): states, extras and labels arrive
 // change-only, relative extras rebuild bit-identical models from the worker's instances,
 // and a budget defers owners to the next pose without losing them.
+// Live pacing: the plugin's frame budget and the worker's average-rate cap.
+static void pacing() {
+    using namespace hyprune::offload;
+    for (auto [fps, want] : std::initializer_list<std::pair<double, int>>{{60, 600}, {45, 450}, {30, 300}}) {
+        FrameBudget b;
+        int sent = 0, run = 0, longest = 0;
+        for (int frame = 0; frame < 600; ++frame) { // 10 s of 60 Hz frame ticks
+            b.accrue(fps / 60);
+            if (b.ready()) {
+                b.spend(), ++sent;
+                run = 0;
+            } else
+                longest = std::max(longest, ++run);
+        }
+        assert(std::abs(sent - want) <= 1);
+        assert(longest <= 1); // never two frames in a row without a pose (an even cadence)
+    }
+    FrameBudget idle;
+    idle.accrue(5); // a long idle gap banks one spare frame, not five
+    idle.spend();
+    idle.spend();
+    assert(!idle.ready());
+    // The worker: requests every 16.7 ms at a 45 FPS cap. Three in four go at once (none is
+    // pushed off the frame grid by a 22 ms spacing), and the average stays at 45.
+    RateCap cap;
+    int rendered = 0, immediate = 0;
+    double t = 0;
+    for (int k = 0; k < 600; ++k, t += 1000. / 60) {
+        bool go = cap.ready(t, 45);
+        if (go)
+            cap.spend(), ++rendered, ++immediate;
+    }
+    assert(rendered >= 448 && rendered <= 452);
+    // A burst after idle is bounded: at most `burst` frames back to back faster than the cap.
+    RateCap burst;
+    burst.ready(0, 45);
+    int quick = 0;
+    for (int k = 0; k < 10; ++k)
+        if (burst.ready(10000 + k * .1, 45))
+            burst.spend(), ++quick;
+    assert(quick == 2);
+}
 static void machineSync() {
     using namespace offload;
     world::World w;
@@ -260,6 +303,7 @@ int main(int argc, char **argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
     using namespace offload;
+    pacing();
     Supply usb{true, true, true, false, 0}, battery{true, false, false, true, 0}, full{true, true, false, false, 240};
     assert(!policy(usb, "auto", 60, 80).admitted);
     auto p = policy(usb, "on", 60, 80);

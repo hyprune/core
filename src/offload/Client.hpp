@@ -1,5 +1,6 @@
 #pragma once
 #include "Common.hpp"
+#include "Pacing.hpp"
 #include "render/GLState.hpp"
 #include "sim/Camera.hpp"
 #include <drm_fourcc.h>
@@ -14,6 +15,7 @@ class Client {
         int phase = 0, acquire = -1, target = -1;
         GLsync copied = nullptr;
         Json request, reply;
+        double received = 0, copying = 0; // when the frame packet arrived, when its copy was issued
     } slots_[2];
     struct Target {
         GLuint tex = 0, fbo = 0;
@@ -24,15 +26,30 @@ class Client {
     double started_ = 0, nextSend_ = 0;
     bool ready_ = false;
     Json frontReply_;
+    FrameBudget budget_;
+    // Round trip of the latest promoted frames (ms after the pose was sent): packet, copy, front.
+    std::deque<std::array<double, 3>> trips_;
+    // Frame ticks (diagnostics): time, promoted sequence, sent sequence, slot phases, budget.
+    std::deque<std::array<double, 6>> ticks_;
+    std::string lastSent_; // the last pose request without its identity: unchanged means no new frame
+    Json lastRequest_ = Json::object(), changed_ = Json::object(); // diagnostics: what made the last frames new
     ExternalCopy externalCopy_;
 
   public:
     std::string error;
     Json capabilities, timings;
     bool connected() const { return fd_ >= 0; }
-    // A front older than maxAgeMs is stale (the in-process renderer stands in); recordings in
-    // lockstep accept any age, the front being exactly the next frame in sequence.
-    bool available(double maxAgeMs = 50) const { return fd_ >= 0 && front_ >= 0 && now() - frontReply_.at("sent").get<double>() <= maxAgeMs; }
+    // Stale (the in-process renderer stands in) when a requested frame is more than maxAgeMs
+    // late; a front that nothing has replaced because nothing changed stays valid. Recordings
+    // in lockstep accept any wait, the front being exactly the next frame in sequence.
+    double inFlightMs() const {
+        double age = 0;
+        for (auto &b : slots_)
+            if (b.phase)
+                age = std::max(age, now() - b.request.at("sent").get<double>());
+        return age;
+    }
+    bool available(double maxAgeMs = 50) const { return fd_ >= 0 && front_ >= 0 && inFlightMs() <= maxAgeMs; }
     GLuint fbo(double maxAgeMs = 50) const { return available(maxAgeMs) ? targets_[front_].fbo : 0; }
     uint64_t frontSequence() const { return front_ >= 0 ? frontSequence_ : 0; }
     // Age of the newest complete frame (ms), or -1.
@@ -42,7 +59,10 @@ class Client {
         for (auto &b : slots_)
             phases.push_back(b.phase);
         return {{"front", front_}, {"frontSequence", frontSequence_}, {"sequence", sequence_}, {"phases", phases},
-                {"frontAgeMs", front_ >= 0 ? Json(now() - frontReply_.at("sent").get<double>()) : Json(nullptr)}};
+                {"frontAgeMs", front_ >= 0 ? Json(now() - frontReply_.at("sent").get<double>()) : Json(nullptr)},
+                {"trips", Json(std::vector<std::array<double, 3>>(trips_.begin(), trips_.end()))},
+                {"changed", changed_},
+                {"ticks", Json(std::vector<std::array<double, 6>>(ticks_.begin(), ticks_.end()))}};
     }
     sim::Camera camera() const {
         auto p = frontReply_.at("pose");
@@ -65,24 +85,38 @@ class Client {
     }
     // extra: fields added to the next pose (animation clock, object state delta); posted: called
     // once that pose was written, so a delta is never lost to backpressure.
+    // Live, twice per compositor frame tick: Send::Promote at its start (the frame boundary)
+    // makes the next finished frame in sequence the front (at most one per frame, so the
+    // cadence stays even); Send::Frame once the camera and scene are final sends, with a slot
+    // free, budget for this frame (share: frames since the last tick x fps /
+    // refresh) and a request that differs from the last one, this tick's pose goes out: one
+    // fresh frame per compositor frame while anything shown changes, at the policy's rate
+    // on average. Two poses may be out: a worker round trip is close to a frame (7 ms render,
+    // 1.5 ms transfer, 14 ms median and 21 ms p90 to the compositor on the work host), and
+    // with one the rate halves whenever a frame misses its tick. The front then shows the
+    // pose of one tick before (as before this change), two after a late frame.
     // Send::Paced sends at most fps poses a second whenever a slot is free. Recordings use
     // Send::Lockstep from the frame tick (the next frame in sequence becomes the front, waited
     // for if needed, then this tick's pose goes out: every presented frame shows the next
     // pose, two ticks behind) and Send::None from the in-between pump (receive and import
     // only; the front stays).
-    enum class Send { Paced, Lockstep, None };
+    enum class Send { Paced, Promote, Frame, Lockstep, None };
     void tick(const sim::Camera &camera, const Json &graphics, const Json &profile, int fps,
-              const std::function<Json()> &extra = {}, const std::function<void()> &posted = {}, Send send = Send::Paced) {
-        bool lockstep = send == Send::Lockstep;
+              const std::function<Json()> &extra = {}, const std::function<void()> &posted = {}, Send send = Send::Paced,
+              double share = 1) {
+        bool lockstep = send == Send::Lockstep, frame = send == Send::Frame;
+        if (frame)
+            budget_.accrue(share);
         if (fd_ < 0)
             return;
         render::GLState guard;
         try {
             double deadline = now() + 100;
             int promoted = 0;
+            uint64_t promotedSeq = 0, sentSeq = 0;
             for (;;) {
             // Copied frames become the front, oldest first (Lockstep: one per frame tick).
-            int limit = send == Send::None ? 0 : lockstep ? 1 - promoted : 2;
+            int limit = send == Send::None || frame ? 0 : lockstep || send == Send::Promote ? 1 - promoted : 2;
             for (int k = 0; k < limit; ++k) {
                 Slot *oldest = nullptr;
                 for (auto &b : slots_)
@@ -97,6 +131,12 @@ class Client {
                     if (status != GL_ALREADY_SIGNALED && status != GL_CONDITION_SATISFIED)
                         break;
                     ++promoted;
+                    {
+                        double sent = b.request.at("sent").get<double>();
+                        trips_.push_back({b.received - sent, b.copying - sent, now() - sent});
+                        while (trips_.size() > 240)
+                            trips_.pop_front();
+                    }
                     glDeleteSync(b.copied);
                     b.copied = nullptr;
                     if (b.reply.at("sequence").get<uint64_t>() > frontSequence_) {
@@ -104,6 +144,7 @@ class Client {
                             targets_[front_].busy = false;
                         front_ = b.target;
                         frontSequence_ = b.reply.at("sequence");
+                        promotedSeq = frontSequence_;
                         frontReply_ = b.reply;
                         timings = b.reply;
                     } else
@@ -148,6 +189,7 @@ class Client {
                               p.at("sent") == b.request.at("sent"),
                           "frame identity");
                     b.reply = p;
+                    b.received = now();
                     b.acquire = packet->take();
                     b.phase = 2;
                 } else {
@@ -198,6 +240,7 @@ class Client {
                     }
                     b.copied = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
                     glFlush();
+                    b.copying = now();
                     b.phase = 3;
                     check(glGetError() == GL_NO_ERROR, "offload import/copy");
                 }
@@ -215,7 +258,11 @@ class Client {
                     glClientWaitSync(b.copied, GL_SYNC_FLUSH_COMMANDS_BIT, 1000000);
             poll(waits.data(), waits.size(), 1);
             }
-            if (ready_ && send != Send::None && (lockstep || now() >= nextSend_)) {
+            int inFlight = 0;
+            for (auto &b : slots_)
+                inFlight += b.phase != 0;
+            if (ready_ && (send == Send::Paced || send == Send::Frame || lockstep) &&
+                (lockstep || (frame ? inFlight < 2 && budget_.ready() : now() >= nextSend_))) {
                 for (int i = 0; i < 2; ++i)
                     if (slots_[i].phase == 0) {
                         auto &b = slots_[i];
@@ -233,8 +280,26 @@ class Client {
                                        camera.pitch, camera.fov, camera.roll, camera.shiftX, camera.shiftY}}};
                         if (extra)
                             b.request.update(extra());
+                        if (frame) {
+                            auto same = b.request;
+                            for (auto key : {"slot", "sequence", "sent"})
+                                same.erase(key);
+                            auto signature = same.dump();
+                            if (signature == lastSent_) {
+                                --sequence_; // nothing changed: the front stays, no frame is drawn
+                                b.request = {};
+                                break;
+                            }
+                            for (auto &[key, value] : same.items())
+                                if (!lastRequest_.contains(key) || lastRequest_[key] != value)
+                                    changed_[key] = changed_.value(key, 0) + 1;
+                            lastRequest_ = std::move(same);
+                            lastSent_ = std::move(signature);
+                            budget_.spend();
+                        }
                         if (sendPacket(fd_, b.request)) {
                             b.phase = 1;
+                            sentSeq = sequence_;
                             b.request.erase("objects"); // the reply carries objectsRevision instead
                             b.request.erase("machines"); // and machinesRevision
                             if (posted)
@@ -244,6 +309,11 @@ class Client {
                         }
                         break;
                     }
+            }
+            if (frame || send == Send::Promote) {
+                ticks_.push_back({now(), double(promotedSeq), double(sentSeq), double(slots_[0].phase), double(slots_[1].phase), budget_.credit});
+                while (ticks_.size() > 400)
+                    ticks_.pop_front();
             }
             check(ready_ || now() - started_ < 30000, "worker warmup deadline");
             for (auto &b : slots_)
@@ -277,6 +347,8 @@ class Client {
             t = {};
         }
         ready_ = false;
+        lastSent_.clear();
+        budget_ = {};
         front_ = -1;
         frontSequence_ = sequence_ = 0;
         nextSend_ = 0;

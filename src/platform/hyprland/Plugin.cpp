@@ -115,7 +115,9 @@ struct Runtime {
     int64_t nextFacts = 0;
     std::string markerMode() const;
     void questsTick();
-    void offloadPump(bool frameTick = false);
+    // stage: 0 the in-between pump (receive and import), 1 a frame tick's start (promote the
+    // next frame), 2 the frame tick once the camera and scene are final (send its pose).
+    void offloadPump(int stage = 0);
     SP<CEventLoopTimer> offloadTimer;
     uint64_t offloadDeferred = 0;
     Json performance() const;
@@ -800,6 +802,10 @@ struct Runtime {
     // the camera, characters and animations) by one refresh interval per frame presented
     // since the last tick, so each exported frame advances by the same amount.
     uint64_t presents = 0, presentsTicked = 0;
+    uint64_t offloadPresents = 0; // presents counted at the last offload frame tick
+    double offloadClock = 0;      // the animation clock last given to the worker
+    bool offloadClockSent = false;
+    std::chrono::steady_clock::time_point offloadFrameTick{};
     uint64_t exportUnticked = 0; // exported frames rendered without a tick since the last one (camera held, then doubled)
     double exportAnimation = 0;
     bool exportPinnedAnimation = false;
@@ -1554,7 +1560,7 @@ void Runtime::offloadTick() {
         request["generation"] = ++offloadGeneration;
         ipc->renderer(request);
     }
-    offloadPump(true);
+    offloadPump(0);
     renderer.offloadState = {{"activeRenderer", renderedOffload ? "offload" : "in-process"},
                             {"powerW", offloadPolicy.value("powerW", Json(nullptr))},
                             {"profile", offloadPolicy.value("profile", "unknown")},
@@ -1562,7 +1568,7 @@ void Runtime::offloadTick() {
                             {"capW", offloadPolicy.value("capW", 0.)},
                             {"worker", offload.timings}};
 }
-void Runtime::offloadPump(bool frameTick) {
+void Runtime::offloadPump(int stage) {
     if (renderPass.active()) throw std::runtime_error("offload polling inside frame");
     if (offload.connected()) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
@@ -1574,17 +1580,33 @@ void Runtime::offloadPump(bool frameTick) {
         // World objects: the animation clock in every pose, their state as a delta against
         // what the worker has, committed once the pose is sent.
         auto objects = [&] {
-            return Json{{"clock", renderer.animationSeconds()}, {"logicalScale", renderer.logicalScale},
+            // The animation clock only moves while an animation is in view (render on demand
+            // in-process does the same), so a still view sends no new pose.
+            if (animationFrames || !offloadClockSent)
+                offloadClock = renderer.animationSeconds(), offloadClockSent = true;
+            return Json{{"clock", offloadClock}, {"logicalScale", renderer.logicalScale},
                         {"objects", world ? offloadObjects.delta(*world, renderer.transforms, mergedAssets, packageAssets)
                                           : Json(nullptr)},
                         {"characters", offloadCharacters()},
                         {"machines", offloadMachines.delta(renderer)}};
         };
-        // While a recording exports frames, poses go out once per frame tick (lockstep).
+        // Poses go out from the frame tick only: live, one per compositor frame at the policy's
+        // rate while anything changes; while a recording exports frames, in lockstep. The
+        // in-between pump receives and imports. share: the frame budget this tick adds.
         using Send = offload::Client::Send;
-        offload.tick(view, renderer.graphics, renderer.profile, offloadPolicy.value("targetFPS", 30), objects,
-                     [&] { offloadObjects.commit(), offloadMachines.commit(); },
-                     !frameExport.active() ? Send::Paced : frameTick ? Send::Lockstep : Send::None);
+        int fps = offloadPolicy.value("targetFPS", 30);
+        double share = 0;
+        if (stage == 2) {
+            auto now = std::chrono::steady_clock::now();
+            auto frames = presents - offloadPresents;
+            share = frames ? double(frames) * fps * refreshInterval()
+                           : std::chrono::duration<double>(now - offloadFrameTick).count() * fps; // idle: timer ticks
+            offloadPresents = presents;
+            offloadFrameTick = now;
+        }
+        offload.tick(view, renderer.graphics, renderer.profile, fps, objects, [&] { offloadObjects.commit(), offloadMachines.commit(); },
+                     stage == 0 ? Send::None : frameExport.active() ? (stage == 2 ? Send::Lockstep : Send::None)
+                                                                    : stage == 1 ? Send::Promote : Send::Frame, share);
         if (!offload.connected()) {
             auto errors = offloadChanges.value("errors", Json::array());
             errors.push_back({{"generation", offloadGeneration}, {"error", offload.error}});
@@ -5035,6 +5057,10 @@ void Runtime::tick() {
     // Input that arrived since the last tick takes effect in this frame: its idle callback can
     // come after this tick, a frame late, where a replay applies it on time.
     runInput(inputQueue.last());
+    if (offload.connected()) { // the frame boundary: the worker frame shown next is chosen now
+        auto section = timed("offload.promote");
+        offloadPump(1);
+    }
     auto updateStarted = std::chrono::steady_clock::now();
     if (capturePending) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
@@ -5314,6 +5340,10 @@ void Runtime::tick() {
             refresh();
         }
         captureGPU.end();
+        if (offload.connected()) { // camera, characters and objects are final: this frame's pose
+            auto section = timed("offload.send");
+            offloadPump(2);
+        }
         renderer.captureMs =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - captureStarted).count();
         if (fullscreen.phase == 1 || fullscreen.phase == 3)
