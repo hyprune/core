@@ -1607,8 +1607,11 @@ void Runtime::offloadPump(int stage) {
         // what the worker has, committed once the pose is sent.
         auto objects = [&] {
             // The animation clock only moves while an animation is in view (render on demand
-            // in-process does the same), so a still view sends no new pose.
-            if (animationFrames || !offloadClockSent)
+            // in-process does the same), so a still view sends no new pose. Asked here, not
+            // from animationFrames: the frame tick sends its pose before it recomputes that.
+            bool animationInView = monitor && renderer.animationVisible(
+                view, float(monitor->m_pixelSize.x) / std::max(1.f, float(monitor->m_pixelSize.y)));
+            if (animationInView || !offloadClockSent)
                 offloadClock = renderer.animationSeconds(), offloadClockSent = true;
             return Json{{"clock", offloadClock}, {"logicalScale", renderer.logicalScale},
                         {"objects", world ? offloadObjects.delta(*world, renderer.transforms, mergedAssets, packageAssets)
@@ -2451,9 +2454,10 @@ void Runtime::machinesTick(float dt) {
     if (!machines.active())
         return;
     // Same clock as Control's publication monotonicMs. Still: reduced motion (states,
-    // labels, counts and flashes change; nothing spins or travels).
+    // labels, counts and flashes change; nothing spins or travels), or a pinned animation
+    // clock (tests: both renderers draw machines at rest, as they draw the pinned time).
     auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    bool still = config["graphics"]["reduced_motion"] == true;
+    bool still = config["graphics"]["reduced_motion"] == true || renderer.animationClock.has_value();
     machines.tick(dt, control.sources, now, still);
     renderer.objectStates = machines.states;
     renderer.objectExtras = machines.extras;
