@@ -38,7 +38,10 @@ class Capture {
     std::vector<PHLWINDOWREF> worldRequests;
     std::set<const void *> worldFloated;
     // Windows on this output that the last refresh could not capture, and why (diagnostics).
-    std::vector<std::pair<std::string, std::string>> skipped;
+    struct Skipped {
+        std::string title, reason, address;
+    };
+    std::vector<Skipped> skipped;
     struct Child {
         WP<CWLSurfaceResource> resource;
         SP<Render::ITexture> texture;

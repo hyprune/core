@@ -1,4 +1,5 @@
 #include "Capture.hpp"
+#include <format>
 #include <hyprland/src/protocols/LayerShell.hpp>
 #include "interaction/Hands.hpp"
 #include "ipc/Text.hpp"
@@ -70,7 +71,10 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
     std::set<std::string> refreshed;
     size_t leasedBytes = 0;
     skipped.clear();
-    auto skip = [&](const PHLWINDOW &w, const char *why) { skipped.emplace_back(ipc::boundedText(w->m_title, ipc::TitleLimit), why); };
+    auto skip = [&](const PHLWINDOW &w, const char *why) {
+        skipped.push_back({ipc::boundedText(w->m_title, ipc::TitleLimit), why,
+                           std::format("0x{:x}", reinterpret_cast<uintptr_t>(w.get()))});
+    };
     std::vector<PHLWINDOWREF> presenting;
     // Shown in the world, so it must keep drawing although its workspace is on no output:
     // clear the xdg "suspended" state the compositor gives hidden workspaces (browsers

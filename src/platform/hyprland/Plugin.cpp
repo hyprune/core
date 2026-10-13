@@ -5835,15 +5835,16 @@ int luaCamera(lua_State *state) {
                  {"animating", workspace->m_renderOffset->isBeingAnimated() || workspace->m_alpha->isBeingAnimated()}});
         }
     j["uncaptured"] = Json::array();
-    for (auto &[title, why] : runtime->capture.skipped)
-        j["uncaptured"].push_back({{"title", title}, {"reason", why}});
+    for (auto &skipped : runtime->capture.skipped)
+        j["uncaptured"].push_back({{"title", skipped.title}, {"reason", skipped.reason}, {"address", skipped.address}});
     j["captures"] = Json::array();
     for (auto &e : runtime->capture.entries)
         j["captures"].push_back(
             {{"id", e.surface.id},
              {"title", e.surface.title},
+             {"address", std::format("0x{:x}", reinterpret_cast<uintptr_t>(e.window.get()))},
              {"parentId", e.parentId},
-             {"floating", e.window->m_isFloating},
+             {"floating", e.window && e.window->m_isFloating},
              {"commits", *e.commits},
              {"visible", e.visible},
              {"wall", e.wall},
