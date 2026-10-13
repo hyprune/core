@@ -189,7 +189,7 @@ Json Runtime::debugToolState() const {
     if (editor.slot != editor.debugSlot)
         return nullptr;
     auto &info = interaction::debugLayerInfo(editor.debugLayer);
-    auto unit = [](float v) { return std::round(std::clamp(v, 0.f, 1.f) * 1000.f) / 1000.f; };
+    auto unit = [](float v) { return std::round(double(std::clamp(v, 0.f, 1.f)) * 1000.0) / 1000.0; };
     Json legend = Json::array();
     for (auto &l : info.legend)
         if (legend.size() < 8)
