@@ -3099,12 +3099,12 @@ void Renderer::icon(const Icon &sprite, int w, int h) {
         return;
     int cell = overlayStyle["iconAtlas"]["cellSize"], cols = iconWidth_ / cell;
     float u = float(sprite.index % cols * cell) / iconWidth_, v = float(sprite.index / cols * cell) / iconHeight_;
-    float x = sprite.x * w, y = sprite.y * h;
+    float x = sprite.x * w, y = sprite.y * h, size = 24 * std::clamp(w / 1920.f, 1.f, 2.f); // 24 px at 1080p, up to 2x
     float vertices[24];
     int i = 0;
     for (auto xy : {std::pair{0.f, 0.f}, {1.f, 0.f}, {1.f, 1.f}, {0.f, 0.f}, {1.f, 1.f}, {0.f, 1.f}}) {
-        vertices[i++] = (x + (xy.first - .5f) * 24) * 2 / w - 1;
-        vertices[i++] = (y + (xy.second - .5f) * 24) * 2 / h - 1;
+        vertices[i++] = (x + (xy.first - .5f) * size) * 2 / w - 1;
+        vertices[i++] = (y + (xy.second - .5f) * size) * 2 / h - 1;
         vertices[i++] = u + xy.first * cell / iconWidth_;
         vertices[i++] = v + xy.second * cell / iconHeight_;
     }
@@ -3133,43 +3133,51 @@ void Renderer::worldOverlays(const sim::Camera &camera, std::span<const surfaces
         return Vec3{c[0], c[1], c[2]};
     };
     auto position = [](const world::Json &p) { return Vec3{p[0], p[1], p[2]}; };
+    // Marker layout in output pixels, scaled like the labels (1x at 1080p, up to 2x): the
+    // icon (24 px) or the fallback "+" sits on the point, the label starts clear of it (the
+    // "+" is a label too, so its panel must not reach the next label's text).
+    const float labelScale = std::clamp(w / 1920.f, 1.f, 2.f), pad = 6 * labelScale;
+    const float plus = labelWidth("+", labelScale);
     auto marker = [&](Vec3 point, const std::string &label, bool waypointMarker, bool prompt, bool wrap = false) {
         auto projected = camera.project(point, aspect);
         if (!projected.visible)
             return;
+        bool icon = iconTexture_ && (waypointMarker || prompt);
+        float offset = icon || !waypointMarker ? 14 * labelScale : plus * .5f + 2 * pad + 2 * labelScale;
         auto labelColor = color(prompt ? "promptColor" : "labelColor");
         if (wrap) { // a caption up to 160 characters (the schema's most): up to four lines over the anchor,
                     // in a bubble wider than a label (about 46 characters a line)
             float scale = std::clamp(w / 1920.f, 1.f, 2.f), limit = std::min(520.f * scale, w - 32.f) - 12 * scale;
-            Label l{projected.x + 14.f / w, projected.y, label.substr(0, 1024), labelColor};
+            Label l{projected.x + offset / w, projected.y, label.substr(0, 1024), labelColor};
             bool cut = false;
             l.lines =
                 wrapText(l.text, limit, [&](const std::string &s) { return labelWidth(s, scale); }, captionLines, &cut);
             captionTruncated = cut;
             labels.push_back(std::move(l));
         } else
-            labels.push_back({projected.x + 14.f / w, projected.y, label.substr(0, 128), labelColor});
-        if (iconTexture_ && (waypointMarker || prompt))
+            labels.push_back({projected.x + offset / w, projected.y, label.substr(0, 128), labelColor});
+        if (icon)
             icons_.push_back({projected.x, projected.y,
                               overlayStyle["iconAtlas"][prompt ? "promptIndex" : "waypointIndex"],
                               color(prompt ? "promptColor" : "waypointColor")});
         else if (waypointMarker)
-            labels.push_back({projected.x - 5.f / w, projected.y, "+", color("waypointColor")});
+            labels.push_back({projected.x - plus * .5f / w, projected.y, "+", color("waypointColor")});
     };
     std::vector<world::Vertex> routeVertices;
     if (!waypoint.is_null() && !route.empty()) {
-        Vec3 previous = camera.position + Vec3{0, -camera.eyeHeight + .025f, 0};
-        for (auto &node : route) {
-            auto next = position(node["position"]);
-            next.y += -1.7f + .025f;
-            for (auto p : {previous, next}) {
+        std::vector<Vec3> line = routeLine;
+        if (line.empty()) {
+            line.push_back(camera.position + Vec3{0, -camera.eyeHeight + .025f, 0});
+            for (auto &node : route)
+                line.push_back(position(node["position"]) + Vec3{0, -1.7f + .025f, 0});
+        }
+        for (size_t k = 1; k < line.size(); ++k)
+            for (auto p : {line[k - 1], line[k]}) {
                 world::Vertex v{};
                 v.position = p;
                 v.normal = {0, 1, 0};
                 routeVertices.push_back(v);
             }
-            previous = next;
-        }
         uniform(native_, "hasTexture", 0);
         auto linear = color("routeColor");
         auto decode = [](float v) { return v <= .04045f ? v / 12.92f : std::pow((v + .055f) / 1.055f, 2.4f); };

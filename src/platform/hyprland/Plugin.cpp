@@ -120,6 +120,11 @@ struct Runtime {
     // stage: 0 the in-between pump (receive and import), 1 a frame tick's start (promote the
     // next frame), 2 the frame tick once the camera and scene are final (send its pose).
     void offloadPump(int stage = 0);
+    void routeLineTick();
+    void waypointArrival();
+    Json routeDiagnostics();
+    std::string routeLineKey, routeTailKey; // the feet cell and the route the drawn line was laid for
+    std::vector<Vec3> routeTail;            // the line from the route's first point on
     SP<CEventLoopTimer> offloadTimer;
     uint64_t offloadDeferred = 0;
     Json performance() const;
@@ -1646,6 +1651,93 @@ void Runtime::offloadPump(int stage) {
             ipc->renderer(stop);
         }
     }
+}
+// RFC-0012 arrival: a waypoint the player reaches is done. Reached: within the waypoint
+// marker's range[0] (2 m) across the ground, the target from 1 m below the feet to 1 m
+// above the eye (not a floor above or below). A route ending there goes with it.
+void Runtime::waypointArrival() {
+    auto &wp = control.location["waypoint"];
+    if (!world || !active || wp.is_null() || !wp.contains("position"))
+        return;
+    Vec3 target{wp["position"][0], wp["position"][1], wp["position"][2]};
+    Vec3 eye = camera.position, feet = eye - Vec3{0, camera.eyeHeight, 0};
+    if (std::hypot(target.x - eye.x, target.z - eye.z) > quests::waypointArrivalRadius || target.y < feet.y - 1 ||
+        target.y > eye.y + 1)
+        return;
+    auto &route = control.location["route"];
+    bool routeEnds = route.is_array() && !route.empty() && route.back().contains("position") &&
+                     length(Vec3{route.back()["position"][0], route.back()["position"][1], route.back()["position"][2]} - target) <= 1;
+    control.execute("waypoint.clear", Json::object(), "", "", world.get(), camera, {});
+    if (routeEnds)
+        control.execute("route.clear", Json::object(), "", "", world.get(), camera, {});
+    publish();
+}
+// Development diagnostics: the drawn route line and the straight one it replaces (legs
+// through collision), and the overlay labels as drawn panels in output pixels.
+Json Runtime::routeDiagnostics() {
+    Json out = {{"points", renderer.routeLine.size()}, {"buried", 0}, {"straightBuried", 0}, {"labels", Json::array()}};
+    if (world && !renderer.routeLine.empty()) {
+        interaction::PlacementScene scene;
+        scene.collision = world->collision;
+        scene.index = &world->collisionIndex;
+        int buried = 0, straight = 0;
+        for (size_t k = 1; k < renderer.routeLine.size(); ++k)
+            buried += interaction::lineBlocked(scene, renderer.routeLine[k - 1], renderer.routeLine[k]);
+        Vec3 previous = renderer.routeLine.front();
+        for (auto &node : renderer.route) {
+            Vec3 next{node["position"][0], node["position"][1].get<float>() - 1.7f + .025f, node["position"][2]};
+            straight += interaction::lineBlocked(scene, previous, next);
+            previous = next;
+        }
+        out["buried"] = buried, out["straightBuried"] = straight;
+    }
+    if (monitor) {
+        float w = monitor->m_pixelSize.x, scale = std::clamp(w / 1920.f, 1.f, 2.f), pad = 6 * scale;
+        for (auto &l : renderer.labels)
+            if (l.lines.empty()) {
+                float x = l.x * w;
+                out["labels"].push_back({{"text", l.text.substr(0, 32)}, {"y", l.y * monitor->m_pixelSize.y},
+                                         {"panel", {x - pad, x + renderer.labelWidth(l.text, scale) + pad}}, {"textX", x}});
+            }
+    }
+    return out;
+}
+// The waypoint route line follows the ground (not straight through a hill or a floor):
+// the route's own legs are laid once per route, the leg from the feet again when the
+// feet move a quarter metre.
+void Runtime::routeLineTick() {
+    if (!world || renderer.waypoint.is_null() || !renderer.route.is_array() || renderer.route.empty()) {
+        renderer.routeLine.clear();
+        routeLineKey.clear(), routeTailKey.clear();
+        return;
+    }
+    interaction::PlacementScene scene;
+    scene.collision = world->collision;
+    scene.index = &world->collisionIndex;
+    constexpr float lift = .025f;
+    auto tailKey = world->id + renderer.route.dump();
+    bool tailChanged = tailKey != routeTailKey;
+    std::vector<Vec3> points;
+    for (auto &node : renderer.route)
+        if (node.contains("position") && node["position"].is_array() && node["position"].size() == 3)
+            points.push_back(Vec3{node["position"][0], node["position"][1].get<float>() - 1.7f, node["position"][2]});
+    if (points.empty()) {
+        renderer.routeLine.clear();
+        return;
+    }
+    if (tailChanged) {
+        routeTailKey = tailKey;
+        routeTail = interaction::groundLine(scene, points[0], {points.begin() + 1, points.end()}, .5f, lift);
+    }
+    Vec3 feet = camera.position - Vec3{0, camera.eyeHeight, 0};
+    auto key = std::to_string(std::lround(feet.x * 4)) + "," + std::to_string(std::lround(feet.y * 4)) + "," +
+               std::to_string(std::lround(feet.z * 4));
+    if (key == routeLineKey && !tailChanged)
+        return;
+    routeLineKey = key;
+    auto line = interaction::groundLine(scene, feet, {points[0]}, .5f, lift);
+    line.insert(line.end(), routeTail.begin() + 1, routeTail.end()); // the tail starts at points[0]
+    renderer.routeLine = std::move(line);
 }
 void Runtime::publishHUD() {
     auto now = std::chrono::steady_clock::now();
@@ -5307,8 +5399,10 @@ void Runtime::tick() {
         control.restorePhoto(camera);
         renderer.debug = debug;
         renderer.showAreaMarkers = input.config["show_area_markers"];
+        waypointArrival();
         renderer.waypoint = control.location["waypoint"];
         renderer.route = control.location["route"];
+        routeLineTick();
         renderer.useDistance = input.config["useDistance"];
         renderer.scopeVignette = zoomHeld && input.config["scopeVignette"].get<bool>();
         float moveT = config["player"]["move_inertia"];
@@ -5944,6 +6038,7 @@ int luaCamera(lua_State *state) {
         {"frames", runtime->renderer.frames},
         {"animationFrames", runtime->animationFrames},
         {"frameCauses", runtime->frameCauses},
+        {"route", runtime->routeDiagnostics()},
         {"offloadRequests", runtime->offloadChanges},
         {"offloadClient", runtime->offload.diagnostics()},
         {"offloadDraws", runtime->offloadDraws},

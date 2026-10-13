@@ -83,6 +83,7 @@ class Renderer {
         std::vector<std::string> lines;
     };
     std::vector<Label> labels;
+    float labelWidth(const std::string &, float scale) const; // in pixels, the label font
     // Tool 9 (the debug tool): the shown layer's name and a one-line legend of its colours,
     // centred at the top of the output. Empty title: nothing drawn.
     struct Banner {
@@ -91,6 +92,9 @@ class Renderer {
     } debugBanner;
     world::Json overlayStyle = overlayDefaults(), waypoint = nullptr, route = world::Json::array(),
                 toolPrompt = nullptr;
+    // The waypoint route line as drawn (world space, on the ground; the runtime lays it on
+    // the floor, interaction::groundLine). Empty: from the feet straight through `route`.
+    std::vector<Vec3> routeLine;
     bool showAreaMarkers = false, showInteractionHints = true;
     float useDistance = 6;
     void applyOverlayStyle(const world::Json &patch); // Deferred, validates before any upload.
@@ -332,7 +336,6 @@ class Renderer {
     void drawReticle(int w, int h, bool typing);
     void drawGizmo(int w, int h);
     void drawLabels(const std::vector<Label> &, int w, int h);
-    float labelWidth(const std::string &, float scale) const; // in pixels, the label font
     static constexpr int captionLines = 4;                    // a wrapped caption's most lines
     bool captionTruncated = false;
     GLuint gizmoProgram_ = 0, gizmoVao_ = 0, gizmoVbo_ = 0;

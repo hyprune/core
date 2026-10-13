@@ -27,6 +27,9 @@ std::optional<Vec3> resolveTarget(const world::World &, const Json &target, cons
 std::string areaAt(const world::World &, Vec3);
 // The eye is inside a reach target: area/zone bounds, else within `radius` (default 4 m).
 bool reaches(const world::World &, const Json &target, std::optional<float> radius, Vec3 eye, const Json &bindings);
+// The waypoint marker's range[0] (metres): inside it the player has arrived, and core
+// clears the waypoint (RFC-0012 arrival).
+inline constexpr float waypointArrivalRadius = 2;
 // Builds the list (<= 64, tier then id): waypoint, route destination, requested
 // quest/focus/break markers, area homes, other bound workspaces, places and zones.
 std::vector<Marker> buildMarkers(const world::World *, const Json &waypoint, const Json &route, const Json &bindings,

@@ -1,4 +1,5 @@
 #include "Control.hpp"
+#include "interaction/Hands.hpp"
 #include "world/Spatial.hpp"
 #include <regex>
 namespace hyprune::control {
@@ -304,10 +305,27 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
             } catch (const std::runtime_error &e) {
                 throw ipc::Error(-32005, e.what());
             }
+            // An off-graph point the straight leg can't reach (through a hill, a building):
+            // along the walking graph to the place nearest it, then to it. A clear straight
+            // leg stays as given.
+            if (planned.empty() && !w->walkingNodes.empty()) {
+                Vec3 to = vector(points[0]["position"]), d = to - camera.position;
+                float l = length(d);
+                auto hit = l > .01f ? interaction::raycast(camera.position, d * (1 / l), w->collision, &w->collisionIndex)
+                                    : std::nullopt;
+                if (hit && hit->distance < l - .05f)
+                    try {
+                        planned = world::walkingRouteNear(*w, camera.position, to);
+                    } catch (const std::runtime_error &) {
+                        planned.clear(); // disconnected: the straight leg as before
+                    }
+            }
             if (!planned.empty()) {
+                auto given = points[0]["target"];
                 points = Json::array();
                 for (auto point : planned)
                     points.push_back({{"target", {{"position", xyz(point)}}}, {"position", xyz(point)}});
+                points.back()["target"] = given; // the destination keeps the caller's target (a zone)
             }
         }
         location["route"] = points;

@@ -1,0 +1,217 @@
+{
+ "nestedOnly": true,
+ "world": "com.hyprune.lumen-reach",
+ "output4k": true,
+ "checks": [
+  {
+   "name": "graph routes to every place: no leg of the drawn line goes through collision",
+   "ok": true,
+   "evidence": [
+    {
+     "id": "arrival",
+     "points": 0,
+     "buried": 0
+    },
+    {
+     "id": "globe-platform",
+     "points": 76,
+     "buried": 0
+    },
+    {
+     "id": "lookout",
+     "points": 75,
+     "buried": 0
+    },
+    {
+     "id": "cascade-bridge",
+     "points": 110,
+     "buried": 0
+    },
+    {
+     "id": "rooftop",
+     "points": 280,
+     "buried": 0
+    },
+    {
+     "id": "hall-arrival",
+     "points": 103,
+     "buried": 0
+    },
+    {
+     "id": "hall-upper",
+     "points": 241,
+     "buried": 0
+    },
+    {
+     "id": "vault-arrival",
+     "points": 243,
+     "buried": 0
+    },
+    {
+     "id": "vault-platform",
+     "points": 272,
+     "buried": 0
+    },
+    {
+     "id": "rise-arrival",
+     "points": 353,
+     "buried": 0
+    },
+    {
+     "id": "fortress-room",
+     "points": 416,
+     "buried": 0
+    },
+    {
+     "id": "diagnostics-platform",
+     "points": 435,
+     "buried": 0
+    },
+    {
+     "id": "dish-platform",
+     "points": 432,
+     "buried": 0
+    },
+    {
+     "id": "gantry-west",
+     "points": 566,
+     "buried": 0
+    }
+   ]
+  },
+  {
+   "name": "an off-graph target behind a hill: the route takes the walking graph, its line on the ground",
+   "ok": true,
+   "evidence": {
+    "route": [
+     [
+      31.5,
+      5.699999809265137,
+      -144.0
+     ],
+     [
+      31.5,
+      1.7000000476837158,
+      -128.0
+     ],
+     [
+      37.0,
+      1.7000000476837158,
+      -126.0
+     ],
+     [
+      54.0,
+      1.7000000476837158,
+      -125.0
+     ],
+     [
+      54.0,
+      1.7000000476837158,
+      -124.0
+     ],
+     [
+      54.0,
+      -4.300000190734863,
+      -100.0
+     ],
+     [
+      48.0,
+      -4.300000190734863,
+      -98.0
+     ],
+     [
+      38.0,
+      -4.300000190734863,
+      -89.0
+     ],
+     [
+      38.0,
+      -4.300000190734863,
+      -79.0
+     ],
+     [
+      40.5,
+      -4.699999809265137,
+      -77.5
+     ]
+    ],
+    "drawn": 211,
+    "buried": 0,
+    "zone": "rime-vault"
+   }
+  },
+  {
+   "name": "autopilot walks it and arriving clears the waypoint",
+   "ok": true,
+   "evidence": {
+    "seconds": 24.2,
+    "at": [
+     38.793739318847656,
+     -4.300204753875732,
+     -78.52508544921875
+    ]
+   }
+  },
+  {
+   "name": "the waypoint label starts clear of its \"+\" marker",
+   "ok": true,
+   "evidence": {
+    "plus": {
+     "panel": [
+      1898.0,
+      1942.0
+     ],
+     "text": "+",
+     "textX": 1910.0,
+     "y": 1079.9999356269836
+    },
+    "label": {
+     "panel": [
+      1946.0001220703125,
+      2330.0
+     ],
+     "text": "Instrument terrace",
+     "textX": 1958.0001220703125,
+     "y": 1079.9999356269836
+    },
+    "labels": 2
+   }
+  },
+  {
+   "name": "3 m away across the ground: the waypoint stays",
+   "ok": true,
+   "evidence": {
+    "waypoint": {
+     "id": "test-globe-platform",
+     "label": "Instrument terrace",
+     "position": [
+      -6.0,
+      2.9000000953674316,
+      -7.0
+     ],
+     "target": {
+      "position": [
+       -6,
+       2.9000000953674316,
+       -7
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "6 m above it (another level): the waypoint stays",
+   "ok": true,
+   "evidence": null
+  },
+  {
+   "name": "within 1.5 m: the waypoint clears, and the route ending there",
+   "ok": true,
+   "evidence": {
+    "waypoint": null,
+    "route": [],
+    "drawn": 0
+   }
+  }
+ ]
+}

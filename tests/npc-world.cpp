@@ -58,6 +58,37 @@ int main(int argc, char **argv) {
         interaction::Body body;
         check(interaction::checkRoute(scene, loop, body).empty(), "the loop is walkable");
         check(interaction::checkRoute(scene, world::routeOf(w->paths[2]), body).empty(), "a 0.2 m step is walkable");
+        // The drawn waypoint line lies on the ground: over a 1 m hill between two route
+        // points on flat ground, never through it; route points are kept.
+        {
+            std::vector<Triangle> hill;
+            auto quad = [&](Vec3 a, Vec3 b, Vec3 c, Vec3 d) { hill.push_back({a, b, c}), hill.push_back({a, c, d}); };
+            quad({-5, 0, -2}, {-5, 0, 2}, {15, 0, 2}, {15, 0, -2});        // flat ground
+            quad({3, 0, -2}, {3, 0, 2}, {5, 1, 2}, {5, 1, -2});            // up
+            quad({5, 1, -2}, {5, 1, 2}, {7, 1, 2}, {7, 1, -2});            // top
+            quad({7, 1, -2}, {7, 1, 2}, {9, 0, 2}, {9, 0, -2});            // down
+            interaction::PlacementScene ground;
+            ground.collision = hill;
+            auto line = interaction::groundLine(ground, {0, 0, 0}, {Vec3{12, 0, 0}, Vec3{12, 0, 1}}, .5f, .04f);
+            check(line.size() == 27 && length(line.front() - Vec3{0, .04f, 0}) < 1e-4f &&
+                      length(line[24] - Vec3{12, .04f, 0}) < 1e-4f && length(line.back() - Vec3{12, .04f, 1}) < 1e-4f,
+                  "route points on their floor, a sample every 0.5 m");
+            auto sunk = interaction::groundLine(ground, {0, 0, 0}, {Vec3{12, -.4f, 0}}, .5f, .04f);
+            check(std::abs(sunk.back().y - .04f) < 1e-4f, "a point below its floor (zone slack) goes onto it");
+            for (auto p : line) {
+                float floor = p.x <= 3 || p.x >= 9 ? 0 : p.x < 5 ? (p.x - 3) / 2 : p.x <= 7 ? 1 : (9 - p.x) / 2;
+                check(std::abs(p.y - (floor + .04f)) < 1e-3f, std::format("route line on the ground at x {} (y {})", p.x, p.y));
+            }
+            // Samples off the slope changes: chords across the crests would dip under the hill;
+            // those legs are split, and no leg of the drawn line passes through collision.
+            auto off = interaction::groundLine(ground, {.25f, 0, 0}, {Vec3{12.25f, 0, 0}}, .5f, .01f);
+            check(off.size() > 26, "crest legs split");
+            for (size_t k = 1; k < off.size(); ++k)
+                check(!interaction::lineBlocked(ground, off[k - 1], off[k]), std::format("leg {} through the hill", k));
+            check(interaction::lineBlocked(ground, {.25f, .01f, 0}, {12.25f, .01f, 0}), "the straight line goes through it");
+            ground.collision = {};
+            check(interaction::groundLine(ground, {0, 0, 0}, {Vec3{12, 3, 0}}).size() == 2, "no collision: straight");
+        }
         auto through = interaction::checkLeg(scene, {-4, 0, 0}, {4, 0, 0}, body);
         check(!through.empty() && through[0].rule == "walls", "a route through the block hits walls");
         auto off = interaction::checkLeg(scene, {0, 0, 12}, {0, 0, 14.8f}, body);

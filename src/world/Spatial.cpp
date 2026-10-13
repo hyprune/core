@@ -289,6 +289,18 @@ std::vector<Vec3> walkingRoute(const World &w, Vec3 from, Vec3 to) {
     std::reverse(route.begin(), route.end());
     return route;
 }
+std::vector<Vec3> walkingRouteNear(const World &w, Vec3 from, Vec3 to) {
+    if (w.walkingNodes.empty())
+        return {};
+    Vec3 near = xyz(w.walkingNodes[0].at("position"));
+    for (auto &n : w.walkingNodes)
+        if (length(xyz(n.at("position")) - to) < length(near - to))
+            near = xyz(n.at("position"));
+    auto route = walkingRoute(w, from, near);
+    if (route.empty() || length(route.back() - to) > .25f)
+        route.push_back(to);
+    return route;
+}
 Json projectMarkers(const World &w, const sim::Camera &camera, float aspect) {
     Json result = Json::array();
 

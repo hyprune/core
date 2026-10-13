@@ -268,6 +268,22 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Waypoints: route line on the ground, routes round obstructions, cleared on arrival (no wire change)
+
+- Arrival (RFC-0012): a waypoint the player reaches is cleared by core: within its
+  marker's `range[0]` (2 m) across the ground, with the target between 1 m below the feet
+  and 1 m above the eye. `location.waypoint` becomes null; a route ending at the same
+  point (within 1 m) is cleared with it.
+- `route.set` with one off-graph target (a position or zone that is no walking-graph
+  place) whose straight leg from the camera is blocked by collision now follows the
+  walking graph to the place nearest the target, then the target (RFC-0004 amendment).
+  The last point keeps the caller's target; a clear straight leg stays as before.
+- The drawn route line lies on the ground (a sample every 0.5 m on the floor below it,
+  legs over a crest split) instead of straight from the feet through hills and floors.
+- Marker labels at output scales above 1x: the fallback `+` and the label are laid out
+  from the scaled glyph advance (the `+` no longer covers the label's first glyph at
+  4K); overlay atlas icons scale with the output up to 2x (24 px at 1080p).
+
 ## Offload draws assets added mid-session (no wire change)
 
 - The offload worker now draws characters and objects whose assets were added after

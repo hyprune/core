@@ -64,7 +64,7 @@
           "fadeMs": 600,
           "holdMs": 4000,
           "reason": "tap",
-          "startedAtMs": 109894637
+          "startedAtMs": 263654725
         },
         "layout": 5
       }
@@ -79,10 +79,10 @@
           1.0
         ],
         "fading": [
-          0.44,
-          0.44,
-          0.44,
-          0.44
+          0.447,
+          0.447,
+          0.447,
+          0.447
         ],
         "framesDuringFade": 12
       }
@@ -91,11 +91,11 @@
       "name": "a TAB hold opens the Director and reveals nothing",
       "evidence": {
         "opened": {
-          "leaseId": "lease-2902bba37a42866c",
+          "leaseId": "lease-41687364e00eb777",
           "outputId": "output-1",
           "panel": "map",
-          "revision": 78,
-          "sessionId": "130ad4ecf4b705c7de89c2e5c63474c1b84dea9917413a9621019ba2ca538ccd"
+          "revision": 92,
+          "sessionId": "aaeb1861e4967afa00fa5bcd5521458369c0d10d3ec9cb1eb1bc6642b9628e4d"
         }
       }
     },
@@ -109,7 +109,7 @@
         "fadeMs": 600,
         "holdMs": 1500,
         "reason": "request",
-        "startedAtMs": 109901857
+        "startedAtMs": 263662074
       }
     },
     {
@@ -155,7 +155,7 @@
           },
           "title": "Release notes",
           "tracked": true,
-          "updatedAt": "2026-10-12T01:14:10"
+          "updatedAt": "2026-10-13T19:56:50"
         }
       ]
     },
@@ -224,8 +224,8 @@
           "id": "release-notes",
           "source": "personal"
         },
-        "revision": 153,
-        "sessionId": "130ad4ecf4b705c7de89c2e5c63474c1b84dea9917413a9621019ba2ca538ccd",
+        "revision": 174,
+        "sessionId": "aaeb1861e4967afa00fa5bcd5521458369c0d10d3ec9cb1eb1bc6642b9628e4d",
         "stepId": "step-1",
         "stepTitle": "Draft",
         "title": "Release notes 0.21"
@@ -263,11 +263,11 @@
       "name": "clutter caps: <= 12 in view, <= 6 edge arrows, <= 5 labels",
       "evidence": {
         "inView": 12,
-        "arrows": 4,
+        "arrows": 3,
         "labels": 5,
-        "stacks": 2,
+        "stacks": 3,
         "kinds": {
-          "quest": 16
+          "quest": 15
         },
         "listed": 48
       }
@@ -287,7 +287,7 @@
       "evidence": [
         {
           "alpha": 1.0,
-          "angle": -0.07485983520746231,
+          "angle": 1.5707963705062866,
           "arrow": true,
           "chevron": 0,
           "dimmed": false,
@@ -300,8 +300,8 @@
           "stack": 1,
           "tier": 1,
           "tracked": true,
-          "x": 1863.312255859375,
-          "y": 472.2515869140625
+          "x": 960.0,
+          "y": 1032.0
         }
       ]
     },
@@ -324,7 +324,7 @@
           "tier": 1,
           "tracked": true,
           "x": 846.9825439453125,
-          "y": 531.523681640625
+          "y": 531.5299682617188
         }
       ]
     },
@@ -343,11 +343,11 @@
         "cycle": 1,
         "cycles": 1,
         "pausedState": null,
-        "phaseEndsAtMs": 109940415,
+        "phaseEndsAtMs": 263700606,
         "phaseMs": 15000,
-        "phaseStartedAtMs": 109925415,
+        "phaseStartedAtMs": 263685606,
         "remainingMs": 15000,
-        "sessionId": "focus-ea49e3efdc385caf",
+        "sessionId": "focus-27223867ff9d5ef8",
         "state": "work",
         "target": {
           "kind": "workspace",
@@ -362,15 +362,15 @@
     },
     {
       "name": "credit accrues with keyboard focus on the target and recent input",
-      "evidence": 2500
+      "evidence": 2502
     },
     {
       "name": "leaving the target credits only the 30 s grace (1.5 s scaled)",
-      "evidence": 1858
+      "evidence": 2126
     },
     {
       "name": "idle beyond focus.idle_s (3 s scaled) stops credit",
-      "evidence": 1990
+      "evidence": 2361
     },
     {
       "name": "input resumes credit",
@@ -380,21 +380,21 @@
       "name": "the last interval ends the session (completed)",
       "evidence": {
         "counted": false,
-        "creditedMs": 9632,
+        "creditedMs": 10232,
         "cycle": 1,
         "cycles": 1,
-        "focusSessionId": "focus-ea49e3efdc385caf",
+        "focusSessionId": "focus-27223867ff9d5ef8",
         "outcome": "completed",
         "phase": "ended",
-        "revision": 386,
-        "sessionId": "130ad4ecf4b705c7de89c2e5c63474c1b84dea9917413a9621019ba2ca538ccd"
+        "revision": 474,
+        "sessionId": "aaeb1861e4967afa00fa5bcd5521458369c0d10d3ec9cb1eb1bc6642b9628e4d"
       }
     },
     {
       "name": "the linked focus objective counts the completed interval",
       "evidence": {
         "count": 1,
-        "creditedMinutes": 3.2,
+        "creditedMinutes": 3.4,
         "done": 1,
         "focusTarget": "quest",
         "id": "work",
@@ -407,13 +407,13 @@
     {
       "name": "history: one work line, workspace and quest IDs, no titles",
       "evidence": {
-        "creditedMin": 3.2,
-        "end": "2026-10-12T01:14:41",
+        "creditedMin": 3.4,
+        "end": "2026-10-13T19:57:21",
         "outcome": "completed",
         "phase": "work",
         "plannedMin": 5.0,
         "questId": "personal/deep-work",
-        "start": "2026-10-12T01:14:26",
+        "start": "2026-10-13T19:57:06",
         "targetKind": "workspace",
         "workspaceId": 2
       }

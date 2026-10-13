@@ -1,4 +1,5 @@
 #include "Walkability.hpp"
+#include "Hands.hpp"
 #include <format>
 namespace hyprune::interaction {
 namespace {
@@ -124,5 +125,58 @@ std::vector<WalkProblem> checkRoute(const PlacementScene &s, const sim::Route &r
 }
 std::vector<WalkProblem> checkLeg(const PlacementScene &s, Vec3 from, Vec3 to, const Body &b, size_t limit) {
     return checkRoute(s, sim::Route::build({from, to}, {sim::Segment::Line, sim::Segment::Line}, false), b, limit);
+}
+bool lineBlocked(const PlacementScene &s, Vec3 a, Vec3 b) {
+    Vec3 d = b - a;
+    float l = length(d);
+    if (l < 1e-4f || s.collision.empty())
+        return false;
+    auto hit = raycast(a, d * (1 / l), s.collision, s.index);
+    return hit && hit->distance < l - 1e-3f;
+}
+std::vector<Vec3> groundLine(const PlacementScene &s, Vec3 from, const std::vector<Vec3> &points, float step, float lift) {
+    auto floorNear = [&](Vec3 p, float y) { return floorBelow(s, Vec3{p.x, y + 1.f, p.z}, 3.5f); };
+    if (auto floor = s.collision.empty() ? std::nullopt : floorNear(from, from.y))
+        from.y = *floor; // the start on its floor too (the route's first point, the feet)
+    std::vector<Vec3> out{from + Vec3{0, lift, 0}};
+    // A chord across a crest (a ramp's top edge, a hill top) can dip under the ground between
+    // two samples: such a leg gets a midpoint on the floor, down to 1/8 of a step.
+    auto add = [&](auto &self, Vec3 p, int depth) -> void {
+        Vec3 a = out.back();
+        if (depth < 3 && lineBlocked(s, a, p)) {
+            Vec3 m = (a + p) * .5f;
+            if (auto floor = floorBelow(s, Vec3{m.x, std::max(a.y, p.y) + .5f, m.z}, 1.f + std::abs(a.y - p.y)))
+                m.y = *floor + lift;
+            self(self, m, depth + 1);
+            self(self, p, depth + 1);
+            return;
+        }
+        out.push_back(p);
+    };
+    float ground = from.y; // floorNear: from 1 m above a reference height down to 2.5 m below
+    Vec3 a = from;
+    for (auto b : points) {
+        Vec3 d = b - a;
+        float flat = std::hypot(d.x, d.z);
+        int n = s.collision.empty() ? 1 : std::max(1, int(std::ceil(flat / step)));
+        for (int k = 1; k < n; ++k) {
+            Vec3 p = a + d * (float(k) / n);
+            auto floor = floorNear(p, ground);
+            if (!floor)
+                floor = floorNear(p, p.y);
+            if (floor)
+                ground = *floor, p.y = *floor;
+            else
+                ground = p.y;
+            add(add, p + Vec3{0, lift, 0}, 0);
+        }
+        // A route point on its floor too (a zone's destination height has slack below it).
+        if (auto floor = s.collision.empty() ? std::nullopt : floorNear(b, b.y))
+            b.y = *floor;
+        add(add, b + Vec3{0, lift, 0}, 0);
+        ground = b.y;
+        a = b;
+    }
+    return out;
 }
 } // namespace hyprune::interaction

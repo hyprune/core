@@ -171,7 +171,7 @@ std::vector<Marker> buildMarkers(const world::World *w, const Json &waypoint, co
         waypointAt = m.position = xyz(waypoint["position"]);
         m.target = {{"position", waypoint["position"]}};
         m.source = {{"waypoint", true}};
-        m.rangeMin = 2;
+        m.rangeMin = waypointArrivalRadius;
         m.rangeMax = 10000;
         m.areaId = area(m.position);
         out.push_back(m);

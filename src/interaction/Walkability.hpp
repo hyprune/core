@@ -38,4 +38,13 @@ std::optional<WalkProblem> checkSpot(const PlacementScene &, Vec3 root, const Bo
 std::vector<WalkProblem> checkRoute(const PlacementScene &, const sim::Route &, const Body &, size_t limit = 8);
 // A straight leg (seat approach, guide join) checked like a route.
 std::vector<WalkProblem> checkLeg(const PlacementScene &, Vec3 from, Vec3 to, const Body &, size_t limit = 8);
+// A route as drawn on the ground (the waypoint route line): from `from` through `points`
+// (feet heights), a sample every `step` metres laid on the floor below it, `lift` above
+// it. Each sample looks for its floor near the previous sample's (up a stair, down a
+// slope, over a hill), then near the straight line; with no floor (a gap, a wall) the
+// straight line's height is kept. Route points go on the floor near them (if any).
+std::vector<Vec3> groundLine(const PlacementScene &, Vec3 from, const std::vector<Vec3> &points, float step = .5f,
+                             float lift = .04f);
+// Whether collision lies on the straight segment from a to b (not counting b itself).
+bool lineBlocked(const PlacementScene &, Vec3 a, Vec3 b);
 } // namespace hyprune::interaction
