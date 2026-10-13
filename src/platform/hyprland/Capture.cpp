@@ -75,6 +75,16 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         skipped.push_back({ipc::boundedText(w->m_title, ipc::TitleLimit), why,
                            std::format("0x{:x}", reinterpret_cast<uintptr_t>(w.get()))});
     };
+    // A room client opening now: ahead of the player, short of walls. Keep the full client
+    // size; the bounded spawn search queues the client if no spot fits.
+    auto ahead = [&](surfaces::Surface &s) {
+        s.yaw = -camera->yaw;
+        s.rotation = {0, 0, 0, 1};
+        s.center = camera->position + camera->forward() * spawnDistance;
+        if (auto wall = interaction::raycast(camera->position, camera->forward(), world->collision, &world->collisionIndex))
+            s.center = camera->position + camera->forward() * interaction::limitSpawnDistance(spawnDistance, wall->distance);
+        surfaces::pushOut(s, world->collision);
+    };
     std::vector<PHLWINDOWREF> presenting;
     // Shown in the world, so it must keep drawing although its workspace is on no output:
     // clear the xdg "suspended" state the compositor gives hidden workspaces (browsers
@@ -177,15 +187,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             if (i == 2)
                 e.surface.center = {3.8f, 2, -2};
             if (!attached && inRoom && camera && world && (!layout || !layout->freePoses.contains(e.surface.id))) {
-                e.surface.yaw = -camera->yaw;
-                e.surface.center = camera->position + camera->forward() * spawnDistance;
-                if (auto wall = interaction::raycast(camera->position, camera->forward(), world->collision,
-                                                     &world->collisionIndex))
-                    e.surface.center = camera->position + camera->forward() * interaction::limitSpawnDistance(
-                                                                                  spawnDistance, wall->distance);
-                // Keep the full client size. Failed recovery is handled by the
-                // bounded spawn search, which queues the client if no spot fits.
-                surfaces::pushOut(e.surface, world->collision);
+                ahead(e.surface);
                 surfaces::Instance instance{e.surface.id, identity.appClass, identity.title, identity.workspaceId};
                 if (layout && !layout->hasPlacement(instance, world))
                     switch (surfaces::adoptRoomClient(*world, i, !spawnNew, layout->unplaced.contains(e.surface.id))) {
@@ -242,8 +244,19 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         it->elsewhere = elsewhere;
         if (!attached && layout && camera && world && !world->areas.empty() && !elsewhere) {
             it->visible = false;
-            if (auto placed =
-                    layout->locate(it->instance, world, *camera, it->surface.pixelWidth, it->surface.pixelHeight)) {
+            auto placed = layout->locate(it->instance, world, *camera, it->surface.pixelWidth, it->surface.pixelHeight);
+            // A floating room client nothing poses (moved in natively, from a home or another
+            // workspace) arrives like a new one: ahead of the player, else in the pocket. It
+            // was left floating in the room, neither drawn nor pocketed.
+            if (!placed && inRoom && w->m_isFloating && !layout->unplaced.contains(it->surface.id) &&
+                layout->carried != it->surface.id && !Fullscreen::controller()->isFullscreen(w)) {
+                auto s = it->surface;
+                s.logicalSize(s.pixelWidth, s.pixelHeight, windowScale);
+                ahead(s);
+                layout->spawn(it->instance, world, *camera, s, float(monitor->m_size.x) / monitor->m_size.y);
+                placed = layout->locate(it->instance, world, *camera, it->surface.pixelWidth, it->surface.pixelHeight);
+            }
+            if (placed) {
                 placed->texture = texture->m_texID;
                 placed->title = identity.title;
                 it->surface = *placed;
