@@ -344,6 +344,19 @@ Character loadCharacter(const std::filesystem::path &path, unsigned compressedFo
             out.slots[0].texture = i;
             out.baseTexture = i;
         }
+        // KHR_materials_pbrSpecularGlossiness (older exporters) without a metallic-roughness
+        // block: its diffuse is the base colour (factor and texture). Dielectric; roughness
+        // from the glossiness.
+        if (m.has_pbr_specular_glossiness && !m.has_pbr_metallic_roughness) {
+            auto &sg = m.pbr_specular_glossiness;
+            out.color = {sg.diffuse_factor[0], sg.diffuse_factor[1], sg.diffuse_factor[2]};
+            out.metallic = 0;
+            out.roughness = std::clamp(1 - sg.glossiness_factor, 0.f, 1.f);
+            if (int i = image(sg.diffuse_texture.texture); i >= 0) {
+                out.slots[0].texture = i;
+                out.baseTexture = i;
+            }
+        }
         // The data textures matter: without the metallic-roughness texture the glTF default
         // metallic factor (1) made every character a mirror, black where no sky reflects.
         c.linearImages.resize(c.images.size(), false);

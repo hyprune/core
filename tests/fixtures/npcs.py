@@ -63,6 +63,10 @@ subprocess.run([sys.executable, str(here / 'make-mannequin.py'), str(glb)], chec
 (root / 'characters/textured').mkdir()
 subprocess.run([sys.executable, str(here / 'make-mannequin.py'), str(root / 'characters/textured/object.glb'),
                 '--ktx2', str(here / 'ktx2/gradient8.ktx2')], check=True, stdout=subprocess.DEVNULL)
+# The same as specular-glossiness materials (diffuse instead of base colour).
+(root / 'characters/specgloss').mkdir()
+subprocess.run([sys.executable, str(here / 'make-mannequin.py'), str(root / 'characters/specgloss/object.glb'),
+                '--ktx2', str(here / 'ktx2/gradient8.ktx2'), '--spec-gloss'], check=True, stdout=subprocess.DEVNULL)
 data = glb.read_bytes(); n = struct.unpack('<I', data[12:16])[0]; g = json.loads(data[20:20 + n])
 pos = [g['accessors'][p['attributes']['POSITION']] for m in g['meshes'] for p in m['primitives']]
 lo = [min(a['min'][i] for a in pos) for i in range(3)]; hi = [max(a['max'][i] for a in pos) for i in range(3)]

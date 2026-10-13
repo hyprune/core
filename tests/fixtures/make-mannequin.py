@@ -8,7 +8,7 @@ turn_left/turn_right/look_around/wave/nod. Flags make spec violations for valida
 
 usage: make-mannequin.py OUT.glb [--root-motion] [--centimetres] [--no-idle] [--extra-bones N]
        [--three-materials] [--baked] [--rotate-x] [--five-weights] [--accent RGB] [--mixamo] [--no-root]
-       [--fingers] [--one-node] [--ktx2 BASE.ktx2]
+       [--fingers] [--one-node] [--ktx2 BASE.ktx2] [--spec-gloss]
 """
 import argparse, json, math, struct, zlib
 
@@ -22,6 +22,7 @@ p.add_argument('--no-root', action='store_true', help='no root bone: the hips ar
 p.add_argument('--fingers', action='store_true', help='add 3 bones per finger (30 more)')
 p.add_argument('--one-node', action='store_true', help='a single mesh node, not body/head/visor')
 p.add_argument('--baked', action='store_true', help='one baked material, no accent or visor (valid)')
+p.add_argument('--spec-gloss', action='store_true', help='materials as KHR_materials_pbrSpecularGlossiness only (older exporters)')
 p.add_argument('--ktx2', help='body textures: this KTX2 base colour (KHR_texture_basisu), PNG normal and metallic-roughness')
 a = p.parse_args()
 
@@ -164,6 +165,15 @@ if a.ktx2:  # the body's maps: a KTX2 colour image (KHR_texture_basisu) and two 
     body = materials[0]['pbrMetallicRoughness']
     body['baseColorFactor'] = [1, 1, 1, 1]; body['baseColorTexture'] = {'index': 0}; body['metallicRoughnessTexture'] = {'index': 2}
     materials[0]['normalTexture'] = {'index': 1}
+if a.spec_gloss:  # the same colours as diffuse, no metallic-roughness block
+    for m in materials:
+        mr = m.pop('pbrMetallicRoughness')
+        sg = {'diffuseFactor': mr.get('baseColorFactor', [1, 1, 1, 1]), 'specularFactor': [.04, .04, .04],
+              'glossinessFactor': 1 - mr.get('roughnessFactor', 1)}
+        if 'baseColorTexture' in mr:
+            sg['diffuseTexture'] = mr['baseColorTexture']
+        m['extensions'] = {'KHR_materials_pbrSpecularGlossiness': sg}
+    gltf['extensionsUsed'] = gltf.get('extensionsUsed', []) + ['KHR_materials_pbrSpecularGlossiness']
 gltf['materials'] = materials
 gltf['meshes'] = meshes
 ibm = []

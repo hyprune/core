@@ -224,6 +224,17 @@ int main(int argc, char **argv) {
                           c.materials[0].slots[1].texture == 1 && c.materials[0].slots[2].texture == 2,
                       "base colour sRGB; normal and metallic-roughness data");
             }
+            {
+                // Specular-glossiness materials: the diffuse is the base colour (factor and texture).
+                auto mr = world::loadCharacter(glb), sg = world::loadCharacter(fixture / "characters/specgloss/object.glb");
+                check(sg.materials.size() == mr.materials.size(), "spec-gloss material count");
+                for (size_t k = 0; k < mr.materials.size(); ++k)
+                    check(length(sg.materials[k].color - mr.materials[k].color) < 1e-5f && sg.materials[k].metallic == 0 &&
+                              std::abs(sg.materials[k].roughness - mr.materials[k].roughness) < 1e-5f &&
+                              sg.materials[k].baseTexture == mr.materials[k].baseTexture,
+                          std::format("spec-gloss material {} reads its diffuse as the base colour", k));
+                check(sg.materials[0].baseTexture == 0 && sg.materials[0].slots[0].texture == 0, "spec-gloss diffuse texture is the base texture");
+            }
             auto copy = fs::temp_directory_path() / std::format("hyprune-npc-tex-{}", getpid());
             fs::remove_all(copy);
             fs::create_directories(copy);
