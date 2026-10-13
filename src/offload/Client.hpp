@@ -30,8 +30,10 @@ class Client {
     std::string error;
     Json capabilities, timings;
     bool connected() const { return fd_ >= 0; }
-    bool available() const { return fd_ >= 0 && front_ >= 0 && now() - frontReply_.at("sent").get<double>() <= 50; }
-    GLuint fbo() const { return available() ? targets_[front_].fbo : 0; }
+    // A front older than maxAgeMs is stale (the in-process renderer stands in); recordings in
+    // lockstep accept any age, the front being exactly the next frame in sequence.
+    bool available(double maxAgeMs = 50) const { return fd_ >= 0 && front_ >= 0 && now() - frontReply_.at("sent").get<double>() <= maxAgeMs; }
+    GLuint fbo(double maxAgeMs = 50) const { return available(maxAgeMs) ? targets_[front_].fbo : 0; }
     // Age of the newest complete frame (ms), or -1.
     double frontAgeMs() const { return front_ >= 0 ? now() - frontReply_.at("sent").get<double>() : -1; }
     Json diagnostics() const {
@@ -62,18 +64,38 @@ class Client {
     }
     // extra: fields added to the next pose (animation clock, object state delta); posted: called
     // once that pose was written, so a delta is never lost to backpressure.
+    // Send::Paced sends at most fps poses a second whenever a slot is free. Recordings use
+    // Send::Lockstep from the frame tick (the next frame in sequence becomes the front, waited
+    // for if needed, then this tick's pose goes out: every presented frame shows the next
+    // pose, two ticks behind) and Send::None from the in-between pump (receive and import
+    // only; the front stays).
+    enum class Send { Paced, Lockstep, None };
     void tick(const sim::Camera &camera, const Json &graphics, const Json &profile, int fps,
-              const std::function<Json()> &extra = {}, const std::function<void()> &posted = {}) {
+              const std::function<Json()> &extra = {}, const std::function<void()> &posted = {}, Send send = Send::Paced) {
+        bool lockstep = send == Send::Lockstep;
         if (fd_ < 0)
             return;
         render::GLState guard;
         try {
-            for (auto &b : slots_)
-                if (b.phase == 3) {
+            double deadline = now() + 100;
+            int promoted = 0;
+            for (;;) {
+            // Copied frames become the front, oldest first (Lockstep: one per frame tick).
+            int limit = send == Send::None ? 0 : lockstep ? 1 - promoted : 2;
+            for (int k = 0; k < limit; ++k) {
+                Slot *oldest = nullptr;
+                for (auto &b : slots_)
+                    if (b.phase == 3 && (!oldest || b.reply.at("sequence").get<uint64_t>() < oldest->reply.at("sequence").get<uint64_t>()))
+                        oldest = &b;
+                if (!oldest)
+                    break;
+                auto &b = *oldest;
+                {
                     auto status = glClientWaitSync(b.copied, 0, 0);
                     check(status != GL_WAIT_FAILED, "copy fence");
                     if (status != GL_ALREADY_SIGNALED && status != GL_CONDITION_SATISFIED)
-                        continue;
+                        break;
+                    ++promoted;
                     glDeleteSync(b.copied);
                     b.copied = nullptr;
                     if (b.reply.at("sequence").get<uint64_t>() > frontSequence_) {
@@ -88,6 +110,7 @@ class Client {
                     b.phase = 0;
                     b.target = -1;
                 }
+            }
             for (int n = 0; n < 8; ++n) {
                 auto packet = receivePacket(fd_);
                 if (!packet)
@@ -177,7 +200,21 @@ class Client {
                     b.phase = 3;
                     check(glGetError() == GL_NO_ERROR, "offload import/copy");
                 }
-            if (ready_ && now() >= nextSend_) {
+            int pending = 0;
+            for (auto &b : slots_)
+                pending += b.phase != 0;
+            if (!lockstep || !ready_ || now() > deadline || ((promoted || !pending) && pending <= 1))
+                break;
+            // Wait for whichever comes next: a packet, an acquire fence, a copy.
+            std::vector<pollfd> waits{{fd_, POLLIN, 0}};
+            for (auto &b : slots_)
+                if (b.phase == 2)
+                    waits.push_back({b.acquire, POLLIN, 0});
+                else if (b.phase == 3)
+                    glClientWaitSync(b.copied, GL_SYNC_FLUSH_COMMANDS_BIT, 1000000);
+            poll(waits.data(), waits.size(), 1);
+            }
+            if (ready_ && send != Send::None && (lockstep || now() >= nextSend_)) {
                 for (int i = 0; i < 2; ++i)
                     if (slots_[i].phase == 0) {
                         auto &b = slots_[i];

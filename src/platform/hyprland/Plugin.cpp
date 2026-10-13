@@ -115,7 +115,7 @@ struct Runtime {
     int64_t nextFacts = 0;
     std::string markerMode() const;
     void questsTick();
-    void offloadPump();
+    void offloadPump(bool frameTick = false);
     SP<CEventLoopTimer> offloadTimer;
     uint64_t offloadDeferred = 0;
     Json performance() const;
@@ -1541,7 +1541,7 @@ void Runtime::offloadTick() {
         request["generation"] = ++offloadGeneration;
         ipc->renderer(request);
     }
-    offloadPump();
+    offloadPump(true);
     renderer.offloadState = {{"activeRenderer", renderedOffload ? "offload" : "in-process"},
                             {"powerW", offloadPolicy.value("powerW", Json(nullptr))},
                             {"profile", offloadPolicy.value("profile", "unknown")},
@@ -1549,7 +1549,7 @@ void Runtime::offloadTick() {
                             {"capW", offloadPolicy.value("capW", 0.)},
                             {"worker", offload.timings}};
 }
-void Runtime::offloadPump() {
+void Runtime::offloadPump(bool frameTick) {
     if (renderPass.active()) throw std::runtime_error("offload polling inside frame");
     if (offload.connected()) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
@@ -1567,8 +1567,11 @@ void Runtime::offloadPump() {
                         {"characters", offloadCharacters()},
                         {"machines", offloadMachines.delta(renderer)}};
         };
+        // While a recording exports frames, poses go out once per frame tick (lockstep).
+        using Send = offload::Client::Send;
         offload.tick(view, renderer.graphics, renderer.profile, offloadPolicy.value("targetFPS", 30), objects,
-                     [&] { offloadObjects.commit(), offloadMachines.commit(); });
+                     [&] { offloadObjects.commit(), offloadMachines.commit(); },
+                     !frameExport.active() ? Send::Paced : frameTick ? Send::Lockstep : Send::None);
         if (!offload.connected()) {
             auto errors = offloadChanges.value("errors", Json::array());
             errors.push_back({{"generation", offloadGeneration}, {"error", offload.error}});
@@ -5619,7 +5622,7 @@ class Pass final : public IPassElement {
             auto &r = runtime->renderer;
             auto key = runtime->frameKey(surfaces);
             r.reuseFrame = !runtime->frameForced() && key == runtime->renderedKey;
-            r.externalWorldFbo = runtime->control.photoHeld() ? 0 : runtime->offload.fbo();
+            r.externalWorldFbo = runtime->control.photoHeld() ? 0 : runtime->offload.fbo(runtime->frameExport.active() ? 1000 : 50);
             if (runtime->offload.connected() && !runtime->control.photoHeld()) {
                 // Diagnostics: frames drawn from the worker vs. stale (local stand-in), by front age.
                 auto age = runtime->offload.frontAgeMs();
