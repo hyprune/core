@@ -576,12 +576,34 @@ def acceptance(client, children, args, shell_token, socketpath):
     s1 = transform()['scale']
     check('uniform scale with Shift snaps to 0.1x', s1[0] == s1[1] == s1[2] and s1[0] != s0[0] and abs(s1[0] / s0[0] * 10 - round(s1[0] / s0[0] * 10)) < 1e-3
           and sc['readout'].startswith('SCALE x'), {'from': s0, 'to': s1, 'readout': sc['readout']})
+    # 13b. Scaling an object resting on the floor keeps it there: larger, it rises out of the
+    # floor; smaller, it drops onto it. Neither is refused for "Needs a floor under it".
+    scaled = []
+    for sign in (1, -1, 1, -1):
+        look(three, c); aim('scale-uniform'); before = transform()
+        pointer('button', 272, 1); time.sleep(.15)
+        for _ in range(6):
+            pointer(-14 * sign, -9 * sign); time.sleep(.05)
+        time.sleep(.3); pointer('button', 272, 0); time.sleep(.4)
+        after = transform()
+        refused = [n['message'] for n in notices('placement.blocked') if 'floor' in n['message']]
+        scaled.append({'from': before['scale'][0], 'to': after['scale'][0], 'y': round(after['position'][1] - before['position'][1], 3),
+                       'supported': probe(*gizmo()['pivotPoint'])['supported'], 'refused': refused})
+    changes = [x['to'] - x['from'] for x in scaled]
+    check('scaling a resting object up and down keeps it on the floor (never refused for the floor)',
+          all(abs(d) > .01 for d in changes) and changes[0] * changes[1] < 0 and all(x['supported'] for x in scaled) and
+          not any(x['refused'] for x in scaled), scaled)
+    for _ in scaled:  # undo them: the next steps start from the pose step 13 left
+        undo()
+    check('undo restores the size and pose before them', abs(transform()['scale'][0] - scaled[0]['from']) < 1e-4, transform())
     # 14. Universal: all three kinds of handle at once.
     mode('universal')
     look(three, c)
     kinds = sorted(gizmo()['handles'])
     check('universal mode shows move, rotate and scale handles together', 'move-x' in kinds and 'rotate-y' in kinds and 'scale-uniform' in kinds, kinds)
-    aim('rotate-x'); q0 = transform()['rotation']; drag(40, 30)
+    # The yaw ring: the object rests on the floor (a scale keeps it there), so a tilt would be
+    # refused for going into it.
+    aim('rotate-y'); q0 = transform()['rotation']; drag(40, 30)
     check('universal rotate ring drags', transform()['rotation'] != q0)
     shot('gizmo-universal-after.png')
     # 15. The window: select, move along its own X, scale its client, undo.

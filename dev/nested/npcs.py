@@ -28,6 +28,8 @@ Checks:
     the tool 3 spot and from the yard's side behind the research dock wall; in the open, drawn.
 10. Disable/remove: authored characters disable (and enable), never remove; user ones remove.
 11. Persistence: a world reload keeps the user character on its route and a disabled one off.
+Steering (9d): a second resident walks the loop the other way and they never overlap; a
+    build monitor dropped on the north walk gets the resident a detour round it and back.
 Motion policy (9c): with `auto` a guide is refused under still, reduced motion and off (and
     talk under off) with the reason; a player standing still 32 s doesn't pause residents; a
     guide with no movement input runs to its end and back onto its route.
@@ -174,8 +176,15 @@ def acceptance(client, children, args, shell_token, socketpath):
         return eye
 
     def shot(name):
-        subprocess.run([str(s.HERE / 'ctl.py'), 'shot', str(out / name)], check=True)
-        return out / name
+        # With nothing changing, render on demand draws no frame and grim's copy can wait for
+        # good: after 10 s, a 1 px pointer nudge there and back draws one.
+        for attempt in range(3):
+            try:
+                subprocess.run([str(s.HERE / 'ctl.py'), 'shot', str(out / name)], check=True, timeout=10)
+                return out / name
+            except subprocess.TimeoutExpired:
+                pointer(1, 0); pointer(-1, 0)
+        raise AssertionError(f'no frame to capture for {name}')
 
     def fps(seconds=2.5):
         f0 = s.camera()['frames']; time.sleep(seconds); return (s.camera()['frames'] - f0) / seconds
@@ -322,8 +331,8 @@ def acceptance(client, children, args, shell_token, socketpath):
     # 8. The authored resident sits on the bench at its stop.
     look([0, 6, 9], [3, 0, 3])
     sat = wait(lambda: (lambda b: b if b and b['activity'] == 'sitting' and b['seat'] else None)(agent('blue-walker')), timeout=120)
-    time.sleep(2.5)
-    seated = agent('blue-walker')
+    # Align (0.25 s), then the sit clip plays through (2.3 s for the starter residents).
+    seated = wait(lambda: (lambda b: b if b and b['clip'] == 'sit_idle' else None)(agent('blue-walker')), timeout=6)
     check('sits on the bench seat (root lifted by the seat fit)', seated['seat'] == 'bench-1/left' and seated['clip'] == 'sit_idle' and
           seated['seatOffset'] > .2 and instance('blue-walker')['seat'] == 'bench-1/left', seated)
     look([1.2, 1.4, 1.2], [3.2, .6, 2.7]); shot('npcs-4-seated.png')
@@ -419,6 +428,62 @@ def acceptance(client, children, args, shell_token, socketpath):
                                                    'reasons': sorted(map(str, reasons))})
     motion('always')
 
+    # 9d. Steering (RFC-0010 steering amendment). A second resident walks the yard loop the
+    # other way: meeting head-on they pass, never closer than their radii allow. A machine
+    # dropped on the north walk is walked round (a detour) and the route rejoined.
+    # Spawned on the north edge (phase 0.25), away from the bench; counted once they are apart.
+    ember = client.call('npcs.spawn', {'ref': EMBER, 'path': 'package/yard-loop', 'reverse': True, 'phase': .25})['id']
+    wait(lambda: agent(ember) and agent(ember)['activity'] in ('walking', 'stopped'), timeout=10)
+    look([-5, 14, 14], [-5, 0, 6])
+    closest, both, worst, apart, passes = 1e9, 0., None, False, 0
+    keys_ = ('activity', 'mode', 'position', 'lateral', 'speed', 'backingOff', 'detour', 'stop')
+    t0 = time.monotonic(); near = False
+    while time.monotonic() - t0 < 60:
+        a, b = agent('blue-walker'), agent(ember)
+        if a and b and a['activity'] != 'sitting' and b['activity'] != 'sitting':
+            d = math.dist(a['position'][::2], b['position'][::2])
+            apart |= d > 1.5
+            if apart and d < closest:
+                closest, both = d, a['radius'] + b['radius']
+                worst = {'seconds': round(time.monotonic() - t0, 1), 'blue': {k: a[k] for k in keys_}, 'ember': {k: b[k] for k in keys_}}
+            if d < 1.2 and not near:
+                passes += 1
+            near = d < 1.2
+        time.sleep(.1)
+    check('two residents walking a loop in opposite directions never overlap', apart and closest >= both - .05 and both > 0,
+          {'closest': round(closest, 3), 'radii': both, 'meetings': passes, 'at': worst})
+    client.call('npcs.remove', {'id': ember}); time.sleep(.5)
+    MONITOR = f'library/{LIBRARY}/build-monitor'
+    def place_monitor():  # the library asset loads on first use: retryable until it has
+        try:
+            return client.call('objects.place', {'ref': MONITOR, 'pose': {'position': [6, 0, -12.5], 'rotation': [0, .7071068, 0, .7071068]}})['id']
+        except RuntimeError as e:
+            if 'retry' not in str(e):
+                raise
+            return None
+    placed = wait(place_monitor, timeout=30)
+    time.sleep(1)
+    c = agent('crimson-walker')
+    check('a machine dropped on its route: the resident gets a detour, not a suspension',
+          c['detours'] >= 1 and instance('crimson-walker')['state'] == 'active', {'agent': c})
+    look([6, 9, -5], [6, 0, -12.5])
+    inside, detoured, rejoined = False, False, False
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < 70 and not rejoined:
+        c = agent('crimson-walker'); p = c['position']
+        # The monitor's footprint (turned: 0.81 x 1.1 m) against the body's box (half 0.85 x radius,
+        # the walkability rule), 2 cm slack.
+        inside |= abs(p[0] - 6) < .405 + .3 - .02 and abs(p[2] + 12.5) < .554 + .3 - .02
+        if c['activity'] == 'walking' and c['detour'] >= 0:
+            detoured = True
+        if detoured and c['detour'] < 0 and abs(p[2] + 12.5) < .05 and abs(p[0] - 6) > 1.2:
+            rejoined = True
+        time.sleep(.1)
+    shot('npcs-9-detour.png')
+    check('it walks round the machine and rejoins its route', detoured and rejoined and not inside,
+          {'detoured': detoured, 'rejoined': rejoined, 'inside': inside, 'agent': agent('crimson-walker')})
+    client.call('objects.remove', {'id': placed}); time.sleep(.5)
+
     # 9b. Occlusion: alone on its walk (the others disabled), the resident behind the yard's
     # opaque geometry is not drawn and keeps no frames coming; in the open again it is both.
     for other in ('blue-walker', user_id):
@@ -489,21 +554,60 @@ def acceptance(client, children, args, shell_token, socketpath):
     if (s.STATE / 'worlds' / LUMEN / 'world.json').is_file():
         client.call('world.load', {'worldId': LUMEN}); wait(lambda: s.camera()['active'] and not s.camera().get('loading'), timeout=90)
         motion('auto'); wait(lambda: len(diag()['agents']) >= 4, timeout=30); time.sleep(2)
+        def hidden_fps(seconds=3.):
+            """(frames per second, frame causes) over a window in which no resident was drawn
+            (None: one came into view)."""
+            c0 = s.camera(); end = time.monotonic() + seconds
+            while time.monotonic() < end:
+                if diag()['drawn'] or diag()['animationVisible']:
+                    return None
+                time.sleep(.2)
+            c1 = s.camera()
+            causes = {k: v - c0['frameCauses'].get(k, 0) for k, v in c1['frameCauses'].items() if v != c0['frameCauses'].get(k, 0)}
+            return (c1['frames'] - c0['frames']) / seconds, causes
         poses = {}
         for name, eye in LUMEN_POSES.items():
-            best = None
-            for k in range(8):  # the first heading with no resident drawn
+            best = f = None
+            for k in list(range(8)) * 2:  # a heading clear of residents for 3 s; one at 0 fps first
                 camera(eye, k * math.pi / 4); time.sleep(1.2)
                 if diag()['drawn'] == 0 and not diag()['animationVisible']:
-                    best = k * math.pi / 4; break
+                    g = hidden_fps()
+                    if g is not None and (best is None or g[0] < .5):
+                        best, f = k * math.pi / 4, g
+                    if g is not None and g[0] < .5:
+                        break
             if best is None:
                 poses[name] = {'noView': True}; continue
-            f = fps(3.)
-            poses[name] = {'yaw': round(best, 3), 'fps': f, 'state': state()['npcs']['state'], 'drawn': diag()['drawn']}
+            poses[name] = {'yaw': round(best, 3), 'fps': f[0], 'causes': f[1], 'state': state()['npcs']['state'], 'drawn': diag()['drawn']}
+        # 0 fps, or frames that come from something else in that view (never from the characters).
         check('Lumen poses: a still player with no resident in view stays at 0 fps (residents animating)',
-              all(not v.get('noView') and v['fps'] < .5 and v['state'] == 'animating' for v in poses.values()), poses)
+              all(not v.get('noView') and (v['fps'] < .5 or not v['causes'].get('npcs')) and v['state'] == 'animating' for v in poses.values()),
+              poses)
+        # A stop facing a screen (anchor) stands in front of it on its normal, outside its 1.5 m
+        # approach zone, and faces it (RFC-0010 steering amendment). Which of Lumen's four
+        # screen stops get a front spot is evidence for the world's authoring.
+        spots = {a['id']: [x for x in a['stopSpots'] if x['face']] for a in diag()['agents']}
+        fronted = [(i, x) for i, xs in spots.items() for x in xs if x['spot']]
+        at_front = None
+        if fronted:
+            rid, stop = fronted[0]
+            look([stop['spot'][0] + 3, stop['spot'][1] + 2.5, stop['spot'][2] + 3], stop['spot'])
+            at_front = wait(lambda: (lambda a: a if a['activity'] == 'stopped' and math.dist(a['position'][::2], stop['spot'][::2]) < .1 else None)(
+                next(a for a in diag()['agents'] if a['id'] == rid)), timeout=150)
+            time.sleep(1.5)
+            at_front = next(a for a in diag()['agents'] if a['id'] == rid)
+            to = [stop['face'][0] - at_front['position'][0], stop['face'][2] - at_front['position'][2]]
+            facing_err = abs(math.remainder(at_front['heading'] - math.atan2(to[0], to[1]), math.tau))
+            shot('npcs-10-screen-front.png')
+        check('Lumen: a stop facing a screen stands in front of it and faces it',
+              at_front is not None and facing_err < .15,
+              {'spots': {i: [{'point': x['point'], 'spot': x['spot']} for x in xs] for i, xs in spots.items() if xs},
+               'resident': at_front and at_front['id'], 'facingError': at_front and round(facing_err, 3)})
         resident = next(a for a in diag()['agents'] if a['id'] == 'sun-court-resident')
-        facing('sun-court-resident', 4.)
+        # Walking again (after a stop it faces its screen: 4 m ahead of it is behind the screen);
+        # followed from 4 m behind, as in the yard.
+        wait(lambda: agent('sun-court-resident')['activity'] == 'walking', timeout=60)
+        facing('sun-court-resident', -4., height=2.2)
         looked = fps()
         check('Lumen: a resident in view keeps frames coming', looked > 20 and diag()['drawn'] >= 1, {'fps': looked, 'agent': resident['id']})
         shot('npcs-8-lumen-resident.png')

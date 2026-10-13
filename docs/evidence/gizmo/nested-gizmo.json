@@ -55,7 +55,6 @@
     {
       "name": "the move is an overlay record of the world object",
       "evidence": {
-        "areaId": "",
         "objectId": "object:sun-court-armillary",
         "position": [
           -6.068635940551758,
@@ -72,8 +71,7 @@
           1.0,
           1.0,
           1.0
-        ],
-        "worldId": "com.hyprune.lumen-reach"
+        ]
       }
     },
     {
@@ -148,7 +146,7 @@
       "evidence": {
         "before": 6.179999828338623,
         "afterChords": 6.179999828338623,
-        "afterCtrlHeld": 2.899962902069092
+        "afterCtrlHeld": 3.1812942028045654
       }
     },
     {
@@ -341,7 +339,61 @@
           0.9000000357627869,
           0.9000000357627869
         ],
-        "readout": "SCALE x0.90  Floating (End drops to the floor)"
+        "readout": "SCALE x0.90"
+      }
+    },
+    {
+      "name": "scaling a resting object up and down keeps it on the floor (never refused for the floor)",
+      "evidence": [
+        {
+          "from": 0.9000000357627869,
+          "to": 0.8266300559043884,
+          "y": -0.203,
+          "supported": true,
+          "refused": []
+        },
+        {
+          "from": 0.8266300559043884,
+          "to": 0.8940187692642212,
+          "y": 0.186,
+          "supported": true,
+          "refused": []
+        },
+        {
+          "from": 0.8940187692642212,
+          "to": 0.8211363554000854,
+          "y": -0.202,
+          "supported": true,
+          "refused": []
+        },
+        {
+          "from": 0.8211363554000854,
+          "to": 0.8880771994590759,
+          "y": 0.185,
+          "supported": true,
+          "refused": []
+        }
+      ]
+    },
+    {
+      "name": "undo restores the size and pose before them",
+      "evidence": {
+        "position": [
+          -5.362582683563232,
+          3.690706253051758,
+          -9.800528526306152
+        ],
+        "rotation": [
+          0.1251015067100525,
+          0.041659217327833176,
+          -0.08098230510950089,
+          0.9879554510116577
+        ],
+        "scale": [
+          0.9000000357627869,
+          0.9000000357627869,
+          0.9000000357627869
+        ]
       }
     },
     {

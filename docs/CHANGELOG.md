@@ -252,6 +252,55 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Characters steer, detour and keep their feet in step (no wire change)
+
+RFC-0010 amendment "steering, detours and gait" (draft); closes open question 2.
+
+- Characters (residents, user characters, the companion) avoid each other. Each scores a
+  sideways offset from its route (up to ±0.9 m where the floor is walkable) and a speed
+  (full, half, stop) against everyone's predicted positions over 2 s, keeping right; a step
+  that would bring two bodies together is never taken. All decide from one snapshot per tick,
+  so the update order changes nothing. Priorities (world order, the companion last) break the
+  symmetry: in a way too narrow to pass, the lower one walks its route back, stands aside and
+  goes on once the other has passed; nobody waits for good. The player keeps priority (the
+  existing sidestep).
+- A stretch of route where the body hits collision (a placed object, a pillar) gets a detour
+  planned on the 0.5 m standing-spot grid and is walked round in both directions. Such a route
+  is now walkable (`paths.list` `walkable` true, no `npc.suspended`), and stops inside the
+  stretch are skipped; guides still refuse paths that need one. Other problems (no floor, a
+  ledge, outside the playable volume, a screen approach) and a stretch with no way round
+  leave the route unwalkable as before. User-placed objects without a collision proxy count
+  as their bounds for characters.
+- A stop reached while stepped aside, or with another character standing on it, is walked
+  past that time instead of snapping onto it.
+- Locomotion eases its speed and blends walk and run on one shared cycle phase advanced by
+  ground speed over the blended stride: no foot sliding when speeding up or slowing down. A
+  character goes at most its run clip at 1.8x.
+- A stop facing an anchor (`face: {anchor}`) stands in front of the screen on its normal,
+  just outside the approach zone, faces it and walks back; the way there is planned on the
+  standing-spot grid round the zone (at most 10 m). Without such a spot it stops on the route
+  point as before (`npc.suspended` notice names the anchor).
+- The companion follows with the same gait at an eased pace, slows for characters crossing
+  its way, and steps aside for a resident coming through where it stands. Its E menu adds
+  **Run with me** / **Walk with me** (`interaction.choose` ids `run` and `walk`, type
+  `companion`); `companion.json` keeps `pace: "run"`. The companion state does not report the
+  pace (a `pace` field would be IPC 0.26).
+- Diagnostics: agents report `speed`, `radius`, `stride`, `gait`, `detours`, `detour`,
+  `stopSpots`, `stop`, `backingOff`, `blockedFor`; the companion `pace`, `speed`, `stride`,
+  `gait`, `madeWay`, `makingWay`.
+
+## Gizmo scale settles on the floor; machines start with a demo source (no wire change)
+
+- Scaling an object that rests on a floor (tool 4) keeps it on that floor: scaled up its
+  base rises out of the floor, scaled down it drops onto it, so a size is never refused for
+  "Needs a floor under it". The other placement rules still apply.
+- `hyprune-demo-source` (`dev/machines/scripts/demo-source.py`, installed in
+  `share/hyprune/machines/` with a `bin/` link like `hyprune-system-gauges`) prints made-up
+  but plausible values for a machine's inputs (`KEY=TYPE[:ARGS]` per input). The reference
+  shell writes a `sources.json` entry running it for a newly placed machine that has none
+  (RFC-0013). A checkout's build links both scripts into `build/bin`, and the live launcher
+  puts that first on the checkout helper's `PATH`.
+
 ## Character motion: `auto` animates whenever the world is shown (no wire change)
 
 RFC-0010 amendment "motion follows the user's settings":

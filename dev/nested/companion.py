@@ -10,6 +10,8 @@ companion-capable character; required). Checks, in Switchyard:
     teleport while it can keep up, never popping in view; it ran to catch up.
  3. Frames: walking in view keeps frames coming; at rest beside the still player, none.
  4. Stay and Follow (E menu choices): stays put while the player walks off; comes back.
+    Run with me / Walk with me (E menu) set its pace (companion.json); hurrying after the
+    player its gait cycle keeps step with the ground (walk and run blended, no sliding).
     Motion `auto` (the default, used throughout): after 32 s standing still it follows the next
     walk; `npc_motion` off refuses Stay (-32005, the reason in the message).
  5. Talk: the aimed companion offers Talk and Stay; Talk shows a say line, the next one each time.
@@ -31,6 +33,8 @@ Then Lumen Reach:
 13. A warp to another home (workspace.activate): it teleports in nearby, out of view.
 14. Focus: standing between the player and a window, focusing the window moves it out of view.
 15. Back in Switchyard: on its route again.
+16. A doorway (Switchyard with two benches across a resident's route): the companion staying
+    in it makes way for the resident; they never overlap and nobody waits for good.
 Evidence: docs/evidence/companion.json; stills in the state dir (HYPRUNE_COMPANION_SHOTS: elsewhere).
 """
 import hashlib, json, math, os, pathlib, secrets, shutil, subprocess, sys, time
@@ -39,6 +43,8 @@ from m2 import wait, keys, pose
 
 YARD = 'com.hyprune.switchyard'
 LUMEN = 'com.hyprune.lumen-reach'
+DOOR = 'org.hyprune.companion-door'   # step 16: Switchyard with a 1.1 m doorway of two benches and a resident through it
+DOOR_AT = [-5, 0, 6.25]
 ARCHIVE = pathlib.Path(os.environ.get('HYPRUNE_COMPANION_LIBRARY', ''))
 USER = [[6, 0, 0], [11, 0, 0], [11, 0, 4]]                       # drawn with tool 3 (clear Switchyard floor)
 LOOP = [[-10, 9.5], [0, 9.5], [0, 3], [-10, 3], [-10, 9.5]]       # walked by the player
@@ -60,6 +66,26 @@ def prepare(installed):
             raise SystemExit(f'--companion needs {world} at {source} ({env})')
         shutil.rmtree(installed / world, ignore_errors=True)
         shutil.copytree(source, installed / world)
+    # The doorway world: two benches (collision proxies) end to end across a route leave a
+    # 1.1 m gap. The resident walking it is spawned in step 16 (the library's character is
+    # object format 0.10, which a world can't author; a user character can).
+    target = installed / DOOR
+    shutil.rmtree(target, ignore_errors=True)
+    shutil.copytree(installed / YARD, target)
+    subprocess.run([sys.executable, str(s.ROOT / 'tests/fixtures/npcs.py')], check=True, stdout=subprocess.DEVNULL)
+    (target / 'objects').mkdir(exist_ok=True)
+    for name in ('bench.gltf', 'bench.bin'):
+        shutil.copy2(s.ROOT / 'tests/fixtures/npcs/objects' / name, target / 'objects' / name)
+    w = json.loads((target / 'world.json').read_text())
+    across = [0, .7071068, 0, .7071068]  # the bench's 1.6 m length along z
+    x, z = DOOR_AT[0], DOOR_AT[2]
+    w.update({'formatVersion': '0.9', 'id': DOOR, 'name': 'Companion doorway',
+              'objectAssets': [{'id': 'bench', 'scene': 'objects/bench.gltf', 'collision': {'node': 'proxy'}}],
+              'paths': [{'id': 'door-walk', 'use': 'route', 'points': [{'position': [-11, 0, z], 'type': 'line'},
+                                                                        {'position': [1, 0, z], 'type': 'line'}]}],
+              'objects': [{'id': 'door-north', 'asset': 'bench', 'pose': {'position': [x, 0, z + .55 + .8], 'rotation': across}},
+                          {'id': 'door-south', 'asset': 'bench', 'pose': {'position': [x, 0, z - .55 - .8], 'rotation': across}}]})
+    (target / 'world.json').write_text(json.dumps(w, indent=1))
     shutil.rmtree(s.STATE / 'datahome', ignore_errors=True)
     (s.STATE / 'datahome').mkdir(parents=True)
     os.environ['XDG_DATA_HOME'] = str(s.STATE / 'datahome')
@@ -121,8 +147,15 @@ def acceptance(client, children, args, shell_token, socketpath):
         return math.hypot(a[0] - b[0], a[2] - b[2])
 
     def shot(name):
-        subprocess.run([str(s.HERE / 'ctl.py'), 'shot', str(out / name)], check=True)
-        return out / name
+        # With nothing changing, render on demand draws no frame and grim's copy can wait for
+        # good: after 10 s, a 1 px pointer nudge there and back draws one.
+        for attempt in range(3):
+            try:
+                subprocess.run([str(s.HERE / 'ctl.py'), 'shot', str(out / name)], check=True, timeout=10)
+                return out / name
+            except subprocess.TimeoutExpired:
+                pointer(1, 0); pointer(-1, 0)
+        raise AssertionError(f'no frame to capture for {name}')
 
     def fps(seconds=2.5):
         f0 = s.camera()['frames']; time.sleep(seconds); return (s.camera()['frames'] - f0) / seconds
@@ -249,12 +282,43 @@ def acceptance(client, children, args, shell_token, socketpath):
         check('motion off: Stay is refused with the reason', ok and 'motion off' in text and comp()['state']['mode'] == 'follow', text)
         client.call('graphics.set', {'patch': {'npc_motion': 'auto'}}); time.sleep(.4)
 
+        # 4c. Pace and feet: Run with me (E menu) is kept in companion.json; following a walk at
+        # 3 m/s, its gait cycle advances with the ground (cycles x stride = distance: no sliding),
+        # blending walk into run. Walk with me puts it back.
+        client.call('interaction.choose', {'objectId': 'companion', 'interactionId': 'run'}); time.sleep(.5)
+        check('Run with me: it keeps the run pace (companion.json)', comp()['pace'] == 'run' and
+              json.loads((s.STATE / 'companion.json').read_text()).get('pace') == 'run', comp()['pace'])
+        steps, gaits = [], set()
+        last = [None]
+        def feet_sample():
+            c = comp()
+            g = c['gait'] or {}
+            gaits.add((g.get('previous'), g.get('clip')))
+            if last[0] and c['speed'] > .3 and last[0]['speed'] > .3:
+                p0 = last[0]
+                d = flat(c['position'], p0['position'])
+                cycles = (g['phase'] - p0['gait']['phase']) % 1
+                stride = (p0['stride'] + c['stride']) / 2
+                if d > .05:
+                    steps.append(abs(cycles * stride - d) / d)
+            last[0] = c
+        drive([[0, 0, 9.5], [-10, 0, 9.5]], 3., sample=feet_sample)
+        steps.sort()
+        median = steps[len(steps) // 2] if steps else 1
+        check('its feet keep step with the ground while it hurries (walk and run blended)', len(steps) >= 10 and median < .1 and
+              any(cl == 'run' for _, cl in gaits), {'samples': len(steps), 'medianSlip': round(median, 3), 'gaits': sorted(map(str, gaits))})
+        client.call('interaction.choose', {'objectId': 'companion', 'interactionId': 'walk'}); time.sleep(.5)
+        check('Walk with me: back to the walk pace', comp()['pace'] == 'walk' and
+              'pace' not in json.loads((s.STATE / 'companion.json').read_text()), comp()['pace'])
+        wait(lambda: comp()['brain'] == 'idle', timeout=20)
+
         # 5. Talk.
         c = comp(); p = c['position']; f = feet()
         look([f[0], 1.7, f[2]], [p[0], 1.1, p[2]]); center(); time.sleep(1)  # turn to it on the spot (a 3 m jump is a warp)
         aimed = state()['npcs']['aimed']
-        check('aimed: Talk and Stay', aimed and aimed['objectId'] == 'companion' and [i['id'] for i in aimed['interactions']] == ['talk', 'stay'] and
-              aimed['interactions'][1]['type'] == 'companion', aimed)
+        check('aimed: Talk, Stay and Run with me', aimed and aimed['objectId'] == 'companion' and
+              [i['id'] for i in aimed['interactions']] == ['talk', 'stay', 'run'] and aimed['interactions'][1]['type'] == 'companion' and
+              aimed['interactions'][2]['label'] == 'Run with me', aimed)
         shot('companion-2-prompt.png')
         client.call('interaction.choose', {'objectId': 'companion', 'interactionId': 'talk'}); time.sleep(.6)
         it = state()['npcs']['interaction']; first = it['line']
@@ -421,7 +485,8 @@ def acceptance(client, children, args, shell_token, socketpath):
     eye = [centre[0] + normal[0] * 4.2, 1.7, centre[2] + normal[2] * 4.2]
     look(eye, centre); time.sleep(1)
     spot = [centre[0] + normal[0] * 2.2 + .3, 0, centre[2] + normal[2] * 2.2]
-    client.call('npcs.bind', {'id': 'companion', 'pose': {'position': spot, 'rotation': [0, 0, 0, 1]}}); time.sleep(1)
+    client.call('npcs.bind', {'id': 'companion', 'pose': {'position': spot, 'rotation': [0, 0, 0, 1]}})
+    wait(lambda: flat(pos(), spot) < .4 and comp()['brain'] == 'idle', timeout=20)  # it walks there (eased, braking)
     look(eye, centre); time.sleep(.8)
     between = comp(); pops = between['pops']
     shot('companion-7-before-focus.png')
@@ -438,6 +503,33 @@ def acceptance(client, children, args, shell_token, socketpath):
     wait(lambda: comp()['brain'] == 'idle' and flat(pos(), feet()) < 3.2, timeout=30)
     check('after focus it follows again', comp()['state']['mode'] == 'follow' and comp()['state']['state'] == 'active', comp()['state'])
     if full:
+        # 16. A doorway: the companion stays right in it (npcs.bind pose); a resident walking its
+        # route through comes up to it, the companion steps out of its way and back, and they
+        # never overlap or wait on each other for good.
+        client.call('world.load', {'worldId': DOOR}); wait(lambda: s.camera()['active'] and not s.camera().get('loading'), timeout=60)
+        time.sleep(2)
+        look([DOOR_AT[0] + 1, 1.7, DOOR_AT[2] + 6], DOOR_AT); time.sleep(.5)
+        walker = client.call('npcs.spawn', {'ref': REF, 'path': 'package/door-walk', 'phase': .05})['id']
+        client.call('npcs.bind', {'id': 'companion', 'pose': {'position': DOOR_AT, 'rotation': [0, 0, 0, 1]}}); time.sleep(1)
+        npc = lambda: next((a for a in s.camera()['npcs']['agents'] if a['id'] == walker), None)
+        made0 = comp()['madeWay']; closest = 1e9; crossings = 0; side = None; waited = longest = 0.
+        t0 = time.monotonic(); prev = t0
+        while time.monotonic() - t0 < 60:
+            r, c = npc(), comp(); now = time.monotonic()
+            if r and c['position']:
+                closest = min(closest, flat(r['position'], c['position']))
+                here = r['position'][0] > DOOR_AT[0]
+                if side is not None and here != side:
+                    crossings += 1
+                side = here
+                waited = waited + (now - prev) if r['activity'] == 'stopped' else 0
+                longest = max(longest, waited)
+            prev = now
+            time.sleep(.1)
+        shot('companion-9-doorway.png')
+        check('a doorway: the companion makes way for a resident; no overlap, no deadlock',
+              comp()['madeWay'] > made0 and closest >= .7 - .05 and crossings >= 2 and longest < 10,
+              {'madeWay': comp()['madeWay'] - made0, 'closest': round(closest, 3), 'crossings': crossings, 'longestWait': round(longest, 1)})
         (s.ROOT / 'docs/evidence/companion.json').write_text(json.dumps({'nestedOnly': True, 'worlds': [YARD, LUMEN], 'library': library,
                                                                          'checks': checks}, indent=1) + '\n')
     print('PASS companion:', len(checks), 'checks', flush=True)
