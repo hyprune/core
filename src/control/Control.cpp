@@ -340,7 +340,7 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
         auto to = target(p["to"], w);
         sim::Camera probe;
         probe.position = to;
-        sim::resolveCapsule(probe, w->collision);
+        sim::resolveCapsule(probe, w->collision, &w->collisionIndex);
         require(length(probe.position - to) < .03f, -32004, "destination obstructed");
         if (p.contains("durationMs"))
             require(p["durationMs"].is_number_integer(), -32602, "duration must be integer");
@@ -586,7 +586,7 @@ void Control::tick(float dt, sim::Camera &camera, const world::World *w, const s
         int steps = std::max(1, int(std::ceil(length(delta) / .05f)));
         for (int step = 0; step < steps; step++) {
             probe.position = probe.position + delta / float(steps);
-            sim::resolveCapsule(probe, w->collision);
+            sim::resolveCapsule(probe, w->collision, &w->collisionIndex);
         }
         bool blocked = length(probe.position - next) > .03f;
         if (blocked) {

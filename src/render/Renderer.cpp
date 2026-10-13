@@ -3204,7 +3204,7 @@ void Renderer::worldOverlays(const sim::Camera &camera, std::span<const surfaces
                 closest = hit;
             }
     if (selected) {
-        auto obstruction = interaction::raycast(camera.position, camera.forward(), world_->collision);
+        auto obstruction = interaction::raycast(camera.position, camera.forward(), world_->collision, &world_->collisionIndex);
         if (!obstruction || obstruction->distance >= closest->distance - .08f)
             marker(selected->center + selected->up() * (selected->height / 2 + .12f), "E USE / F FOCUS", false, true);
     }
