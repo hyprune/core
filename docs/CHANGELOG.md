@@ -268,6 +268,15 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Recall spreads windows out (no wire change)
+
+- `surfaces.recall` gives every recalled window its own free spot ahead of the player,
+  like a pocketed window coming out: a fan in the camera's vertical plane, rows above
+  and below, then further out; in view first, clear of collision, never over another
+  window. Recalled windows stay where they were put (they no longer follow the camera)
+  and keep the `recalled` status until moved. A window with no free spot falls back to
+  the old pose in front of the player.
+
 ## Characters and objects named by their display name (no wire change)
 
 - `objects.instances[].name` for authored instances, NPC prompts ("Talk to …"), say

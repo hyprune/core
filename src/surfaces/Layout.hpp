@@ -52,6 +52,17 @@ class Layout {
     // that workspace, where the window belongs natively again (tiled).
     int release(const Instance &, const world::World *, int wallWorkspace = 0);
     void recall(std::span<const Instance>);
+    // After recall: each recalled window (pixel size in logical client units) on its own
+    // free spot ahead of the player, in recall order, like a pocketed window coming out
+    // (spawn): a fan in the camera's vertical plane, rows above and below, then further
+    // out; in view first, out of collision, never over another window. The pose stays put
+    // and the status stays "recalled" until the window is moved. Returns how many found a
+    // spot; the rest keep the pose in front of the player.
+    struct RecallWindow {
+        Instance instance;
+        int pixelWidth = 1, pixelHeight = 1;
+    };
+    size_t spreadRecalled(std::span<const RecallWindow>, const world::World *, const sim::Camera &, float aspect);
     bool pulled(const Instance &, const world::World *) const;
     // Composed on workspace `id`'s wall (its pose is its rectangle there) rather than drawn on
     // its own: on that workspace and not pulled into the world, unless its home lives on

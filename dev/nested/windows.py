@@ -174,6 +174,20 @@ def acceptance(client,children,args,shell_token,socketpath):
     client.call('surfaces.recall',{});time.sleep(1)
     shot('windows-recall.png')
     audit('recall all')
+    # Recalled windows spread out ahead of the player: no two overlap (same plane facing
+    # the player: their rectangles are disjoint, or they stand at different depths).
+    rec={x['surfaceId'] for x in state()['mounts']['instances'] if x['status']=='recalled'}
+    planes=[c for c in s.camera()['captures'] if c['id'] in rec and c['visible'] and not c['parentId']]
+    def apart(a,b):
+        n=a['normal'];r=[-n[2],0,n[0]]
+        d=[b['position'][k]-a['position'][k] for k in range(3)]
+        dot=lambda u,v:sum(x*y for x,y in zip(u,v))
+        return abs(dot(d,r))>=(a['size'][0]+b['size'][0])/2-.01 or abs(d[1])>=(a['size'][1]+b['size'][1])/2-.01 or abs(dot(d,n))>.3
+    piled=[(a['title'],b['title']) for i,a in enumerate(planes) for b in planes[i+1:] if not apart(a,b)]
+    result={'recalled':len(rec),'visible':len(planes),'overlapping':piled[:8]}
+    steps.append({'step':'recall spreads windows','result':result})
+    if piled or len(planes)<len(rec):failures.append({'step':'recall','kind':'recalled windows overlap or hidden','result':result})
+    print(('PASS' if not piled and len(planes)==len(rec) else 'MISMATCH')+' windows: recall spreads windows',result,flush=True)
 
     # IPC 0.26: more than 16 room windows in the pocket, all listed (0.25: 16), and the real
     # shell's Director > Surfaces lists them all.

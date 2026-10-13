@@ -4903,10 +4903,16 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
         std::vector<surfaces::Instance> live;
+        std::vector<surfaces::Layout::RecallWindow> sized;
         for (auto &e : capture.entries)
-            if (layout.pulled(e.instance, nullptr))
+            if (layout.pulled(e.instance, nullptr)) {
                 live.push_back(e.instance);
+                sized.push_back({e.instance, e.surface.pixelWidth, e.surface.pixelHeight});
+            }
         layout.recall(live);
+        if (active && world && monitor)
+            layout.spreadRecalled(sized, world.get(), camera,
+                                  float(monitor->m_size.x) / std::max(1., double(monitor->m_size.y)));
         typing = false;
         keys.clear();
         cancelGrab();

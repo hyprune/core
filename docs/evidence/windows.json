@@ -51,6 +51,14 @@
       "mismatches": []
     },
     {
+      "step": "recall spreads windows",
+      "result": {
+        "recalled": 8,
+        "visible": 8,
+        "overlapping": []
+      }
+    },
+    {
       "step": "14 more room windows",
       "counts": {
         "clients": 38,

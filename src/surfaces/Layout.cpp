@@ -505,6 +505,62 @@ bool reachable(const Surface &s, const world::World &w) {
     float lowest = s.center.y - (std::abs(s.up().y) * s.height + std::abs(s.right().y) * s.width) * .5f;
     return lowest - hit->point.y <= MaxSpawnLift && w.playable.contains(hit->point + Vec3{0, 1.7f, 0});
 }
+size_t Layout::spreadRecalled(std::span<const RecallWindow> windows, const world::World *w, const sim::Camera &camera,
+                              float aspect) {
+    if (!w)
+        return 0;
+    Vec3 forward = camera.forward();
+    forward.y = 0;
+    if (length(forward) < 1e-3f)
+        forward = {0, 0, -1};
+    forward = normalized(forward);
+    const Vec3 right = normalized(cross(forward, {0, 1, 0})), up{0, 1, 0};
+    float tangent = std::tan(camera.fov * float(M_PI) / 360.f);
+    auto inView = [&](const Surface &c) {
+        auto delta = c.center - camera.position;
+        float depth = dot(delta, forward);
+        float x = std::abs(dot(delta, right)) + c.width * .5f, y = std::abs(dot(delta, up)) + c.height * .5f;
+        return depth > .3f && x <= depth * tangent * aspect && y <= depth * tangent;
+    };
+    size_t placed = 0;
+    for (auto &window : windows) {
+        auto &id = window.instance.id;
+        if (!recalled.contains(id))
+            continue;
+        Surface desired;
+        desired.id = id;
+        desired.title = window.instance.title;
+        desired.logicalSize(window.pixelWidth, window.pixelHeight, windowScale);
+        desired.yaw = -camera.yaw;
+        desired.rotation = {0, 0, 0, 1};
+        std::optional<Surface> found;
+        // Nearest first: rings 2.4, 3.4, 4.6, 6 m; rows at eye height, above, below; a fan of
+        // columns from the centre out. Pass 0 keeps the whole window in view.
+        for (int pass = 0; pass < 2 && !found; ++pass)
+            for (float distance : {2.4f, 3.4f, 4.6f, 6.f}) {
+                for (int row : {0, 1, -1, 2}) {
+                    for (int fan = 0; fan < 11 && !found; ++fan) {
+                        int column = fan == 0 ? 0 : ((fan + 1) / 2) * (fan % 2 ? 1 : -1);
+                        auto c = desired;
+                        c.center = camera.position + forward * distance + right * (column * (c.width + .15f)) +
+                                   up * (row * (c.height + .15f));
+                        if ((pass > 0 || inView(c)) && !overlaps(c, w->collision) && vacant(c, id))
+                            found = c;
+                    }
+                    if (found)
+                        break;
+                }
+                if (found)
+                    break;
+            }
+        if (!found)
+            continue;
+        freePoses[id] = *found;
+        unplaced.erase(id);
+        ++placed;
+    }
+    return placed;
+}
 bool Layout::spawn(const Instance &i, const world::World *w, const sim::Camera &camera, Surface s, float aspect) {
     auto desired = s;
     if (!w || hasPlacement(i, w))

@@ -61,6 +61,46 @@ int main(int argc, char **argv) {
             auto recalled = grown.locate(opened, w.get(), spawnCamera, 1600, 900);
             check(recalled && length(recalled->center - spawnCamera.position) < 6, "recalled room client vanished");
         }
+        {
+            // Recalling many windows spreads them on free spots ahead (no pile): each its own
+            // spot, none over another or in collision, nearest ones in view; they stay
+            // "recalled" and stay put when the player turns.
+            surfaces::Layout many = adopted;
+            std::vector<surfaces::Instance> live;
+            std::vector<surfaces::Layout::RecallWindow> sized;
+            for (int k = 0; k < 12; ++k) {
+                surfaces::Instance i = opened;
+                i.id = "recall-" + std::to_string(k);
+                live.push_back(i);
+                sized.push_back({i, k % 3 ? 1280 : 1600, k % 3 ? 800 : 900});
+            }
+            many.recall(live);
+            size_t spread = many.spreadRecalled(sized, w.get(), spawnCamera, 16.f / 9);
+            check(spread == live.size(), "recall spread every window");
+            std::vector<surfaces::Surface> planes;
+            for (auto &r : sized) {
+                auto plane = many.locate(r.instance, w.get(), spawnCamera, r.pixelWidth, r.pixelHeight);
+                check(plane && !surfaces::overlaps(*plane, w->collision), "recalled window missing or in collision");
+                check(dot(plane->center - spawnCamera.position, spawnCamera.forward()) > 1, "recalled window not ahead");
+                planes.push_back(*plane);
+            }
+            for (size_t a = 0; a < planes.size(); ++a)
+                for (size_t b = a + 1; b < planes.size(); ++b) {
+                    auto d = planes[b].center - planes[a].center;
+                    bool apart = std::abs(dot(d, planes[a].right())) >= (planes[a].width + planes[b].width) * .5f ||
+                                 std::abs(d.y) >= (planes[a].height + planes[b].height) * .5f ||
+                                 std::abs(dot(d, planes[a].normal())) > .3f;
+                    check(apart, "recalled windows overlap");
+                }
+            auto turned = spawnCamera;
+            turned.yaw += 1.2f;
+            auto still = many.locate(live[5], w.get(), turned, sized[5].pixelWidth, sized[5].pixelHeight);
+            check(still && length(still->center - planes[5].center) < 1e-4f, "a recalled window followed the camera");
+            many.locate(live[0], w.get(), spawnCamera, 1600, 900);
+            check(std::any_of(many.instances.begin(), many.instances.end(),
+                              [](auto &i) { return i["status"] == "recalled"; }),
+                  "recalled windows lost their status");
+        }
         surfaces::Instance second = opened;
         second.id = "new-live-second";
         proposed.id = second.id;
