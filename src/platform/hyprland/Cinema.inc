@@ -164,6 +164,18 @@ Json Runtime::cinemaCommand(const Json &request) {
         exportStart(request.at("path").get<std::string>(), w, h, size_t(request.value("queueMB", 2048)) << 20, request.value("every", 1));
     } else if (op == "exportStop") {
         exportStop();
+    } else if (op == "probe") {
+        // Live pacing: per presented frame its draw time, the offload front shown and a hash.
+        if (request.value("on", true)) {
+            probePresents.clear();
+            frameProbe.start();
+        } else {
+            Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+            Json frames = Json::array();
+            for (auto &s : frameProbe.stop())
+                frames.push_back({s.t, s.tag, std::to_string(s.hash), s.age});
+            return {{"fields", {"t", "front", "hash", "age"}}, {"frames", frames}, {"presents", probePresents}};
+        }
     } else if (op == "stop") {
         cinema.stop();
         cinemaTracing = false;

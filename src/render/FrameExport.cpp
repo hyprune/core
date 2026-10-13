@@ -194,3 +194,84 @@ FrameExport::Status FrameExport::status() {
     return {grabbed, written, skipped, stalls, queue.size(), width, height, path, error, running, writing};
 }
 } // namespace hyprune::render
+namespace hyprune::render {
+FrameProbe::~FrameProbe() {
+    // GL objects die with the context; nothing is freed here without one.
+}
+void FrameProbe::collect(bool wait) {
+    while (inFlight) {
+        auto &s = ring[oldest];
+        auto state = glClientWaitSync(s.fence, wait ? GL_SYNC_FLUSH_COMMANDS_BIT : 0, wait ? 1000000000ull : 0);
+        if (state != GL_ALREADY_SIGNALED && state != GL_CONDITION_SATISFIED)
+            return;
+        glDeleteSync(s.fence);
+        s.fence = nullptr;
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, s.pbo);
+        if (auto *p = static_cast<const uint8_t *>(glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, W * H * 4, GL_MAP_READ_BIT))) {
+            uint64_t h = 1469598103934665603ull;
+            for (int i = 0; i < W * H * 4; ++i)
+                h = (h ^ p[i]) * 1099511628211ull;
+            s.sample.hash = h;
+            glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+        }
+        samples.push_back(s.sample);
+        oldest = (oldest + 1) % ring.size();
+        --inFlight;
+    }
+}
+void FrameProbe::grab(GLuint source, int w, int h, double t, uint64_t tag, double age) {
+    if (!running)
+        return;
+    if (!tex) {
+        glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, W, H);
+        glGenFramebuffers(1, &fbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+        for (auto &s : ring) {
+            glGenBuffers(1, &s.pbo);
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, s.pbo);
+            glBufferData(GL_PIXEL_PACK_BUFFER, W * H * 4, nullptr, GL_STREAM_READ);
+        }
+    }
+    collect(false);
+    if (inFlight == ring.size())
+        collect(true);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, source);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+    glDisable(GL_SCISSOR_TEST);
+    glBlitFramebuffer(0, 0, w, h, 0, 0, W, H, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    auto &s = ring[next];
+    GLint alignment = 4;
+    glGetIntegerv(GL_PACK_ALIGNMENT, &alignment);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, s.pbo);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+    glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glPixelStorei(GL_PACK_ALIGNMENT, alignment);
+    s.fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    s.sample = {t, tag, 0, age};
+    next = (next + 1) % ring.size();
+    ++inFlight;
+}
+std::vector<FrameProbe::Sample> FrameProbe::stop() {
+    running = false;
+    collect(true);
+    for (auto &s : ring) {
+        if (s.fence)
+            glDeleteSync(s.fence);
+        if (s.pbo)
+            glDeleteBuffers(1, &s.pbo);
+        s = {};
+    }
+    next = oldest = inFlight = 0;
+    if (fbo)
+        glDeleteFramebuffers(1, &fbo);
+    if (tex)
+        glDeleteTextures(1, &tex);
+    fbo = tex = 0;
+    return std::move(samples);
+}
+} // namespace hyprune::render

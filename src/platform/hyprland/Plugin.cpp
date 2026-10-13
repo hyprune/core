@@ -794,6 +794,8 @@ struct Runtime {
     double cinemaVsync = 0; // virtual vblank (s), phase-locked to presents: the camera moves whole refresh intervals
     render::FrameExport frameExport; // every presented frame of the world's output, for recordings
     uint64_t exportPasses = 0;
+    render::FrameProbe frameProbe;  // pacing measurements (Cinema.inc "probe")
+    std::vector<double> probePresents; // presentation times (ms) while probing
     // While exporting, time is counted in presented frames: every tick moves the world (and
     // the camera, characters and animations) by one refresh interval per frame presented
     // since the last tick, so each exported frame advances by the same amount.
@@ -5499,6 +5501,8 @@ void Runtime::framePresented(std::chrono::steady_clock::time_point when) {
     lastPresented = std::chrono::steady_clock::now();
     presentedAt = when;
     ++presents;
+    if (frameProbe.active() && probePresents.size() < 100000)
+        probePresents.push_back(std::chrono::duration<double, std::milli>(when.time_since_epoch()).count());
     if (frameLog.file)
         frameLog.line({{"kind", "present"}, {"t", FrameLog::now()}});
     if (!tickDeferred)
@@ -5682,15 +5686,26 @@ class ExportPass final : public IPassElement {
   public:
     std::vector<UP<IPassElement>> draw() override {
         safe([] {
-            if (!runtime || !runtime->frameExport.active())
+            if (!runtime || !(runtime->frameExport.active() || runtime->frameProbe.active()))
                 return;
             auto &data = g_pHyprRenderer->m_renderData;
             auto *fb = dynamic_cast<Render::GL::CGLFramebuffer *>(data.currentFB.get());
             if (!fb)
                 return;
             render::GLState guard;
-            runtime->frameExport.grab(fb->getFBID(), int(data.currentFB->m_size.x), int(data.currentFB->m_size.y));
-            ++runtime->exportPasses;
+            int w = int(data.currentFB->m_size.x), h = int(data.currentFB->m_size.y);
+            if (runtime->frameProbe.active()) {
+                auto now = std::chrono::steady_clock::now();
+                bool worker = runtime->renderedOffload;
+                runtime->frameProbe.grab(fb->getFBID(), w, h, std::chrono::duration<double, std::milli>(now.time_since_epoch()).count(),
+                                         worker ? runtime->offload.frontSequence() : 0,
+                                         worker ? runtime->offload.frontAgeMs()
+                                                : std::chrono::duration<double, std::milli>(now - runtime->lastTick).count());
+            }
+            if (runtime->frameExport.active()) {
+                runtime->frameExport.grab(fb->getFBID(), w, h);
+                ++runtime->exportPasses;
+            }
         });
         return {};
     }
@@ -6293,7 +6308,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
             if (stage == RENDER_POST_WINDOWS && runtime->active && !locked() &&
                 g_pHyprRenderer->m_renderData.pMonitor == runtime->monitor)
                 g_pHyprRenderer->addPassElement(makeUnique<Pass>());
-            if (stage == RENDER_LAST_MOMENT && runtime->frameExport.active() &&
+            if (stage == RENDER_LAST_MOMENT && (runtime->frameExport.active() || runtime->frameProbe.active()) &&
                 g_pHyprRenderer->m_renderData.pMonitor == runtime->monitor)
                 g_pHyprRenderer->addPassElement(makeUnique<ExportPass>());
         });
@@ -6730,7 +6745,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     if (!runtime) return;
                     runtime->offloadDeferred = 0;
                     runtime->settleRenderPass();
+                    double start = runtime->frameLog.file ? Runtime::FrameLog::now() : 0;
                     safe([] { runtime->offloadPump(); });
+                    if (runtime->frameLog.file)
+                        runtime->frameLog.line({{"kind", "pump"}, {"t", start}, {"ms", Runtime::FrameLog::now() - start}});
                 });
             self->updateTimeout(std::chrono::milliseconds(runtime->offload.connected() ? 4 : 100));
         }, nullptr);

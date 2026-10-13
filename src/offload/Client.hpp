@@ -34,6 +34,7 @@ class Client {
     // lockstep accept any age, the front being exactly the next frame in sequence.
     bool available(double maxAgeMs = 50) const { return fd_ >= 0 && front_ >= 0 && now() - frontReply_.at("sent").get<double>() <= maxAgeMs; }
     GLuint fbo(double maxAgeMs = 50) const { return available(maxAgeMs) ? targets_[front_].fbo : 0; }
+    uint64_t frontSequence() const { return front_ >= 0 ? frontSequence_ : 0; }
     // Age of the newest complete frame (ms), or -1.
     double frontAgeMs() const { return front_ >= 0 ? now() - frontReply_.at("sent").get<double>() : -1; }
     Json diagnostics() const {

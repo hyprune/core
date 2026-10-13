@@ -70,3 +70,39 @@ class FrameExport {
     void write();
 };
 } // namespace hyprune::render
+namespace hyprune::render {
+// Pacing probe (nested measurements of live presentation, not a wire contract): every
+// presented frame of the world's output is reduced to 160x90 on the GPU and read back a
+// few frames later, so a run records each frame's time, a caller tag and a content hash
+// without changing how frames are produced.
+class FrameProbe {
+  public:
+    struct Sample {
+        double t = 0;     // steady clock, ms, when the frame was drawn
+        uint64_t tag = 0; // e.g. the offload front sequence shown
+        uint64_t hash = 0;
+        double age = 0;   // ms from the camera sample this frame shows to its draw
+    };
+    ~FrameProbe();
+    void start() { samples.clear(), running = true; }
+    bool active() const { return running; }
+    // Inside the compositor render pass, GL context current, state saved by the caller.
+    void grab(GLuint fbo, int width, int height, double t, uint64_t tag, double age);
+    // GL context current: stops, finishes the readbacks and returns every sample.
+    std::vector<Sample> stop();
+
+  private:
+    static constexpr int W = 160, H = 90;
+    struct Slot {
+        GLuint pbo = 0;
+        GLsync fence = nullptr;
+        Sample sample;
+    };
+    std::array<Slot, 6> ring{};
+    size_t next = 0, oldest = 0, inFlight = 0;
+    GLuint tex = 0, fbo = 0;
+    bool running = false;
+    std::vector<Sample> samples;
+    void collect(bool wait);
+};
+} // namespace hyprune::render
