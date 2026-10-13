@@ -4,13 +4,15 @@
   HYPRUNE_NESTED_4K=1 dev/nested/isolated.py dev/nested/walkthrough.py OUT.mkv
 
 The Sun Court arrival walks along the authored walking graph into Array Hall
-at the High preset, in walk mode, then pans across the hall. wf-recorder
-captures HEADLESS-1 to OUT: NVENC constant-QP by default (RGB in, so no CPU
-colour conversion keeps 4K at 30 fps), HYPRUNE_WALKTHROUGH_CODEC=libx264 for
-CPU. Encoding for the gallery is a separate step. Nested only.
+at the High preset, in walk mode, then pans across the hall (an eased core camera
+path). Every presented frame of HEADLESS-1 is exported to OUT (cinema.py): NVENC
+constant-QP by default (RGB in, converted on the GPU), HYPRUNE_WALKTHROUGH_CODEC=libx264
+for CPU; HYPRUNE_WALKTHROUGH_FPS keeps 60 (default) or 30 frames a second. Encoding
+for the gallery is a separate step. Nested only.
 """
-import argparse, json, math, os, pathlib, signal, subprocess, time
+import argparse, json, math, os, pathlib, subprocess, time
 import session as s
+import cinema
 import m3b
 from m2 import wait, pose
 
@@ -36,14 +38,13 @@ def acceptance(client, children, args, shell_token, socketpath):
     pose(client, [first[0], first[1] + 1.7, first[2]], yaw, -.03)
     time.sleep(4)  # uploads and shader warm-up finish before the first recorded frame
     graphics = client.call('graphics.get', {})
-    log = open(s.STATE / 'recorder.log', 'w')
     codec = os.environ.get('HYPRUNE_WALKTHROUGH_CODEC', 'h264_nvenc')
-    quality = ['-x', 'bgr0', '-p', 'preset=p4', '-p', 'rc=constqp', '-p', 'qp=16'] if 'nvenc' in codec else \
-              ['-x', 'yuv420p', '-p', 'preset=ultrafast', '-p', 'crf=14']
-    recorder = s.envrun('wf-recorder', '-o', 'HEADLESS-1', '-r', '30', '-D', '--no-dmabuf', '-c', codec, *quality,
-                        '-f', str(out), stdout=log, stderr=subprocess.STDOUT)
-    children.append(recorder)
-    started = time.monotonic(); samples = []
+    encoder = ['-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'constqp', '-qp', '16'] if 'nvenc' in codec else \
+              ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '14', '-pix_fmt', 'yuv420p']
+    fps = int(os.environ.get('HYPRUNE_WALKTHROUGH_FPS', '30'))
+    cam = cinema.Cinema(s)
+    recorder = cam.recording(out, encoder=encoder, out_fps=fps if fps != 60 else None)
+    started = recorder.__enter__(); samples = []
     def hold(seconds):
         until = time.monotonic() + seconds
         while time.monotonic() < until:
@@ -58,12 +59,13 @@ def acceptance(client, children, args, shell_token, socketpath):
             hold(.5)
         hold(1)
         # Close on a slow pan across the hall instead of the wall ahead.
-        c = s.camera(); here = state()['movement']['position']; start_yaw = c.get('yaw', 0)
-        for i in range(1, 61):
-            pose(client, here, start_yaw - .9 * (1 - math.cos(math.pi * i / 60)) / 2, -.03); time.sleep(.05)
+        c = s.camera(); here = c['position']; start_yaw = c.get('yaw', 0)
+        cam.run([{'t': 0, 'eye': here, 'yaw': start_yaw, 'pitch': -.03, 'ease': 'inout'},
+                 {'t': 3, 'eye': here, 'yaw': start_yaw - .9, 'pitch': -.03}])
         hold(1.5)
     finally:
-        recorder.send_signal(signal.SIGINT); recorder.wait(timeout=30); log.close()
+        recorder.__exit__(None, None, None)
+        cam.stop()
     end = state()['movement']['position']
     report = {'output': str(out), 'seconds': round(time.monotonic() - started, 1), 'route': PATH, 'speed': SPEED,
               'end': end, 'target': points[-1], 'graphics': graphics.get('performance', {}).get('effective'), 'samples': samples}
@@ -71,10 +73,13 @@ def acceptance(client, children, args, shell_token, socketpath):
                                                 'stream=nb_read_frames,width,height', '-of', 'json', str(out)]))['streams'][0]
     report.update(frames=int(probe['nb_read_frames']), size=[probe['width'], probe['height']], codec=codec)
     report['captureFps'] = round(report['frames'] / report['seconds'], 2)
+    report['export'] = cam.last_export
+    report['smoothness'] = cinema.gate(out)
     out.with_suffix('.json').write_text(json.dumps(report, indent=2) + '\n')
-    assert report['captureFps'] > 28, ('capture could not keep 30 fps', report['captureFps'])
+    assert report['export']['written'] == report['export']['grabbed'], ('export lost frames', report['export'])
     distance = math.dist([end[0], end[2]], [points[-1][0], points[-1][2]])
-    print('WALKTHROUGH', json.dumps({'seconds': report['seconds'], 'endDistance': round(distance, 2), 'captureFps': report['captureFps']}), flush=True)
+    print('WALKTHROUGH', json.dumps({'seconds': report['seconds'], 'endDistance': round(distance, 2), 'captureFps': report['captureFps'],
+                                     'smoothness': cinema.gate_summary(report['smoothness'])}), flush=True)
 
 
 if __name__ == '__main__':
