@@ -1,0 +1,457 @@
+{
+ "checks": [
+  {
+   "name": "negotiated IPC 0.27",
+   "ok": true,
+   "evidence": "0.27"
+  },
+  {
+   "name": "catalog: screens are placeable with aspect, size and mount type",
+   "ok": true,
+   "evidence": {
+    "user/workspace-screen-stand-16x9": {
+     "aspect": "16:9",
+     "mountType": "kiosk-pillar",
+     "size": [
+      3.2,
+      1.8
+     ]
+    },
+    "user/workspace-screen-stand-21x9": {
+     "aspect": "21:9",
+     "mountType": "kiosk-pillar",
+     "size": [
+      4.2,
+      1.8
+     ]
+    },
+    "user/workspace-screen-wall-16x9": {
+     "aspect": "16:9",
+     "mountType": "hanging-wall",
+     "size": [
+      3.2,
+      1.8
+     ]
+    },
+    "user/workspace-screen-wall-21x9": {
+     "aspect": "21:9",
+     "mountType": "hanging-wall",
+     "size": [
+      4.2,
+      1.8
+     ]
+    }
+   }
+  },
+  {
+   "name": "Lumen Reach homes are 21-24",
+   "ok": true,
+   "evidence": {
+    "21": "sun-court",
+    "22": "array-hall",
+    "23": "rime-vault",
+    "24": "signal-rise"
+   }
+  },
+  {
+   "name": "objects.place put the stand screen in front of the player",
+   "ok": true,
+   "evidence": "u-7570c2"
+  },
+  {
+   "name": "the screen shows the next free workspace (25) as a home",
+   "ok": true,
+   "evidence": {
+    "screen": {
+     "aspect": "16:9",
+     "home": "screen-u-7570c2",
+     "size": [
+      3.2,
+      1.8
+     ],
+     "workspace": 25
+    },
+    "bindings": {
+     "21": "sun-court",
+     "22": "array-hall",
+     "23": "rime-vault",
+     "24": "signal-rise",
+     "25": "screen-u-7570c2"
+    }
+   }
+  },
+  {
+   "name": "mounts list the screen home (area, anchor, mount role)",
+   "ok": true,
+   "evidence": {
+    "anchor": {
+     "areaId": "screen-u-7570c2",
+     "id": "screen-u-7570c2",
+     "mount": {
+      "interaction": "focus-in",
+      "role": "mounted-workspace",
+      "type": "kiosk-pillar"
+     },
+     "pose": {
+      "position": [
+       -8.0,
+       1.9002223014831543,
+       7.019999980926514
+      ],
+      "rotation": [
+       0.0,
+       0.0,
+       0.0,
+       1.0
+      ]
+     },
+     "size": [
+      3.2,
+      1.8
+     ]
+    },
+    "area": {
+     "dataAnchors": [],
+     "id": "screen-u-7570c2",
+     "primaryAnchor": "screen-u-7570c2",
+     "spawnId": "screen-u-7570c2",
+     "theme": "Stand screen 16:9",
+     "toolAnchors": [],
+     "workspaceSlot": "25"
+    }
+   }
+  },
+  {
+   "name": "the Director lists workspace 25 as a home",
+   "ok": true,
+   "evidence": {
+    "id": 25,
+    "label": "screen-u-7570c2",
+    "spawnId": "screen-u-7570c2",
+    "worldId": "com.hyprune.lumen-reach"
+   }
+  },
+  {
+   "name": "the window stays tiled on workspace 25 (only the room floats)",
+   "ok": true,
+   "evidence": {
+    "workspace": 25,
+    "floating": false,
+    "active": 20
+   }
+  },
+  {
+   "name": "workspace 25 is composed at the screen anchor",
+   "ok": true,
+   "evidence": {
+    "frame": {
+     "composed": 28,
+     "id": "workspace-25",
+     "position": [
+      -8.0,
+      1.9002223014831543,
+      7.019999980926514
+     ],
+     "right": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "size": [
+      3.200000047683716,
+      1.8000000715255737
+     ],
+     "title": "Stand screen 16:9 / workspace 25",
+     "up": [
+      0.0,
+      1.0,
+      0.0
+     ],
+     "workspaceId": 25
+    },
+    "anchor": {
+     "position": [
+      -8.0,
+      1.9002223014831543,
+      7.019999980926514
+     ],
+     "rotation": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    }
+   }
+  },
+  {
+   "name": "the screen is aimable as workspace 25",
+   "ok": true,
+   "evidence": {
+    "distance": 3.2,
+    "aim": "workspace-25"
+   }
+  },
+  {
+   "name": "F on the screen focuses workspace 25",
+   "ok": true,
+   "evidence": 25
+  },
+  {
+   "name": "Super+Tab returns to the world",
+   "ok": true,
+   "evidence": null
+  },
+  {
+   "name": "workspace.activate 25 travels in front of the screen",
+   "ok": true,
+   "evidence": {
+    "camera": [
+     -8.0,
+     1.7002222537994385,
+     9.803999900817871
+    ],
+    "anchor": [
+     -8.0,
+     1.9002223014831543,
+     7.019999980926514
+    ],
+    "workspace": 25
+   }
+  },
+  {
+   "name": "objects.transform moved the screen",
+   "ok": true,
+   "evidence": {
+    "position": [
+     -6.5,
+     0.00022232532501220703,
+     7.0
+    ],
+    "rotation": [
+     0.0,
+     -0.0,
+     0.0,
+     1.0
+    ]
+   }
+  },
+  {
+   "name": "the anchor and the composed wall follow the screen",
+   "ok": true,
+   "evidence": {
+    "shift": [
+     1.5,
+     0.0,
+     0.0
+    ],
+    "moved": [
+     1.5,
+     0.0,
+     0.0
+    ],
+    "frame": [
+     -6.5,
+     1.9002223014831543,
+     7.019999980926514
+    ]
+   }
+  },
+  {
+   "name": "workspace 21 (an authored home) is refused",
+   "ok": true,
+   "evidence": {
+    "code": -32005,
+    "data": {
+     "retryable": false,
+     "rule": "workspace.taken"
+    },
+    "message": "workspace 21 is the home of sun-court"
+   }
+  },
+  {
+   "name": "configure workspace 26 rebinds the screen",
+   "ok": true,
+   "evidence": {
+    "21": "sun-court",
+    "22": "array-hall",
+    "23": "rime-vault",
+    "24": "signal-rise",
+    "26": "screen-u-7570c2"
+   }
+  },
+  {
+   "name": "configure null leaves the screen empty (no home)",
+   "ok": true,
+   "evidence": {
+    "aspect": "16:9",
+    "home": null,
+    "size": [
+     3.2,
+     1.8
+    ],
+    "workspace": null
+   }
+  },
+  {
+   "name": "configure next-free binds 25 again",
+   "ok": true,
+   "evidence": {
+    "21": "sun-court",
+    "22": "array-hall",
+    "23": "rime-vault",
+    "24": "signal-rise",
+    "25": "screen-u-7570c2"
+   }
+  },
+  {
+   "name": "editor.json keeps the screen and its workspace",
+   "ok": true,
+   "evidence": {
+    "areaId": "sun-court",
+    "id": "u-7570c2",
+    "pose": {
+     "position": [
+      -6.5,
+      0.00022232532501220703,
+      7.0
+     ],
+     "rotation": [
+      0.0,
+      -0.0,
+      0.0,
+      1.0
+     ]
+    },
+    "ref": "user/workspace-screen-stand-16x9",
+    "scale": 1.0,
+    "workspace": 25,
+    "worldId": "com.hyprune.lumen-reach"
+   }
+  },
+  {
+   "name": "in another world the screen is no home",
+   "ok": true,
+   "evidence": {}
+  },
+  {
+   "name": "after a world reload the screen is the same home on 25",
+   "ok": true,
+   "evidence": {
+    "screen": {
+     "aspect": "16:9",
+     "home": "screen-u-7570c2",
+     "size": [
+      3.2,
+      1.8
+     ],
+     "workspace": 25
+    },
+    "bindings": {
+     "21": "sun-court",
+     "22": "array-hall",
+     "23": "rime-vault",
+     "24": "signal-rise",
+     "25": "screen-u-7570c2"
+    }
+   }
+  },
+  {
+   "name": "its workspace is composed on it again",
+   "ok": true,
+   "evidence": {
+    "composed": 2,
+    "id": "workspace-25",
+    "position": [
+     -6.5,
+     1.9002223014831543,
+     7.019999980926514
+    ],
+    "right": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "size": [
+     3.200000047683716,
+     1.8000000715255737
+    ],
+    "title": "Stand screen 16:9 / workspace 25",
+    "up": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "workspaceId": 25
+   }
+  },
+  {
+   "name": "a 21:9 screen placed in Switchyard",
+   "ok": true,
+   "evidence": "u-19ba86"
+  },
+  {
+   "name": "it becomes a home on 21 (Switchyard has none of its own)",
+   "ok": true,
+   "evidence": {
+    "screen": {
+     "aspect": "21:9",
+     "home": "screen-u-19ba86",
+     "size": [
+      4.2,
+      1.8
+     ],
+     "workspace": 21
+    },
+    "bindings": {
+     "21": "screen-u-19ba86"
+    }
+   }
+  },
+  {
+   "name": "workspace 21 is composed on the Switchyard screen",
+   "ok": true,
+   "evidence": {
+    "composed": 3,
+    "id": "workspace-21",
+    "position": [
+     0.0,
+     1.899999976158142,
+     5.019999980926514
+    ],
+    "right": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "size": [
+     3.200000047683716,
+     1.8000000715255737
+    ],
+    "title": "Stand screen 21:9 / workspace 21",
+    "up": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "workspaceId": 21
+   }
+  },
+  {
+   "name": "Switchyard keeps no authored homes: only the screen is an area",
+   "ok": true,
+   "evidence": [
+    {
+     "dataAnchors": [],
+     "id": "screen-u-19ba86",
+     "primaryAnchor": "screen-u-19ba86",
+     "spawnId": "screen-u-19ba86",
+     "theme": "Stand screen 21:9",
+     "toolAnchors": [],
+     "workspaceSlot": "21"
+    }
+   ]
+  }
+ ],
+ "roomAnchors": 0
+}
