@@ -32,6 +32,9 @@ struct LoadOptions {
     // World 0.9 library references resolve against these installed library roots, in order
     // (each holds <id>@<version>/ directories; RFC-0011 "Libraries").
     std::vector<std::filesystem::path> libraryRoots;
+    // The manifest inside the package: builder/base.json for a world folder in editor mode
+    // (RFC-0014); its paths resolve against the folder like world.json's.
+    std::string manifest = "world.json";
 };
 // Texture indices refer to images and samplers together; color space belongs to a slot.
 struct Sampler {
@@ -177,6 +180,9 @@ struct World {
     bool authoredHomes() const { return authoredAreas() > 0; }
     std::array<Image, 6> environment;
     std::vector<CubeLevel> environmentHigh, environmentLow;
+    // World 0.11 atmosphere.panorama resampled to cube faces (RGBA8, sRGB-encoded unless
+    // the panorama's encoding is linear), drawn as the sky; empty without a panorama.
+    std::array<Image, 6> panorama;
     const Spawn &spawn(const std::string &id = "") const;
 };
 std::filesystem::path safePath(const std::filesystem::path &root, const std::string &path);

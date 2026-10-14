@@ -45,7 +45,7 @@ Json defaultAtmosphere() {
 void validateAtmosphere(const Json &profile) {
     // Reuse the exact offline world schema, including closed fields and numeric bounds.
     Json manifest = {
-        {"formatVersion", "0.5"},
+        {"formatVersion", profile.is_object() && profile.contains("panorama") ? "0.11" : "0.5"},
         {"id", "com.hyprune.validation"},
         {"version", "0.1.0"},
         {"name", "Validation"},

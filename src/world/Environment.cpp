@@ -95,6 +95,9 @@ std::vector<CubeLevel> prefilterEnvironment(const World &w, int resolution) {
     if (p.contains("environment")) {
         config.intensity = p["environment"]["intensity"];
         config.srgb = p["environment"]["encoding"] == "srgb";
+    } else if (p.contains("panorama") && w.environment[0].width) {
+        config.intensity = p["panorama"].value("intensity", 1.f);
+        config.srgb = p["panorama"].value("encoding", "srgb") == "srgb";
     }
     int size = 16;
     while (size * 2 <= resolution)
@@ -136,5 +139,61 @@ std::vector<CubeLevel> prefilterEnvironment(const World &w, int resolution) {
         result.push_back(std::move(level));
     }
     return result;
+}
+void resamplePanorama(World &w, const unsigned char *rgba, int width, int height) {
+    const auto &pano = w.atmosphere.at("panorama");
+    int size = pano.value("maxResolution", 1024);
+    float rotation = pano.value("rotation", 0.f), c = std::cos(rotation), s = std::sin(rotation);
+    // Supersample when the image has more texels per face than the face (90 degrees of it).
+    int n = std::clamp(int(std::round(width / 4.f / size)), 1, 4);
+    auto texel = [&](int x, int y, int ch) {
+        x = ((x % width) + width) % width;
+        y = std::clamp(y, 0, height - 1);
+        return float(rgba[(size_t(y) * width + x) * 4 + ch]);
+    };
+    for (int face = 0; face < 6; ++face) {
+        auto &out = w.panorama[face];
+        out.width = out.height = size;
+        out.rgba.assign(size_t(size) * size * 4, 255);
+        for (int y = 0; y < size; ++y)
+            for (int x = 0; x < size; ++x) {
+                float sum[3]{};
+                for (int sy = 0; sy < n; ++sy)
+                    for (int sx = 0; sx < n; ++sx) {
+                        auto d = direction(face, 2 * (x + (sx + .5f) / n) / size - 1, 2 * (y + (sy + .5f) / n) / size - 1);
+                        d = {c * d.x + s * d.z, d.y, -s * d.x + c * d.z}; // the sky shader's rotation
+                        float u = (.5f + std::atan2(d.x, -d.z) / (2 * pi)) * width - .5f,
+                              v = (.5f - std::asin(std::clamp(d.y, -1.f, 1.f)) / pi) * height - .5f;
+                        int ix = int(std::floor(u)), iy = int(std::floor(v));
+                        float fx = u - ix, fy = v - iy;
+                        for (int ch = 0; ch < 3; ++ch)
+                            sum[ch] += texel(ix, iy, ch) * (1 - fx) * (1 - fy) + texel(ix + 1, iy, ch) * fx * (1 - fy) +
+                                       texel(ix, iy + 1, ch) * (1 - fx) * fy + texel(ix + 1, iy + 1, ch) * fx * fy;
+                    }
+                auto *o = &out.rgba[(size_t(y) * size + x) * 4];
+                for (int ch = 0; ch < 3; ++ch)
+                    o[ch] = (unsigned char)std::clamp(std::lround(sum[ch] / (n * n)), 0l, 255l);
+            }
+    }
+    if (w.atmosphere.contains("environment") || !pano.value("environment", true))
+        return;
+    // Lighting: box-filtered 128 px faces (averaged in the stored encoding; close enough for
+    // the prefiltered radiance this feeds).
+    int small = std::min(128, size), k = size / small;
+    for (int face = 0; face < 6; ++face) {
+        auto &src = w.panorama[face];
+        auto &out = w.environment[face];
+        out.width = out.height = small;
+        out.rgba.assign(size_t(small) * small * 4, 255);
+        for (int y = 0; y < small; ++y)
+            for (int x = 0; x < small; ++x)
+                for (int ch = 0; ch < 3; ++ch) {
+                    unsigned total = 0;
+                    for (int yy = 0; yy < k; ++yy)
+                        for (int xx = 0; xx < k; ++xx)
+                            total += src.rgba[(size_t(y * k + yy) * size + x * k + xx) * 4 + ch];
+                    out.rgba[(size_t(y) * small + x) * 4 + ch] = (unsigned char)(total / (k * k));
+                }
+    }
 }
 } // namespace hyprune::world

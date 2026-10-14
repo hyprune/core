@@ -219,7 +219,7 @@ class Renderer {
         size_t gpuBytes = 0;
         GLuint materialUbo = 0;
         GLsizei materialStride = 0;
-        GLuint cube = 0;
+        GLuint cube = 0, panorama = 0;
         GLsync fence = nullptr;
         std::vector<Job> jobs;
         size_t next = 0;
@@ -278,6 +278,7 @@ class Renderer {
     void drawNpcs(const std::array<std::array<float, 4>, 6> &planes, const std::vector<bool> &areas, bool regions, int tone, float exposure);
     GLuint scene_ = 0, tone_ = 0, reticle_ = 0, quadVao_ = 0, quadVbo_ = 0, screenVao_ = 0, repeat_ = 0, clamp_ = 0, mipClamp_ = 0;
     GLuint environment_ = 0, bloom_ = 0, sky_ = 0, native_ = 0, depthProgram_ = 0;
+    GLuint panorama_ = 0; // world 0.11 panorama sky: an sRGB cube with mips, or 0
     GLuint inkComposite_ = 0, inkNormals_ = 0, inkProgram_ = 0, inkFbo_ = 0, inkNormal_ = 0, inkDepth_ = 0;
     size_t submittedBatches_ = 0, culledBatches_ = 0, frustumCulled_ = 0;
     int cubeLevels_ = 1;

@@ -237,7 +237,8 @@ const std::map<std::string, std::string> &objectMethods() {
 }
 std::optional<ObjectRef> parseRef(const std::string &ref) {
     static const std::regex package(std::string("^package/(") + Slug + ")$"),
-        library(std::string("^library/(") + LibId + ")@(" + SemVer + ")/(" + ObjSlug + ")$"), user(std::string("^user/(") + ObjSlug + ")$");
+        library(std::string("^library/(") + LibId + ")@(" + SemVer + ")/(" + ObjSlug + ")$"), user(std::string("^user/(") + ObjSlug + ")$"),
+        folder(std::string("^world/(") + ObjSlug + ")$");
     std::smatch m;
     if (ref.size() > 256)
         return std::nullopt;
@@ -245,6 +246,8 @@ std::optional<ObjectRef> parseRef(const std::string &ref) {
         return ObjectRef{"package", "", "", m[1]};
     if (std::regex_match(ref, m, user))
         return ObjectRef{"user", "", "", m[1]};
+    if (std::regex_match(ref, m, folder)) // a world folder's copy (RFC-0014, IPC 0.27)
+        return ObjectRef{"world", "", "", m[1]};
     if (std::regex_match(ref, m, library)) {
         // groups: 1 id, 2 (repeat), 3 version, then the version's subgroups, last the object
         return ObjectRef{"library", m[1], m[3], m[m.size() - 1]};

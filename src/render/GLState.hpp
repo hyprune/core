@@ -15,7 +15,7 @@ class GLState {
     GLboolean colorMask[4], depthMask;
     struct Unit {
         GLint texture, cube, sampler;
-    } units[7];
+    } units[8]; // 7: the world 0.11 panorama sky
     static constexpr std::array<GLenum, 8> caps{GL_BLEND,
                                                 GL_DEPTH_TEST,
                                                 GL_SCISSOR_TEST,
@@ -45,7 +45,7 @@ class GLState {
         glGetIntegeri_v(GL_UNIFORM_BUFFER_BINDING, 0, &materialBuffer);
         glGetInteger64i_v(GL_UNIFORM_BUFFER_START, 0, &materialStart);
         glGetInteger64i_v(GL_UNIFORM_BUFFER_SIZE, 0, &materialSize);
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 8; i++) {
             glActiveTexture(GL_TEXTURE0 + i);
             glGetIntegerv(GL_TEXTURE_BINDING_2D, &units[i].texture);
             glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &units[i].cube);
@@ -81,7 +81,7 @@ class GLState {
         glBindVertexArray(vao);
         glBindBuffer(GL_ARRAY_BUFFER, array);
         glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 8; i++) {
             glActiveTexture(GL_TEXTURE0 + i);
             glBindTexture(GL_TEXTURE_2D, units[i].texture);
             glBindTexture(GL_TEXTURE_CUBE_MAP, units[i].cube);

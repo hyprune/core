@@ -19,7 +19,9 @@
 #include "world/Objects.hpp"
 #include "world/Occlusion.hpp"
 #include "world/Catalog.hpp"
+#include "world/Schema.hpp"
 #include <format>
+#include <deque>
 #include <regex>
 #include <sys/inotify.h>
 #include <sys/random.h>
@@ -337,6 +339,24 @@ struct Runtime {
     world::ScanCache scanCache;
     std::shared_ptr<const world::CatalogSnapshot> catalog = std::make_shared<world::CatalogSnapshot>();
     std::vector<world::CatalogEntry> packageCatalog;
+    // RFC-0014 world folders in editor mode (Builder.inc): the loaded folder, if any, and its
+    // objects/ directory as world/<id> entries (a deque: placements point into it).
+    struct BuilderProject {
+        std::string projectId, worldId, name, sky, error;
+        std::filesystem::path folder;
+        uint64_t revision = 0;
+        Json written = Json::array(); // the placements last written to builder/project.json
+        bool readOnly = false;
+    };
+    std::optional<BuilderProject> builder;
+    std::deque<world::CatalogEntry> worldCatalog;
+    std::optional<std::filesystem::path> pendingProject; // the folder a pending load opens
+    std::optional<std::filesystem::path> projectFolder(const std::string &id) const;
+    void builderScan();
+    void builderSwitch(std::optional<std::filesystem::path> folder);
+    void builderWrite(const Json &records);
+    const world::CatalogEntry *builderCopy(const world::CatalogEntry &);
+    Json builderState() const;
     uint64_t catalogRevision = 0;
     std::future<world::CatalogSnapshot> catalogScan;
     bool catalogDirty = true;
@@ -885,6 +905,8 @@ struct Runtime {
     void settleWorkspaceSwitch(const PHLWORKSPACE &);
     std::chrono::steady_clock::time_point lastTick = std::chrono::steady_clock::now();
     std::filesystem::path installed;
+    std::filesystem::path projectsDir; // RFC-0014 world folders (HYPRUNE_PROJECTS_DIR)
+    std::filesystem::path worldRoot, pendingRoot; // the loaded package's directory (installed or a folder)
     struct Binding {
         int pid;
         std::string start;
@@ -1575,7 +1597,7 @@ void Runtime::offloadTick() {
         if (std::filesystem::is_directory(root, error))
             roots.push_back(root.string());
     Json request = {{"enabled", enabled}, {"graphics", g}, {"compositorPci", compositorPci()},
-                    {"worldPath", world ? (installed / world->id).string() : ""}, {"worldLoad", worldLoads},
+                    {"worldPath", world ? worldRoot.string() : ""}, {"worldLoad", worldLoads},
                     {"objectRoots", roots},
                     {"width", monitor ? int(monitor->m_pixelSize.x) : 0},
                     {"height", monitor ? int(monitor->m_pixelSize.y) : 0}};
@@ -1989,6 +2011,7 @@ void Runtime::publish() {
         {"integrations", {{"sources", control.sources}}}};
     publication["markers"] = markers.stateKey();
     publication["objects"] = objectsState();
+    publication["builder"] = builderState();
     publication["npcs"] = npcsState();
     publication["live"] = {{"instances", machines.live()}};
     publication["companion"] = companionState();
@@ -2029,6 +2052,15 @@ void Runtime::load(const std::string &id, const std::string &spawnId) {
     pendingSpawn = spawnId;
     loadDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(28);
     auto package = installed / id;
+    // RFC-0014: local.<slug> with no installed package is a world folder, opened in editor
+    // mode from builder/base.json; its placements come from builder/project.json.
+    pendingProject.reset();
+    std::error_code ec;
+    if (!std::filesystem::exists(package / "world.json", ec))
+        if (auto folder = projectFolder(id))
+            package = *folder, pendingProject = *folder;
+    pendingRoot = package;
+    bool project = pendingProject.has_value();
     // KTX2 textures transcode on the loader to what this GPU advertises.
     static const unsigned formats = [] {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
@@ -2039,9 +2071,12 @@ void Runtime::load(const std::string &id, const std::string &spawnId) {
     options.libraryRoots.push_back(catalogRoots.userLibraries);
     for (auto &root : catalogRoots.systemLibraries)
         options.libraryRoots.push_back(root);
-    pendingWorld = std::async(std::launch::async, [package, id, options] {
+    if (project)
+        options.manifest = "builder/base.json";
+    pendingWorld = std::async(std::launch::async, [package, id, options, project] {
         auto candidate = world::load(package, options);
-        if (candidate->id != id)
+        // A released folder keeps its published id in builder/base.json.
+        if (candidate->id != id && !project)
             throw std::runtime_error("installed ID mismatch");
         return candidate;
     });
@@ -2104,6 +2139,9 @@ void Runtime::finishLoad() {
         objectModels.clear();
         renderer.transforms.clear();
         originalCollision = world->collision;
+        worldRoot = pendingRoot;
+        builderSwitch(pendingProject);
+        pendingProject.reset();
         loadStep = "objects";
         objectsWorldLoaded();
         loadStep = "control";
@@ -2531,7 +2569,7 @@ void Runtime::machinesTick(float dt) {
         machinesSyncedRevision = instanceRevision, machinesSyncedAssets = world->objectAssets.size();
         bool was = machines.active();
         world::Machines::Setup setup;
-        setup.dev = machinesDev, setup.devRoot = installed / world->id, setup.worldId = world->id;
+        setup.dev = machinesDev, setup.devRoot = worldRoot, setup.worldId = world->id;
         setup.user = machinesFile.error.empty() ? machinesFile.current : Json(nullptr);
         try {
             machines.sync(*world, setup);
@@ -3789,6 +3827,7 @@ Vec3 objectOrigin(const world::World &w, const std::string &id) {
 #include "Gizmo.inc"
 #include "Objects.inc"
 #include "Screens.inc"
+#include "Builder.inc"
 #include "Paths.inc"
 #include "Npcs.inc"
 #include "Companion.inc"
@@ -3796,6 +3835,19 @@ Vec3 objectOrigin(const world::World &w, const std::string &id) {
 void Runtime::saveEditor() {
     if (session.playing) return;
     auto value = editor.saved();
+    // A world folder's placements live in its builder/project.json, never in editor.json.
+    if (builder) {
+        Json kept = Json::array(), mine = Json::array();
+        for (auto &r : value["placements"])
+            (r["worldId"] == builder->worldId ? mine : kept).push_back(r);
+        value["placements"] = kept;
+        Json overrides = Json::array();
+        for (auto &r : value["overrides"])
+            if (r["worldId"] != builder->worldId)
+                overrides.push_back(r);
+        value["overrides"] = overrides;
+        builderWrite(mine);
+    }
     if (value == lastEditor)
         return;
     interaction::atomicJSON(editorFile, value);
@@ -5075,6 +5127,9 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             throw ipc::Error(-32602, "unexpected params");
         auto profile=world ? renderer.profile : Json(nullptr);
         if(profile.is_object() && !ipc::protocol::atLeast(protocol,"0.13"))profile.erase("outline");
+        // World 0.11's panorama is a package asset, like environment faces' pixels: the IPC
+        // profile never carries it (atmosphere.set keeps the loaded one).
+        if(profile.is_object())profile.erase("panorama");
         return Json{{"profile",profile},{"quality", renderer.intelQuality ? "intel" : "high"}};
     }
     if (method == "atmosphere.set") {
@@ -5086,6 +5141,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             throw ipc::Error(-32602, e.what());
         }
         auto before = renderer.profile;
+        if (before.contains("panorama"))
+            params["profile"]["panorama"] = before["panorama"];
         // Pixel assets remain immutable; no IPC path is opened. Sky/environment changes require a world reload.
         if (params["profile"]["sky"] != before["sky"] ||
             params["profile"].value("environment", Json(nullptr)) != before.value("environment", Json(nullptr)))
@@ -6314,6 +6371,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         runtime->installed = std::filesystem::path(dataHome) / "hyprune/worlds";
     else
         runtime->installed = std::filesystem::path(getenv("HOME") ? getenv("HOME") : "/") / ".local/share/hyprune/worlds";
+    // RFC-0014 world folders, as the hyprune CLI resolves them.
+    if (const char *projects = getenv("HYPRUNE_PROJECTS_DIR"); projects && projects[0] == '/')
+        runtime->projectsDir = projects;
+    else
+        runtime->projectsDir = (dataHome && dataHome[0] == '/' ? std::filesystem::path(dataHome)
+                                                                : std::filesystem::path(getenv("HOME") ? getenv("HOME") : "/") / ".local/share") /
+                               "hyprune/projects";
     const char *dir = getenv("XDG_RUNTIME_DIR");
     const char *sig = getenv("HYPRLAND_INSTANCE_SIGNATURE");
     if (!dir || !sig)

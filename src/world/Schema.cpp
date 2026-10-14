@@ -165,6 +165,11 @@ void validateObjectDocument(const Json &value, const std::string &kind, const st
         validate(value, schema, common, "", &schema);
         return;
     }
+    if (kind == "project") { // builder/project.json (RFC-0014), projectVersion 0.1, beside world format 0.11
+        static const Json schema = Json::parse(projectSchema011), common011 = Json::parse(commonSchema011);
+        validate(value, schema, common011, "", &schema);
+        return;
+    }
     for (auto &p : pinned)
         if (version == p.version) {
             auto key = version + ":" + kind;
@@ -183,7 +188,7 @@ void validateManifest(const Json &value) {
     struct Pinned {
         const char *version, *world, *common;
     };
-    static constexpr Pinned pinned[]{{"0.9", worldSchema09, commonSchema09}, {"0.8", worldSchema08, commonSchema08}, {"0.7", worldSchema07, commonSchema07}, {"0.6", worldSchema06, commonSchema06},
+    static constexpr Pinned pinned[]{{"0.11", worldSchema011, commonSchema011}, {"0.9", worldSchema09, commonSchema09}, {"0.8", worldSchema08, commonSchema08}, {"0.7", worldSchema07, commonSchema07}, {"0.6", worldSchema06, commonSchema06},
                                      {"0.5", worldSchema05, commonSchema04}, {"0.4", worldSchema04, commonSchema04},
                                      {"0.3", worldSchema03, commonSchema03}, {"0.2", worldSchema02, commonSchema02}};
     static std::map<std::string, std::pair<Json, Json>> parsed;

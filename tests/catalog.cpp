@@ -2,9 +2,12 @@
 // library archives, refs, the editor overlay migration, catalog asset loading and the
 // support rule. Fixture: tests/fixtures/catalog.py.
 #include "interaction/Placement.hpp"
+#include "interaction/InputFile.hpp"
 #include "interaction/Tools.hpp"
 #include "world/Catalog.hpp"
 #include "world/Objects.hpp"
+#include "world/Schema.hpp"
+#include "world/World.hpp"
 #include <cassert>
 #include <cstdio>
 #include <fstream>
@@ -413,6 +416,60 @@ void imports(const fs::path &fixture) {
     check(!o::checkImport(record).valid, "import.json is closed");
 }
 } // namespace
+// RFC-0014 world folders (world format 0.11): builder/base.json loads like world.json, the
+// panorama becomes cube faces turned as documented (the image centre looks along -Z, u grows
+// towards +X), project files validate, and world/<id> refs name the folder's copies.
+void builder(const fs::path &fixture) {
+    auto root = fixture.parent_path() / "builder";
+    world::LoadOptions options;
+    options.manifest = "builder/base.json";
+    auto w = world::load(root, options);
+    check(w->id == "local.fixture-plain" && w->manifest["formatVersion"] == "0.11" && w->objectAssets.empty(),
+          "a world folder loads from builder/base.json, without its placements");
+    check(w->panorama[0].width == 256 && w->environment[0].width == 128, "the panorama is resampled (256 px) and lights the world (128 px)");
+    auto at = [&](int face, float x, float y) {
+        int size = w->panorama[face].width, px = int((x + 1) / 2 * size), py = int((y + 1) / 2 * size);
+        auto *c = &w->panorama[face].rgba[(size_t(py) * size + px) * 4];
+        return std::array<int, 3>{c[0], c[1], c[2]};
+    };
+    // Face 5 is -Z (direction (-x, -y, -1)): its left half looks towards -X (green band), its
+    // right half towards +X (blue); face 2 (+Y) is the yellow cap.
+    check(at(5, .5f, 0) == std::array<int, 3>{30, 200, 40} && at(5, -.5f, 0) == std::array<int, 3>{40, 60, 230},
+          "the panorama's centre looks along -Z, u grows towards +X");
+    check(at(2, 0, 0) == std::array<int, 3>{255, 230, 0}, "the panorama's top row is straight up");
+    auto made = world::load(root);
+    check(made->id == "local.fixture-plain" && made->panorama[0].width == 256, "the folder's world.json loads too");
+    auto project = interaction::readJSON(root / "builder/project.json");
+    world::validateObjectDocument(project, "project", "0.1");
+    auto bad = project;
+    bad["placements"][0]["ref"] = "user/barrel";
+    bool refused = false;
+    try {
+        world::validateObjectDocument(bad, "project", "0.1");
+    } catch (const std::exception &) {
+        refused = true;
+    }
+    check(refused, "project placements name only world/<id> copies");
+    auto ref = world::parseRef("world/barrel");
+    check(ref && ref->source == "world" && ref->id == "barrel" && !world::parseRef("world/Barrel") && !world::parseRef("world/a/b"),
+          "world/<id> refs");
+    auto e = world::scanObject(root / "objects/barrel", "world/barrel", "world");
+    world::decidePlaceable(e);
+    check(e.state == "ready" && e.placeable && e.source == "world", "a folder's copy is a placeable world entry");
+    // A panorama that isn't 2:1 is refused.
+    auto temp = fs::temp_directory_path() / ("hn-builder-" + std::to_string(getpid()));
+    fs::remove_all(temp);
+    fs::copy(root, temp, fs::copy_options::recursive);
+    fs::copy_file(root / "objects/barrel/thumbnail.png", temp / "sky/bands.png", fs::copy_options::overwrite_existing);
+    refused = false;
+    try {
+        world::load(temp, options);
+    } catch (const std::exception &x) {
+        refused = std::string(x.what()).find("2:1") != std::string::npos;
+    }
+    fs::remove_all(temp);
+    check(refused, "a panorama that isn't 2:1 is refused");
+}
 int main(int argc, char **argv) {
     if (argc != 2) {
         std::fprintf(stderr, "usage: catalog-tests <tests/fixtures/catalog>\n");
@@ -429,6 +486,7 @@ int main(int argc, char **argv) {
     overlay();
     assets(fixture);
     imports(fixture);
+    builder(fixture);
     support();
     fs::remove_all(tmp);
     std::cout << "PASS catalog: " << checked << " checks\n";

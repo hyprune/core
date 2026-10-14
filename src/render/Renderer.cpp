@@ -291,8 +291,8 @@ void main(){vec3 c;
 )";
 const char *skyFragment = R"(#version 300 es
 precision highp float;
-in vec2 uv;uniform samplerCube environmentMap;uniform vec3 forward,right,up;uniform float tanFov,aspect,rotation;uniform vec2 lensShift;uniform int skyMode;uniform vec3 zenith,horizon,ground;out vec4 result;
-void main(){vec3 d=normalize(forward+right*((uv.x*2.-1.-lensShift.x)*tanFov*aspect)+up*((uv.y*2.-1.-lensShift.y)*tanFov));if(skyMode==1){result=vec4(mix(horizon,d.y>0.?zenith:ground,abs(d.y)),1);return;}float c=cos(rotation),s=sin(rotation);d=vec3(c*d.x+s*d.z,d.y,-s*d.x+c*d.z);result=vec4(textureLod(environmentMap,d,0.).rgb,1);}
+in vec2 uv;uniform samplerCube environmentMap,panoramaMap;uniform vec3 forward,right,up;uniform float tanFov,aspect,rotation,panoramaIntensity;uniform vec2 lensShift;uniform int skyMode;uniform vec3 zenith,horizon,ground;out vec4 result;
+void main(){vec3 d=normalize(forward+right*((uv.x*2.-1.-lensShift.x)*tanFov*aspect)+up*((uv.y*2.-1.-lensShift.y)*tanFov));if(skyMode==1){result=vec4(mix(horizon,d.y>0.?zenith:ground,abs(d.y)),1);return;}if(skyMode==3){result=vec4(texture(panoramaMap,d).rgb*panoramaIntensity,1);return;}float c=cos(rotation),s=sin(rotation);d=vec3(c*d.x+s*d.z,d.y,-s*d.x+c*d.z);result=vec4(textureLod(environmentMap,d,0.).rgb,1);}
 )";
 // Resolve colour/depth once, then pack normal + linear depth for one-fetch
 // neighbour tests. MSAA coverage blends metadata only at existing geometry edges;
@@ -808,6 +808,8 @@ void Renderer::freeWorld() {
     gpuBytes_ = 0;
     glDeleteTextures(1, &environment_);
     environment_ = 0;
+    glDeleteTextures(1, &panorama_);
+    panorama_ = 0;
     world_.reset();
 }
 // Image textures and samplers for world images from p->imageBase on (all of them for a
@@ -1223,6 +1225,32 @@ void Renderer::beginPrepare(std::shared_ptr<const world::World> world) {
                 glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, mip, GL_RGBA16F, l.size, l.size, 0, GL_RGBA,
                              GL_FLOAT, l.faces[face].data());
             });
+    if (int size = p->world->panorama[0].width) {
+        // World 0.11 panorama: one face per job, then the mip chain (sRGB decode in the sampler).
+        add(0, [p, size] {
+            int levels = 1;
+            while ((size >> levels) > 0)
+                ++levels;
+            glGenTextures(1, &p->panorama);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, p->panorama);
+            glTexStorage2D(GL_TEXTURE_CUBE_MAP, levels, GL_SRGB8_ALPHA8, size, size);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            for (auto wrap : {GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T, GL_TEXTURE_WRAP_R})
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, wrap, GL_CLAMP_TO_EDGE);
+        }, "panorama");
+        for (int face = 0; face < 6; ++face)
+            add(size_t(size) * size * 4, [p, face, size] {
+                glBindTexture(GL_TEXTURE_CUBE_MAP, p->panorama);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+                glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, 0, 0, 0, size, size, GL_RGBA, GL_UNSIGNED_BYTE,
+                                p->world->panorama[face].rgba.data());
+            }, "panorama face");
+        add(size_t(size) * size * 2, [p] {
+            glBindTexture(GL_TEXTURE_CUBE_MAP, p->panorama);
+            glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+        }, "panorama mips");
+    }
     meshJobs(p, [&](size_t bytes, std::function<void()> run, std::string kind) { add(bytes, std::move(run), std::move(kind)); });
     for (auto &finish : finishers)
         finish();
@@ -1323,6 +1351,8 @@ bool Renderer::continuePrepare(double milliseconds, size_t byteBudget) {
         gpuBytes_ = p->gpuBytes;
         environment_ = p->cube;
         p->cube = 0;
+        panorama_ = p->panorama;
+        p->panorama = 0;
         cubeLevels_ = p->levels.size();
         profile = p->profile;
         pending_.reset();
@@ -1401,6 +1431,7 @@ void Renderer::cancelPrepare() {
         glDeleteVertexArrays(1, &b.vao);
     }
     glDeleteTextures(1, &p->cube);
+    glDeleteTextures(1, &p->panorama);
     release(p->textures, p->colors, [](GLsizei n, const GLuint *ids) { glDeleteTextures(n, ids); });
     release(p->samplers, p->dataSamplers, [](GLsizei n, const GLuint *ids) { glDeleteSamplers(n, ids); });
     glDeleteBuffers(1, &p->materialUbo);
@@ -1782,7 +1813,13 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glDisable(GL_DEPTH_TEST);
     glUseProgram(sky_);
     uniform(sky_, "environmentMap", 6);
-    uniform(sky_, "skyMode", graphics["sky"] == "gradient" ? 1 : 2);
+    // The panorama (rotation baked into its faces) replaces the gradient and the environment.
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, panorama_);
+    glBindSampler(7, 0);
+    uniform(sky_, "panoramaMap", 7);
+    glUniform1f(location(sky_, "panoramaIntensity"), profile.contains("panorama") ? profile["panorama"].value("intensity", 1.f) : 1.f);
+    uniform(sky_, "skyMode", graphics["sky"] == "gradient" ? 1 : panorama_ ? 3 : 2);
     uniform(sky_, "zenith", vec(sky["zenith"]));
     uniform(sky_, "horizon", vec(sky["horizon"]));
     uniform(sky_, "ground", vec(sky["ground"]));

@@ -213,6 +213,8 @@ size_t gpuBytes(const World &world, bool srgbDecode, std::span<const CubeLevel> 
     }
     for (const auto &level : environment)
         bytes += size_t(level.size) * level.size * 6 * 8;
+    // The panorama cube: RGBA8 with mips (about 4/3 of the top level).
+    bytes += size_t(world.panorama[0].width) * world.panorama[0].width * 6 * 4 * 4 / 3;
     return bytes;
 }
 unsigned nodeNamed(std::span<const std::string> names, const std::string &name, const std::string &path) {
@@ -553,7 +555,7 @@ GltfScene loadGltf(World &into, const std::filesystem::path &root, const std::st
 }
 std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions options) {
     require(!std::filesystem::is_symlink(root), "package root is a symlink");
-    auto manifestPath = safePath(root, "world.json");
+    auto manifestPath = safePath(root, options.manifest);
     require(std::filesystem::file_size(manifestPath) <= 1024 * 1024, "manifest too large");
     std::ifstream in(manifestPath);
     std::vector<std::set<std::string>> objectKeys;
@@ -714,6 +716,17 @@ std::shared_ptr<World> load(const std::filesystem::path &root, LoadOptions optio
             result->environment[i++] = {w, h, {pixels, pixels + size_t(w) * h * 4}};
             stbi_image_free(pixels);
         }
+    }
+    if (result->atmosphere.contains("panorama")) {
+        auto path = safePath(root, result->atmosphere["panorama"]["image"]);
+        int w, h, n;
+        require(stbi_info(path.c_str(), &w, &h, &n), "panorama: not a PNG or JPEG image");
+        require(std::abs(w - 2 * h) <= 2 && w >= 1024 && w <= 8192,
+                "panorama: an equirectangular image is 2:1 and 1,024 to 8,192 px wide");
+        auto pixels = stbi_load(path.c_str(), &w, &h, &n, 4);
+        require(pixels, "panorama decode");
+        resamplePanorama(*result, pixels, w, h);
+        stbi_image_free(pixels);
     }
     int resolution = result->atmosphere.contains("environment")
                          ? std::min(128, result->atmosphere["environment"]["maxResolution"].get<int>())

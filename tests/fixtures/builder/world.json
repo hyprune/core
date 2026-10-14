@@ -1,0 +1,130 @@
+{
+  "formatVersion": "0.11",
+  "id": "local.fixture-plain",
+  "version": "0.1.0",
+  "name": "Fixture Plain",
+  "license": "CC0-1.0",
+  "description": "Built with the Hyprune builder from the Flat land starter.",
+  "scene": "starter/land.glb",
+  "defaultSpawn": "start",
+  "spawns": [
+    {
+      "id": "start",
+      "pose": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ]
+      }
+    }
+  ],
+  "collision": [
+    {
+      "node": 0,
+      "shape": "mesh",
+      "layer": "static"
+    }
+  ],
+  "playable": {
+    "volumes": [
+      {
+        "type": "box",
+        "min": [
+          -1000,
+          -50,
+          -1000
+        ],
+        "max": [
+          1000,
+          500,
+          1000
+        ]
+      }
+    ],
+    "maxFlyHeight": 500
+  },
+  "atmosphere": {
+    "fog": {
+      "color": [
+        0.72,
+        0.8,
+        0.86
+      ],
+      "density": 0.0012,
+      "heightFalloff": 0,
+      "baseHeight": 0,
+      "excludeUnlit": true
+    },
+    "sky": {
+      "zenith": [
+        0.22,
+        0.38,
+        0.66
+      ],
+      "horizon": [
+        0.72,
+        0.8,
+        0.86
+      ],
+      "ground": [
+        0.33,
+        0.36,
+        0.33
+      ],
+      "sun": {
+        "direction": [
+          0.5499,
+          0.6198,
+          0.5599
+        ],
+        "color": [
+          1,
+          0.95,
+          0.86
+        ],
+        "intensity": 3,
+        "angularRadius": 0.0093
+      }
+    },
+    "exposure": 1,
+    "toneMapping": "aces",
+    "bloom": {
+      "strength": 0.06,
+      "threshold": 1.2,
+      "radius": 3
+    },
+    "panorama": {
+      "image": "sky/bands.png",
+      "projection": "equirect",
+      "encoding": "srgb",
+      "intensity": 1,
+      "rotation": 0,
+      "maxResolution": 256,
+      "environment": true
+    }
+  },
+  "attribution": [
+    {
+      "path": ".",
+      "author": "Richard",
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "starter/land.glb",
+      "author": "Hyprune contributors",
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "sky/bands.png",
+      "author": "Hyprune contributors",
+      "license": "CC0-1.0"
+    }
+  ]
+}

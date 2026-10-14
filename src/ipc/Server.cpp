@@ -167,11 +167,21 @@ Json Server::visibleState(const Peer &p) const {
         if (state.contains("companion") && state["companion"].is_object())
             state["companion"].erase("pace");
     }
-    // IPC 0.27: workspace screens on object instances.
-    if (!protocol::atLeast(p.protocol, "0.27") && state.is_object() && state.contains("objects") && state["objects"].is_object() &&
-        state["objects"].contains("instances"))
-        for (auto &i : state["objects"]["instances"])
-            i.erase("screen");
+    // IPC 0.27: workspace screens on object instances; world folders (the builder key and
+    // world/<id> copies, which older object refs can't name).
+    if (!protocol::atLeast(p.protocol, "0.27") && state.is_object()) {
+        state.erase("builder");
+        if (state.contains("objects") && state["objects"].is_object() && state["objects"].contains("instances")) {
+            auto &list = state["objects"]["instances"];
+            for (auto &i : list)
+                i.erase("screen");
+            Json kept = Json::array();
+            for (auto &i : list)
+                if (!i.value("ref", "").starts_with("world/"))
+                    kept.push_back(i);
+            list = kept;
+        }
+    }
     // IPC 0.24 (RFC-0013): the live state of bound machines.
     if (!protocol::atLeast(p.protocol, "0.24") && state.is_object())
         state.erase("live");

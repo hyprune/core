@@ -192,6 +192,12 @@ const world::CatalogEntry *Runtime::catalogEntry(const std::string &ref, std::st
                 return &e;
         return nullptr;
     }
+    if (r->source == "world") { // a world folder's own copies (RFC-0014, Builder.inc)
+        for (auto &e : worldCatalog)
+            if (e.ref == ref)
+                return &e;
+        return nullptr;
+    }
     if (auto it = catalog->refs.find(ref); it != catalog->refs.end())
         return &it->second;
     if (r->source != "library" || !substitute)
@@ -214,6 +220,9 @@ const world::CatalogEntry *Runtime::catalogEntry(const std::string &ref, std::st
 Json Runtime::catalogEntries() {
     Json out = Json::array();
     for (auto &e : packageCatalog)
+        if (out.size() < 1024)
+            out.push_back(e.json());
+    for (auto &e : worldCatalog)
         if (out.size() < 1024)
             out.push_back(e.json());
     for (auto &e : catalog->entries)
@@ -539,7 +548,7 @@ void Runtime::objectsWorldLoaded() {
     instanceOverrides.clear();
     for (size_t k = 0; k < authoredInstances; ++k)
         instanceOverrides[k] = world->objectInstances[k].model;
-    packageCatalog = world::packageEntries(*world, installed / world->id, gizmoObjects);
+    packageCatalog = world::packageEntries(*world, worldRoot, gizmoObjects);
     ++catalogRevision;
     objectsSync(); // before anything publishes: instances point into the package catalog
     builtObjects = ~0ull;
@@ -985,6 +994,14 @@ void Runtime::placeFromPocket(bool surface) {
         objectRefused("Not placed", v);
         return;
     }
+    if (builder && (e->source == "user" || e->source == "library")) {
+        try {
+            e = builderCopy(*e);
+        } catch (const ipc::Error &err) {
+            objectNotice("placement.blocked", std::string("Not placed: ") + err.what());
+            return;
+        }
+    }
     auto id = newPlacementId();
     Json record{{"worldId", world->id}, {"id", id}, {"areaId", areaAt(t->position)}, {"ref", e->ref},
                 {"pose", poseJson(*t)}, {"scale", 1.0}};
@@ -1184,6 +1201,13 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
     if (method == "objects.catalog") {
         only({});
         auto entries = catalogEntries();
+        if (!ipc::protocol::atLeast(methodProtocol, "0.27")) { // world folder copies are 0.27
+            Json kept = Json::array();
+            for (auto &e : entries)
+                if (e["source"] != "world")
+                    kept.push_back(e);
+            entries = kept;
+        }
         // IPC 0.24 (RFC-0013): a machine's declared inputs, for its data source panel.
         if (ipc::protocol::atLeast(objectsProtocol, "0.24"))
             for (auto &e : entries) {
@@ -1348,6 +1372,9 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         }
         if (!placed)
             throw refusal("Not placed", last);
+        // In a world folder, user and library objects are copied in first (RFC-0014).
+        if (builder && (e->source == "user" || e->source == "library"))
+            e = builderCopy(*e);
         auto id = newPlacementId();
         // Workspace screens (IPC 0.27) show a workspace from the start: the one asked for, else
         // the next free one; null leaves the screen empty.
