@@ -274,8 +274,9 @@ const Json *Layout::homeOf(const Instance &i, const world::World *w) const {
         return b;
     if (auto h = homes.find(i.id); h != homes.end())
         return binding(h->second, w);
-    // A room window a durable rule restored (a relaunch) belongs to that rule's area.
-    if (auto p = saved(i, w); p && w)
+    // A room window a durable rule restored (a relaunch) belongs to that rule's area when the
+    // rule holds a mount of that area. A free mount (a pose) only names an area for the wire.
+    if (auto p = saved(i, w); p && w && !p->at("anchorId").get<std::string>().empty())
         for (const auto *list : {&bindings, &defaults})
             for (const auto &b : *list)
                 if (b.at("worldId") == w->id && b.at("areaId") == p->at("areaId"))

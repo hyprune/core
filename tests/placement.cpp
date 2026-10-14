@@ -153,6 +153,17 @@ void homeWindows() {
     layout.instances = world::Json::array();
     assert(layout.homeOf(relaunched, &w) && layout.homeOf(relaunched, &w)->at("id") == 21);
     assert(layout.place(relaunched, "rig", &w) == "rig" && layout.release(relaunched, &w) == 21);
+    // A free room mount (tool 5 in free space) records an area for the wire, but no home:
+    // relaunched from its durable rule it is an unzoned room window again (no areaId).
+    surfaces::Instance loose{"loose", "foot", "Loose", 20}, again{"again", "foot", "Loose", 20};
+    surfaces::Surface spot;
+    spot.logicalSize(1200, 675, .002f);
+    spot.center = {3, 1.7f, 2};
+    layout.mount(loose, &w, spot);
+    layout.forget(loose.id);
+    layout.instances = world::Json::array();
+    assert(!layout.homeOf(again, &w));
+    assert(layout.locate(again, &w, camera, 1200, 675) && !layout.instances.back().contains("areaId"));
     // Pocketing a home window takes it into the world too.
     layout.stash(signal, {});
     assert(layout.leaving(signal) && layout.pulled(signal, &w));
