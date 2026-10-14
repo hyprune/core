@@ -244,7 +244,7 @@ Character::SeatFit Character::measureSeat() const {
     fit.sink = feet ? std::max(0.f, drop / feet) : 0;
     return fit;
 }
-Character loadCharacter(const std::filesystem::path &path, unsigned compressedFormats) {
+Character loadCharacter(const std::filesystem::path &path, unsigned compressedFormats, bool clipsOnly) {
     cgltf_options opts{};
     cgltf_data *raw = nullptr;
     if (cgltf_parse_file(&opts, path.c_str(), &raw) != cgltf_result_success)
@@ -447,7 +447,7 @@ Character loadCharacter(const std::filesystem::path &path, unsigned compressedFo
             c.primitives.push_back(std::move(out));
         }
     }
-    if (c.primitives.empty())
+    if (c.primitives.empty() && !clipsOnly) // a motion pack's rig is a skin and its clips, no mesh
         throw std::runtime_error("no triangle mesh uses the skin");
     // Rest-pose bounds as drawn: skinned with the rest pose (armature included).
     std::vector<Mat4> rest;

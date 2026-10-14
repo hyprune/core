@@ -165,6 +165,10 @@ int main() {
             }
             check(slip < .03f, "foot slip " + std::to_string(slip * 100) + " % at scale " + std::to_string(scale));
             check(lift < .005f * scale, "planted foot off the floor by " + std::to_string(lift));
+            // Core's own measures (npc-check, motion-pack) agree: the planted feet give the speed.
+            float measured = world::plantedSpeed(target, moved), coreSlip = world::footSlip(target, moved);
+            check(std::abs(measured - moved.speed) < .03f * moved.speed, "planted speed " + std::to_string(measured));
+            check(coreSlip >= 0 && coreSlip < .03f, "core foot slip " + std::to_string(coreSlip));
             std::cout << "scale " << scale << ": matched " << info.matched << ", worst bone " << worst << " deg, slip "
                       << slip * 100 << " %\n";
         }

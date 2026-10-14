@@ -46,7 +46,7 @@ std::shared_ptr<MotionPack> loadMotionPack(const std::filesystem::path &director
         need(slug(id) && !rigs.contains(id), "motion.json: rig ids are unique slugs");
         auto path = safePath(directory, scene);
         need(std::filesystem::file_size(path) <= 32u * 1024 * 1024, "rig " + id + ": larger than 32 MiB");
-        auto rig = std::make_shared<Character>(loadCharacter(path));
+        auto rig = std::make_shared<Character>(loadCharacter(path, 0, true));
         need(rig->role("hips") >= 0, "rig " + id + ": no hips bone");
         rigs[id] = int(pack->rigs.size());
         pack->rigs.push_back(rig);

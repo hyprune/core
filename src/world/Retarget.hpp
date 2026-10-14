@@ -24,4 +24,11 @@ float hipHeight(const Character &);
 // travel and bob) take a translation; every other bone keeps the target's bone lengths.
 Character::Clip retargetClip(const Character &target, const Character &source, const Character::Clip &clip,
                              const std::map<std::string, std::string> &aliases = {}, RetargetInfo *info = nullptr);
+// An in-place locomotion clip's ground speed from its feet: while a foot is planted (within 3 %
+// of the hip height of its lowest point over the clip) it moves backwards at the clip's speed;
+// the median backward speed of planted feet, m/s (0 without feet).
+float plantedSpeed(const Character &, const Character::Clip &);
+// Foot slip of an in-place locomotion clip (speed > 0): the median of |planted foot velocity +
+// speed forward| / speed over the clip; -1 without feet, speed or a planted foot.
+float footSlip(const Character &, const Character::Clip &);
 } // namespace hyprune::world

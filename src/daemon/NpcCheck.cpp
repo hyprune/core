@@ -1,11 +1,14 @@
 // hyprune-npc-check: check an NPC character (.glb) against the artist spec (RFC-0010).
 #include "world/Character.hpp"
+#include "world/Motion.hpp"
+#include "world/Retarget.hpp"
 #include <format>
 #include <iostream>
 #include <optional>
 int main(int argc, char **argv) {
     using namespace hyprune::world;
     std::string file, against;
+    std::vector<std::string> motionDirs; // --motion DIR: motion packs bound onto it (shared clip library)
     bool json = false;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
@@ -13,15 +16,17 @@ int main(int argc, char **argv) {
             json = true;
         else if (a == "--against" && i + 1 < argc)
             against = argv[++i];
+        else if (a == "--motion" && i + 1 < argc)
+            motionDirs.push_back(argv[++i]);
         else if (file.empty() && !a.starts_with("--"))
             file = a;
         else {
-            std::cerr << "usage: hyprune-npc-check CHARACTER.glb [--against BASE.glb] [--json]\n";
+            std::cerr << "usage: hyprune-npc-check CHARACTER.glb [--against BASE.glb] [--motion PACK_DIR]... [--json]\n";
             return 2;
         }
     }
     if (file.empty()) {
-        std::cerr << "usage: hyprune-npc-check CHARACTER.glb [--against BASE.glb] [--json]\n";
+        std::cerr << "usage: hyprune-npc-check CHARACTER.glb [--against BASE.glb] [--motion PACK_DIR]... [--json]\n";
         return 2;
     }
     try {
@@ -43,6 +48,29 @@ int main(int argc, char **argv) {
         Json summary{{"file", file},          {"bones", c.joints.size()},       {"triangles", c.triangles},
                      {"materials", c.materialNames}, {"height", c.hi.y - c.lo.y}, {"clips", clips},
                      {"problems", list},      {"ok", errors == 0}};
+        // Motion packs: the clips they fill on this character, foot slip of the bound locomotion
+        // clips (in place, at their scaled speed), and the seat fit below with a bound sit.
+        if (!motionDirs.empty()) {
+            std::vector<std::shared_ptr<MotionPack>> packs;
+            for (auto &d : motionDirs)
+                packs.push_back(loadMotionPack(d, "check"));
+            auto binding = bindMotion(c, Json::object(), packs);
+            Json bound = Json::array();
+            for (auto &b : binding.clips) {
+                auto *clip = c.clip(b.name);
+                float slip = clip && (b.role == "walk" || b.role == "run") ? footSlip(c, *clip) : -1;
+                bound.push_back({{"name", b.name}, {"role", b.role}, {"pack", b.pack}, {"speed", clip ? clip->speed : 0},
+                                 {"footSlip", slip < 0 ? Json(nullptr) : Json(std::round(slip * 1000) / 1000)}});
+            }
+            summary["motion"] = {{"skeleton", binding.skeleton.empty() ? Json(nullptr) : Json(binding.skeleton)}, {"bound", bound}};
+            if (!json) {
+                std::cout << "motion: skeleton " << (binding.skeleton.empty() ? "none" : binding.skeleton) << ", " << bound.size() << " clips bound\n";
+                for (auto &b : bound)
+                    std::cout << "  " << b["name"].get<std::string>() << " (" << b["pack"].get<std::string>() << ")"
+                              << (b["footSlip"].is_null() ? std::string() : std::format(", speed {:.2f} m/s, foot slip {:.1f} %", b["speed"].get<float>(), b["footSlip"].get<float>() * 100))
+                              << '\n';
+            }
+        }
         // The sit clip's seat height (RFC-0011 clips.sit.seatHeight), measured as core does.
         auto seat = c.measureSeat();
         summary["seatHeight"] = seat.valid ? Json(std::round(seat.seatHeight * 1000) / 1000) : Json(nullptr);
