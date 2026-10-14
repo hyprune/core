@@ -227,9 +227,10 @@ void Runtime::companionBind(const Json &patch) {
             if (patch.contains(key) && !patch[key].is_null())
                 record[key] = patch[key];
     } else if (patch.contains("pose")) {
-        auto spot = standingSpot(companionBody, patch["pose"]);
+        interaction::WalkProblem why{{}, "floor", ""};
+        auto spot = standingSpot(companionBody, patch["pose"], &why);
         if (!spot)
-            throw ipc::Error(-32007, "not a free standing spot", Json{{"retryable", false}, {"rule", "support"}});
+            throw spotRefusal(why, false);
         record["pose"] = {{"position", vecJson(spot->first)}, {"rotation", yawRotation(spot->second)}};
     } else {
         // Settings alone adjust the current route binding.

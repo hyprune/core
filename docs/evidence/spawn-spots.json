@@ -1,0 +1,281 @@
+{
+ "nestedOnly": true,
+ "world": "com.hyprune.lumen-reach",
+ "characters": [
+  "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
+  "library/com.hyprune.starter@0.2.0/resident-blue"
+ ],
+ "checks": [
+  {
+   "name": "sun-court at [-8, 0, 12]: Drunk Ash spawns in front on open floor",
+   "ok": true,
+   "evidence": {
+    "eye": [
+     -8.0,
+     1.7000000476837158,
+     12.0
+    ],
+    "spot": [
+     -8.0,
+     0.0,
+     10.0
+    ],
+    "error": null
+   }
+  },
+  {
+   "name": "sun-court at [-8, 0, 12]: a starter resident spawns in front on open floor",
+   "ok": true,
+   "evidence": {
+    "eye": [
+     -8.0,
+     1.7000000476837158,
+     12.0
+    ],
+    "spot": [
+     -8.0,
+     0.0,
+     10.0
+    ],
+    "error": null
+   }
+  },
+  {
+   "name": "sun-court at [-6, 0, 6]: Drunk Ash spawns in front on open floor",
+   "ok": true,
+   "evidence": {
+    "eye": [
+     -6.0,
+     1.7000000476837158,
+     6.0
+    ],
+    "spot": [
+     -4.0,
+     0.0,
+     6.0
+    ],
+    "error": null
+   }
+  },
+  {
+   "name": "sun-court at [-6, 0, 6]: a starter resident spawns in front on open floor",
+   "ok": true,
+   "evidence": {
+    "eye": [
+     -6.0,
+     1.7000000476837158,
+     6.0
+    ],
+    "spot": [
+     -4.0,
+     0.0,
+     6.0
+    ],
+    "error": null
+   }
+  },
+  {
+   "name": "sun-court at [10, 0, -4]: Drunk Ash spawns in front on open floor",
+   "ok": true,
+   "evidence": {
+    "eye": [
+     10.0,
+     1.7000000476837158,
+     -4.0
+    ],
+    "spot": [
+     10.0,
+     0.0,
+     -2.0
+    ],
+    "error": null
+   }
+  },
+  {
+   "name": "sun-court at [10, 0, -4]: a starter resident spawns in front on open floor",
+   "ok": true,
+   "evidence": {
+    "eye": [
+     10.0,
+     1.7000000476837158,
+     -4.0
+    ],
+    "spot": [
+     10.0,
+     0.0,
+     -2.0
+    ],
+    "error": null
+   }
+  },
+  {
+   "name": "array-hall at [8, 0, -34]: Drunk Ash spawns in front on open floor",
+   "ok": true,
+   "evidence": {
+    "eye": [
+     8.0,
+     1.7000000476837158,
+     -34.0
+    ],
+    "spot": [
+     12.337116241455078,
+     1.1920928955078125e-07,
+     -36.48785400390625
+    ],
+    "error": null
+   }
+  },
+  {
+   "name": "array-hall at [8, 0, -34]: a starter resident spawns in front on open floor",
+   "ok": true,
+   "evidence": {
+    "eye": [
+     8.0,
+     1.7000000476837158,
+     -34.0
+    ],
+    "spot": [
+     12.337116241455078,
+     1.1920928955078125e-07,
+     -36.48785400390625
+    ],
+    "error": null
+   }
+  },
+  {
+   "name": "rime-vault at [38, -6, -79]: Drunk Ash spawns in front on open floor",
+   "ok": true,
+   "evidence": {
+    "eye": [
+     38.0,
+     -4.299999713897705,
+     -79.0
+    ],
+    "spot": [
+     38.0,
+     -6.0,
+     -76.5
+    ],
+    "error": null
+   }
+  },
+  {
+   "name": "rime-vault at [38, -6, -79]: a starter resident spawns in front on open floor",
+   "ok": true,
+   "evidence": {
+    "eye": [
+     38.0,
+     -4.299999713897705,
+     -79.0
+    ],
+    "spot": [
+     38.0,
+     -6.0,
+     -76.5
+    ],
+    "error": null
+   }
+  },
+  {
+   "name": "signal-rise at [54, 0, -125]: Drunk Ash spawns in front on open floor",
+   "ok": true,
+   "evidence": {
+    "eye": [
+     54.0,
+     1.7095996141433716,
+     -124.99950408935547
+    ],
+    "spot": [
+     57.287803649902344,
+     -0.05015969276428223,
+     -123.79936218261719
+    ],
+    "error": null
+   }
+  },
+  {
+   "name": "signal-rise at [54, 0, -125]: a starter resident spawns in front on open floor",
+   "ok": true,
+   "evidence": {
+    "eye": [
+     54.0,
+     1.7095996141433716,
+     -124.99950408935547
+    ],
+    "spot": [
+     57.287803649902344,
+     -0.05015969276428223,
+     -123.79936218261719
+    ],
+    "error": null
+   }
+  },
+  {
+   "name": "in a placement zone, the spot is found outside the zone",
+   "ok": true,
+   "evidence": {
+    "spot": [
+     2.5,
+     0.0,
+     -0.5
+    ],
+    "zone": {
+     "min": [
+      -2.0,
+      0.15,
+      0.0
+     ],
+     "max": [
+      7.0,
+      4.8,
+      8.0
+     ]
+    }
+   }
+  },
+  {
+   "name": "facing a wall: a spot to the side, or a refusal with its rule and reason",
+   "ok": true,
+   "evidence": {
+    "id": "u-eebac6",
+    "error": null
+   }
+  },
+  {
+   "name": "a refused spot in a window placement zone gives rule zone and the reason",
+   "ok": true,
+   "evidence": {
+    "code": -32007,
+    "data": {
+     "retryable": false,
+     "rule": "zone"
+    },
+    "message": "not a free standing spot: in sun-court-open-work, kept free for windows"
+   }
+  },
+  {
+   "name": "a refused spot on the arrival spawn gives rule keep-clear and the reason",
+   "ok": true,
+   "evidence": {
+    "code": -32007,
+    "data": {
+     "retryable": false,
+     "rule": "keep-clear"
+    },
+    "message": "not a free standing spot: in a keep-clear area (a spawn, a doorway, a ladder)"
+   }
+  },
+  {
+   "name": "a refused spot in mid-air gives rule support and the reason",
+   "ok": true,
+   "evidence": {
+    "code": -32007,
+    "data": {
+     "retryable": false,
+     "rule": "support"
+    },
+    "message": "not a free standing spot: no floor there"
+   }
+  }
+ ]
+}

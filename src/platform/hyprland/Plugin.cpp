@@ -682,7 +682,9 @@ struct Runtime {
                          const Json &settings);
     void requireRoute(const std::string &ref, const interaction::Body &, const std::string &except = "");
     interaction::Body bodyOf(const world::CatalogEntry &);
-    std::optional<std::pair<Vec3, float>> standingSpot(const interaction::Body &, const Json &pose);
+    std::optional<std::pair<Vec3, float>> standingSpot(const interaction::Body &, const Json &pose,
+                                                       interaction::WalkProblem *why = nullptr);
+    ipc::Error spotRefusal(const interaction::WalkProblem &, bool inFront);
     std::string spawnCharacter(const std::string &ref, const std::string &path, const Json &pose, const Json &settings);
     Json finishDrawing();
     void bindCharacter(const std::string &id, const Json &patch);

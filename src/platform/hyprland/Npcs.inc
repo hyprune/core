@@ -1001,35 +1001,102 @@ interaction::Body Runtime::bodyOf(const world::CatalogEntry &e) {
     return {traits.value("radius", .35f), traits.value("height", 1.75f)};
 }
 // A standing spot for a body (RFC-0011 "User-spawned characters"): given, or in front of
-// the player by the reachable-spawn rules.
-std::optional<std::pair<Vec3, float>> Runtime::standingSpot(const interaction::Body &body, const Json &pose) {
+// the player by the reachable-spawn rules: the free spot nearest 2 m straight ahead, within
+// 6 m and 80 degrees of the view (window placement zones and keep-clear volumes cover open
+// floor: the spot is past their edge). With no spot, `why` gets the rule that refused the
+// first candidate (2 m straight ahead).
+std::optional<std::pair<Vec3, float>> Runtime::standingSpot(const interaction::Body &body, const Json &pose,
+                                                              interaction::WalkProblem *why) {
     auto scene = npcScene();
-    scene.keepClear.clear();
     auto s = placementScene();
-    for (auto &k : s.keepClear)
-        scene.keepClear.push_back(k);
-    for (auto &z : s.zones)
-        scene.keepClear.push_back(z);
+    scene.keepClear = s.keepClear;
+    std::vector<std::pair<std::string, interaction::Box>> zones;
+    for (auto &z : world->placementZones)
+        if (z.contains("bounds"))
+            zones.push_back({z.value("id", ""), interaction::aabbBox(vec3(z["bounds"]["min"]), vec3(z["bounds"]["max"]))});
+    std::optional<interaction::WalkProblem> first;
+    auto check = [&](Vec3 at, float within) -> std::optional<interaction::WalkProblem> {
+        auto problem = interaction::checkSpot(scene, at, body, true, within);
+        if (!problem) {
+            interaction::Box probe;
+            probe.centre = at + Vec3{0, .6f, 0};
+            probe.half = {body.radius * .5f, .4f, body.radius * .5f};
+            for (auto &[id, z] : zones)
+                if (interaction::boxBox(z, probe))
+                    problem = interaction::WalkProblem{at, "zone", "in " + id + ", kept free for windows"};
+        }
+        if (problem && !first)
+            first = problem;
+        return problem;
+    };
+    auto refused = [&] {
+        if (why && first)
+            *why = *first;
+        return std::nullopt;
+    };
     if (!pose.is_null()) {
         Vec3 at = vec3(pose["position"]);
-        if (interaction::checkSpot(scene, at, body, true))
-            return std::nullopt;
         auto floor = interaction::floorAt(scene, at);
+        if (check(Vec3{at.x, floor.value_or(at.y), at.z}, interaction::maxStep))
+            return refused();
         return std::pair{Vec3{at.x, floor.value_or(at.y), at.z}, yawOf(pose["rotation"].get<std::array<float, 4>>())};
     }
-    Vec3 flat = normalized(Vec3{camera.forward().x, 0, camera.forward().z});
-    for (float d : {2.f, 2.5f, 1.5f, 3.f}) {
-        Vec3 at = camera.position + flat * d;
-        auto floor = interaction::floorBelow(scene, at, 4);
-        if (!floor)
+    Vec3 ahead{camera.forward().x, 0, camera.forward().z};
+    Vec3 flat = length(ahead) > 1e-3f ? normalized(ahead) : Vec3{0, 0, -1};
+    Vec3 feetNow = camera.position - Vec3{0, camera.eyeHeight, 0};
+    // Candidates: a fan up to 80 degrees either side, 1.5 to 6 m out, nearest the ideal spot
+    // (2 m straight ahead) first; those out of a 90 degree view after those in it.
+    std::vector<std::tuple<float, float, float>> candidates; // (cost, angle, distance)
+    for (int k = -4; k <= 4; ++k)
+        for (float d = 1.5f; d <= 6.01f; d += .5f) {
+            float angle = k * .35f, off = std::hypot(d * std::sin(angle), d * std::cos(angle) - 2);
+            candidates.push_back({off + (std::abs(angle) > .8f ? 3.f : 0.f), angle, d});
+        }
+    std::sort(candidates.begin(), candidates.end());
+    for (auto [cost, angle, d] : candidates) {
+        float c = std::cos(angle), sn = std::sin(angle);
+        Vec3 dir{flat.x * c - flat.z * sn, 0, flat.x * sn + flat.z * c};
+        Vec3 at = camera.position + dir * d;
+        // Its floor: near the player's feet level (a step up or down), not the top of whatever
+        // is in the way at eye height.
+        auto floor = interaction::floorAt(scene, Vec3{at.x, feetNow.y, at.z}, 1.2f);
+        if (!floor) {
+            if (!first)
+                first = interaction::WalkProblem{at, "floor", "no floor there"};
             continue;
+        }
         Vec3 feet{at.x, *floor, at.z};
-        if (auto wall = interaction::raycast(camera.position, flat, world->collision, &world->collisionIndex); wall && wall->distance < d + body.radius)
+        // Reachable: nothing between the player and the spot, at knee and chest height.
+        bool blocked = false;
+        for (float h : {.5f, 1.2f}) {
+            Vec3 from = feetNow + Vec3{0, h, 0}, to = feet + Vec3{0, h, 0};
+            blocked |= interaction::lineBlocked(scene, from, to + normalized(to - from) * body.radius);
+        }
+        if (blocked) {
+            if (!first)
+                first = interaction::WalkProblem{feet, "walls", "a wall or object is in the way"};
             continue;
-        if (!interaction::checkSpot(scene, feet, body, true))
-            return std::pair{feet, std::atan2(-flat.x, -flat.z)};
+        }
+        if (!check(feet, interaction::maxStep))
+            return std::pair{feet, std::atan2(-dir.x, -dir.z)};
     }
-    return std::nullopt;
+    return refused();
+}
+// The refusal for a standing spot: its rule (IPC objectRule names) and why.
+ipc::Error Runtime::spotRefusal(const interaction::WalkProblem &why, bool inFront) {
+    static const std::map<std::string, std::string> rules{{"floor", "support"},     {"ledge", "support"},
+                                                          {"walls", "walls"},       {"playable", "playable"},
+                                                          {"approach", "approach"}, {"keep-clear", "keep-clear"},
+                                                          {"zone", "zone"}};
+    auto rule = rules.contains(why.rule) ? rules.at(why.rule) : std::string("support");
+    std::string reason = why.rule == "floor"      ? "no floor there"
+                         : why.rule == "walls"    ? (why.message.starts_with("a wall") ? why.message : "no room for the character there")
+                         : why.rule == "playable" ? "outside the playable area"
+                         : why.rule == "approach" ? "in front of a screen"
+                         : why.rule == "keep-clear" ? "in a keep-clear area (a spawn, a doorway, a ladder)"
+                         : why.message;
+    return ipc::Error(-32007, std::string(inFront ? "no free standing spot in front of you: " : "not a free standing spot: ") + reason,
+                      Json{{"retryable", false}, {"rule", rule}});
 }
 std::string Runtime::spawnCharacter(const std::string &ref, const std::string &path, const Json &pose, const Json &settings) {
     auto *e = catalogEntry(ref);
@@ -1062,10 +1129,10 @@ std::string Runtime::spawnCharacter(const std::string &ref, const std::string &p
         auto t = route.tangent(s) * (settings.value("reverse", false) ? -1.f : 1.f);
         yaw = std::atan2(t.x, t.z);
     } else {
-        auto spot = standingSpot(body, pose);
+        interaction::WalkProblem why{{}, "floor", ""};
+        auto spot = standingSpot(body, pose, &why);
         if (!spot)
-            throw ipc::Error(-32007, pose.is_null() ? "no free standing spot in front of you" : "not a free standing spot",
-                             Json{{"retryable", false}, {"rule", "support"}});
+            throw spotRefusal(why, pose.is_null());
         at = spot->first, yaw = spot->second;
     }
     assetFor(*e); // decode now
@@ -1125,9 +1192,10 @@ void Runtime::bindCharacter(const std::string &id, const Json &patch) {
         float s = route.wrap(patch.value("phase", after.value("phase", 0.f)) * route.length());
         after["pose"] = {{"position", vecJson(route.at(s))}, {"rotation", yawRotation(yawOf(after["pose"]["rotation"].get<std::array<float, 4>>()))}};
     } else if (patch.contains("pose")) {
-        auto spot = standingSpot(body, patch["pose"]);
+        interaction::WalkProblem why{{}, "floor", ""};
+        auto spot = standingSpot(body, patch["pose"], &why);
         if (!spot)
-            throw ipc::Error(-32007, "not a free standing spot", Json{{"retryable", false}, {"rule", "support"}});
+            throw spotRefusal(why, false);
         after.erase("path");
         after["pose"] = {{"position", vecJson(spot->first)}, {"rotation", yawRotation(spot->second)}};
     }
