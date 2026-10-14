@@ -49,25 +49,25 @@
       "name": "three placed gauges run as machines without a bindings file, each on com.hyprune.sources.<id>",
       "evidence": {
         "gauge-tube": {
-          "id": "u-0caee2",
-          "source": "com.hyprune.sources.u-0caee2"
+          "id": "u-588758",
+          "source": "com.hyprune.sources.u-588758"
         },
         "gauge-abacus": {
-          "id": "u-57cfee",
-          "source": "com.hyprune.sources.u-57cfee"
+          "id": "u-b50d2b",
+          "source": "com.hyprune.sources.u-b50d2b"
         },
         "gauge-cube": {
-          "id": "u-4ff97a",
-          "source": "com.hyprune.sources.u-4ff97a"
+          "id": "u-1cebc6",
+          "source": "com.hyprune.sources.u-1cebc6"
         }
       }
     },
     {
       "name": "a notice names the data source each new gauge reads",
       "evidence": [
-        "Machine u-0caee2 reads data source com.hyprune.sources.u-0caee2: add an entry with id \"u-0caee2\" to sources.json",
-        "Machine u-57cfee reads data source com.hyprune.sources.u-57cfee: add an entry with id \"u-57cfee\" to sources.json",
-        "Machine u-4ff97a reads data source com.hyprune.sources.u-4ff97a: add an entry with id \"u-4ff97a\" to sources.json"
+        "Machine u-588758 reads data source com.hyprune.sources.u-588758: add an entry with id \"u-588758\" to sources.json",
+        "Machine u-b50d2b reads data source com.hyprune.sources.u-b50d2b: add an entry with id \"u-b50d2b\" to sources.json",
+        "Machine u-1cebc6 reads data source com.hyprune.sources.u-1cebc6: add an entry with id \"u-1cebc6\" to sources.json"
       ]
     },
     {
@@ -200,46 +200,46 @@
       "name": "the average ring moves, within the range of the published values",
       "evidence": {
         "gauge-tube": [
-          0.263,
-          0.288,
-          0.313,
-          0.33,
-          0.354,
-          0.379,
-          0.412,
-          0.444,
-          0.493,
-          0.541,
-          0.572,
-          0.62
+          0.253,
+          0.285,
+          0.309,
+          0.334,
+          0.358,
+          0.382,
+          0.418,
+          0.466,
+          0.514,
+          0.56,
+          0.607,
+          0.653
         ],
         "gauge-abacus": [
-          0.728,
-          0.733,
-          0.735,
-          0.741,
-          0.742,
-          0.748,
-          0.755,
-          0.757,
-          0.76,
-          0.767,
-          0.781,
-          0.794
+          0.729,
+          0.73,
+          0.736,
+          0.737,
+          0.747,
+          0.749,
+          0.754,
+          0.761,
+          0.763,
+          0.768,
+          0.778,
+          0.793
         ],
         "gauge-cube": [
           0.208,
-          0.244,
-          0.274,
-          0.3,
-          0.312,
-          0.328,
-          0.343,
-          0.37,
-          0.374,
-          0.385,
+          0.228,
+          0.281,
+          0.294,
+          0.322,
+          0.337,
+          0.364,
+          0.381,
+          0.389,
           0.411,
-          0.418
+          0.423,
+          0.43
         ]
       }
     },
@@ -267,24 +267,24 @@
       "name": "values held: the gauges stop (no motion, no new revision in view), so they force no frames",
       "evidence": {
         "gauges": {
-          "u-0caee2": {
+          "u-588758": {
             "moving": false,
             "inView": true,
-            "revision": 1597
+            "revision": 1588
           },
-          "u-57cfee": {
+          "u-b50d2b": {
             "moving": false,
             "inView": true,
-            "revision": 1770
+            "revision": 1777
           },
-          "u-4ff97a": {
+          "u-1cebc6": {
             "moving": false,
             "inView": true,
-            "revision": 1662
+            "revision": 1724
           }
         },
         "frames in this view (other world animation included)": {
-          "perSecond": 60.0,
+          "perSecond": 59.6,
           "frames": 182,
           "animationFrames": true
         },

@@ -61,6 +61,17 @@ def library_of(archive,fallback):
                 j=json.load(t.extractfile(m));return f"{j['id']}@{j['version']}"
     return fallback
 
+def helper_connected(process,log,timeout=25):
+    """Wait for the source helper's first connection (its log line) before anything that blocks
+    core's loop, such as a world load: the launch token is one-use, so a hello that times out
+    while core is busy and is answered later leaves the helper's reconnects refused."""
+    deadline=time.monotonic()+timeout
+    while 'connected to core' not in pathlib.Path(log).read_text(errors='replace'):
+        if process.poll() is not None or time.monotonic()>deadline:
+            raise AssertionError('source helper did not connect: '+pathlib.Path(log).read_text(errors='replace')[-600:])
+        time.sleep(.1)
+    return process
+
 def starter_archive(env):
     """The starter library .tar.zst: $env if set, else the newest tools/library-pack output in the
     worlds checkout (build/libraries); a missing path the caller reports."""

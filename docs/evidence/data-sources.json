@@ -16,8 +16,8 @@
           "type": "number"
         },
         "live": {
-          "id": "u-2e795f",
-          "source": "com.hyprune.sources.u-2e795f",
+          "id": "u-2e4582",
+          "source": "com.hyprune.sources.u-2e4582",
           "status": null
         }
       }
@@ -49,12 +49,12 @@
           "2"
         ],
         "values": {
-          "value": 76.8,
-          "display": "77%",
+          "value": 52.0,
+          "display": "52%",
           "label": "CPU",
-          "level": "warn"
+          "level": "ok"
         },
-        "durationMs": 44
+        "durationMs": 58
       }
     },
     {
@@ -62,7 +62,7 @@
       "evidence": {
         "sources": [
           {
-            "id": "u-2e795f",
+            "id": "u-2e4582",
             "kind": "command",
             "argv": [
               "gauge-sim.py",
@@ -81,10 +81,10 @@
       "evidence": {
         "live": {
           "average": 0.0,
-          "display": "92%",
+          "display": "59%",
           "label": "CPU",
-          "level": "fail",
-          "value": 92.0
+          "level": "ok",
+          "value": 59.4
         },
         "worldLoads": 1
       }
@@ -93,22 +93,22 @@
       "name": "editing the interval changes the run cadence (1 s -> 4 s), no restart",
       "evidence": {
         "meanGapS": {
-          "1": 1.04,
-          "4": 4.04
+          "1": 1.07,
+          "4": 4.07
         }
       }
     },
     {
       "name": "Restart re-runs the command at once; Reset average restarts the running average",
       "evidence": {
-        "runAfterMs": 42,
+        "runAfterMs": 68,
         "resets": 1,
         "ring": {
-          "level": 0.5758991228357115,
-          "target": 0.5760000000000001,
+          "level": 0.33299999999999996,
+          "target": 0.33299999999999996,
           "tilt": 0.0
         },
-        "value": 57.6
+        "value": 33.3
       }
     },
     {
@@ -119,7 +119,7 @@
           "key": "value",
           "publishedAt": null,
           "raw": null,
-          "source": "com.hyprune.sources.u-2e795f",
+          "source": "com.hyprune.sources.u-2e4582",
           "value": 0
         }
       }

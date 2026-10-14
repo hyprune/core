@@ -74,9 +74,9 @@ def helper(socketpath, only=None):
     token = s.STATE / 'helper.token'
     token.write_text(HELPER_TOKEN + '\n'); token.chmod(0o600)
     log = open(s.STATE / 'source-helper.log', 'w')
-    return subprocess.Popen([sys.executable, str(s.ROOT / 'dev/machines/source-helper.py'), '--config', str(s.STATE / 'sources.json'),
+    return s.helper_connected(subprocess.Popen([sys.executable, str(s.ROOT / 'dev/machines/source-helper.py'), '--config', str(s.STATE / 'sources.json'),
                              '--socket', str(socketpath), '--token-file', str(token), '-v'],
-                            stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                            stdout=log, stderr=subprocess.STDOUT, start_new_session=True), s.STATE / 'source-helper.log')
 
 
 def acceptance(client, children, args, shell_token, socketpath):
