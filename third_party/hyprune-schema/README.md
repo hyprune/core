@@ -35,7 +35,7 @@ schema commit recorded in `ipc-source.json` and `OBJECT-SOURCE.json`.
 IPC 0.26 (debug tool, companion pace, longer pocket list) is pinned to the schema commit
 recorded in `ipc-source.json`.
 
-Object format 0.11 (draft: the mount trait for workspace screens) and IPC 0.27 (workspace
+Object format 0.11 (the mount trait for workspace screens) and IPC 0.27 (workspace
 screens) are pinned to the schema commit recorded in `OBJECT-SOURCE.json` and `ipc-source.json`.
 
 `v0.11/import.schema.json` (import.json, importVersion 0.1) and the IPC 0.27 catalog fields are
@@ -45,3 +45,7 @@ World 0.11 (draft: panorama skies, object format 0.11 directory assets), `v0.11/
 (builder/project.json, projectVersion 0.1) and the IPC 0.27 builder state are pinned to the schema
 commit recorded in `v0.11/WORLD-SOURCE.json`, `OBJECT-SOURCE.json` and `ipc-source.json`. World 0.11
 follows 0.9: there is no world format 0.10.
+
+IPC 0.27, world format 0.11, object format 0.11, `import.json` 0.1 and `builder/project.json`
+0.1 are released with @hyprune/schema 0.13.0 (commit `5c95119`); every 0.11 file and the IPC
+bytes are pinned to it.

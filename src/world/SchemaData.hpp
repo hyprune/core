@@ -14021,7 +14021,7 @@ inline constexpr const char *librarySchema010 = R"schema({
 inline constexpr const char *objectSchema011 = R"schema({
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.11/object.schema.json",
-  "title": "Hyprune object manifest 0.11 (DRAFT): the mount trait for workspace screens",
+  "title": "Hyprune object manifest 0.11: the mount trait for workspace screens",
   "type": "object",
   "properties": {
     "formatVersion": {
@@ -15975,7 +15975,7 @@ inline constexpr const char *objectSchema011 = R"schema({
 inline constexpr const char *librarySchema011 = R"schema({
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.11/library.schema.json",
-  "title": "Hyprune object library manifest 0.11 (library.json, RFC-0011) (DRAFT)",
+  "title": "Hyprune object library manifest 0.11 (library.json, RFC-0011)",
   "type": "object",
   "properties": {
     "formatVersion": {
@@ -16068,7 +16068,7 @@ inline constexpr const char *librarySchema011 = R"schema({
 inline constexpr const char *importSchema011 = R"schema({
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.11/import.schema.json",
-  "title": "Hyprune import record (import.json beside object.json, RFC-0014), importVersion 0.1, published with object format 0.11 (DRAFT)",
+  "title": "Hyprune import record (import.json beside object.json, RFC-0014), importVersion 0.1, published with object format 0.11",
   "type": "object",
   "properties": {
     "importVersion": {
@@ -16400,7 +16400,7 @@ inline constexpr const char *importSchema011 = R"schema({
 inline constexpr const char *worldSchema011 = R"schema({
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.11/world.schema.json",
-  "title": "Hyprune world format 0.11 (DRAFT): panorama skies, builder worlds, object format 0.11 assets",
+  "title": "Hyprune world format 0.11: panorama skies, builder worlds, object format 0.11 assets",
   "type": "object",
   "properties": {
     "formatVersion": {
@@ -19309,7 +19309,7 @@ inline constexpr const char *commonSchema011 = R"schema({
 inline constexpr const char *projectSchema011 = R"schema({
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.11/project.schema.json",
-  "title": "Hyprune builder project (builder/project.json, RFC-0014), projectVersion 0.1, published with world format 0.11 (DRAFT)",
+  "title": "Hyprune builder project (builder/project.json, RFC-0014), projectVersion 0.1, published with world format 0.11",
   "type": "object",
   "properties": {
     "projectVersion": {
