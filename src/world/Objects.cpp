@@ -1,4 +1,5 @@
 #include "Objects.hpp"
+#include "Motion.hpp"
 #include "Catalog.hpp"
 #include "Character.hpp"
 #include "Paths.hpp"
@@ -123,7 +124,7 @@ namespace {
 // A skinned character asset (RFC-0010 spec, checked as hyprune-npc-check does): no static
 // meshes; bounds are the rest pose's, the swept sphere that grown by 0.6 m.
 ObjectAsset characterAsset(const std::filesystem::path &glb, const std::string &id, const Json &traits, unsigned formats,
-                           size_t &memory) {
+                           size_t &memory, const std::shared_ptr<const std::vector<std::shared_ptr<MotionPack>>> &packs) {
     const std::string label = "objectAssets " + id;
     ObjectAsset a;
     a.id = id;
@@ -136,6 +137,15 @@ ObjectAsset characterAsset(const std::filesystem::path &glb, const std::string &
     }
     for (auto &p : checkCharacter(*c))
         require(p.level != CharacterProblem::Error, label + ": " + p.message);
+    // Shared clip library: the packs fill the clips it lacks (after the check: the spec applies
+    // to what the character itself ships).
+    if (packs && !packs->empty()) {
+        auto binding = bindMotion(*c, traits.value("character", Json::object()), *packs);
+        Json clips = Json::array();
+        for (auto &b : binding.clips)
+            clips.push_back({{"name", b.name}, {"role", b.role}, {"style", b.style.empty() ? Json(nullptr) : Json(b.style)}, {"pack", b.pack}});
+        a.motion = {{"skeleton", binding.skeleton.empty() ? Json(nullptr) : Json(binding.skeleton)}, {"clips", clips}};
+    }
     for (auto &image : c->images) {
         memory += image.rgba.size() * 4 / 3; // RGBA: runtime mips
         for (auto &level : image.levels)
@@ -157,7 +167,7 @@ ObjectAsset manifestAsset(World &w, const std::filesystem::path &dir, const std:
     const auto traits = manifest.value("traits", Json::object());
     if (traits.contains("character")) {
         auto a = characterAsset(safePath(dir, manifest.at("scene").get<std::string>()), id, traits,
-                                options.compressedFormats, memory);
+                                options.compressedFormats, memory, options.motion);
         a.manifest = manifest;
         a.directory = dir;
         return a;
@@ -193,8 +203,32 @@ std::filesystem::path libraryObject(const LoadOptions &options, const std::strin
     return {};
 }
 } // namespace
+// Motion packs a world's characters bind: the package's, then each installed library's (newest
+// version of an id first), then the user folder's ($XDG_DATA_HOME/hyprune/motion).
+std::shared_ptr<const std::vector<std::shared_ptr<MotionPack>>> scanMotionPacks(const std::filesystem::path &root,
+                                                                                 const LoadOptions &options,
+                                                                                 std::vector<std::string> &problems) {
+    std::vector<std::pair<std::filesystem::path, std::string>> roots{{root, "package"}};
+    for (auto &libraries : options.libraryRoots) {
+        std::error_code ec;
+        std::vector<std::filesystem::path> dirs;
+        for (auto &e : std::filesystem::directory_iterator(libraries, ec))
+            if (e.is_directory(ec))
+                dirs.push_back(e.path());
+        std::sort(dirs.rbegin(), dirs.rend());
+        for (auto &d : dirs)
+            roots.push_back({d, "library/" + d.filename().string()});
+    }
+    auto user = CatalogRoots::fromEnvironment().userObjects.parent_path();
+    if (!user.empty())
+        roots.push_back({user, "user"});
+    return std::make_shared<const std::vector<std::shared_ptr<MotionPack>>>(findMotionPacks(roots, &problems));
+}
 void loadObjects(World &w, const std::filesystem::path &root, const std::string &formatVersion, LoadOptions options,
                  size_t &memory) {
+    if (!options.motion)
+        options.motion = scanMotionPacks(root, options, w.motionProblems);
+    w.motionPacks = options.motion;
     const auto &j = w.manifest;
     const auto assets = j.value("objectAssets", Json::array()), objects = j.value("objects", Json::array());
     bool v09 = format::atLeast(formatVersion, "0.9");
@@ -250,7 +284,7 @@ void loadObjects(World &w, const std::filesystem::path &root, const std::string 
         require(!traits.contains("character") || traits.size() == 1, label + ": a character combines with no other trait");
         auto scenePath = entry.at("scene").get<std::string>();
         if (traits.contains("character")) {
-            auto asset = characterAsset(safePath(root, scenePath), id, traits, options.compressedFormats, memory);
+            auto asset = characterAsset(safePath(root, scenePath), id, traits, options.compressedFormats, memory, options.motion);
             asset.ref = "package/" + id;
             w.objectAssets.push_back(std::move(asset));
             continue;

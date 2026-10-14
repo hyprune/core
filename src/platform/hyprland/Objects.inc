@@ -270,8 +270,9 @@ int Runtime::assetFor(const world::CatalogEntry &e) {
         slot.entry = e;
         auto dir = e.directory;
         auto manifest = e.manifest;
-        auto formats = compressedFormats;
-        slot.load = std::async(std::launch::async, [dir, manifest, formats] { return world::loadObjectAsset(dir, manifest, {formats}); });
+        world::LoadOptions options{compressedFormats};
+        options.motion = world ? world->motionPacks : nullptr; // the world's motion packs (shared clip library)
+        slot.load = std::async(std::launch::async, [dir, manifest, options] { return world::loadObjectAsset(dir, manifest, options); });
     }
     return -1;
 }
@@ -1076,7 +1077,8 @@ Json Runtime::objectsState() {
                              {"seat", nullptr},
                              {"character", i.character},
                              {"accent", nullptr},
-                             {"screen", instanceScreen(i)}});
+                             {"screen", instanceScreen(i)},
+                             {"style", nullptr}}); // IPC 0.28 (older peers: erased)
         // IPC 0.23: a character's route, what it is doing and the seat it holds.
         if (!i.character || !world)
             continue;
@@ -1089,6 +1091,8 @@ Json Runtime::objectsState() {
                 rec["state"] = "suspended";
             if (n->accent)
                 rec["accent"] = {std::clamp(n->accent->x, 0.f, 1.f), std::clamp(n->accent->y, 0.f, 1.f), std::clamp(n->accent->z, 0.f, 1.f)};
+            Json style = n->companion ? companionStyle() : i.source == "user" ? editor.placement(world->id, i.id).value("style", Json(nullptr)) : Json(nullptr);
+            rec["style"] = world::validCharacterStyle(style) ? style : Json(nullptr);
         } else {
             Json config = i.source == "user" ? editor.placement(world->id, i.id) : Json(nullptr);
             if (config.is_object() && config.contains("path"))
@@ -1221,6 +1225,11 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
                     entry["companion"] = companionCapability(*e);
                 else
                     entry["companion"] = nullptr;
+        // IPC 0.28 (shared clip library): a character's styles and dances, its own and from
+        // motion packs (bound when the character is loaded in this world; else its own only).
+        if (ipc::protocol::atLeast(methodProtocol, "0.28"))
+            for (auto &entry : entries)
+                entry["motion"] = catalogMotion(entry["ref"]);
         // IPC 0.27: a workspace screen's anchor (aspect, size, mount type).
         if (ipc::protocol::atLeast(methodProtocol, "0.27"))
             for (auto &entry : entries) {
@@ -1545,4 +1554,23 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         return revision();
     }
     throw ipc::Error(-32601, "unknown method");
+}
+// IPC 0.28 catalog motion of an entry: null for objects that are no character; for a character
+// loaded in this world (placed, the companion, a package asset) its styles and dances with the
+// motion packs that filled them, else what its object.json lists.
+Json Runtime::catalogMotion(const std::string &ref) {
+    auto *e = catalogEntry(ref);
+    if (!e || !e->manifest.is_object() || !e->manifest.value("traits", Json::object()).contains("character"))
+        return nullptr;
+    if (world)
+        for (size_t k = 0; k < world->objectAssets.size(); ++k) {
+            auto &a = world->objectAssets[k];
+            auto assetRef = k < packageAssets ? a.ref : k - packageAssets < mergedAssets.size() ? mergedAssets[k - packageAssets].ref : std::string();
+            if (assetRef == ref && a.character)
+                return world::characterMotion(*a.character, a.motion);
+        }
+    world::Character listed;
+    for (auto &[name, _] : e->manifest["traits"]["character"].value("clips", Json::object()).items())
+        listed.clips.push_back({name});
+    return world::characterMotion(listed, nullptr);
 }

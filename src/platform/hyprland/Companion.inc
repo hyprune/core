@@ -177,14 +177,58 @@ std::string Runtime::companionPace() const { return companionFile.current.value(
 void Runtime::companionSetPace(const std::string &pace) {
     if (companionRef().empty())
         throw ipc::Error(-32005, "no companion chosen");
-    Json next = {{"ref", companionRef()}};
+    Json next = companionFile.current.is_object() ? companionFile.current : Json::object(); // its style stays
+    next["ref"] = companionRef();
     if (pace == "run")
         next["pace"] = "run";
+    else
+        next.erase("pace");
     companionFile.save(next);
     companionFile.current = next;
     ++companionRevision; // its interactions change
     objectNotice("companion.following", (companionName.empty() ? std::string("Your companion") : companionName) +
                                             (pace == "run" ? " runs with you" : " walks with you"));
+}
+// Its walk, run and idle styles (companion.json "style"; IPC 0.28), null for plain clips.
+Json Runtime::companionStyle() const {
+    auto style = companionFile.current.is_object() ? companionFile.current.value("style", Json(nullptr)) : Json(nullptr);
+    return world::validCharacterStyle(style) ? style : Json(nullptr);
+}
+void Runtime::companionSetStyle(const Json &style) {
+    if (companionRef().empty())
+        throw ipc::Error(-32005, "no companion chosen");
+    Json next = companionFile.current.is_object() ? companionFile.current : Json::object();
+    next["ref"] = companionRef();
+    if (style.is_null())
+        next.erase("style");
+    else
+        next["style"] = style;
+    companionFile.save(next);
+    companionFile.current = next;
+    ++companionRevision; // its agent takes the styled clips
+    auto walk = style.is_object() ? style.value("walk", std::string()) : std::string();
+    objectNotice("companion.style", (companionName.empty() ? std::string("Your companion") : companionName) +
+                                        (walk.empty() ? " walks its own way" : " walks " + walk));
+}
+// Dances in place, facing the player, for a while (the named dance, else one at random).
+void Runtime::companionDance(const std::string &option) {
+    auto *n = npcRun(companionId);
+    if (!n || companionBrain.hidden())
+        throw ipc::Error(-32005, "the companion can't dance now");
+    std::vector<std::string> dances;
+    for (auto &[name, _] : n->agent.clips)
+        if (name.starts_with("dance_"))
+            dances.push_back(name);
+    if (dances.empty())
+        throw ipc::Error(-32005, (companionName.empty() ? std::string("Your companion") : companionName) + " has no dances");
+    std::string clip = world::motionClipName("dance", option);
+    if (option.empty())
+        clip = dances[size_t(std::rand()) % dances.size()];
+    if (std::find(dances.begin(), dances.end(), clip) == dances.end())
+        throw ipc::Error(-32602, "unknown dance " + option);
+    float seconds = std::clamp(n->agent.duration(clip) * 2, 8.f, 20.f);
+    companionBrain.startDance(clip, seconds);
+    ++npcRevision;
 }
 std::vector<std::string> Runtime::companionLines() const {
     std::vector<std::string> lines;
@@ -671,16 +715,26 @@ std::optional<Json> Runtime::companionMethod(const std::string &method, const Js
     if (method == "companion.mode") {
         // IPC 0.26: an optional pace next to the mode (set first; it stays across modes).
         bool paced = params.is_object() && params.contains("pace") && ipc::protocol::atLeast(methodProtocol, "0.26");
-        if (paced)
+        bool styled = params.is_object() && params.contains("style") && ipc::protocol::atLeast(methodProtocol, "0.28");
+        if (paced && styled)
+            only({"mode", "pace", "style"});
+        else if (styled)
+            only({"mode", "style"});
+        else if (paced)
             only({"mode", "pace"});
         else
             only({"mode"});
+        if (styled && !params["style"].is_null() && !world::validCharacterStyle(params["style"]))
+            throw ipc::Error(-32602, "style must be {walk?, run?, idle?} styles");
         if (params["mode"] != "follow" && params["mode"] != "stay")
             throw ipc::Error(-32602, "mode must be follow or stay");
         if (paced && params["pace"] != "walk" && params["pace"] != "run")
             throw ipc::Error(-32602, "pace must be walk or run");
         if (paced && params["pace"] != companionPace())
             companionSetPace(params["pace"]);
+        if (styled && params["style"] != companionStyle())
+            companionSetStyle(params["style"]);
+        companionBrain.stopDance();
         companionSetMode(params["mode"]);
         return revision();
     }
@@ -706,7 +760,9 @@ Json Runtime::companionState() {
                           : status == "waiting"              ? "waiting"
                           : mode == "route"                  ? n->agent.activity()
                                                              : companionBrain.activity(n->agent);
-        if (act == "interacting" || act == "talking")
+        if (companionBrain.dancing())
+            act = "dancing"; // IPC 0.28 (older peers: idle)
+        else if (act == "interacting" || act == "talking")
             act = "talking";
         else if (act == "stopped" || act == "suspended" || act == "guiding")
             act = "idle";
@@ -722,7 +778,14 @@ Json Runtime::companionState() {
             {"activity", activity},
             {"position", position},
             {"carried", companionCarry},
-            {"pace", companionPace()}}; // IPC 0.26 (older peers: erased)
+            {"pace", companionPace()}, // IPC 0.26 (older peers: erased)
+            {"style", companionStyle()}, // IPC 0.28 (older peers: erased)
+            {"dance", n && companionBrain.dancing() ? Json([&] {
+                 std::string s = companionBrain.dance.substr(6);
+                 std::replace(s.begin(), s.end(), '_', '-');
+                 return s;
+             }())
+                                                    : Json(nullptr)}};
 }
 // Diagnostics (camera()["companion"]).
 Json Runtime::companionDiagnostics() {

@@ -329,6 +329,8 @@ void Runtime::npcSync() {
             if (!config.is_object())
                 config = Json{{"mode", "follow"}};
             config["interactions"] = companionInteractions();
+            if (auto style = companionStyle(); style.is_object())
+                config["style"] = style; // kept across modes and companions (companion.json)
         } else
             config = editor.placement(world->id, info.id);
         std::string path = config.contains("path") && config["path"].is_string() ? qualifiedPath(config["path"]) : "";
@@ -364,6 +366,22 @@ void Runtime::npcSync() {
             a.walkSpeed = clips["walk"]["speed"];
         if (auto run = c.clip("run"); run && run->speed > 0)
             a.runSpeed = run->speed;
+        // Styles: a styled clip the character has (its own or from a motion pack) plays under the
+        // role's name, at its own speed: {"walk": "confident", "run": "fast", "idle": "calm"}.
+        if (config.contains("style") && config["style"].is_object())
+            for (auto &[role, style] : config["style"].items()) {
+                if (!style.is_string() || (role != "walk" && role != "run" && role != "idle"))
+                    continue;
+                auto styled = world::motionClipName(role, style.get<std::string>());
+                if (auto *clip = c.clip(styled)) {
+                    n.alias[role] = styled;
+                    a.clips[role] = clip->duration;
+                    if (role == "walk" && clip->speed > 0)
+                        a.walkSpeed = clip->speed;
+                    if (role == "run" && clip->speed > 0)
+                        a.runSpeed = clip->speed;
+                }
+            }
         // Seat fit: object.json's measured seat height, else core's measurement; the sink
         // (ankles below idle) always from the clip.
         auto fit = seatFits.find(asset.character.get());
@@ -390,6 +408,21 @@ void Runtime::npcSync() {
         if (config.contains("accent") && config["accent"].is_array())
             n.accent = vec3(config["accent"]);
         n.interactions = config.contains("interactions") ? config["interactions"] : traits.value("interactions", Json::array());
+        // The companion's dances (its own dance_* clips and those bound from motion packs): Dance in
+        // its E menu, an option per dance (IPC 0.28; older peers never see it).
+        if (companion) {
+            Json options = Json::array();
+            for (auto &clip : c.clips)
+                if (clip.name.starts_with("dance_") && options.size() < 16) {
+                    std::string id = clip.name.substr(6), label = id;
+                    std::replace(id.begin(), id.end(), '_', '-');
+                    std::replace(label.begin(), label.end(), '_', ' ');
+                    label[0] = char(std::toupper(label[0]));
+                    options.push_back({{"id", id}, {"label", label.substr(0, 32)}});
+                }
+            if (!options.empty() && n.interactions.size() < 8)
+                n.interactions.push_back({{"id", "dance"}, {"label", "Dance"}, {"action", {{"type", "dance"}, {"options", options}}}});
+        }
         bool suspended = false;
         if (!pathJson.is_null()) {
             a.route = world::routeOf(pathJson);
@@ -605,17 +638,17 @@ void Runtime::npcTick(float dt) {
             world::Character::PoseInput in;
             if (still) {
                 // Posed still: seated at a seat, else the calm idle's first frame.
-                in.to = c.clip(a.seated() && a.has("sit_idle") ? "sit_idle" : "idle");
+                in.to = c.clip(n.resolve(a.seated() && a.has("sit_idle") ? "sit_idle" : "idle"));
             } else {
-                in.from = a.pose.previous.empty() ? nullptr : c.clip(a.pose.previous);
-                in.to = c.clip(a.pose.clip);
+                in.from = a.pose.previous.empty() ? nullptr : c.clip(n.resolve(a.pose.previous));
+                in.to = c.clip(n.resolve(a.pose.clip));
                 in.fromTime = a.pose.previousTime, in.toTime = a.pose.clipTime;
                 in.fromLoop = a.pose.previousLoop, in.toLoop = a.pose.loop;
                 in.weight = in.from ? a.pose.fade : 1;
                 in.lookYaw = a.pose.lookYaw, in.lookPitch = a.pose.lookPitch;
             }
             if (!in.to)
-                in.to = c.clip("idle");
+                in.to = c.clip(n.resolve("idle"));
             c.evaluate(in, n.skin);
             n.posed = in;
             n.stillPosed = still;
@@ -732,11 +765,12 @@ Json Runtime::interactionList(const NpcRun &n) const {
     Json out = Json::array();
     for (auto &i : n.interactions)
         if (out.size() < 8)
-            out.push_back({{"id", i["id"]}, {"label", i["label"]}, {"type", i["action"]["type"]}});
+            out.push_back({{"id", i["id"]}, {"label", i["label"]}, {"type", i["action"]["type"]},
+                           {"options", i["action"].contains("options") ? i["action"]["options"] : Json(nullptr)}}); // IPC 0.28
     return out;
 }
 // Starts an interaction of a character (or the choice list when it has several and none is named).
-void Runtime::beginInteraction(const std::string &objectId, const std::string &interactionId) {
+void Runtime::beginInteraction(const std::string &objectId, const std::string &interactionId, const std::string &option) {
     auto *n = npcRun(objectId);
     // Only the user's settings stop a request: refused, not accepted and never carried out.
     auto motion = npcMotion();
@@ -775,6 +809,18 @@ void Runtime::beginInteraction(const std::string &objectId, const std::string &i
         return;
     }
     auto &action = (*chosen)["action"];
+    if (action["type"] == "dance") { // the companion dances: the named option, else one at random
+        n->agent.endInteract();
+        if (npcInteraction && npcInteraction->objectId == objectId)
+            npcInteraction.reset();
+        if (!option.empty() && std::none_of(action["options"].begin(), action["options"].end(), [&](auto &o) { return o["id"] == option; }))
+            throw ipc::Error(-32602, "unknown dance " + option);
+        companionDance(option);
+        ++npcRevision;
+        return;
+    }
+    if (!option.empty())
+        throw ipc::Error(-32602, "only a dance takes an option");
     if (action["type"] == "companion") { // Stay or Follow, or its pace: done at once
         n->agent.endInteract();
         if (npcInteraction && npcInteraction->objectId == objectId)
@@ -971,7 +1017,7 @@ Json Runtime::characterRecord(const world::CatalogEntry &e, const std::string &i
            {"pose", {{"position", vecJson(at)}, {"rotation", yawRotation(yaw)}}}, {"scale", 1.0}};
     if (!path.empty())
         r["path"] = path;
-    for (auto key : {"phase", "speed", "accent", "reverse"})
+    for (auto key : {"phase", "speed", "accent", "reverse", "style"})
         if (settings.contains(key) && !settings[key].is_null())
             r[key] = settings[key];
     return r;
@@ -1216,7 +1262,7 @@ void Runtime::bindCharacter(const std::string &id, const Json &patch) {
         after.erase("path");
         after["pose"] = {{"position", vecJson(spot->first)}, {"rotation", yawRotation(spot->second)}};
     }
-    for (auto key : {"phase", "speed", "accent", "reverse"})
+    for (auto key : {"phase", "speed", "accent", "reverse", "style"})
         if (patch.contains(key)) {
             if (patch[key].is_null())
                 after.erase(key);
@@ -1263,6 +1309,10 @@ std::optional<Json> Runtime::npcsMethod(const std::string &method, const Json &p
             throw ipc::Error(-32602, "pose must be {position, rotation}");
         if (p.contains("path") && !p["path"].is_string())
             throw ipc::Error(-32602, "path must be a path ref");
+        if (p.contains("style") && !ipc::protocol::atLeast(methodProtocol, "0.28"))
+            throw ipc::Error(-32602, "unknown parameter style");
+        if (p.contains("style") && !p["style"].is_null() && !world::validCharacterStyle(p["style"]))
+            throw ipc::Error(-32602, "style must be {walk?, run?, idle?} styles");
     };
     if (!world || loading)
         throw ipc::Error(-32005, "no world loaded");
@@ -1271,7 +1321,12 @@ std::optional<Json> Runtime::npcsMethod(const std::string &method, const Json &p
         return Json{{"paths", pathsList()}};
     }
     if (method == "interaction.choose") {
-        only({"objectId", "interactionId"});
+        if (ipc::protocol::atLeast(methodProtocol, "0.28"))
+            only({"objectId", "interactionId"}, {"option"});
+        else
+            only({"objectId", "interactionId"});
+        if (params.contains("option") && !params["option"].is_string())
+            throw ipc::Error(-32602, "option must be a string");
         if (!params["objectId"].is_string() || !(params["interactionId"].is_string() || params["interactionId"].is_null()))
             throw ipc::Error(-32602, "objectId and interactionId (string or null)");
         if (params["interactionId"].is_null()) {
@@ -1279,11 +1334,11 @@ std::optional<Json> Runtime::npcsMethod(const std::string &method, const Json &p
                 endInteraction();
             return revision();
         }
-        beginInteraction(params["objectId"], params["interactionId"]);
+        beginInteraction(params["objectId"], params["interactionId"], params.value("option", std::string()));
         return revision();
     }
     if (method == "npcs.spawn") {
-        only({"ref"}, {"path", "pose", "phase", "speed", "accent", "reverse"});
+        only({"ref"}, {"path", "pose", "phase", "speed", "accent", "reverse", "style"});
         settings(params);
         if (!params["ref"].is_string())
             throw ipc::Error(-32602, "ref must be a string");
@@ -1295,7 +1350,7 @@ std::optional<Json> Runtime::npcsMethod(const std::string &method, const Json &p
         return revision({{"id", id}});
     }
     if (method == "npcs.bind") {
-        only({"id"}, {"path", "pose", "phase", "speed", "accent", "reverse"});
+        only({"id"}, {"path", "pose", "phase", "speed", "accent", "reverse", "style"});
         settings(params);
         if (params.size() < 2)
             throw ipc::Error(-32602, "name at least one setting");
