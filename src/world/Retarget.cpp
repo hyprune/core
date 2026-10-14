@@ -182,4 +182,56 @@ Character::Clip retargetClip(const Character &target, const Character &source, c
         *info = local;
     return out;
 }
+namespace {
+// Planted-foot velocities of an in-place clip: per sample, each foot within 3 % of the hip
+// height of its lowest point over the clip (on the ground) gives its horizontal velocity.
+std::vector<Vec3> plantedVelocities(const Character &c, const Character::Clip &clip) {
+    int feet[2] = {c.role("leftfoot"), c.role("rightfoot")};
+    std::vector<Vec3> out;
+    if (feet[0] < 0 || feet[1] < 0 || clip.duration <= 0)
+        return out;
+    const int steps = 240;
+    float dt = clip.duration / steps;
+    std::vector<std::array<Vec3, 2>> at(steps + 1);
+    std::vector<Mat4> m;
+    for (int k = 0; k <= steps; ++k) {
+        c.pose(&clip, k * dt, true, m);
+        for (int f = 0; f < 2; ++f) {
+            // Skinning matrices carry the inverse bind: the joint's world matrix is m x bind.
+            Mat4 world = m[feet[f]] * inverse(c.joints[feet[f]].inverseBind);
+            at[k][f] = {world.v[12], world.v[13], world.v[14]};
+        }
+    }
+    float tolerance = .03f * std::max(hipHeight(c), .1f);
+    for (int f = 0; f < 2; ++f) {
+        float low = at[0][f].y;
+        for (auto &p : at)
+            low = std::min(low, p[f].y);
+        for (int k = 0; k < steps; ++k)
+            if (at[k][f].y < low + tolerance && at[k + 1][f].y < low + tolerance)
+                out.push_back({(at[k + 1][f].x - at[k][f].x) / dt, 0, (at[k + 1][f].z - at[k][f].z) / dt});
+    }
+    return out;
+}
+float median(std::vector<float> v) {
+    if (v.empty())
+        return -1;
+    std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+    return v[v.size() / 2];
+}
+} // namespace
+float plantedSpeed(const Character &c, const Character::Clip &clip) {
+    std::vector<float> speeds;
+    for (auto v : plantedVelocities(c, clip))
+        speeds.push_back(std::max(0.f, -v.z)); // backwards: the character faces +Z
+    return std::max(0.f, median(speeds));
+}
+float footSlip(const Character &c, const Character::Clip &clip) {
+    if (clip.speed <= 0)
+        return -1;
+    std::vector<float> slips;
+    for (auto v : plantedVelocities(c, clip))
+        slips.push_back(length(Vec3{v.x, 0, v.z + clip.speed}) / clip.speed);
+    return median(slips);
+}
 } // namespace hyprune::world
