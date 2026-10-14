@@ -174,7 +174,7 @@ struct World {
 };
 std::filesystem::path safePath(const std::filesystem::path &root, const std::string &path);
 std::shared_ptr<World> load(const std::filesystem::path &package, LoadOptions = {});
-// Marks ownsCollision from collisionNodes and nodeParents (load calls it).
+// Marks ownsCollision from collisionNodes, nodeParents and the drawn meshes (load calls it).
 void markCollisionOwners(World &);
 bool movableNode(const World &, unsigned node);
 // collisionNodes entry of world-object proxy triangles: never a scene node, so

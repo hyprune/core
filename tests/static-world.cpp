@@ -17,11 +17,19 @@ float dist(Vec3 a, Vec3 b) { return length(a - b); }
 int main(int argc, char **argv) {
     try {
         // Synthetic scene: 0 root group; 1 building (visual only); 2 crate (visual + own collision);
-        // 3 group holding 4 (visual) and 5 (its collision); 6 standalone collision mesh (walk floor).
+        // 3 group holding 4 (visual) and 5 (its collision); 6 standalone collision mesh (walk floor);
+        // 7 a collision-only root outside the drawn scene (how packages keep their walk meshes).
         world::World w;
-        w.nodeParents = {-1, 0, 0, 0, 3, 3, 0};
-        w.collisionNodes = {2, 2, 5, 6, 6, 6};
+        w.nodeParents = {-1, 0, 0, 0, 3, 3, 0, -1};
+        w.collisionNodes = {2, 2, 5, 6, 6, 6, 7};
+        for (unsigned node : {1u, 2u, 4u}) {
+            world::Mesh mesh;
+            mesh.node = node;
+            w.meshes.push_back(mesh);
+        }
         world::markCollisionOwners(w);
+        check(!world::movableNode(w, 6) && !world::movableNode(w, 7), "collision that is never drawn is static");
+        check(!world::movableNode(w, 5), "a group's collision child is not a target of its own");
         check(!world::movableNode(w, 1), "a visual-only building must be static");
         check(world::movableNode(w, 2), "a node with its own collision may move (collision moves with it)");
         check(world::movableNode(w, 3) && !world::movableNode(w, 4), "a group owns its collision child; its visual leaf alone does not");

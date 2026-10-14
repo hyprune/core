@@ -57,10 +57,17 @@ std::filesystem::path safePath(const std::filesystem::path &root, const std::str
     return out;
 }
 void markCollisionOwners(World &w) {
+    // Only drawn geometry owns collision: a rendered mesh node or a group above one. A
+    // collision-only node (outside the drawn scene, such as a walk floor) is static, so a
+    // persisted move of it (an index that named other geometry in an older package) is dropped.
+    std::vector<bool> drawn(w.nodeParents.size(), false);
+    for (auto &mesh : w.meshes)
+        for (int i = int(mesh.node); i >= 0 && size_t(i) < drawn.size() && !drawn[i]; i = w.nodeParents[i])
+            drawn[i] = true;
     w.ownsCollision.assign(w.nodeParents.size(), false);
     for (auto node : std::set<unsigned>(w.collisionNodes.begin(), w.collisionNodes.end()))
         for (int i = int(node); i >= 0 && size_t(i) < w.nodeParents.size() && !w.ownsCollision[i]; i = w.nodeParents[i])
-            w.ownsCollision[i] = true;
+            w.ownsCollision[i] = drawn[i];
 }
 bool movableNode(const World &w, unsigned node) { return node < w.ownsCollision.size() && w.ownsCollision[node]; }
 const Spawn &World::spawn(const std::string &id) const {
