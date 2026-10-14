@@ -242,6 +242,24 @@ void overlay() {
     broken = tools.saved();
     broken["placements"][0]["pose"]["rotation"] = {0, 0, 0, 2};
     check(throws<std::runtime_error>([&] { restored.restore(broken); }), "unit quaternion");
+    // User characters (IPC 0.23) and workspace screens (IPC 0.27) keep their extra fields.
+    tools.setPlacement("w", "u-npc001", {{"worldId", "w"}, {"id", "u-npc001"}, {"areaId", ""}, {"ref", "user/walker"},
+                                         {"pose", {{"position", {0, 0, 0}}, {"rotation", {0, 0, 0, 1}}}}, {"scale", 1},
+                                         {"path", "user/path-1"}, {"phase", .25}, {"speed", 1.2}, {"reverse", true},
+                                         {"accent", {.9, .5, .1}}, {"disabled", false}});
+    tools.setPlacement("w", "u-scr001", {{"worldId", "w"}, {"id", "u-scr001"}, {"areaId", ""}, {"ref", "user/screen"},
+                                         {"pose", {{"position", {0, 1, 0}}, {"rotation", {0, 0, 0, 1}}}}, {"scale", 1},
+                                         {"workspace", 23}, {"locked", true}});
+    interaction::Tools again;
+    again.restore(tools.saved());
+    check(again.placement("w", "u-npc001")["path"] == "user/path-1" && again.placement("w", "u-scr001")["workspace"] == 23,
+          "character and screen records survive a restart");
+    broken = tools.saved();
+    broken["placements"][2]["workspace"] = 0;
+    check(throws<std::runtime_error>([&] { again.restore(broken); }), "screen workspace 1-9999");
+    broken = tools.saved();
+    broken["placements"][2]["colour"] = "red";
+    check(throws<std::runtime_error>([&] { again.restore(broken); }), "closed placement");
     tools.setOverride("w", "arm", nullptr);
     check(tools.override("w", "arm").is_null(), "remove override");
 }

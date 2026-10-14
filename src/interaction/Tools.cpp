@@ -480,14 +480,31 @@ void Tools::restore(const Json &input) {
     std::map<std::string, size_t> perWorld;
     std::set<std::pair<std::string, std::string>> placementIds, overrideIds;
     for (auto &r : j["placements"]) {
-        if (!r.is_object() || r.size() < 6 || r.size() > 7 || (r.size() == 7 && !r.contains("locked")))
+        // {worldId, id, areaId, ref, pose, scale} plus the optional lock (IPC 0.22), a user
+        // character's route and settings (0.23) and a workspace screen's workspace (0.27).
+        if (!r.is_object())
             throw std::runtime_error("invalid placement");
+        for (auto k : {"worldId", "id", "areaId", "ref", "pose", "scale"})
+            if (!r.contains(k))
+                throw std::runtime_error("invalid placement");
         for (auto k : {"worldId", "id", "areaId", "ref"})
             text(r.at(k));
         pose(r.at("pose"));
         scale(r.at("scale"));
-        if (r.contains("locked") && !r["locked"].is_boolean())
-            throw std::runtime_error("invalid placement lock");
+        for (auto &[k, v] : r.items()) {
+            if (k == "worldId" || k == "id" || k == "areaId" || k == "ref" || k == "pose" || k == "scale")
+                continue;
+            bool ok = k == "locked" || k == "reverse" || k == "disabled"     ? v.is_boolean()
+                      : k == "path"                                            ? v.is_string() && v.get<std::string>().size() <= 256
+                      : k == "phase"                                           ? v.is_number() && v.get<double>() >= 0 && v.get<double>() < 1
+                      : k == "speed"                                           ? v.is_number() && v.get<double>() >= .25 && v.get<double>() <= 2
+                      : k == "workspace"                                       ? v.is_number_integer() && v.get<int64_t>() >= 1 && v.get<int64_t>() <= 9999
+                      : k == "accent" ? v.is_array() && v.size() == 3 &&
+                                            std::all_of(v.begin(), v.end(), [](auto &c) { return c.is_number() && c >= 0 && c <= 1; })
+                                      : false;
+            if (!ok)
+                throw std::runtime_error("invalid placement field " + k);
+        }
         if (!placementIds.insert({r["worldId"].get<std::string>(), r["id"].get<std::string>()}).second)
             throw std::runtime_error("duplicate placement id");
         if (++perWorld[r["worldId"].get<std::string>()] > placementsPerWorld)
