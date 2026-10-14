@@ -34,3 +34,6 @@ schema commit recorded in `ipc-source.json` and `OBJECT-SOURCE.json`.
 
 IPC 0.26 (debug tool, companion pace, longer pocket list) is pinned to the schema commit
 recorded in `ipc-source.json`.
+
+Object format 0.11 (draft: the mount trait for workspace screens) and IPC 0.27 (workspace
+screens) are pinned to the schema commit recorded in `OBJECT-SOURCE.json` and `ipc-source.json`.
