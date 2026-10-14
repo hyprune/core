@@ -171,6 +171,20 @@ struct Companion {
     float wayLeft = 0;
     int madeWay = 0; // times it stepped aside (diagnostics)
     float idleClock = 0, nextIdle = 12;
+    // Shared clip library (RFC-0010 amendment): a dance asked for in the E menu loops in place
+    // until it ends, the player walks away or anything else is asked; now and then, idle long
+    // enough, a short flourish (a few seconds of one of its dances). Talking, the talk_*
+    // reactions it has play now and then between talk loops.
+    std::string dance;
+    float danceLeft = 0, flourishClock = 0, nextFlourish = 60, reactClock = 0;
+    bool flourishing = false;
+    void startDance(const std::string &clip, float seconds) {
+        dance = clip;
+        danceLeft = seconds;
+        flourishing = false;
+    }
+    void stopDance() { danceLeft = 0, flourishing = false; }
+    bool dancing() const { return danceLeft > 0; }
     uint32_t seed = 0x9e3779b9u;
     int teleports = 0;
     int stranded = 0; // times no slot was found while it was far from the player (diagnostics)
@@ -203,7 +217,21 @@ struct Companion {
         Vec3 before = a.position;
         float headingBefore = a.heading;
         a.advance(dt, w);
-        if (a.mode == NpcAgent::Mode::Interact) {
+        if (danceLeft > 0 && (a.mode == NpcAgent::Mode::Interact || !v.animate ||
+                              std::hypot(v.feet.x - a.position.x, v.feet.z - a.position.z) > (flourishing ? followDistance + 1.5f : 5.f)))
+            stopDance(); // talking, still or the player walked off: the dance ends
+        if (danceLeft > 0) {
+            danceLeft -= dt;
+            a.speedNow = 0;
+            if (!flourishing) { // dancing for the player: facing them
+                Vec3 d = v.feet - a.position;
+                if (std::hypot(d.x, d.z) > .05f)
+                    a.turnTowards(std::atan2(d.x, d.z), dt);
+            }
+            a.play(dance, true);
+            if (danceLeft <= 0)
+                a.idle();
+        } else if (a.mode == NpcAgent::Mode::Interact) {
             interact(a, dt);
         } else if (!v.animate)
             stillTick(a, dt, v);
@@ -340,6 +368,19 @@ struct Companion {
             Vec3 d = *a.interactWith - a.position;
             if (std::hypot(d.x, d.z) > .05f)
                 a.turnTowards(std::atan2(d.x, d.z), dt);
+        }
+        // A reaction now and then (talk_shrug, talk_puzzled ...), played through once.
+        if (!a.pose.loop && !a.clipDone())
+            return;
+        reactClock += dt;
+        std::vector<std::string> reactions;
+        for (auto &[name, _] : a.clips)
+            if (name.starts_with("talk_"))
+                reactions.push_back(name);
+        if (!reactions.empty() && reactClock > 6) {
+            reactClock = random(-4, 0);
+            a.play(reactions[size_t(random(0, float(reactions.size()) - .001f))], false);
+            return;
         }
         if (a.has("talk"))
             a.play("talk");
@@ -640,6 +681,22 @@ struct Companion {
             nextIdle = random(8, 20);
             a.play(variants[size_t(random(0, float(variants.size()) - .001f))], false);
             return;
+        }
+        // The occasional flourish: a few seconds of one of its dances (bound from motion packs).
+        flourishClock += dt;
+        if (flourishClock >= nextFlourish) {
+            flourishClock = 0;
+            nextFlourish = random(40, 90);
+            std::vector<std::string> dances;
+            for (auto &[name, _] : a.clips)
+                if (name.starts_with("dance_"))
+                    dances.push_back(name);
+            if (!dances.empty()) {
+                auto pick = dances[size_t(random(0, float(dances.size()) - .001f))];
+                startDance(pick, std::min(a.duration(pick), 6.f));
+                flourishing = true;
+                return;
+            }
         }
         a.idle();
     }

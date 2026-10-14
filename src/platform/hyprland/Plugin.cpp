@@ -15,6 +15,7 @@
 #include "quests/Markers.hpp"
 #include "sim/ViewBob.hpp"
 #include "surfaces/Stacking.hpp"
+#include "world/Motion.hpp"
 #include "world/Mounts.hpp"
 #include "world/Objects.hpp"
 #include "world/Occlusion.hpp"
@@ -655,6 +656,12 @@ struct Runtime {
         std::shared_ptr<const world::Character> character;
         std::optional<Vec3> accent;
         Json interactions = Json::array();
+        // Styles (shared clip library): a role's clip played as its styled clip (walk -> walk_confident).
+        std::map<std::string, std::string> alias;
+        std::string resolve(const std::string &clip) const {
+            auto it = alias.find(clip);
+            return it == alias.end() ? clip : it->second;
+        }
         std::vector<Mat4> skin;
         world::Character::PoseInput posed;
         bool stillPosed = false, lit = false;
@@ -712,7 +719,7 @@ struct Runtime {
     std::optional<std::pair<std::string, float>> characterAim();
     bool protectCharacter(const std::string &what, const char *action);
     Json interactionList(const NpcRun &) const;
-    void beginInteraction(const std::string &objectId, const std::string &interactionId);
+    void beginInteraction(const std::string &objectId, const std::string &interactionId, const std::string &option = "");
     void endInteraction();
     bool interactUse();
     void npcInteractionTick();
@@ -782,6 +789,11 @@ struct Runtime {
     void companionBind(const Json &patch);
     void companionSetMode(const std::string &mode);
     void companionSetPace(const std::string &pace);
+    // IPC 0.28 (shared clip library): its walk/run/idle styles (companion.json) and dances.
+    Json companionStyle() const;
+    Json catalogMotion(const std::string &ref);
+    void companionSetStyle(const Json &style);
+    void companionDance(const std::string &option);
     std::string companionPace() const;
     void companionView(sim::CompanionView &, const interaction::PlacementScene &walk, const interaction::PlacementScene &stand);
     void companionPlanner(const interaction::PlacementScene &walk);

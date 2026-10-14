@@ -294,8 +294,11 @@ int main(int argc, char **argv) {
         objects.start(*scene);
         offload::MachineReceiver machines;
         const unsigned formats = render::Renderer::compressedFormats();
-        offload::ObjectReceiver::Loader loadAsset = [formats](const std::filesystem::path &dir, const Json &manifest) {
-            return world::loadObjectAsset(dir, manifest, {formats});
+        offload::ObjectReceiver::Loader loadAsset = [formats, motion = scene->motionPacks](const std::filesystem::path &dir,
+                                                                                        const Json &manifest) {
+            world::LoadOptions options{formats};
+            options.motion = motion; // the scene's motion packs: the same clips as the plugin's
+            return world::loadObjectAsset(dir, manifest, options);
         };
         // Assets drawable here (merged and uploaded): announced whenever the count grows, so
         // the plugin poses again for a still scene once a mid-session asset is ready.

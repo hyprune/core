@@ -1,4 +1,5 @@
 #include "Tools.hpp"
+#include "world/Motion.hpp"
 #include "DebugTool.hpp"
 #include "sim/Route.hpp"
 #include <chrono>
@@ -501,6 +502,7 @@ void Tools::restore(const Json &input) {
                       : k == "workspace"                                       ? v.is_number_integer() && v.get<int64_t>() >= 1 && v.get<int64_t>() <= 9999
                       : k == "accent" ? v.is_array() && v.size() == 3 &&
                                             std::all_of(v.begin(), v.end(), [](auto &c) { return c.is_number() && c >= 0 && c <= 1; })
+                      : k == "style"  ? world::validCharacterStyle(v) // IPC 0.28: a character's walk, run and idle styles
                                       : false;
             if (!ok)
                 throw std::runtime_error("invalid placement field " + k);

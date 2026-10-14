@@ -25,6 +25,7 @@ struct Image {
     unsigned compressedFormat = 0;
     std::vector<std::vector<unsigned char>> levels;
 };
+struct MotionPack;
 // Block formats the GPU accepts, for transcoding KHR_texture_basisu images.
 enum CompressedFormat : unsigned { BC7 = 1, BC1BC3 = 2, ASTC4x4 = 4 };
 struct LoadOptions {
@@ -35,6 +36,10 @@ struct LoadOptions {
     // The manifest inside the package: builder/base.json for a world folder in editor mode
     // (RFC-0014); its paths resolve against the folder like world.json's.
     std::string manifest = "world.json";
+    // Motion packs character assets bind (RFC-0010 shared clip library). Null: load() scans the
+    // package, the library roots and the user folder; an object loaded on its own (a user
+    // placement) passes the world's.
+    std::shared_ptr<const std::vector<std::shared_ptr<MotionPack>>> motion;
 };
 // Texture indices refer to images and samplers together; color space belongs to a slot.
 struct Sampler {
@@ -86,6 +91,7 @@ struct ObjectAsset {
     std::filesystem::path directory;    // where a dir/library asset was read from
     std::string ref;                    // its catalog ref (package/<id> or library/<lib>@<v>/<obj>)
     std::shared_ptr<const Character> character;
+    Json motion = nullptr;             // characters: {skeleton, clips [{name, role, style, pack}]} bound from motion packs
     bool unlit = false;                // lighting.mode "unlit": every material drawn unlit
     std::vector<Mesh> meshes;          // rendered meshes; Mesh::node is the asset's node index
     std::vector<int> nodeParents;
@@ -159,6 +165,9 @@ struct World {
     // are drawn instanced. Render-only apart from their static collision proxies.
     std::vector<ObjectAsset> objectAssets;
     std::vector<ObjectInstance> objectInstances;
+    // Motion packs found at load (package, libraries, user folder), and the ones skipped.
+    std::shared_ptr<const std::vector<std::shared_ptr<MotionPack>>> motionPacks;
+    std::vector<std::string> motionProblems;
     // lightObjects caches (scene meshes are static after load): per-mesh rest bounds and
     // each visual triangle's (mesh, first vertex).
     std::vector<std::pair<Vec3, Vec3>> meshBounds;

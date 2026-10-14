@@ -167,6 +167,30 @@ Json Server::visibleState(const Peer &p) const {
         if (state.contains("companion") && state["companion"].is_object())
             state["companion"].erase("pace");
     }
+    // IPC 0.28 (shared clip library): character styles, the companion's dances and dance
+    // interactions with their options; older peers see the 0.27 shapes (a dance as idle).
+    if (!protocol::atLeast(p.protocol, "0.28") && state.is_object()) {
+        if (state.contains("objects") && state["objects"].is_object() && state["objects"].contains("instances"))
+            for (auto &i : state["objects"]["instances"])
+                i.erase("style");
+        if (state.contains("companion") && state["companion"].is_object()) {
+            auto &c = state["companion"];
+            c.erase("style");
+            c.erase("dance");
+            if (c.value("activity", Json(nullptr)) == "dancing")
+                c["activity"] = "idle";
+        }
+        if (state.contains("npcs") && state["npcs"].is_object() && state["npcs"].contains("aimed") && state["npcs"]["aimed"].is_object()) {
+            auto &list = state["npcs"]["aimed"]["interactions"];
+            Json kept = Json::array();
+            for (auto i : list)
+                if (i.value("type", "") != "dance") {
+                    i.erase("options");
+                    kept.push_back(i);
+                }
+            list = kept;
+        }
+    }
     // IPC 0.27: workspace screens on object instances; world folders (the builder key and
     // world/<id> copies, which older object refs can't name).
     if (!protocol::atLeast(p.protocol, "0.27") && state.is_object()) {
