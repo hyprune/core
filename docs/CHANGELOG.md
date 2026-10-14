@@ -268,6 +268,25 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Core 0.8.3 fixes (no wire change)
+
+- After a session lock the shell's HUD came back without a lease: core refused every method
+  while locked, `shell.release` too, so the lease outlived the lock and the shell's next
+  `shell.claim` was refused ("output already leased"). `shell.release` is now accepted while
+  locked, and a claim from the connection that already holds the output renews its lease
+  (RFC-0003 amendment). Display power off/on keeps the lease and the HUD.
+- `npcs.spawn` without a pose looked at four spots straight ahead and refused any failure as
+  rule `support`. It now takes the free spot nearest 2 m ahead within 6 m and 80 degrees of
+  the view, past window placement zones and keep-clear volumes (which cover the open floor in
+  front of Lumen Reach's screens); a refusal's `data.rule` and message say which rule failed
+  (`support`, `walls`, `playable`, `approach`, `keep-clear` or `zone`, a zone by its id), also
+  for given poses in `npcs.spawn`, `npcs.bind` and `companion.bind` (RFC-0011 amendment).
+- The window prompt "E USE / F FOCUS" is hidden while the window is in use (E).
+- Collision that is never drawn is static: a persisted move of a collision-only node is no
+  longer applied (it shifted walk collision).
+- A free room mount recorded with a world's first area no longer becomes that area's home
+  after a relaunch.
+
 ## Core 0.8.2 fixes (no wire change)
 
 - Offload power policy: a GPU that enforces less than 20 W no longer makes the configured
