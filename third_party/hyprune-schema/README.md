@@ -40,3 +40,8 @@ screens) are pinned to the schema commit recorded in `OBJECT-SOURCE.json` and `i
 
 `v0.11/import.schema.json` (import.json, importVersion 0.1) and the IPC 0.27 catalog fields are
 pinned to the same commit.
+
+World 0.11 (draft: panorama skies, object format 0.11 directory assets), `v0.11/project.schema.json`
+(builder/project.json, projectVersion 0.1) and the IPC 0.27 builder state are pinned to the schema
+commit recorded in `v0.11/WORLD-SOURCE.json`, `OBJECT-SOURCE.json` and `ipc-source.json`. World 0.11
+follows 0.9: there is no world format 0.10.
