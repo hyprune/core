@@ -37,3 +37,6 @@ recorded in `ipc-source.json`.
 
 Object format 0.11 (draft: the mount trait for workspace screens) and IPC 0.27 (workspace
 screens) are pinned to the schema commit recorded in `OBJECT-SOURCE.json` and `ipc-source.json`.
+
+`v0.11/import.schema.json` (import.json, importVersion 0.1) and the IPC 0.27 catalog fields are
+pinned to the same commit.
