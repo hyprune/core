@@ -72,6 +72,7 @@ struct Fixture {
     sim::CompanionView view;
     sim::NpcWorld world;
     bool look = false, airborne = false, animate = true, warped = false;
+    bool nowhere = false; // no standing spot at all, not even by the walking rules
     float minDistance = 1e9f;
     bool everSeenPop = false;
     Fixture() {
@@ -95,10 +96,17 @@ struct Fixture {
         v.warped = warped;
         v.inView = [this](Vec3 p) { return player.sees(p, scene); };
         v.free = [this](Vec3 p) -> std::optional<Vec3> {
+            if (nowhere)
+                return std::nullopt;
             for (auto &k : scene.keepClear)
                 if (k.contains(p, scene.radius))
                     return std::nullopt;
             if (std::hypot(p.x - player.feet.x, p.z - player.feet.z) < 1)
+                return std::nullopt;
+            return scene.stand(p);
+        };
+        v.loose = [this](Vec3 p) -> std::optional<Vec3> { // keep-clear allowed
+            if (nowhere || std::hypot(p.x - player.feet.x, p.z - player.feet.z) < 1)
                 return std::nullopt;
             return scene.stand(p);
         };
@@ -217,10 +225,10 @@ int main() {
             f.run(1);
             auto inView = true;
             f.player.feet = {0, 0, 30};
-            f.scene.keepClear = {{-41, -41, 41, 41}}; // nothing free
+            f.nowhere = true; // nothing free
             f.run(1);
             check(f.companion.hidden() && f.companion.activity(f.agent) == "waiting", "waiting hidden without a free spot");
-            f.scene.keepClear.clear();
+            f.nowhere = false;
             f.run(.6f);
             check(!f.companion.hidden() && f.distance() < 6.1f && !f.player.sees(f.agent.position, f.scene), "placed once a spot exists");
             (void)inView;
@@ -234,6 +242,49 @@ int main() {
             for (auto &k : f.scene.keepClear)
                 check(!k.contains(f.agent.position), "not standing in keep-clear");
             check(f.agent.position.x < 0, "takes the free side");
+        }
+        // The player stops in a keep-clear volume (a doorway, the foot of a ramp) 9 m away:
+        // with no free spot near them it takes one by the walking rules and comes to them,
+        // never standing idle far away (the owner's capture: idle 10 m up the ramp).
+        {
+            Fixture f;
+            f.run(1);
+            f.scene.keepClear = {{-6, 4, 6, 16}};
+            f.run(7.5f, [&](float dt) { f.player.feet.z = std::min(10.f, f.player.feet.z + 1.6f * dt); });
+            float idleFar = 0, worst = 0;
+            for (int i = 0; i < 400; ++i) {
+                f.run(.02f);
+                bool far = f.companion.activity(f.agent) == "idle" && f.distance() > 4.5f;
+                idleFar = far ? idleFar + .02f : 0;
+                worst = std::max(worst, idleFar);
+            }
+            check(worst < .5f, std::format("never idle far from the player ({:.2f} s)", worst));
+            check(f.distance() < 3.2f && f.companion.slot && f.companion.slotLoose,
+                  std::format("near them on a walking-rules slot ({:.2f} m)", f.distance()));
+            check(f.companion.teleports == 0 && !f.everSeenPop, "walked, no teleport");
+            f.scene.keepClear.clear();
+            f.run(1.5f, [&](float dt) { f.player.feet.z += 1.2f * dt; });
+            f.run(3);
+            check(!f.companion.slotLoose, "a free slot again once there is one");
+        }
+        // No spot anywhere near the player while far away: it walks to within the follow
+        // distance, and with no way there teleports out of view; never idles far away.
+        {
+            Fixture f;
+            f.run(1);
+            f.player.feet = {0, 0, 9};
+            f.nowhere = true;
+            f.run(6);
+            check(f.distance() <= 3.05f && f.companion.activity(f.agent) == "idle" && f.companion.stranded >= 1,
+                  std::format("walked up to them without a slot ({:.2f} m)", f.distance()));
+            check(f.minDistance >= .95f, "never into them");
+            Fixture g;
+            g.run(1);
+            g.scene.walls = {{-41, 4, 41, 5}}; // no way through
+            g.player.feet = {0, 0, 9};
+            g.nowhere = true;
+            g.run(3);
+            check(g.companion.teleports == 0 && g.companion.hidden(), "nowhere at all to go: waits hidden (out of view)");
         }
         // A blocked way: walks round a wall; with no way at all, teleports after 1.5 s.
         {

@@ -133,6 +133,10 @@ struct CompanionView {
     bool animate = true;      // characters animate; false (still, power, reduced motion): teleports only
     std::function<bool(Vec3)> inView;               // the player can see a companion standing at this root
     std::function<std::optional<Vec3>(Vec3)> free;  // a free standing spot at p (floor-snapped), or none
+    // A standing spot by the walking rules alone (keep-clear volumes, approach and placement
+    // zones allowed), or none: the fallback where the player stands with every free spot near
+    // them in such a volume (a doorway, the foot of a ramp). Null: no fallback.
+    std::function<std::optional<Vec3>(Vec3)> loose;
 };
 
 struct Companion {
@@ -154,6 +158,7 @@ struct Companion {
     State state = State::Idle;
     int side = 1;                    // +1: behind right, -1: behind left
     std::optional<Vec3> slot;
+    bool slotLoose = false;          // the slot came from the walking rules alone (diagnostics)
     Mode slotMode = Mode::Follow;    // the mode the slot was chosen in
     Vec3 slotFor{1e9f, 0, 0};        // feet the slot was chosen for
     float slotAge = 1e9f;
@@ -168,6 +173,7 @@ struct Companion {
     float idleClock = 0, nextIdle = 12;
     uint32_t seed = 0x9e3779b9u;
     int teleports = 0;
+    int stranded = 0; // times no slot was found while it was far from the player (diagnostics)
 
     bool hidden() const { return state == State::Waiting; }
     // Activity for the companion state (IPC 0.25).
@@ -223,15 +229,21 @@ struct Companion {
                 candidates.push_back({std::hypot(p.x - ideal.x, p.z - ideal.z) + .01f * k, p});
             }
         std::stable_sort(candidates.begin(), candidates.end(), [](auto &x, auto &y) { return x.first < y.first; });
-        int plans = 0;
-        for (auto &[_, p] : candidates) {
-            auto spot = v.free ? v.free(p) : std::optional<Vec3>{p};
-            if (!spot || (v.inView && v.inView(*spot)))
-                continue;
-            if (plans++ >= planBudget)
+        // Free spots first; where there are none (the player in a doorway or keep-clear
+        // volume), spots by the walking rules alone.
+        for (auto *rule : {&v.free, &v.loose}) {
+            if (rule == &v.loose && !v.loose)
                 break;
-            if (planner.plan(*spot, v.feet, 1.2f))
-                return spot;
+            int plans = 0;
+            for (auto &[_, p] : candidates) {
+                auto spot = *rule ? (*rule)(p) : std::optional<Vec3>{p};
+                if (!spot || (v.inView && v.inView(*spot)))
+                    continue;
+                if (plans++ >= planBudget)
+                    break;
+                if (planner.plan(*spot, v.feet, 1.2f))
+                    return spot;
+            }
         }
         return std::nullopt;
     }
@@ -243,26 +255,58 @@ struct Companion {
         return lo + (hi - lo) * float(seed >> 8) / float(1u << 24);
     }
     static float flat(Vec3 a, Vec3 b) { return std::hypot(a.x - b.x, a.z - b.z); }
+    // A path cut where it first comes within `radius` of `centre` (horizontally).
+    static std::vector<Vec3> within(Vec3 from, const std::vector<Vec3> &path, Vec3 centre, float radius) {
+        std::vector<Vec3> out;
+        Vec3 at = from;
+        for (auto &p : path) {
+            if (flat(p, centre) > radius) {
+                out.push_back(p);
+                at = p;
+                continue;
+            }
+            Vec3 d = p - at;
+            float lo = 0, hi = 1;
+            for (int i = 0; i < 20; ++i) {
+                float m = (lo + hi) * .5f;
+                (flat(at + d * m, centre) > radius ? lo : hi) = m;
+            }
+            if (hi > 1e-3f)
+                out.push_back(at + d * hi);
+            break;
+        }
+        return out;
+    }
     // The follow slot: behind and to one side, keeping the side while it is free.
+    // Free spots first, then (following) spots by the walking rules alone: a player standing
+    // in a doorway or keep-clear volume still has a slot near them.
     std::optional<Vec3> chooseSlot(const CompanionView &v) {
+        slotLoose = false;
         if (mode == Mode::Stay)
             return stay;
         float behind = v.heading + 3.14159265f;
         auto at = [&](float angle, float distance) { return v.feet + Vec3{std::sin(angle), 0, std::cos(angle)} * distance; };
         constexpr float aside = .698f; // 40 deg
-        for (float d : {followDistance, 1.5f, 2.5f})
-            for (float a : {behind - side * aside, behind + side * aside, behind}) {
-                if (auto s = v.free ? v.free(at(a, d)) : std::optional<Vec3>{at(a, d)}) {
-                    float rel = std::remainder(a - behind, 6.2831853f);
-                    if (std::abs(rel) > .1f)
-                        side = rel < 0 ? 1 : -1;
-                    return s;
+        for (auto *rule : {&v.free, &v.loose}) {
+            if (rule == &v.loose && !v.loose)
+                break;
+            for (float d : {followDistance, 1.5f, 2.5f})
+                for (float a : {behind - side * aside, behind + side * aside, behind}) {
+                    if (auto s = *rule ? (*rule)(at(a, d)) : std::optional<Vec3>{at(a, d)}) {
+                        float rel = std::remainder(a - behind, 6.2831853f);
+                        if (std::abs(rel) > .1f)
+                            side = rel < 0 ? 1 : -1;
+                        slotLoose = rule == &v.loose;
+                        return s;
+                    }
                 }
-            }
-        for (float d : {2.f, 3.f, 1.5f}) // anywhere near
-            for (int k = 0; k < 12; ++k)
-                if (auto s = v.free ? v.free(at(behind + k * .5236f, d)) : std::nullopt)
-                    return s;
+            for (float d : {2.f, 3.f, 1.5f}) // anywhere near
+                for (int k = 0; k < 12; ++k)
+                    if (auto s = *rule ? (*rule)(at(behind + k * .5236f, d)) : std::nullopt) {
+                        slotLoose = rule == &v.loose;
+                        return s;
+                    }
+        }
         return std::nullopt;
     }
     bool place(NpcAgent &a, Vec3 at, const CompanionView &v) {
@@ -424,9 +468,48 @@ struct Companion {
         bool crowded = mode == Mode::Follow && toPlayer < personalSpace;
         if (!slot || flat(v.feet, slotFor) > .3f || slotAge > .5f || crowded || slotMode != mode)
             slot = chooseSlot(v), slotFor = v.feet, slotAge = 0, slotMode = mode;
-        if (!slot) { // nowhere free near the player: stand, look at them
-            state = State::Idle;
-            idleTick(a, dt, v);
+        if (!slot) {
+            // Nowhere to stand near the player. Close by: stand, look at them. Further away it
+            // never idles: it walks towards them (within the follow distance), and with no way
+            // there it counts as blocked (a teleport out of view after 1.5 s).
+            if (mode == Mode::Stay || toPlayer <= followDistance + 1) {
+                state = State::Idle;
+                waypoints.clear();
+                idleTick(a, dt, v);
+                return;
+            }
+            if (state != State::Moving)
+                ++stranded;
+            state = State::Moving;
+            sincePlan += dt;
+            if (waypoints.empty() || flat(plannedTo, v.feet) > .5f) {
+                if (sincePlan < .5f && !waypoints.empty()) {
+                    walk(a, dt, w.movers);
+                    return;
+                }
+                if (sincePlan < .5f && blocked > 0) {
+                    blocked += dt;
+                    standAndLook(a, dt, v);
+                    return;
+                }
+                sincePlan = 0;
+                plannedTo = v.feet;
+                auto path = planner.plan(a.position, v.feet, followDistance);
+                if (!path || path->empty()) {
+                    waypoints.clear();
+                    blocked += dt;
+                    standAndLook(a, dt, v);
+                    return;
+                }
+                waypoints = within(a.position, *path, v.feet, followDistance);
+                if (waypoints.empty()) {
+                    blocked += dt;
+                    standAndLook(a, dt, v);
+                    return;
+                }
+                blocked = 0;
+            }
+            walk(a, dt, w.movers);
             return;
         }
         float toSlot = flat(a.position, *slot);

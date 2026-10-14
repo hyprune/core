@@ -296,8 +296,10 @@ void Runtime::companionView(sim::CompanionView &v, const interaction::PlacementS
     if (auto hit = aim(); hit && hit->second.distance <= 8)
         corridor = {pointerCamera().position, pointerCamera().position + pointerRay() * hit->second.distance};
     Vec3 feet = v.feet;
-    v.free = [=, scene = &standScene](Vec3 p) -> std::optional<Vec3> {
-        auto floor = interaction::floorBelow(*scene, p + Vec3{0, 1.2f, 0}, 2.5f);
+    // A spot by `scene`'s rules (strict: keep-clear too), 1 m from the player and clear of the
+    // view corridor (distance from the companion's vertical axis to the segment, sampled).
+    auto spot = [=](const interaction::PlacementScene &scene, Vec3 p, bool strict) -> std::optional<Vec3> {
+        auto floor = interaction::floorBelow(scene, p + Vec3{0, 1.2f, 0}, 2.5f);
         if (!floor)
             return std::nullopt;
         Vec3 root{p.x, *floor, p.z};
@@ -305,17 +307,20 @@ void Runtime::companionView(sim::CompanionView &v, const interaction::PlacementS
             return std::nullopt;
         if (corridor) {
             auto [a, b] = *corridor;
-            // Distance from the companion's vertical axis to the corridor segment, sampled.
             for (float t = 0; t <= 1.001f; t += .1f) {
                 Vec3 q = a + (b - a) * t;
                 if (q.y >= root.y - .2f && q.y <= root.y + body.height + .2f && std::hypot(q.x - root.x, q.z - root.z) < .6f + body.radius)
                     return std::nullopt;
             }
         }
-        if (interaction::checkSpot(*scene, root, body, true))
+        if (interaction::checkSpot(scene, root, body, strict))
             return std::nullopt;
         return root;
     };
+    v.free = [spot, scene = &standScene](Vec3 p) { return spot(*scene, p, true); };
+    // The fallback: the walking rules alone (the walk scene has no approach or keep-clear
+    // volumes).
+    v.loose = [spot, scene = &walkScene](Vec3 p) { return spot(*scene, p, false); };
     companionPlanner(walkScene);
 }
 // Points the planner at a walk scene. The callbacks hold its address: the caller keeps the
@@ -720,10 +725,25 @@ Json Runtime::companionState() {
 Json Runtime::companionDiagnostics() {
     auto *n = npcRun(companionId);
     auto &b = companionBrain;
+    // Why the spot behind the player is not a follow slot (strict rules), when there is none.
+    Json slotMiss = nullptr;
+    if (world && n && !b.slot && companionMode() == "follow") {
+        auto standScene = npcScene();
+        auto placing = placementScene();
+        standScene.keepClear.insert(standScene.keepClear.end(), placing.keepClear.begin(), placing.keepClear.end());
+        standScene.keepClear.insert(standScene.keepClear.end(), placing.zones.begin(), placing.zones.end());
+        Vec3 back = companionFeet - Vec3{std::sin(companionHeading), 0, std::cos(companionHeading)} * b.followDistance;
+        auto floor = interaction::floorBelow(standScene, back + Vec3{0, 1.2f, 0}, 2.5f);
+        auto why = floor ? interaction::checkSpot(standScene, {back.x, *floor, back.z}, companionBody, true) : std::nullopt;
+        slotMiss = !floor ? Json("floor: none below") : why ? Json(why->rule + ": " + why->message) : Json("free");
+    }
     return {{"state", companionState()},
+            {"slotMiss", slotMiss},
             {"brain", b.state == sim::Companion::State::Idle ? "idle" : b.state == sim::Companion::State::Moving ? "moving" : "waiting"},
             {"teleports", b.teleports},
             {"slot", b.slot ? vecJson(*b.slot) : Json(nullptr)},
+            {"slotLoose", b.slotLoose},
+            {"stranded", b.stranded},
             {"waypoints", b.waypoints.size()},
             {"plannerExpanded", b.planner.expanded},
             {"running", b.running},
