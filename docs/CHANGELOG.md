@@ -316,6 +316,16 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Walk probes for world tools (no wire change)
+
+- `hyprune-walk-check PACKAGE PROBES.json` (new build tool): each probe walks (fixed heading, a
+  walk or run speed, a frame time) or autodrives (`route.set` + `autodrive.start`, the player's
+  walker) from an eye position towards a target, then stands still until it has stood for
+  0.2 s. One JSON line per probe: `startGrounded`, `end`, `grounded`, `lastGrounded` (where it
+  last stood), `minY`, `playable`, `leftPlayable` and `crossed` (the capsule axis passed
+  through a collision triangle between two frames). World authors sweep walls and floor edges
+  with it for holes a capsule falls through (Lumen Reach's `tools/check-fall-through.py`).
+
 ## Core 0.8.4 fixes (no wire change)
 
 - Paths drawn with tool 3 are `generic`, so a user character carried and set down near one did

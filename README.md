@@ -221,6 +221,10 @@ for locked acceptance or `dev/hyprune-dev m2-record` for the demo recording. Set
 `HYPRUNE_M2_PACKAGE` to a built Lumen Reach directory to load it unchanged after
 acceptance; `dev/hyprune-dev m2` keeps the isolated session available for captures.
 `build/hyprune-world-check <package-directory>` validates packages without a compositor.
+`build/hyprune-walk-check <package-directory> <probes.json>` runs walking probes (walk, run,
+autodrive) with core's own walker and reports where each capsule ends: whether it still stands,
+left the playable volumes or passed through a collision surface between frames. World tools use it
+for fall-through sweeps.
 
 ## M3A hands-on parity
 
