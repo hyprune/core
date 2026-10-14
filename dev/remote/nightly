@@ -251,8 +251,8 @@ def run():
         # perf measures at native 4K, alone.
         gpus = max(1, len(list(pathlib.Path('/sys/class/drm').glob('renderD*'))))
         passes = [('', ['--parallel', str(gpus), '--pinned'], [n for n in names if not n.endswith('.py') and n != 'perf'], {}),
-                  ('-scripts', ['--parallel', '1', '--no-build'], [n for n in names if n.endswith('.py')], {}),
-                  ('-perf', ['--parallel', '1', '--no-build'], [n for n in names if n == 'perf'], {'HYPRUNE_NESTED_4K': '1'})]
+                  ('-scripts', ['--parallel', '1', '--no-build', '--pinned'], [n for n in names if n.endswith('.py')], {}),
+                  ('-perf', ['--parallel', '1', '--no-build', '--pinned'], [n for n in names if n == 'perf'], {'HYPRUNE_NESTED_4K': '1'})]
         summaries = []
         for suffix, options, chosen, extra in passes:
             if not chosen:

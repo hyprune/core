@@ -15,6 +15,18 @@ WORKSPACE = CORE.parent
 RUNS = pathlib.Path(os.environ.get('HYPRUNE_REMOTE_RUNS', str(pathlib.Path.home() / 'hyprune-remote-runs')))
 DEFAULT = ['ctest', 'workspace-homes', 'placement', 'playable', 'static-world', 'live-findings', 'ipc-warp']
 FIXTURES = ['generate', 'm2', 'm3a', 'm3b', 'climbing', 'visibility', 'materials', 'catalog']
+# Published, hash-pinned library inputs (beside the world pins in the meta repo): the starter
+# library from hyprune/libraries/releases.json; the companion character the --companion
+# suite uses, from its own repository's release. Each sets these variables unless they are set.
+LIBRARY_ENV = {'starter': ('HYPRUNE_CATALOG_LIBRARY', 'HYPRUNE_NPCS_LIBRARY'), 'companion': ('HYPRUNE_COMPANION_LIBRARY',)}
+COMPANION = {'repo': 'rick-the-alien/hyprune-companion-drunk-ash', 'tag': 'v0.1.0',
+             'asset': 'io.github.rick-the-alien.drunk-ash-0.1.0.tar.zst',
+             'sha256': '51492f77c08d28dc080fce5b85bd18e558cabe367f85faa16ef39bc901711983'}
+# dev/nested scripts with a required output argument: a directory, or the file named here.
+SCRIPT_OUTPUT = {'npcs_demo.py': 'npcs-demo.mp4'}
+# Cross-GPU scripts: every render node visible, the first one the compositor's, dGPU allowed.
+SCRIPT_ENV = {name: {'HYPRUNE_NESTED_GPU': 'all:0', 'HYPRUNE_NESTED_ALLOW_DGPU': '1'}
+              for name in ('offload_objects.py', 'offload_pacing.py')}
 
 
 def log(*a):
@@ -95,6 +107,49 @@ def ensure_world(key, tag=None, pinned_only=False):
     return version
 
 
+def fetch(url, dest, sha256, gh_release=None):
+    """dest after a SHA-256 check, downloaded unless an identical file is already there."""
+    if dest.is_file() and hashlib.sha256(dest.read_bytes()).hexdigest() == sha256:
+        return dest
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=dest.parent) as tmp:
+        if gh_release:
+            repo, tag, asset = gh_release
+            sh(['gh', 'release', 'download', tag, '-R', repo, '-p', asset, '-D', tmp])
+            got = pathlib.Path(tmp) / asset
+        else:
+            got = pathlib.Path(tmp) / dest.name
+            sh(['curl', '-fsSL', '--retry', '3', '-o', str(got), url])
+        digest = hashlib.sha256(got.read_bytes()).hexdigest()
+        if digest != sha256:
+            raise RuntimeError(f'{dest.name}: sha256 {digest} != {sha256}')
+        got.replace(dest)
+    return dest
+
+
+def ensure_libraries():
+    """The pinned library archives in WORKSPACE/libraries: {key: path}."""
+    cache = WORKSPACE / 'libraries'
+    pins = WORKSPACE / 'hyprune/libraries/releases.json'
+    found = {}
+    starters = [p for p in (json.loads(pins.read_text()) if pins.is_file() else {}).values()
+                if p.get('id') == 'com.hyprune.starter' and p.get('published', True)]
+    if starters:
+        pin = max(starters, key=lambda p: [int(n) for n in re.findall(r'\d+', p['version'])])
+        found['starter'] = fetch(pin['url'], cache / pin['url'].rsplit('/', 1)[1], pin['sha256'])
+    found['companion'] = fetch(None, cache / COMPANION['asset'], COMPANION['sha256'],
+                               (COMPANION['repo'], COMPANION['tag'], COMPANION['asset']))
+    return found
+
+
+def script_args(tree, suite, out):
+    """The output argument a dev/nested script requires (none for the others)."""
+    if not re.search(r"add_argument\('output'\)", (tree / 'dev/nested' / suite).read_text()):
+        return []
+    (out / 'output').mkdir(parents=True, exist_ok=True)
+    return [str(out / 'output' / SCRIPT_OUTPUT.get(suite, ''))]
+
+
 def gpus():
     if not shutil.which('nvidia-smi'):
         return []
@@ -116,7 +171,8 @@ def run_suite(tree, suite, out):
     if suite == 'ctest':
         cmd = ['ctest', '--test-dir', 'build', '--output-on-failure']
     elif suite.endswith('.py'):  # a dev/nested harness script that drives session.run itself
-        cmd = [sys.executable, 'dev/nested/isolated.py', 'dev/nested/' + suite]
+        cmd = [sys.executable, 'dev/nested/isolated.py', 'dev/nested/' + suite, *script_args(tree, suite, out)]
+        env.update(SCRIPT_ENV.get(suite, {}))
     else:
         cmd = ['dev/nested/run.sh'] + ([] if suite == 'smoke' else ['--' + suite])
     started = time.monotonic()
@@ -160,6 +216,12 @@ def run(args):
         ensure_schema()
         summary['worlds'] = {'lumen-reach': ensure_world('lumen-reach', args.lumen, args.pinned),
                              'switchyard': ensure_world('switchyard', None, args.pinned)}
+        if args.pinned:
+            libraries = ensure_libraries()
+            summary['libraries'] = {k: p.name for k, p in libraries.items()}
+            for key, path in libraries.items():
+                for var in LIBRARY_ENV[key]:
+                    os.environ.setdefault(var, str(path))
         summary['gpus'] = gpus()
         before = evidence_snapshot(tree)
         nested = [s for s in args.suites if s != 'ctest']
@@ -221,7 +283,8 @@ def main():
     parser.add_argument('suites', nargs='*', help=f'ctest, smoke, run.sh modes without "--", or dev/nested/<script>.py names (default: {" ".join(DEFAULT)})')
     parser.add_argument('--ref', help='git ref to test in a detached worktree (fetched from origin); default: this checkout')
     parser.add_argument('--lumen', help='hyprune/worlds release tag, e.g. lumen-reach-v0.9.0 (default: installed, else pinned)')
-    parser.add_argument('--pinned', action='store_true', help='replace installed worlds with the published releases pinned in hyprune/worlds/releases.json')
+    parser.add_argument('--pinned', action='store_true', help='replace installed worlds with the published releases pinned in hyprune/worlds/releases.json, '
+                        'and supply the pinned libraries (starter, companion) to suites that need them')
     parser.add_argument('--parallel', type=int, default=4, help='concurrent suites (each nested suite is an isolated instance)')
     parser.add_argument('--no-build', action='store_true')
     parser.add_argument('--detach', action='store_true', help='start in the background and print the run id')
