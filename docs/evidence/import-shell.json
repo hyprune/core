@@ -1,0 +1,143 @@
+{
+ "checks": [
+  {
+   "name": "the browser picks barrel.gltf and the review shows its measures",
+   "ok": true,
+   "evidence": {
+    "path": "/home/rick/.cache/tmp.tPGJ751gnO/.import-shell-state/models/barrel/barrel.gltf",
+    "inspection": {
+     "triangles": 12544,
+     "unitsGuess": "cm"
+    }
+   }
+  },
+  {
+   "name": "Import runs its stages and writes user/barrel",
+   "ok": true,
+   "evidence": {
+    "phase": "done",
+    "stages": [
+     "read",
+     "clean",
+     "fit",
+     "simplify",
+     "textures",
+     "collision",
+     "thumbnail",
+     "ktx2",
+     "compress",
+     "check"
+    ],
+    "error": null,
+    "seconds": 4.1
+   }
+  },
+  {
+   "name": "the object folder has object.json (0.11), import.json and a thumbnail",
+   "ok": true,
+   "evidence": {
+    "files": [
+     "import.json",
+     "object.glb",
+     "object.json",
+     "thumbnail.png"
+    ],
+    "bounds": {
+     "min": [
+      -0.41,
+      0,
+      -0.41
+     ],
+     "max": [
+      0.41,
+      1.2,
+      0.4098
+     ]
+    },
+    "steps": [
+     "read GLTF",
+     "units cm (x0.01), Z-up turned to Y-up, pivot at the base",
+     "decimated 12544 -> 4999 triangles",
+     "convex hull collision proxy, 444 triangles",
+     "KTX2 (Basis Universal): 1 texture(s)",
+     "meshopt compression, quantised geometry"
+    ]
+   }
+  },
+  {
+   "name": "core's catalog lists it within seconds, placeable, with provenance and imported",
+   "ok": true,
+   "evidence": {
+    "seconds": 1.4,
+    "triangles": 4999,
+    "collision": 444,
+    "warnings": [],
+    "provenance": {
+     "author": "Hyprune contributors",
+     "license": "CC0-1.0",
+     "source": "unknown"
+    },
+    "imported": {
+     "at": "2026-10-14T19:18:51Z",
+     "sourceName": "barrel.gltf"
+    }
+   }
+  },
+  {
+   "name": "tool 5 places the imported barrel",
+   "ok": true,
+   "evidence": {
+    "position": [
+     -8.0,
+     0.005222201347351074,
+     7.342893600463867
+    ],
+    "rotation": [
+     0.0,
+     -0.0,
+     0.0,
+     1.0
+    ]
+   }
+  },
+  {
+   "name": "it is active and upright",
+   "ok": true,
+   "evidence": {
+    "position": [
+     -8.0,
+     0.005222201347351074,
+     7.342893600463867
+    ],
+    "rotation": [
+     0.0,
+     -0.0,
+     0.0,
+     1.0
+    ]
+   }
+  },
+  {
+   "name": "a second barrel at the same pose is refused by the first one's proxy",
+   "ok": true,
+   "evidence": {
+    "code": -32007,
+    "data": {
+     "retryable": false,
+     "rule": "walls"
+    },
+    "message": "Not placed: Inside solid geometry"
+   }
+  },
+  {
+   "name": "one beside it is placed",
+   "ok": true,
+   "evidence": "u-ff265f"
+  },
+  {
+   "name": "no QML runtime errors in the shell log",
+   "ok": true,
+   "evidence": []
+  }
+ ]
+}
