@@ -415,3 +415,13 @@ the starter screens in the user folder (or the starter kit 0.3.0 installed) and 
   with Super+LMB: the wall moves with it on release.
 - [ ] A 21:9 wall screen on a wall: the workspace shows centred with dark bars on a 16:9
   monitor, full width on a 21:9 one.
+
+## Placed characters across a restart (core 0.9.0)
+
+Loader fix only (`editor.json` restore); no render, cursor or focus change. With Lumen Reach 0.11.3:
+
+- [ ] Director → Objects: place a character and bind it to a route (Rebind route), then
+  `core/dev/live/down` and `up` again (or log out and in): the plugin loads, the character is
+  back on its route and walking. No "invalid placement" notice.
+- [ ] Signal Rise: walk, run (Shift) and autodrive from the foot of the snow-service stairs
+  towards the ramp foot, along the passage wall: you stop at the wall, never drop through.

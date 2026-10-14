@@ -316,8 +316,13 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
-## Walk probes for world tools (no wire change)
+## Core 0.9.0 fixes (no wire change)
 
+- A user character placed with a route (IPC 0.23 placement fields `path`, `phase`, `speed`,
+  `accent`, `reverse`, `disabled`) made the next plugin load fail with "invalid placement":
+  `editor.json` records were restored with the six base fields and `lock` only. The restore now
+  takes those fields with their ranges, and the `workspace` field workspace screens add (1-9999).
+  Unknown fields are still refused.
 - `hyprune-walk-check PACKAGE PROBES.json` (new build tool): each probe walks (fixed heading, a
   walk or run speed, a frame time) or autodrives (`route.set` + `autodrive.start`, the player's
   walker) from an eye position towards a target, then stands still until it has stood for
