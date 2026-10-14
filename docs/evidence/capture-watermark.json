@@ -95,10 +95,10 @@
         1080
       ],
       "ink": "#0f1a27",
-      "regionLuminance": 0.3477282153002558,
+      "regionLuminance": 0.38382859387484597,
       "contrast": {
-        "navy": 2.812814391665051,
-        "white": 1.7792207086797054
+        "navy": 2.915556668234677,
+        "white": 1.6844476557336268
       },
       "rect": [
         1682,
@@ -109,7 +109,7 @@
       "variant": "lockup-bold-horizontal-mono",
       "lockupWidthPx": 250,
       "opacity": 0.550000011920929,
-      "watermarkMs": 1.620025
+      "watermarkMs": 2.249157
     },
     {
       "pose": "sun-court-stone-b",
@@ -118,10 +118,10 @@
         1080
       ],
       "ink": "#0f1a27",
-      "regionLuminance": 0.27610785312539254,
+      "regionLuminance": 0.40071848858519127,
       "contrast": {
-        "navy": 2.579646355333308,
-        "white": 2.020329310046296
+        "navy": 2.960770933391662,
+        "white": 1.644690941138208
       },
       "rect": [
         1682,
@@ -132,7 +132,7 @@
       "variant": "lockup-bold-horizontal-mono",
       "lockupWidthPx": 250,
       "opacity": 0.550000011920929,
-      "watermarkMs": 0.59685
+      "watermarkMs": 1.815975
     },
     {
       "pose": "sun-court-stone-c",
@@ -141,10 +141,10 @@
         1080
       ],
       "ink": "#0f1a27",
-      "regionLuminance": 0.3579125478184495,
+      "regionLuminance": 0.38367921230911084,
       "contrast": {
-        "navy": 2.8426898679887715,
-        "white": 1.751002763206882
+        "navy": 2.915149036382459,
+        "white": 1.6848113258902693
       },
       "rect": [
         1682,
@@ -155,7 +155,7 @@
       "variant": "lockup-bold-horizontal-mono",
       "lockupWidthPx": 250,
       "opacity": 0.550000011920929,
-      "watermarkMs": 0.611821
+      "watermarkMs": 3.020237
     },
     {
       "pose": "sun-court-stone-d",
@@ -164,10 +164,10 @@
         1080
       ],
       "ink": "#0f1a27",
-      "regionLuminance": 0.3377788695715113,
+      "regionLuminance": 0.3633593463588211,
       "contrast": {
-        "navy": 2.7829085597119834,
-        "white": 1.8080336748214223
+        "navy": 2.8583726497376705,
+        "white": 1.7364107388521586
       },
       "rect": [
         1682,
@@ -178,7 +178,7 @@
       "variant": "lockup-bold-horizontal-mono",
       "lockupWidthPx": 250,
       "opacity": 0.550000011920929,
-      "watermarkMs": 0.597225
+      "watermarkMs": 1.021936
     },
     {
       "pose": "sun-court-view",
@@ -187,10 +187,10 @@
         1080
       ],
       "ink": "#0f1a27",
-      "regionLuminance": 0.3220248512130399,
+      "regionLuminance": 0.3614096592237269,
       "contrast": {
-        "navy": 2.7340247332244667,
-        "white": 1.8563972114100926
+        "navy": 2.8527821882213713,
+        "white": 1.7415951840210426
       },
       "rect": [
         1682,
@@ -201,7 +201,7 @@
       "variant": "lockup-bold-horizontal-mono",
       "lockupWidthPx": 250,
       "opacity": 0.550000011920929,
-      "watermarkMs": 0.622191
+      "watermarkMs": 2.445642
     },
     {
       "pose": "array-hall-a",
@@ -210,10 +210,10 @@
         1080
       ],
       "ink": "#0f1a27",
-      "regionLuminance": 0.2447303283573826,
+      "regionLuminance": 0.2920775173715312,
       "contrast": {
-        "navy": 2.462375288249757,
-        "white": 2.1576203651484973
+        "navy": 2.635489305059723,
+        "white": 1.9589631219889143
       },
       "rect": [
         1682,
@@ -224,7 +224,7 @@
       "variant": "lockup-bold-horizontal-mono",
       "lockupWidthPx": 250,
       "opacity": 0.550000011920929,
-      "watermarkMs": 0.63326
+      "watermarkMs": 1.02177
     },
     {
       "pose": "array-hall-b",
@@ -233,10 +233,10 @@
         1080
       ],
       "ink": "#0f1a27",
-      "regionLuminance": 0.3495286930301252,
+      "regionLuminance": 0.39200982830334874,
       "contrast": {
-        "navy": 2.818149395618114,
-        "white": 1.7741407159709017
+        "navy": 2.9376720952078728,
+        "white": 1.6648587331880509
       },
       "rect": [
         1682,
@@ -247,7 +247,7 @@
       "variant": "lockup-bold-horizontal-mono",
       "lockupWidthPx": 250,
       "opacity": 0.550000011920929,
-      "watermarkMs": 0.632539
+      "watermarkMs": 2.507718
     },
     {
       "pose": "rime-vault-a",
@@ -256,10 +256,10 @@
         1080
       ],
       "ink": "#ffffff",
-      "regionLuminance": 0.07417321040541526,
+      "regionLuminance": 0.05630291532477179,
       "contrast": {
-        "navy": 1.5542411234248052,
-        "white": 3.850234077565351
+        "navy": 1.416613799782848,
+        "white": 4.273881387457358
       },
       "rect": [
         1682,
@@ -270,7 +270,7 @@
       "variant": "lockup-bold-horizontal-mono",
       "lockupWidthPx": 250,
       "opacity": 0.550000011920929,
-      "watermarkMs": 0.61209
+      "watermarkMs": 1.291087
     },
     {
       "pose": "rime-vault-b",
@@ -279,10 +279,10 @@
         1080
       ],
       "ink": "#ffffff",
-      "regionLuminance": 0.035990721034678555,
+      "regionLuminance": 0.04682553911711662,
       "contrast": {
-        "navy": 1.244730048207546,
-        "white": 4.912449115682706
+        "navy": 1.3385658550388735,
+        "white": 4.547089092158478
       },
       "rect": [
         1682,
@@ -293,7 +293,7 @@
       "variant": "lockup-bold-horizontal-mono",
       "lockupWidthPx": 250,
       "opacity": 0.550000011920929,
-      "watermarkMs": 0.616194
+      "watermarkMs": 1.773942
     },
     {
       "pose": "rime-vault-c",
@@ -302,10 +302,10 @@
         1080
       ],
       "ink": "#ffffff",
-      "regionLuminance": 0.02728005054777738,
+      "regionLuminance": 0.019890535993058317,
       "contrast": {
-        "navy": 1.1657111750360123,
-        "white": 5.2545725537361845
+        "navy": 1.096478430988515,
+        "white": 5.580550122635357
       },
       "rect": [
         1682,
@@ -316,9 +316,9 @@
       "variant": "lockup-bold-horizontal-mono",
       "lockupWidthPx": 250,
       "opacity": 0.550000011920929,
-      "watermarkMs": 0.637926
+      "watermarkMs": 1.153555
     }
   ],
-  "bright": "sun-court-stone-c",
+  "bright": "sun-court-stone-b",
   "dark": "rime-vault-c"
 }

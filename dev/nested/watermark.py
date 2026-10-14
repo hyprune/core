@@ -51,7 +51,8 @@ def acceptance(client, children, args, shell_token, socketpath):
     s.ctl('eval', 'hl.dispatch(hl.dsp.focus({ monitor = "HEADLESS-1" }))')
     client.call('world.load', {'worldId': 'com.hyprune.lumen-reach'})
     s.ctl('eval', 'hl.plugin.hyprune.toggle("HEADLESS-1")'); time.sleep(.7)
-    client.call('graphics.set', {'patch': {'offload': 'off', 'dynamic_resolution': False}})
+    # Reduced motion holds the armillary and the residents still: on/off frames differ only by the mark.
+    client.call('graphics.set', {'patch': {'offload': 'off', 'dynamic_resolution': False, 'reduced_motion': True}})
     check('default_off', s.camera()['config']['capture']['watermark'] is False)
     captures = s.STATE / 'statehome/hyprune/captures'
     out = s.STATE / 'captures'; shutil.rmtree(out, ignore_errors=True); out.mkdir()

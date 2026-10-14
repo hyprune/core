@@ -90,7 +90,8 @@ def acceptance(client,children,args,token,socket):
     keys('-k','2');before=queue()['count'];pointer('button',274);check('unassigned_slot_noop',queue()['count']==before)
     keys('-k','3');pose(client,[0,2.3,0],math.pi/2,0);time.sleep(.3)
     pointer('button',272);wait(lambda:len(state()['editor']['paths'])>0)
-    points=len(state()['editor']['paths'][-1]['points']);pointer('button',272)
+    # Primary on an existing point drags it (path tool): aim off the first point for the second.
+    points=len(state()['editor']['paths'][-1]['points']);pose(client,[0,2.3,0],math.pi/2+.3,0);time.sleep(.3);pointer('button',272)
     wait(lambda:len(state()['editor']['paths'][-1]['points'])==points+1)
     pointer('button',273);wait(lambda:len(state()['editor']['paths'][-1]['points'])==points)
     pointer('button',274);wait(lambda:state()['editor']['paths'][-1]['closed'])

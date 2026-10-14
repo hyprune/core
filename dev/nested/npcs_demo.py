@@ -66,7 +66,9 @@ def prepare(installed):
                           {'id': 'bench', 'scene': 'objects/demo-bench.gltf', 'collision': {'node': 'proxy'},
                            'traits': {'seat': {'anchors': [{'id': 'left', 'position': [-.4, 0, .6], 'yaw': 0, 'height': .3},
                                                            {'id': 'right', 'position': [.4, 0, .6], 'yaw': 0, 'height': .3}]}}}]
-    w['paths'] = [{'id': 'court-loop', 'name': 'Court loop', 'use': 'route', 'closed': True, 'points': [pt(p) for p in LOOP],
+    # The demo stages its own two residents: the package's own (on its own routes) stay out.
+    w['objects'] = [o for o in w['objects'] if 'path' not in o]
+    w['paths'] = w.get('paths', []) + [{'id': 'court-loop', 'name': 'Court loop', 'use': 'route', 'closed': True, 'points': [pt(p) for p in LOOP],
                    'stops': [{'point': 3, 'seconds': 10, 'seat': 'court-bench/left'}, {'point': 1, 'seconds': 2.5, 'clip': 'wave'}]},
                   {'id': 'east-walk', 'name': 'East walk', 'use': 'route', 'points': [pt(p) for p in EAST]}]
     w['objects'] += [{'id': 'blue-walker', 'asset': 'blue', 'path': 'court-loop', 'phase': .55, 'accent': [.2, .5, .95]},
