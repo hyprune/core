@@ -196,7 +196,7 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   previous projection: tool 1 for tool 9, five tool definitions, no `tool9`, `debugTool`
   or `pace`, 16-item lists (the selected and carried windows kept) and a count of at most
   32, also in `mounts.changed`.
-- **0.27** (draft) Workspace screens (RFC-0011 amendment; object format 0.11). No new
+- **0.27** Workspace screens (RFC-0011 amendment; object format 0.11). No new
   method, event or grant. A user placement of an object whose `mount` trait has a
   `mounted-workspace` anchor is a workspace screen: while it is placed (active or still
   loading) and bound to a workspace, it is that workspace's home in the loaded world, with
@@ -218,13 +218,13 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   `editor.json` keeps `workspace`. Notices `screen.bound`, `screen.unbound`. A screen's
   own approach zone never refuses moving it. Older sessions see no `screen` fields and
   can't send `workspace`; the injected homes appear in their `mounts` too.
-  Imports (RFC-0014 amendment, same draft): catalog entries also carry required `warnings`
+  Imports (RFC-0014 amendment, same version): catalog entries also carry required `warnings`
   (at most 8: validation notes, sizes over their recommendation), `provenance` (null for
   package assets, else `{license, author, source}` from `import.json` or the `"."`
   attribution, `"unknown"` where unrecorded) and `imported` (null, or `{at, sourceName}` from
   `import.json`). The per-world user-placement totals become 2,000,000 triangles, a 512 MiB
   GPU pool and 100,000 proxy triangles (were 400,000, 192 MiB, 10,000) for every protocol.
-  World folders (RFC-0014 builder world amendment, same draft; world format 0.11): required
+  World folders (RFC-0014 builder world amendment, same version; world format 0.11): required
   state key `builder` (null, or `{projectId, worldId, name, folder, mode: "edit", revision,
   placements, sky, error}` while a world folder is loaded). `world.load` of `local.<slug>`
   with no installed package of that id opens `$HYPRUNE_PROJECTS_DIR/<slug>/` (default
@@ -241,7 +241,7 @@ their frozen state projections and enums. Unknown or unadvertised methods return
 
 These are wire-compatible behavior changes that integrators may notice:
 
-- **World format 0.11** (draft; RFC-0014 builder world amendment) loads: it follows 0.9 (there
+- **World format 0.11** (RFC-0014 builder world amendment) loads: it follows 0.9 (there
   is no world format 0.10) and adds `atmosphere.panorama`, an equirectangular PNG or JPEG
   (2:1, 1,024 to 8,192 px wide; its centre looks along -Z, u grows towards +X) resampled on
   the loader to an sRGB cube of `maxResolution` per face, drawn as the sky at every sky
@@ -316,7 +316,13 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
-## Core 0.9.0 fixes (no wire change)
+## Core 0.9.0
+
+A minor release with the contract round of @hyprune/schema 0.13.0: **IPC 0.27** (workspace
+screens, imports in the catalog, world folders), **world format 0.11** (panorama skies, builder
+worlds) and **object format 0.11** (the `mount` trait, size recommendations, `import.json`) are
+released; see their entries above. Older protocols and formats are unchanged. Also:
+
 
 - A user character placed with a route (IPC 0.23 placement fields `path`, `phase`, `speed`,
   `accent`, `reverse`, `disabled`) made the next plugin load fail with "invalid placement":
@@ -700,7 +706,7 @@ RFC-0005 "Amendment: reachable spawns, home windows and world switches":
 Older packages remain accepted by core at every format version above.
 
 Object manifests (`object.json`, `library.json`) are numbered like world formats; core
-checks 0.9, 0.10 (draft) and **0.11** (draft): 0.11 switches on the `mount` trait for
+checks 0.9, 0.10 (an unreleased draft) and **0.11**: 0.11 switches on the `mount` trait for
 workspace screens (1-4 anchors, at most one `mounted-workspace` anchor, 16:9 within 0.5 %
 or 21:9 from 2.33 to 2.39, at least 0.9 m high, every rectangle inside the bounds grown by
 0.1 m, `frameNode` a scene node; `tool-mount` anchors are inert). Such objects are
