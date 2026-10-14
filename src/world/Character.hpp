@@ -34,6 +34,7 @@ struct Character {
     struct Clip {
         std::string name;
         float duration = 0, speed = 0; // speed: metres/second of an in-place locomotion clip (extras.speed)
+        bool retargeted = false;       // from a motion pack (Motion.hpp), authored on another body
         std::vector<Channel> channels;
     };
     std::vector<Primitive> primitives;
@@ -72,7 +73,8 @@ struct Character {
     // What the `sit` clip was authored for, measured in its final pose: seatHeight is the lowest
     // thigh vertex above the root (RFC-0011 `seatHeight`); sink is how far the ankles end below
     // their `idle` height (a clip that sinks into the floor; >= 0). valid: the character has
-    // `sit` and thigh bones.
+    // `sit` and thigh bones. A retargeted sit's seat is at most a fifth of the hip height below
+    // the hip joints (clothing skinned to the thighs hangs lower).
     struct SeatFit {
         bool valid = false;
         float seatHeight = 0, sink = 0;
