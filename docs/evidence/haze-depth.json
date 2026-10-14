@@ -1,0 +1,113 @@
+{
+ "nestedOnly": true,
+ "world": "com.hyprune.lumen-reach",
+ "character": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
+ "checks": [
+  {
+   "name": "a character stands between the player and the vent steam",
+   "ok": true,
+   "evidence": {
+    "id": "u-bdd3c3",
+    "at": [
+     45.20955276489258,
+     -6.0,
+     -96.24291229248047
+    ],
+    "eye": [
+     43.882021935851114,
+     -4.3,
+     -99.15455476674555
+    ],
+    "toSteam": 5.76
+   }
+  },
+  {
+   "name": "in-process: the steam lies behind the character in this view",
+   "ok": true,
+   "evidence": {
+    "characterPixels": 46779,
+    "steamPixels": 17968,
+    "steamBehindCharacter": 2422,
+    "steamOverCharacter": 0,
+    "maxLevelsOverCharacter": 0
+   }
+  },
+  {
+   "name": "in-process: no steam drawn over the character",
+   "ok": true,
+   "evidence": {
+    "characterPixels": 46779,
+    "steamPixels": 17968,
+    "steamBehindCharacter": 2422,
+    "steamOverCharacter": 0,
+    "maxLevelsOverCharacter": 0
+   }
+  },
+  {
+   "name": "offload A: offload is displayed",
+   "ok": true,
+   "evidence": {
+    "activeRenderer": "offload",
+    "status": "active",
+    "reason": "ready"
+   }
+  },
+  {
+   "name": "offload B: offload is displayed",
+   "ok": true,
+   "evidence": {
+    "activeRenderer": "offload",
+    "status": "active",
+    "reason": "ready"
+   }
+  },
+  {
+   "name": "offload C: offload is displayed",
+   "ok": true,
+   "evidence": {
+    "activeRenderer": "offload",
+    "status": "active",
+    "reason": "ready"
+   }
+  },
+  {
+   "name": "offload D: offload is displayed",
+   "ok": true,
+   "evidence": {
+    "activeRenderer": "offload",
+    "status": "active",
+    "reason": "ready"
+   }
+  },
+  {
+   "name": "offload: the steam lies behind the character in this view",
+   "ok": true,
+   "evidence": {
+    "characterPixels": 46779,
+    "steamPixels": 17968,
+    "steamBehindCharacter": 2422,
+    "steamOverCharacter": 0,
+    "maxLevelsOverCharacter": 0
+   }
+  },
+  {
+   "name": "offload: no steam drawn over the character",
+   "ok": true,
+   "evidence": {
+    "characterPixels": 46779,
+    "steamPixels": 17968,
+    "steamBehindCharacter": 2422,
+    "steamOverCharacter": 0,
+    "maxLevelsOverCharacter": 0
+   }
+  },
+  {
+   "name": "offload matches the in-process renderer (haze and character)",
+   "ok": true,
+   "evidence": {
+    "differingFraction": 0.0,
+    "meanLevels": 0.0
+   }
+  }
+ ]
+}

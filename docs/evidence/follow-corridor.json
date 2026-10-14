@@ -1,0 +1,1027 @@
+{
+ "nestedOnly": true,
+ "world": "com.hyprune.lumen-reach",
+ "companion": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
+ "checks": [
+  {
+   "name": "ramp-down: after the warp it is near or out of view",
+   "ok": true,
+   "evidence": {
+    "t": 6.66,
+    "label": "arrived",
+    "d": 3.0,
+    "dy": 0.0,
+    "activity": "idle",
+    "brain": "idle",
+    "inView": false,
+    "step": "brain",
+    "slot": [
+     51.401920318603516,
+     0.009999990463256836,
+     -126.49949645996094
+    ],
+    "waypoints": 0,
+    "teleports": 1,
+    "pending": false,
+    "slotMiss": null,
+    "feet": [
+     54.0,
+     0.01,
+     -125.0
+    ],
+    "at": [
+     51.23,
+     0.01,
+     -126.15
+    ]
+   }
+  },
+  {
+   "name": "ramp-down: the player walked the leg",
+   "ok": true,
+   "evidence": {
+    "feet": [
+     52.43254470825195,
+     -5.999999713897705,
+     -98.3348159790039
+    ],
+    "target": [
+     52.4,
+     -6,
+     -98.3
+    ]
+   }
+  },
+  {
+   "name": "ramp-down: it keeps up (near or out of view at the end, never idle far away)",
+   "ok": true,
+   "evidence": {
+    "leg": "ramp-down",
+    "end": {
+     "t": 33.44,
+     "label": "looking back",
+     "d": 2.28,
+     "dy": 0.15,
+     "activity": "idle",
+     "brain": "idle",
+     "inView": true,
+     "step": "brain",
+     "slot": [
+      52.53989791870117,
+      -5.917016983032227,
+      -100.3319320678711
+     ],
+     "waypoints": 0,
+     "teleports": 1,
+     "pending": false,
+     "slotMiss": null,
+     "feet": [
+      52.43,
+      -6.0,
+      -98.33
+     ],
+     "at": [
+      52.65,
+      -5.85,
+      -100.61
+     ]
+    },
+    "idleFar": 0.0,
+    "teleports": 0,
+    "pops": 0,
+    "maxD": 8.49
+   }
+  },
+  {
+   "name": "vault-floor: after the warp it is near or out of view",
+   "ok": true,
+   "evidence": {
+    "t": 6.6,
+    "label": "arrived",
+    "d": 2.32,
+    "dy": 0.15,
+    "activity": "idle",
+    "brain": "idle",
+    "inView": false,
+    "step": "brain",
+    "slot": [
+     52.50737762451172,
+     -5.92572021484375,
+     -100.297119140625
+    ],
+    "waypoints": 0,
+    "teleports": 1,
+    "pending": false,
+    "slotMiss": null,
+    "feet": [
+     52.4,
+     -6.0,
+     -98.3
+    ],
+    "at": [
+     52.65,
+     -5.85,
+     -100.61
+    ]
+   }
+  },
+  {
+   "name": "vault-floor: the player walked the leg",
+   "ok": true,
+   "evidence": {
+    "feet": [
+     38.02366256713867,
+     -5.999999713897705,
+     -89.02116394042969
+    ],
+    "target": [
+     38.0,
+     -6.0,
+     -89.0
+    ]
+   }
+  },
+  {
+   "name": "vault-floor: it keeps up (near or out of view at the end, never idle far away)",
+   "ok": true,
+   "evidence": {
+    "leg": "vault-floor",
+    "end": {
+     "t": 35.3,
+     "label": "looking back",
+     "d": 2.24,
+     "dy": -0.0,
+     "activity": "idle",
+     "brain": "idle",
+     "inView": true,
+     "step": "brain",
+     "slot": [
+      40.02253341674805,
+      -6.0,
+      -89.08838653564453
+     ],
+     "waypoints": 0,
+     "teleports": 1,
+     "pending": false,
+     "slotMiss": null,
+     "feet": [
+      38.02,
+      -6.0,
+      -89.02
+     ],
+     "at": [
+      40.25,
+      -6.0,
+      -89.28
+     ]
+    },
+    "idleFar": 0.0,
+    "teleports": 0,
+    "pops": 0,
+    "maxD": 4.96
+   }
+  },
+  {
+   "name": "ramp-up: after the warp it is near or out of view",
+   "ok": true,
+   "evidence": {
+    "t": 6.64,
+    "label": "arrived",
+    "d": 2.26,
+    "dy": -0.0,
+    "activity": "idle",
+    "brain": "idle",
+    "inView": false,
+    "step": "brain",
+    "slot": [
+     39.998992919921875,
+     -6.0,
+     -89.06342315673828
+    ],
+    "waypoints": 0,
+    "teleports": 1,
+    "pending": false,
+    "slotMiss": null,
+    "feet": [
+     38.0,
+     -6.0,
+     -89.0
+    ],
+    "at": [
+     40.25,
+     -6.0,
+     -89.28
+    ]
+   }
+  },
+  {
+   "name": "ramp-up: the player walked the leg",
+   "ok": true,
+   "evidence": {
+    "feet": [
+     53.99997329711914,
+     -0.003398013114929155,
+     -123.95497131347656
+    ],
+    "target": [
+     54.0,
+     0.0,
+     -124.0
+    ]
+   }
+  },
+  {
+   "name": "ramp-up: it keeps up (near or out of view at the end, never idle far away)",
+   "ok": true,
+   "evidence": {
+    "leg": "ramp-up",
+    "end": {
+     "t": 56.84,
+     "label": "looking back",
+     "d": 2.74,
+     "dy": -0.69,
+     "activity": "idle",
+     "brain": "idle",
+     "inView": true,
+     "step": "brain",
+     "slot": [
+      53.995933532714844,
+      -0.6510752439498901,
+      -121.39569854736328
+     ],
+     "waypoints": 0,
+     "teleports": 1,
+     "pending": false,
+     "slotMiss": null,
+     "feet": [
+      54.0,
+      -0.02,
+      -123.89
+     ],
+     "at": [
+      53.91,
+      -0.71,
+      -121.16
+     ]
+    },
+    "idleFar": 0.0,
+    "teleports": 0,
+    "pops": 0,
+    "maxD": 5.7
+   }
+  },
+  {
+   "name": "stairs-down: after the warp it is near or out of view",
+   "ok": true,
+   "evidence": {
+    "t": 6.51,
+    "label": "arrived",
+    "d": 2.84,
+    "dy": -0.71,
+    "activity": "idle",
+    "brain": "idle",
+    "inView": false,
+    "step": "brain",
+    "slot": [
+     53.99939727783203,
+     -0.6249994039535522,
+     -121.5
+    ],
+    "waypoints": 0,
+    "teleports": 1,
+    "pending": false,
+    "slotMiss": null,
+    "feet": [
+     54.0,
+     0.0,
+     -124.0
+    ],
+    "at": [
+     53.91,
+     -0.71,
+     -121.16
+    ]
+   }
+  },
+  {
+   "name": "stairs-down: the player walked the leg",
+   "ok": true,
+   "evidence": {
+    "feet": [
+     57.82050323486328,
+     -5.840405654907227,
+     -100.60144805908203
+    ],
+    "target": [
+     57.85,
+     -6,
+     -100.6
+    ]
+   }
+  },
+  {
+   "name": "stairs-down: it keeps up (near or out of view at the end, never idle far away)",
+   "ok": true,
+   "evidence": {
+    "leg": "stairs-down",
+    "end": {
+     "t": 32.9,
+     "label": "looking back",
+     "d": 1.75,
+     "dy": 0.33,
+     "activity": "idle",
+     "brain": "idle",
+     "inView": true,
+     "step": "brain",
+     "slot": [
+      56.73897933959961,
+      -5.604549407958984,
+      -101.58180236816406
+     ],
+     "waypoints": 0,
+     "teleports": 1,
+     "pending": false,
+     "slotMiss": null,
+     "feet": [
+      57.82,
+      -5.86,
+      -100.54
+     ],
+     "at": [
+      56.74,
+      -5.52,
+      -101.92
+     ]
+    },
+    "idleFar": 0.0,
+    "teleports": 0,
+    "pops": 0,
+    "maxD": 8.54
+   }
+  },
+  {
+   "name": "stairs-up: after the warp it is near or out of view",
+   "ok": true,
+   "evidence": {
+    "t": 6.4,
+    "label": "arrived",
+    "d": 1.84,
+    "dy": 0.45,
+    "activity": "idle",
+    "brain": "idle",
+    "inView": false,
+    "step": "brain",
+    "slot": [
+     57.997371673583984,
+     -5.27290153503418,
+     -102.90839385986328
+    ],
+    "waypoints": 0,
+    "teleports": 1,
+    "pending": false,
+    "slotMiss": null,
+    "feet": [
+     57.85,
+     -5.76,
+     -100.91
+    ],
+    "at": [
+     57.77,
+     -5.31,
+     -102.75
+    ]
+   }
+  },
+  {
+   "name": "stairs-up: the player walked the leg",
+   "ok": true,
+   "evidence": {
+    "feet": [
+     57.84996795654297,
+     -0.1498825073242187,
+     -123.36353302001953
+    ],
+    "target": [
+     57.85,
+     0,
+     -123.4
+    ]
+   }
+  },
+  {
+   "name": "stairs-up: it keeps up (near or out of view at the end, never idle far away)",
+   "ok": true,
+   "evidence": {
+    "leg": "stairs-up",
+    "end": {
+     "t": 40.48,
+     "label": "looking back",
+     "d": 2.13,
+     "dy": -0.45,
+     "activity": "idle",
+     "brain": "idle",
+     "inView": true,
+     "step": "brain",
+     "slot": [
+      56.56459426879883,
+      -0.5568450689315796,
+      -121.77262115478516
+     ],
+     "waypoints": 0,
+     "teleports": 1,
+     "pending": false,
+     "slotMiss": null,
+     "feet": [
+      57.85,
+      -0.16,
+      -123.3
+     ],
+     "at": [
+      56.64,
+      -0.61,
+      -121.55
+     ]
+    },
+    "idleFar": 0.0,
+    "teleports": 0,
+    "pops": 0,
+    "maxD": 5.66
+   }
+  },
+  {
+   "name": "maintenance-up: after the warp it is near or out of view",
+   "ok": true,
+   "evidence": {
+    "t": 6.59,
+    "label": "arrived",
+    "d": 3.0,
+    "dy": -0.0,
+    "activity": "idle",
+    "brain": "idle",
+    "inView": false,
+    "step": "brain",
+    "slot": [
+     38.0,
+     -6.0,
+     -76.5
+    ],
+    "waypoints": 0,
+    "teleports": 2,
+    "pending": false,
+    "slotMiss": null,
+    "feet": [
+     38.0,
+     -6.0,
+     -79.0
+    ],
+    "at": [
+     38.0,
+     -6.0,
+     -76.0
+    ]
+   }
+  },
+  {
+   "name": "maintenance-up: the player walked the leg",
+   "ok": true,
+   "evidence": {
+    "feet": [
+     28.500017166137695,
+     -1.9999998331069946,
+     -93.96751403808594
+    ],
+    "target": [
+     28.5,
+     -2.0,
+     -94.0
+    ]
+   }
+  },
+  {
+   "name": "maintenance-up: it keeps up (near or out of view at the end, never idle far away)",
+   "ok": true,
+   "evidence": {
+    "leg": "maintenance-up",
+    "end": {
+     "t": 45.56,
+     "label": "looking back",
+     "d": 2.23,
+     "dy": -0.06,
+     "activity": "idle",
+     "brain": "idle",
+     "inView": true,
+     "step": "brain",
+     "slot": [
+      29.785390853881836,
+      -2.0,
+      -92.43525695800781
+     ],
+     "waypoints": 0,
+     "teleports": 2,
+     "pending": false,
+     "slotMiss": null,
+     "feet": [
+      28.5,
+      -2.0,
+      -93.97
+     ],
+     "at": [
+      29.79,
+      -2.06,
+      -92.14
+     ]
+    },
+    "idleFar": 0.0,
+    "teleports": 0,
+    "pops": 0,
+    "maxD": 5.7
+   }
+  },
+  {
+   "name": "maintenance-down: after the warp it is near or out of view",
+   "ok": true,
+   "evidence": {
+    "t": 6.39,
+    "label": "arrived",
+    "d": 2.26,
+    "dy": -0.06,
+    "activity": "idle",
+    "brain": "idle",
+    "inView": true,
+    "step": "brain",
+    "slot": [
+     29.786182403564453,
+     -2.0,
+     -92.46842193603516
+    ],
+    "waypoints": 0,
+    "teleports": 2,
+    "pending": false,
+    "slotMiss": null,
+    "feet": [
+     28.5,
+     -2.0,
+     -94.0
+    ],
+    "at": [
+     29.79,
+     -2.06,
+     -92.14
+    ]
+   }
+  },
+  {
+   "name": "maintenance-down: the player walked the leg",
+   "ok": true,
+   "evidence": {
+    "feet": [
+     37.972076416015625,
+     -5.999999713897705,
+     -78.97706604003906
+    ],
+    "target": [
+     38.0,
+     -6.0,
+     -79.0
+    ]
+   }
+  },
+  {
+   "name": "maintenance-down: it keeps up (near or out of view at the end, never idle far away)",
+   "ok": true,
+   "evidence": {
+    "leg": "maintenance-down",
+    "end": {
+     "t": 38.76,
+     "label": "looking back",
+     "d": 2.49,
+     "dy": -0.0,
+     "activity": "idle",
+     "brain": "idle",
+     "inView": true,
+     "step": "brain",
+     "slot": [
+      35.47215270996094,
+      -6.0,
+      -78.99675750732422
+     ],
+     "waypoints": 0,
+     "teleports": 2,
+     "pending": false,
+     "slotMiss": null,
+     "feet": [
+      37.97,
+      -6.0,
+      -78.98
+     ],
+     "at": [
+      35.5,
+      -6.0,
+      -78.71
+     ]
+    },
+    "idleFar": 0.0,
+    "teleports": 0,
+    "pops": 0,
+    "maxD": 7.9
+   }
+  },
+  {
+   "name": "descent-up: after the warp it is near or out of view",
+   "ok": true,
+   "evidence": {
+    "t": 6.62,
+    "label": "arrived",
+    "d": 2.52,
+    "dy": -0.0,
+    "activity": "idle",
+    "brain": "idle",
+    "inView": false,
+    "step": "brain",
+    "slot": [
+     35.5001335144043,
+     -6.0,
+     -79.02599334716797
+    ],
+    "waypoints": 0,
+    "teleports": 2,
+    "pending": false,
+    "slotMiss": null,
+    "feet": [
+     38.0,
+     -6.0,
+     -79.0
+    ],
+    "at": [
+     35.5,
+     -6.0,
+     -78.71
+    ]
+   }
+  },
+  {
+   "name": "descent-up: the player walked the leg",
+   "ok": true,
+   "evidence": {
+    "feet": [
+     30.000045776367188,
+     -0.002645921707153276,
+     -52.039756774902344
+    ],
+    "target": [
+     30.0,
+     0.0,
+     -52.0
+    ]
+   }
+  },
+  {
+   "name": "descent-up: it keeps up (near or out of view at the end, never idle far away)",
+   "ok": true,
+   "evidence": {
+    "leg": "descent-up",
+    "end": {
+     "t": 47.77,
+     "label": "looking back",
+     "d": 2.2,
+     "dy": -0.5,
+     "activity": "idle",
+     "brain": "idle",
+     "inView": true,
+     "step": "brain",
+     "slot": [
+      31.28786849975586,
+      -0.4409991502761841,
+      -53.61699676513672
+     ],
+     "waypoints": 0,
+     "teleports": 2,
+     "pending": false,
+     "slotMiss": null,
+     "feet": [
+      30.0,
+      -0.01,
+      -52.09
+     ],
+     "at": [
+      31.29,
+      -0.51,
+      -53.87
+     ]
+    },
+    "idleFar": 0.0,
+    "teleports": 0,
+    "pops": 0,
+    "maxD": 5.65
+   }
+  },
+  {
+   "name": "descent-down: after the warp it is near or out of view",
+   "ok": true,
+   "evidence": {
+    "t": 6.5,
+    "label": "arrived",
+    "d": 2.27,
+    "dy": -0.51,
+    "activity": "idle",
+    "brain": "idle",
+    "inView": false,
+    "step": "brain",
+    "slot": [
+     31.286123275756836,
+     -0.4177166223526001,
+     -53.5316276550293
+    ],
+    "waypoints": 0,
+    "teleports": 2,
+    "pending": false,
+    "slotMiss": null,
+    "feet": [
+     30.0,
+     0.0,
+     -52.0
+    ],
+    "at": [
+     31.29,
+     -0.51,
+     -53.87
+    ]
+   }
+  },
+  {
+   "name": "descent-down: the player walked the leg",
+   "ok": true,
+   "evidence": {
+    "feet": [
+     37.966861724853516,
+     -5.999999713897705,
+     -78.97270202636719
+    ],
+    "target": [
+     38.0,
+     -6.0,
+     -79.0
+    ]
+   }
+  },
+  {
+   "name": "descent-down: it keeps up (near or out of view at the end, never idle far away)",
+   "ok": true,
+   "evidence": {
+    "leg": "descent-down",
+    "end": {
+     "t": 37.01,
+     "label": "looking back",
+     "d": 2.23,
+     "dy": -0.0,
+     "activity": "idle",
+     "brain": "idle",
+     "inView": true,
+     "step": "brain",
+     "slot": [
+      35.46697998046875,
+      -6.0,
+      -78.99685668945312
+     ],
+     "waypoints": 0,
+     "teleports": 2,
+     "pending": false,
+     "slotMiss": null,
+     "feet": [
+      37.97,
+      -6.0,
+      -78.97
+     ],
+     "at": [
+      35.74,
+      -6.0,
+      -78.88
+     ]
+    },
+    "idleFar": 0.0,
+    "teleports": 0,
+    "pops": 0,
+    "maxD": 8.84
+   }
+  },
+  {
+   "name": "warp-signal-rise: after the warp it is near or out of view",
+   "ok": true,
+   "evidence": {
+    "t": 6.6,
+    "label": "arrived",
+    "d": 2.77,
+    "dy": -0.04,
+    "activity": "idle",
+    "brain": "idle",
+    "inView": false,
+    "step": "brain",
+    "slot": [
+     51.40190887451172,
+     0.009999990463256836,
+     -126.49948120117188
+    ],
+    "waypoints": 0,
+    "teleports": 3,
+    "pending": false,
+    "slotMiss": null,
+    "feet": [
+     54.0,
+     0.01,
+     -125.0
+    ],
+    "at": [
+     51.52,
+     -0.03,
+     -126.24
+    ]
+   }
+  },
+  {
+   "name": "warp-signal-rise: it keeps up (near or out of view at the end, never idle far away)",
+   "ok": true,
+   "evidence": {
+    "leg": "warp-signal-rise",
+    "end": {
+     "t": 14.87,
+     "label": "stopped",
+     "d": 2.77,
+     "dy": -0.04,
+     "activity": "idle",
+     "brain": "idle",
+     "inView": false,
+     "step": "brain",
+     "slot": [
+      51.40190887451172,
+      0.009999990463256836,
+      -126.49948120117188
+     ],
+     "waypoints": 0,
+     "teleports": 3,
+     "pending": false,
+     "slotMiss": null,
+     "feet": [
+      54.0,
+      0.01,
+      -125.0
+     ],
+     "at": [
+      51.52,
+      -0.03,
+      -126.24
+     ]
+    },
+    "idleFar": 0.0,
+    "teleports": 0,
+    "pops": 0,
+    "maxD": 2.77
+   }
+  },
+  {
+   "name": "warp-rime-vault: after the warp it is near or out of view",
+   "ok": true,
+   "evidence": {
+    "t": 6.63,
+    "label": "arrived",
+    "d": 3.0,
+    "dy": -0.0,
+    "activity": "idle",
+    "brain": "idle",
+    "inView": false,
+    "step": "brain",
+    "slot": [
+     38.0,
+     -6.0,
+     -76.5
+    ],
+    "waypoints": 0,
+    "teleports": 4,
+    "pending": false,
+    "slotMiss": null,
+    "feet": [
+     38.0,
+     -6.0,
+     -79.0
+    ],
+    "at": [
+     38.0,
+     -6.0,
+     -76.0
+    ]
+   }
+  },
+  {
+   "name": "warp-rime-vault: it keeps up (near or out of view at the end, never idle far away)",
+   "ok": true,
+   "evidence": {
+    "leg": "warp-rime-vault",
+    "end": {
+     "t": 14.87,
+     "label": "stopped",
+     "d": 3.0,
+     "dy": -0.0,
+     "activity": "idle",
+     "brain": "idle",
+     "inView": false,
+     "step": "brain",
+     "slot": [
+      38.0,
+      -6.0,
+      -76.5
+     ],
+     "waypoints": 0,
+     "teleports": 4,
+     "pending": false,
+     "slotMiss": null,
+     "feet": [
+      38.0,
+      -6.0,
+      -79.0
+     ],
+     "at": [
+      38.0,
+      -6.0,
+      -76.0
+     ]
+    },
+    "idleFar": 0.0,
+    "teleports": 0,
+    "pops": 0,
+    "maxD": 3.0
+   }
+  },
+  {
+   "name": "warp-sun-court: after the warp it is near or out of view",
+   "ok": true,
+   "evidence": {
+    "t": 6.6,
+    "label": "arrived",
+    "d": 1.92,
+    "dy": -0.0,
+    "activity": "idle",
+    "brain": "idle",
+    "inView": false,
+    "step": "brain",
+    "slot": [
+     -9.285372734069824,
+     -1.1920928955078125e-07,
+     13.532258987426758
+    ],
+    "waypoints": 0,
+    "teleports": 5,
+    "pending": false,
+    "slotMiss": null,
+    "feet": [
+     -8.0,
+     0.0,
+     12.0
+    ],
+    "at": [
+     -9.01,
+     -0.0,
+     13.63
+    ]
+   }
+  },
+  {
+   "name": "warp-sun-court: it keeps up (near or out of view at the end, never idle far away)",
+   "ok": true,
+   "evidence": {
+    "leg": "warp-sun-court",
+    "end": {
+     "t": 14.83,
+     "label": "stopped",
+     "d": 1.92,
+     "dy": -0.0,
+     "activity": "idle",
+     "brain": "idle",
+     "inView": false,
+     "step": "brain",
+     "slot": [
+      -9.285372734069824,
+      -1.1920928955078125e-07,
+      13.532258987426758
+     ],
+     "waypoints": 0,
+     "teleports": 5,
+     "pending": false,
+     "slotMiss": null,
+     "feet": [
+      -8.0,
+      0.0,
+      12.0
+     ],
+     "at": [
+      -9.01,
+      -0.0,
+      13.63
+     ]
+    },
+    "idleFar": 0.0,
+    "teleports": 0,
+    "pops": 0,
+    "maxD": 1.92
+   }
+  }
+ ]
+}

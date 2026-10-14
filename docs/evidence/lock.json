@@ -8,13 +8,13 @@
    "evidence": {
     "leases": [
      {
-      "id": "lease-a8bc88cb8a0201e3",
+      "id": "lease-74147974f5f4baea",
       "outputs": [
        "output-1"
       ]
      }
     ],
-    "shellLease": "lease-a8bc88cb8a0201e3",
+    "shellLease": "lease-74147974f5f4baea",
     "hud": true
    }
   },
@@ -42,13 +42,13 @@
    "evidence": {
     "leases": [
      {
-      "id": "lease-a16e5db11ad83230",
+      "id": "lease-375a9191f7bc326b",
       "outputs": [
        "output-1"
       ]
      }
     ],
-    "shellLease": "lease-a16e5db11ad83230",
+    "shellLease": "lease-375a9191f7bc326b",
     "hud": true
    }
   },
@@ -56,8 +56,8 @@
    "name": "after unlock: no \"already leased\" refusal in the shell log",
    "ok": true,
    "evidence": {
-    "lease": "lease-a16e5db11ad83230",
-    "first": "lease-a8bc88cb8a0201e3"
+    "lease": "lease-375a9191f7bc326b",
+    "first": "lease-74147974f5f4baea"
    }
   },
   {
@@ -78,13 +78,13 @@
    "evidence": {
     "leases": [
      {
-      "id": "lease-a16e5db11ad83230",
+      "id": "lease-375a9191f7bc326b",
       "outputs": [
        "output-1"
       ]
      }
     ],
-    "shellLease": "lease-a16e5db11ad83230",
+    "shellLease": "lease-375a9191f7bc326b",
     "hud": true
    }
   },
@@ -108,7 +108,7 @@
    "ok": true,
    "evidence": [
     {
-     "id": "lease-a16e5db11ad83230",
+     "id": "lease-375a9191f7bc326b",
      "outputs": [
       "output-1"
      ],

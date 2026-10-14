@@ -11,7 +11,7 @@
       "name": "fly stops at soft side boundary",
       "passed": true,
       "evidence": [
-        1.9996994733810425,
+        1.9997085332870483,
         1.7000000476837158,
         4.0
       ]
@@ -21,7 +21,7 @@
       "passed": true,
       "evidence": [
         0.0,
-        2.9998507499694824,
+        2.9998397827148438,
         4.0
       ]
     },
@@ -30,7 +30,7 @@
       "passed": true,
       "evidence": [
         0.0,
-        3.4988558292388916,
+        3.498861312866211,
         4.0
       ]
     },
@@ -38,7 +38,7 @@
       "name": "noclip escapes box",
       "passed": true,
       "evidence": [
-        6.999978542327881,
+        7.014565944671631,
         1.7000000476837158,
         4.0
       ]
@@ -71,7 +71,7 @@
       "name": "fly returns gradually after noclip",
       "passed": true,
       "evidence": [
-        3.450000524520874,
+        3.395275831222534,
         1.7000000476837158,
         4.0
       ]
@@ -80,7 +80,7 @@
       "name": "fly recovers inside expanded volume",
       "passed": true,
       "evidence": [
-        2.5000014305114746,
+        2.5,
         1.7000000476837158,
         4.0
       ]
@@ -89,7 +89,7 @@
       "name": "walking remains collision driven outside playable volume",
       "passed": true,
       "evidence": [
-        3.849985122680664,
+        4.406257629394531,
         1.7000000476837158,
         4.0
       ]
@@ -104,7 +104,7 @@
       "passed": true,
       "evidence": [
         0.0,
-        118.59991455078125,
+        118.4484634399414,
         0.0
       ]
     },
@@ -113,7 +113,7 @@
       "passed": true,
       "evidence": [
         0.0,
-        121.50045776367188,
+        121.50467681884766,
         0.0
       ]
     }

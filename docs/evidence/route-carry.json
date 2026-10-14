@@ -1,0 +1,142 @@
+{
+ "nestedOnly": true,
+ "world": "com.hyprune.lumen-reach",
+ "character": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
+ "checks": [
+  {
+   "name": "the character is the user's own (npcs.spawn), not the companion",
+   "ok": true,
+   "evidence": {
+    "id": "u-344a7a"
+   }
+  },
+  {
+   "name": "tool 3 draws a closed four-point path",
+   "ok": true,
+   "evidence": {
+    "id": "path-340624105259435",
+    "use": "generic",
+    "closed": true
+   }
+  },
+  {
+   "name": "paths.list lists the drawn square (generic until a character is put on it)",
+   "ok": true,
+   "evidence": {
+    "use": "generic",
+    "walkable": null,
+    "problems": []
+   }
+  },
+  {
+   "name": "held 0.5 m from the drawn square: it is the snap target, highlighted",
+   "ok": true,
+   "evidence": {
+    "carried": {
+     "at": [
+      42.46666717529297,
+      0.0,
+      -135.73333740234375
+     ],
+     "highlight": 0,
+     "id": "u-344a7a",
+     "route": "",
+     "valid": true
+    },
+    "drop": {
+     "at": [
+      50.28303909301758,
+      0.03483888506889343,
+      -135.0247344970703
+     ],
+     "highlight": 97,
+     "id": "u-344a7a",
+     "route": "user/path-340624105259435",
+     "valid": true
+    }
+   }
+  },
+  {
+   "name": "released: bound to the square, which is now a route, and it walks it",
+   "ok": true,
+   "evidence": {
+    "agent": {
+     "path": "user/path-340624105259435",
+     "position": [
+      50.79104995727539,
+      0.032222308218479156,
+      -137.5476837158203
+     ],
+     "activity": "walking"
+    },
+    "from": [
+     50.083255767822266,
+     0.032315146178007126,
+     -136.31578063964844
+    ]
+   }
+  },
+  {
+   "name": "paths.list: now a walkable route the character is bound to",
+   "ok": true,
+   "evidence": {
+    "use": "route",
+    "walkable": true,
+    "problems": [],
+    "bound": [
+     "u-344a7a"
+    ]
+   }
+  },
+  {
+   "name": "held 1.6 m and more from any route: no snap, it stands there",
+   "ok": true,
+   "evidence": {
+    "drop": {
+     "at": [
+      48.400001525878906,
+      0.0,
+      -136.9499969482422
+     ],
+     "highlight": 0,
+     "id": "u-344a7a",
+     "route": "",
+     "valid": true
+    },
+    "agent": {
+     "path": "",
+     "position": [
+      48.400001525878906,
+      0.0,
+      -136.9499969482422
+     ],
+     "activity": "idle"
+    }
+   }
+  },
+  {
+   "name": "Rebind route (npcs.bind) on a drawn square: bound, a route now, and it walks it",
+   "ok": true,
+   "evidence": {
+    "agent": {
+     "path": "user/path-340648405751562",
+     "position": [
+      59.061519622802734,
+      0.11141785234212875,
+      -137.03561401367188
+     ],
+     "activity": "walking"
+    }
+   }
+  },
+  {
+   "name": "editor.json keeps the drawn paths as routes",
+   "ok": true,
+   "evidence": {
+    "id": "path-340648405751562",
+    "use": "route",
+    "closed": true
+   }
+  }
+ ]
+}

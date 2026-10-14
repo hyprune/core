@@ -69,11 +69,11 @@
     "focusMoves": 0,
     "gait": {
      "clip": "idle",
-     "fade": 0.8385685682296753,
-     "phase": 0.4243267774581909,
+     "fade": 0.8363541960716248,
+     "phase": 0.4234737753868103,
      "previous": "run"
     },
-    "heading": 2.7925918102264404,
+    "heading": 2.7925915718078613,
     "inView": false,
     "madeWay": 0,
     "makingWay": false,
@@ -82,9 +82,9 @@
     "plannerExpanded": 0,
     "pops": 0,
     "position": [
-     -11.631692886352539,
+     -11.63245677947998,
      0.0,
-     8.487875938415527
+     8.489975929260254
     ],
     "run": "active",
     "running": false,
@@ -93,6 +93,8 @@
      0.0,
      8.21462631225586
     ],
+    "slotLoose": false,
+    "slotMiss": null,
     "speed": 0.0,
     "state": {
      "activity": "idle",
@@ -102,15 +104,16 @@
      "pace": "walk",
      "path": null,
      "position": [
-      -11.631692886352539,
+      -11.63245677947998,
       0.0,
-      8.487875938415527
+      8.489975929260254
      ],
      "reason": null,
      "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
      "state": "active"
     },
     "step": "brain",
+    "stranded": 0,
     "stride": 2.3459999561309814,
     "teleportPending": false,
     "teleports": 1,
@@ -126,13 +129,13 @@
    "name": "follows a walked route: behind and beside, never within 1 m, no teleport or pop",
    "ok": true,
    "evidence": {
-    "end": 2.14,
-    "min": 1.93,
-    "max": 5.51,
+    "end": 2.12,
+    "min": 1.96,
+    "max": 5.5,
     "teleports": 0,
     "pops": 0,
     "ran": true,
-    "samples": 81,
+    "samples": 80,
     "endY": -0.0
    }
   },
@@ -141,8 +144,8 @@
    "ok": true,
    "evidence": {
     "end": 2.23,
-    "min": 2.32,
-    "max": 7.97,
+    "min": 2.33,
+    "max": 7.9,
     "teleports": 0,
     "pops": 0,
     "ran": true,
@@ -170,10 +173,10 @@
      "gait": {
       "clip": "idle",
       "fade": 1.0,
-      "phase": 0.424439936876297,
+      "phase": 0.4233720302581787,
       "previous": "run"
      },
-     "heading": 0.5553911924362183,
+     "heading": 0.5539414286613464,
      "inView": true,
      "madeWay": 0,
      "makingWay": false,
@@ -182,9 +185,9 @@
      "plannerExpanded": 0,
      "pops": 0,
      "position": [
-      -1.0124658346176147,
+      -1.009793996810913,
       0.0,
-      7.368431568145752
+      7.367459297180176
      ],
      "run": "active",
      "running": false,
@@ -193,6 +196,8 @@
       0.0,
       7.467741966247559
      ],
+     "slotLoose": false,
+     "slotMiss": null,
      "speed": 0.0,
      "state": {
       "activity": "idle",
@@ -202,15 +207,16 @@
       "pace": "walk",
       "path": null,
       "position": [
-       -1.0124658346176147,
+       -1.009793996810913,
        0.0,
-       7.368431568145752
+       7.367459297180176
       ],
       "reason": null,
       "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
       "state": "active"
      },
      "step": "brain",
+     "stranded": 0,
      "stride": 2.3459999561309814,
      "teleportPending": false,
      "teleports": 2,
@@ -222,7 +228,7 @@
    "name": "walking, it keeps frames coming",
    "ok": true,
    "evidence": {
-    "fps": 60.00502172495308
+    "fps": 59.94648951558467
    }
   },
   {
@@ -236,9 +242,9 @@
     "pace": "walk",
     "path": null,
     "position": [
-     -1.0121467113494873,
+     -1.0098422765731812,
      0.0,
-     7.368316173553467
+     7.3674774169921875
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -250,14 +256,14 @@
    "ok": true,
    "evidence": {
     "at": [
-     -1.0121467113494873,
+     -1.0098422765731812,
      0.0,
-     7.368316173553467
+     7.3674774169921875
     ],
     "now": [
-     -1.0121467113494873,
+     -1.0098422765731812,
      0.0,
-     7.368316173553467
+     7.3674774169921875
     ]
    }
   },
@@ -272,9 +278,9 @@
     "pace": "walk",
     "path": null,
     "position": [
-     -6.184638977050781,
+     -6.139737606048584,
      0.0,
-     1.9611825942993164
+     2.007964611053467
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -286,8 +292,8 @@
    "ok": true,
    "evidence": {
     "end": 2.18,
-    "min": 2.1,
-    "max": 3.73,
+    "min": 2.08,
+    "max": 3.67,
     "teleports": 0,
     "pops": 0,
     "ran": true,
@@ -311,9 +317,8 @@
    "ok": true,
    "evidence": {
     "samples": 16,
-    "medianSlip": 0.005,
+    "medianSlip": 0.004,
     "gaits": [
-     "('idle', 'walk')",
      "('run', 'idle')",
      "('walk', 'run')"
     ]
@@ -335,9 +340,9 @@
     "pace": "run",
     "path": null,
     "position": [
-     -6.110008239746094,
+     -6.266943454742432,
      0.0,
-     10.629739761352539
+     10.609654426574707
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -394,9 +399,9 @@
     "pace": "walk",
     "path": null,
     "position": [
-     -9.98945140838623,
+     -9.980842590332031,
      0.0,
-     7.501303672790527
+     7.502170085906982
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -414,9 +419,9 @@
     "pace": "walk",
     "path": null,
     "position": [
-     -9.990482330322266,
+     -9.981797218322754,
      0.0,
-     7.501678466796875
+     7.5025177001953125
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -477,7 +482,7 @@
    "ok": true,
    "evidence": {
     "bind": "companion",
-    "pathId": "path-261278576699688",
+    "pathId": "path-339856298707596",
     "spawn": null,
     "use": "route"
    }
@@ -488,8 +493,8 @@
    "evidence": {
     "finish": {
      "bound": "companion",
-     "id": "path-261278576699688",
-     "revision": 2668
+     "id": "path-339856298707596",
+     "revision": 2667
     },
     "state": {
      "activity": "walking",
@@ -497,7 +502,7 @@
      "mode": "route",
      "name": "Drunk Ash",
      "pace": "walk",
-     "path": "user/path-261278576699688",
+     "path": "user/path-339856298707596",
      "position": [
       10.997600555419922,
       0.0027196407318115234,
@@ -516,14 +521,14 @@
     "from": [
      10.997600555419922,
      0.0027196407318115234,
-     3.2365448474884033
+     3.232200860977173
     ],
     "to": [
      10.997600555419922,
      0.0027196407318115234,
-     0.8539104461669922
+     0.8451228141784668
     ],
-    "offRoute": 0.10393814582200439
+    "offRoute": 0.09515307200255801
    }
   },
   {
@@ -544,9 +549,9 @@
     "pace": "walk",
     "path": null,
     "position": [
-     9.407787322998047,
-     0.000566373229958117,
-     4.3224029541015625
+     9.3976469039917,
+     0.0005526365712285042,
+     4.343172073364258
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -562,7 +567,7 @@
      0.0027196407318115234,
      2.000000238418579
     ],
-    "route": "user/path-261278576699688",
+    "route": "user/path-339856298707596",
     "valid": true,
     "activity": "carried"
    }
@@ -577,11 +582,11 @@
      "mode": "route",
      "name": "Drunk Ash",
      "pace": "walk",
-     "path": "user/path-261278576699688",
+     "path": "user/path-339856298707596",
      "position": [
       10.997600555419922,
       0.0027196407318115234,
-      2.943817138671875
+      2.9568734169006348
      ],
      "reason": null,
      "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -590,7 +595,7 @@
     "position": [
      10.997600555419922,
      0.0027196407318115234,
-     3.295508861541748
+     3.3085169792175293
     ]
    }
   },
@@ -609,14 +614,14 @@
      "activity": "carried"
     },
     "before": [
-     9.879347801208496,
-     0.0005020068492740393,
-     3.314103841781616
+     9.869912147521973,
+     0.000483454525237903,
+     3.3109796047210693
     ],
     "after": [
-     9.879347801208496,
-     0.0005020068492740393,
-     3.314103841781616
+     9.869912147521973,
+     0.000483454525237903,
+     3.3109796047210693
     ]
    }
   },
@@ -677,11 +682,11 @@
      ]
     },
     "agent": {
-     "path": "user/path-261278576699688",
+     "path": "user/path-339856298707596",
      "position": [
       10.997600555419922,
       0.0027196407318115234,
-      2.631244659423828
+      2.670280933380127
      ],
      "activity": "walking"
     }
@@ -691,7 +696,7 @@
    "name": "editor.json keeps the per-world binding",
    "ok": true,
    "evidence": {
-    "path": "user/path-261278576699688",
+    "path": "user/path-339856298707596",
     "phase": 0.5,
     "worldId": "com.hyprune.switchyard"
    }
@@ -705,11 +710,11 @@
     "mode": "route",
     "name": "Drunk Ash",
     "pace": "walk",
-    "path": "user/path-261278576699688",
+    "path": "user/path-339856298707596",
     "position": [
      10.997600555419922,
      0.0027196407318115234,
-     0.789441704750061
+     0.7595750689506531
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -722,7 +727,7 @@
    "evidence": {
     "parityMeanLevels": 0.0,
     "parityDiffering": 0.0,
-    "hiddenDiffering": 0.15652
+    "hiddenDiffering": 0.15651
    }
   },
   {
@@ -739,7 +744,7 @@
     "clip": "idle",
     "feet": [
      -8.0,
-     0.00022220611572265625,
+     0.0,
      12.0
     ],
     "focusMisses": 0,
@@ -747,10 +752,10 @@
     "gait": {
      "clip": "idle",
      "fade": 1.0,
-     "phase": 0.42126545310020447,
+     "phase": 0.423213928937912,
      "previous": "run"
     },
-    "heading": 1.919795036315918,
+    "heading": 1.9197925329208374,
     "inView": false,
     "madeWay": 0,
     "makingWay": false,
@@ -759,17 +764,19 @@
     "plannerExpanded": 0,
     "pops": 3,
     "position": [
-     -6.995872497558594,
-     0.00022220611572265625,
-     13.634601593017578
+     -6.991703987121582,
+     -1.1920928955078125e-07,
+     13.633084297180176
     ],
     "run": "active",
     "running": false,
     "slot": [
      -6.714626312255859,
-     0.00022220611572265625,
+     -1.1920928955078125e-07,
      13.532258033752441
     ],
+    "slotLoose": false,
+    "slotMiss": null,
     "speed": 0.0,
     "state": {
      "activity": "idle",
@@ -779,15 +786,16 @@
      "pace": "walk",
      "path": null,
      "position": [
-      -6.995872497558594,
-      0.00022220611572265625,
-      13.634601593017578
+      -6.991703987121582,
+      -1.1920928955078125e-07,
+      13.633084297180176
      ],
      "reason": null,
      "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
      "state": "active"
     },
     "step": "brain",
+    "stranded": 0,
     "stride": 2.3459999561309814,
     "teleportPending": false,
     "teleports": 6,
@@ -798,14 +806,14 @@
    "name": "follows through Sun Court into Array Hall",
    "ok": true,
    "evidence": {
-    "end": 2.77,
+    "end": 2.76,
     "min": 1.96,
-    "max": 12.34,
+    "max": 5.81,
     "teleports": 0,
     "pops": 0,
     "ran": true,
     "samples": 113,
-    "endY": -0.0
+    "endY": 0.0
    }
   },
   {
@@ -813,12 +821,12 @@
    "ok": true,
    "evidence": {
     "end": 2.22,
-    "min": 2.71,
-    "max": 5.01,
+    "min": 2.78,
+    "max": 5.36,
     "teleports": 0,
     "pops": 0,
     "ran": true,
-    "samples": 90,
+    "samples": 89,
     "endY": -0.46
    }
   },
@@ -831,18 +839,18 @@
     "clip": "idle",
     "feet": [
      -8.0,
-     0.00022220611572265625,
-     12.0
+     0.0,
+     11.999996185302734
     ],
     "focusMisses": 0,
     "focusMoves": 0,
     "gait": {
      "clip": "idle",
      "fade": 1.0,
-     "phase": 0.4223487675189972,
+     "phase": 0.4220696985721588,
      "previous": "run"
     },
-    "heading": 4.363387107849121,
+    "heading": 4.363388538360596,
     "inView": false,
     "madeWay": 0,
     "makingWay": false,
@@ -851,17 +859,19 @@
     "plannerExpanded": 0,
     "pops": 3,
     "position": [
-     -9.007498741149902,
-     0.00022220611572265625,
-     13.633377075195312
+     -9.006938934326172,
+     -1.1920928955078125e-07,
+     13.633576393127441
     ],
     "run": "active",
     "running": false,
     "slot": [
      -9.285372734069824,
-     0.00022220611572265625,
-     13.532258987426758
+     -1.1920928955078125e-07,
+     13.532255172729492
     ],
+    "slotLoose": false,
+    "slotMiss": null,
     "speed": 0.0,
     "state": {
      "activity": "idle",
@@ -871,15 +881,16 @@
      "pace": "walk",
      "path": null,
      "position": [
-      -9.007498741149902,
-      0.00022220611572265625,
-      13.633377075195312
+      -9.006938934326172,
+      -1.1920928955078125e-07,
+      13.633576393127441
      ],
      "reason": null,
      "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
      "state": "active"
     },
     "step": "brain",
+    "stranded": 0,
     "stride": 2.3459999561309814,
     "teleportPending": false,
     "teleports": 7,
@@ -895,11 +906,11 @@
     "mode": "route",
     "name": "Drunk Ash",
     "pace": "walk",
-    "path": "user/path-261278576699688",
+    "path": "user/path-339856298707596",
     "position": [
      10.997600555419922,
      0.0027196407318115234,
-     0.7594100832939148
+     0.7438837885856628
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -916,9 +927,9 @@
      5.0
     ],
     "before": [
-     0.2290283590555191,
+     0.23152200877666473,
      0.0,
-     7.482800006866455
+     7.47598123550415
     ],
     "after": [
      1.7484555314695172e-07,
@@ -944,9 +955,9 @@
     "pace": "walk",
     "path": null,
     "position": [
-     -1.0000065565109253,
+     -0.9911220669746399,
      0.0,
-     10.776907920837402
+     10.782957077026367
     ],
     "reason": null,
     "ref": "library/io.github.rick-the-alien.drunk-ash@0.1.0/drunk-ash",
@@ -958,7 +969,7 @@
    "ok": true,
    "evidence": {
     "madeWay": 7,
-    "closest": 0.987,
+    "closest": 0.985,
     "crossings": 2,
     "longestWait": 0.0
    }
