@@ -268,6 +268,24 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Core 0.8.4 fixes (no wire change)
+
+- Paths drawn with tool 3 are `generic`, so a user character carried and set down near one did
+  not snap to it, and `npcs.bind` refused it ("is not a route"). A user's `generic` path is now
+  taken wherever a character needs a route (carry snap within 0.75 m, `npcs.bind`, `npcs.spawn`
+  with a path, the companion's binding) and becomes a route (`use: route`, one undo step) when
+  it is walkable for that character; otherwise the usual -32007 refusal (RFC-0011 amendment).
+  A drawn path left without points is dropped when the drawing ends.
+- The companion stood idle wherever it was, in follow mode, when every spot near the player lay
+  in a keep-clear volume or zone (the foot of Lumen Reach's Signal Rise ramp), until the player
+  was 20 m away. Its follow slot and teleport target now fall back to spots by the walking rules
+  alone; with no spot at all it walks towards the player, or teleports out of view when it
+  can't (RFC-0010 amendment). `camera()` diagnostics gain `companion.slotLoose`, `stranded` and
+  `slotMiss`, and `npcs.carry`.
+- With offload, blended world materials (alpha haze, such as vent steam) behind a character
+  were drawn over it: the compositor's depth pass under the worker's frame lacked characters.
+  They are in it now; the in-process renderer was not affected.
+
 ## Core 0.8.3 fixes (no wire change)
 
 - After a session lock the shell's HUD came back without a lease: core refused every method

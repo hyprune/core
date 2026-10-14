@@ -371,3 +371,23 @@ real session:
   control and shows/hides once for Super+Tab (free cursor) and back.
 - [ ] Lock while the Director is open, and while using a window (E): after unlock and
   re-entry, no stuck input grab, the Director opens and closes normally.
+
+## Drawn routes, the companion at the ramp foot, steam with offload (core 0.8.4)
+
+Three fixes from a live session, each with a nested check (`--route-carry`,
+`--follow-corridor`, `--haze-depth`). The offload change adds the characters to the
+compositor's depth pass under the worker's frame (inside the render pass, GL state saved as
+before); no cursor or focus work. Check on the real session, with Lumen Reach and a character
+you placed from Director → Objects:
+
+- [ ] Tool 3: draw a closed square on open floor (Alternate closes it), then key 1. Super+LMB
+  on your placed character, hold the aim just outside the square: the square lights up and
+  the ring is valid. Release: it walks the square; no crash, no stuck Super or button.
+- [ ] Director → Objects → Characters → Rebind route on that character: your drawn path is
+  listed ("Drawn path"); choosing it binds it and it walks it.
+- [ ] With the companion following, walk from Signal Rise down the ramp into the Rime Vault
+  and stop at its foot; turn round: the companion comes down to you (or, when it can't, appears
+  near you out of view), never standing far up the ramp.
+- [ ] Offload on (Settings → Performance): in the Rime Vault, stand so a resident walks or
+  sits in front of the purge vent steam: the steam stays behind them. Toggle offload off and on
+  while looking: the picture matches.
