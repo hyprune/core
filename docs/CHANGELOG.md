@@ -224,10 +224,30 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   attribution, `"unknown"` where unrecorded) and `imported` (null, or `{at, sourceName}` from
   `import.json`). The per-world user-placement totals become 2,000,000 triangles, a 512 MiB
   GPU pool and 100,000 proxy triangles (were 400,000, 192 MiB, 10,000) for every protocol.
+  World folders (RFC-0014 builder world amendment, same draft; world format 0.11): required
+  state key `builder` (null, or `{projectId, worldId, name, folder, mode: "edit", revision,
+  placements, sky, error}` while a world folder is loaded). `world.load` of `local.<slug>`
+  with no installed package of that id opens `$HYPRUNE_PROJECTS_DIR/<slug>/` (default
+  `$XDG_DATA_HOME/hyprune/projects`) from `builder/base.json`; the placements of
+  `builder/project.json` are user placements there, and every objects edit in the folder is
+  written back to that file (never `editor.json`; `revision` counts the writes). Placing a
+  user or library object in a folder copies it into the folder's `objects/<id>/` first:
+  object refs gain `world/<id>` and catalog entries the source `world` (notice
+  `builder.copied`). Older sessions see no `builder` key, no `world/` instances and no
+  `world` catalog entries. Git, saves and releases are the SDK CLI's (`hyprune builder`);
+  core never runs git.
 
 ### Changes without a protocol bump
 
 These are wire-compatible behavior changes that integrators may notice:
+
+- **World format 0.11** (draft; RFC-0014 builder world amendment) loads: it follows 0.9 (there
+  is no world format 0.10) and adds `atmosphere.panorama`, an equirectangular PNG or JPEG
+  (2:1, 1,024 to 8,192 px wide; its centre looks along -Z, u grows towards +X) resampled on
+  the loader to an sRGB cube of `maxResolution` per face, drawn as the sky at every sky
+  setting but off and, without `atmosphere.environment`, lighting the world. Directory
+  assets may be object format 0.11. `atmosphere.get`, `state.presentation` and
+  `presentation.changed` never carry the panorama; `atmosphere.set` keeps the loaded one.
 
 - **0.22** Object catalog and user placements (RFC-0011 P1). New grant
   `objects.control` (requestable from 0.22). New required state key `objects
