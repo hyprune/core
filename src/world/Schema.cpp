@@ -160,6 +160,11 @@ void validateObjectDocument(const Json &value, const std::string &kind, const st
     static std::map<std::string, Json> parsed;
     static std::mutex lock;
     static const Json common = Json::parse(commonSchema08);
+    if (kind == "import") { // import.json (RFC-0014): published beside object format 0.11
+        static const Json schema = Json::parse(importSchema011);
+        validate(value, schema, common, "", &schema);
+        return;
+    }
     for (auto &p : pinned)
         if (version == p.version) {
             auto key = version + ":" + kind;

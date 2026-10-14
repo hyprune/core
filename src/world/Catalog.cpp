@@ -381,14 +381,14 @@ CatalogEntry scanObject(const fs::path &dir, const std::string &ref, const std::
         e.library = r->libraryKey();
     std::vector<std::string> errors, warnings;
     try {
-        auto inv = inventory(dir, Limits::files, Limits::fileBytes, Limits::directoryBytes, "Object");
+        auto inv = inventory(dir, objects::HardCaps::files, objects::HardCaps::fileBytes, objects::HardCaps::directoryBytes, "Object");
         if (cache) {
             std::lock_guard guard(cache->lock);
             auto it = cache->entries.find(dir.string() + "\n" + ref);
             if (it != cache->entries.end() && it->second.first == inv.signature)
                 return it->second.second;
         }
-        auto manifest = parseJson(readFile(dir, "object.json", Limits::fileBytes), "object.json");
+        auto manifest = parseJson(readFile(dir, "object.json", objects::HardCaps::fileBytes), "object.json");
         require(manifest.dump().size() <= ManifestBytes, "object.json exceeds 1 MiB");
         e.manifest = manifest;
         if (manifest.is_object()) {
@@ -427,7 +427,7 @@ CatalogEntry scanObject(const fs::path &dir, const std::string &ref, const std::
         std::string scenePath = manifest.is_object() && manifest.contains("scene") && manifest["scene"].is_string() ? manifest["scene"].get<std::string>() : "";
         if (!scenePath.empty() && safeRelative(scenePath) && has(scenePath)) {
             try {
-                auto bytes = readFile(dir, scenePath, Limits::fileBytes);
+                auto bytes = readFile(dir, scenePath, objects::HardCaps::fileBytes);
                 scene = gltfDocument(bytes, scenePath);
                 std::vector<std::string> missing;
                 for (auto key : {"buffers", "images"})
@@ -473,7 +473,7 @@ CatalogEntry scanObject(const fs::path &dir, const std::string &ref, const std::
                     auto &image = images[i];
                     std::string bytes;
                     if (image.contains("uri"))
-                        bytes = readFile(dir, resourcePath(scenePath, image["uri"]), Limits::fileBytes);
+                        bytes = readFile(dir, resourcePath(scenePath, image["uri"]), objects::HardCaps::fileBytes);
                     else {
                         auto views = g.value("bufferViews", Json::array());
                         size_t v = image.value("bufferView", size_t(-1));
@@ -482,7 +482,7 @@ CatalogEntry scanObject(const fs::path &dir, const std::string &ref, const std::
                         auto buffers = g.value("buffers", Json::array());
                         size_t b = view.value("buffer", size_t(-1));
                         require(b < buffers.size(), "no image data");
-                        std::string data = buffers[b].contains("uri") ? readFile(dir, resourcePath(scenePath, buffers[b]["uri"]), Limits::fileBytes)
+                        std::string data = buffers[b].contains("uri") ? readFile(dir, resourcePath(scenePath, buffers[b]["uri"]), objects::HardCaps::fileBytes)
                                                                       : scene->bin;
                         size_t offset = view.value("byteOffset", 0), length = view.value("byteLength", 0);
                         require(offset + length <= data.size(), "no image data");
@@ -505,7 +505,7 @@ CatalogEntry scanObject(const fs::path &dir, const std::string &ref, const std::
                                     ? manifest["thumbnail"].get<std::string>()
                                     : "";
         if (!thumbPath.empty() && safeRelative(thumbPath) && has(thumbPath)) {
-            auto bytes = readFile(dir, thumbPath, Limits::fileBytes);
+            auto bytes = readFile(dir, thumbPath, objects::HardCaps::fileBytes);
             auto header = imageHeader(reinterpret_cast<const unsigned char *>(bytes.data()), bytes.size());
             if (!header || header->format != "png")
                 errors.push_back("thumbnail: not a PNG image");
@@ -514,6 +514,16 @@ CatalogEntry scanObject(const fs::path &dir, const std::string &ref, const std::
         }
         options.directory = dir.filename().string();
         options.files = &inv.files;
+        // import.json (RFC-0014): checked with the object; it names the source file and when.
+        Json importRecord;
+        if (has("import.json")) {
+            try {
+                importRecord = parseJson(readFile(dir, "import.json", objects::HardCaps::fileBytes), "import.json");
+                options.importRecord = &importRecord;
+            } catch (const std::exception &x) {
+                errors.push_back(std::string("import.json: ") + x.what());
+            }
+        }
         auto result = objects::checkObject(manifest, options);
         errors.insert(errors.begin(), result.errors.begin(), result.errors.end());
         warnings = result.warnings;
@@ -539,6 +549,23 @@ CatalogEntry scanObject(const fs::path &dir, const std::string &ref, const std::
             e.thumbnail = (dir / thumbPath).string();
         e.digest = digestOf(dir, inv.files);
         e.errors = errors;
+        e.warnings.assign(warnings.begin(), warnings.begin() + std::min<size_t>(8, warnings.size()));
+        // IPC 0.27 provenance: import.json's record, else the attribution of ".", "unknown" where unrecorded.
+        auto known = [](const Json &v, size_t limit) {
+            return v.is_string() && !v.get<std::string>().empty() ? Json(v.get<std::string>().substr(0, limit)) : Json("unknown");
+        };
+        Json attribution = Json::object();
+        for (auto &a : manifest.value("attribution", Json::array()))
+            if (a.is_object() && a.value("path", "") == ".")
+                attribution = a;
+        if (importRecord.is_object() && options.importRecord && result.errors.empty()) {
+            auto &l = importRecord["license"];
+            e.provenance = {{"license", known(l["spdx"], 512)}, {"author", known(l["author"], 256)}, {"source", known(l["source"], 1024)}};
+            e.imported = {{"at", importRecord["importedAt"]}, {"sourceName", importRecord["source"]["name"]}};
+        } else
+            e.provenance = {{"license", known(attribution.value("license", manifest.value("license", Json())), 512)},
+                            {"author", known(attribution.value("author", Json()), 256)},
+                            {"source", known(attribution.value("source", Json()), 1024)}};
         e.state = errors.empty() ? "ready" : "invalid";
         decidePlaceable(e);
         if (cache) {

@@ -27,6 +27,13 @@ struct Limits {
 // A workspace screen anchor's aspect (object format 0.11): "16:9" within 0.5 %, "21:9" from
 // 2.33 to 2.39 (21:9, 64:27 and 43:18 panels), else "" (screenAspect in the schema repository).
 std::string screenAspect(double width, double height);
+// Object format 0.11 (RFC-0014 sizes): hard caps for ordinary objects (not characters or
+// items); below them the Limits budgets are recommendations (warnings). objectHardCaps.
+struct HardCaps {
+    static constexpr uint64_t triangles = 2000000, gpuBytes = 1024ull << 20, collisionTriangles = 100000;
+    static constexpr int textureSize = 8192;
+    static constexpr size_t files = 256, directoryBytes = 512u << 20, fileBytes = 64u << 20;
+};
 struct ScreenLimits {
     static constexpr double minHeight = .9, boundsMargin = .1;
 };
@@ -52,6 +59,7 @@ struct Options {
     const std::vector<File> *files = nullptr;   // the directory inventory
     std::optional<Thumbnail> thumbnail;
     Measured measured;
+    const Json *importRecord = nullptr;         // the directory's parsed import.json (RFC-0014), if any
 };
 struct Result {
     bool valid = false;
@@ -65,6 +73,8 @@ Result checkObject(const Json &manifest, const Options &, std::string version = 
 // library's inventory.
 Result checkLibrary(const Json &manifest, const std::map<std::string, Json> *objects, const std::vector<File> *files,
                     std::string version = "");
+// import.json (RFC-0014, importVersion 0.1): the schema and its SPDX licence.
+Result checkImport(const Json &record);
 // SPDX license expression syntax with the vendored license and exception lists.
 bool validSpdx(const std::string &expression);
 // glTF triangle count of a primitive (mode 4: count/3; strips and fans: count - 2).

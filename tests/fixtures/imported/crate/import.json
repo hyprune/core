@@ -1,0 +1,62 @@
+{
+ "importVersion": "0.1",
+ "source": {
+  "name": "crate.obj",
+  "format": "obj",
+  "bytes": 224,
+  "sha256": "2edeb42c995dc5cb9b996d8ea94e31aff8a944eeb4f6c723c7df1212179f5702"
+ },
+ "converter": {
+  "name": "hyprune object import",
+  "version": "0.10.0",
+  "backend": "assimp"
+ },
+ "options": {
+  "units": "cm",
+  "scale": 0.01,
+  "up": "y",
+  "yaw": 0,
+  "surface": "floor",
+  "maxTriangles": 50000,
+  "maxTexture": 2048,
+  "collision": "convex",
+  "ktx2": "auto",
+  "lighting": "lit"
+ },
+ "measured": {
+  "before": {
+   "triangles": 12,
+   "maxTexture": 0,
+   "gpuBytes": 576,
+   "collisionTriangles": null,
+   "extent": [
+    60,
+    60,
+    60
+   ]
+  },
+  "after": {
+   "triangles": 12,
+   "maxTexture": 0,
+   "gpuBytes": 552,
+   "collisionTriangles": 12,
+   "extent": [
+    0.6,
+    0.6,
+    0.6
+   ]
+  }
+ },
+ "steps": [
+  "converted OBJ with Assimp",
+  "units cm (x0.01), Y up, pivot at the base",
+  "convex hull collision proxy, 12 triangles",
+  "meshopt compression, quantised geometry"
+ ],
+ "license": {
+  "spdx": "LicenseRef-unknown",
+  "author": "unknown",
+  "source": "unknown"
+ },
+ "importedAt": "2026-10-14T19:10:04Z"
+}

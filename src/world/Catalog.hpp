@@ -27,6 +27,10 @@ struct CatalogEntry {
          gpuBytes = nullptr, collisionTriangles = nullptr;
     std::vector<std::string> tags, traits, versions, errors;
     bool placeable = false;
+    // IPC 0.27 (RFC-0014): validation warnings (sizes over their recommendation), provenance
+    // {license, author, source} and import.json's {at, sourceName} (null without one).
+    std::vector<std::string> warnings;
+    Json provenance = nullptr, imported = nullptr;
     // Not on the wire.
     std::filesystem::path directory; // object directory, or the world package root
     Json manifest = nullptr;         // object.json, or a world 0.8 objectAssets entry

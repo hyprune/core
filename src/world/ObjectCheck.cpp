@@ -48,6 +48,22 @@ std::string screenAspect(double width, double height) {
     return "";
 }
 namespace {
+// One budget check (budgetCheck in the schema repository): over the hard cap (0.11) or the
+// budget (older formats, characters, items) fails; over the recommendation (0.11) warns.
+struct Budget {
+    const std::string &version;
+    bool special;
+    const Fail &fail, &warn;
+    void operator()(uint64_t value, uint64_t limit, uint64_t hard, const std::function<std::string(uint64_t)> &message) const {
+        if (value <= limit)
+            return;
+        if (special || !atLeast(version, "0.11"))
+            return fail(message(limit));
+        if (value > hard)
+            return fail(message(hard) + " (the hard cap)");
+        warn(message(limit) + " (recommended; it still loads)");
+    }
+};
 const std::vector<std::string> &versionsList() {
     static const std::vector<std::string> list{"0.9", "0.10", "0.11"};
     return list;
@@ -519,9 +535,9 @@ void validateObjectGltf(const Json &value, const std::string &version, const Jso
             for (auto &p : arrayOr(*mesh, "primitives"))
                 triangles += primitiveTriangles(gltf, p);
     bool item = has(traits, "mover") && traits["mover"].value("item", false) == true;
+    Budget over{version, has(traits, "character") || item, fail, warn};
     uint64_t cap = has(traits, "character") ? Limits::characterTriangles : item ? Limits::itemTriangles : Limits::triangles;
-    if (triangles > cap)
-        fail("triangles: " + std::to_string(triangles) + " exceeds " + std::to_string(cap));
+    over(triangles, cap, HardCaps::triangles, [&](uint64_t l) { return "triangles: " + std::to_string(triangles) + " exceeds " + std::to_string(l); });
     if (collidable) {
         auto name = (*collidable)["node"].get<std::string>();
         if (byName.contains(name) && !byName[name].empty()) {
@@ -529,9 +545,9 @@ void validateObjectGltf(const Json &value, const std::string &version, const Jso
             if (auto mesh = meshOf(byName[name][0]))
                 for (auto &p : arrayOr(*mesh, "primitives"))
                     n += primitiveTriangles(gltf, p);
-            if (n > Limits::collisionTriangles)
-                fail("traits.collidable: proxy has " + std::to_string(n) + " triangles, more than " +
-                     std::to_string(Limits::collisionTriangles));
+            over(n, Limits::collisionTriangles, HardCaps::collisionTriangles, [&](uint64_t l) {
+                return "traits.collidable: proxy has " + std::to_string(n) + " triangles, more than " + std::to_string(l);
+            });
         }
     }
     result.triangles = triangles;
@@ -1023,18 +1039,24 @@ void validateObjectManifest(const Json &value, const std::string &version, const
     }
     if (has(traits, "machine"))
         validateMachine(value, fail);
+    // import.json (RFC-0014): the record of how the object was imported, when the directory has one.
+    if (options.importRecord) {
+        auto r = checkImport(*options.importRecord);
+        for (auto &e : r.errors)
+            fail("import.json: " + e);
+    }
+    bool special = has(traits, "character") || (has(traits, "mover") && traits["mover"].value("item", false) == true);
+    Budget over{version, special, fail, warn};
     if (options.files) {
         uint64_t total = 0;
         std::set<std::string> paths;
         for (auto &f : *options.files)
             total += f.size, paths.insert(f.path);
-        if (options.files->size() > Limits::files)
-            fail("directory: " + std::to_string(options.files->size()) + " files, more than " + std::to_string(Limits::files));
-        if (total > Limits::directoryBytes)
-            fail("directory: " + std::to_string(total) + " bytes, more than " + std::to_string(Limits::directoryBytes));
+        auto count = options.files->size();
+        over(count, Limits::files, HardCaps::files, [&](uint64_t l) { return "directory: " + std::to_string(count) + " files, more than " + std::to_string(l); });
+        over(total, Limits::directoryBytes, HardCaps::directoryBytes, [&](uint64_t l) { return "directory: " + std::to_string(total) + " bytes, more than " + std::to_string(l); });
         for (auto &f : *options.files) {
-            if (f.size > Limits::fileBytes)
-                fail("directory: " + f.path + " exceeds " + std::to_string(Limits::fileBytes) + " bytes");
+            over(f.size, Limits::fileBytes, HardCaps::fileBytes, [&](uint64_t l) { return "directory: " + f.path + " exceeds " + std::to_string(l) + " bytes"; });
             if (!covered(value["attribution"], f.path))
                 fail("attribution: " + f.path + " is not covered");
         }
@@ -1059,11 +1081,12 @@ void validateObjectManifest(const Json &value, const std::string &version, const
                          " is more than 1 cm from the scene's " + fixed(w));
             }
     int texture = has(traits, "character") ? Limits::characterTextureSize : Limits::textureSize;
-    if (measured.maxTextureSize && *measured.maxTextureSize > texture)
-        fail("textures: " + std::to_string(*measured.maxTextureSize) + " px exceeds " + std::to_string(texture) + " px");
+    if (measured.maxTextureSize)
+        over(uint64_t(std::max(0, *measured.maxTextureSize)), uint64_t(texture), HardCaps::textureSize,
+             [&](uint64_t l) { return "textures: " + std::to_string(*measured.maxTextureSize) + " px exceeds " + std::to_string(l) + " px"; });
     uint64_t gpu = has(traits, "mover") && traits["mover"].value("item", false) == true ? Limits::itemGpuBytes : Limits::gpuBytes;
-    if (measured.gpuBytes && *measured.gpuBytes > gpu)
-        fail("gpu: " + std::to_string(*measured.gpuBytes) + " bytes exceeds " + std::to_string(gpu));
+    if (measured.gpuBytes)
+        over(*measured.gpuBytes, gpu, HardCaps::gpuBytes, [&](uint64_t l) { return "gpu: " + std::to_string(*measured.gpuBytes) + " bytes exceeds " + std::to_string(l); });
     if (options.gltf)
         validateObjectGltf(value, version, *options.gltf, measured, fail, warn, result);
 }
@@ -1297,6 +1320,20 @@ bool validSpdx(const std::string &source) {
     } catch (const std::runtime_error &) {
         return false;
     }
+}
+Result checkImport(const Json &value) {
+    Result result;
+    try {
+        validateObjectDocument(value, "import", "0.11");
+        auto spdx = value["license"]["spdx"].get<std::string>();
+        if (!validSpdx(spdx))
+            result.errors.push_back("license.spdx: invalid SPDX expression");
+    } catch (const std::exception &e) {
+        std::string message = e.what();
+        result.errors.push_back(message.starts_with(": ") ? "/" + message.substr(2) : message);
+    }
+    result.valid = result.errors.empty();
+    return result;
 }
 Result checkObject(const Json &value, const Options &options, std::string version) {
     Result result;

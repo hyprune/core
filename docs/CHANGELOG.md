@@ -218,6 +218,12 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   `editor.json` keeps `workspace`. Notices `screen.bound`, `screen.unbound`. A screen's
   own approach zone never refuses moving it. Older sessions see no `screen` fields and
   can't send `workspace`; the injected homes appear in their `mounts` too.
+  Imports (RFC-0014 amendment, same draft): catalog entries also carry required `warnings`
+  (at most 8: validation notes, sizes over their recommendation), `provenance` (null for
+  package assets, else `{license, author, source}` from `import.json` or the `"."`
+  attribution, `"unknown"` where unrecorded) and `imported` (null, or `{at, sourceName}` from
+  `import.json`). The per-world user-placement totals become 2,000,000 triangles, a 512 MiB
+  GPU pool and 100,000 proxy triangles (were 400,000, 192 MiB, 10,000) for every protocol.
 
 ### Changes without a protocol bump
 
@@ -663,7 +669,12 @@ checks 0.9, 0.10 (draft) and **0.11** (draft): 0.11 switches on the `mount` trai
 workspace screens (1-4 anchors, at most one `mounted-workspace` anchor, 16:9 within 0.5 %
 or 21:9 from 2.33 to 2.39, at least 0.9 m high, every rectangle inside the bounds grown by
 0.1 m, `frameNode` a scene node; `tool-mount` anchors are inert). Such objects are
-placeable; world packages can't author them yet.
+placeable; world packages can't author them yet. In 0.11 the per-asset budgets of ordinary
+objects (not characters or items) are recommendations: over one is a warning, and only the
+hard caps refuse (2,000,000 triangles, 8,192 px textures, 1 GiB GPU, 100,000 proxy
+triangles, 256 files, 512 MiB per directory, 64 MiB per file); core reads object directories
+up to those caps. `import.json` (RFC-0014, importVersion 0.1) beside `object.json` is
+validated with the object.
 
 Optional world extensions, at any format version: `com.hyprune.map` 0.1 (overview
 map SVG and its affine frame) and, since IPC 0.20, `com.hyprune.blueprint` 0.1

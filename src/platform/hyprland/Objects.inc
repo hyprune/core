@@ -7,9 +7,11 @@
 namespace {
 namespace fs = std::filesystem;
 // pocketWindowLimit: pocketed windows listed on the wire (IPC 0.26, the apps limit).
-constexpr size_t userPlacementLimit = 128, userAssetLimit = 32, userTriangleLimit = 400000, userCollisionLimit = 10000,
+// IPC 0.27 (RFC-0014 sizes): the per-world user totals are the physical limits; imported objects
+// over the per-asset recommendations still place (0.22-0.26: 400,000 triangles, 192 MiB, 10,000).
+constexpr size_t userPlacementLimit = 128, userAssetLimit = 32, userTriangleLimit = 2000000, userCollisionLimit = 100000,
                  pocketObjectLimit = 16, pocketWindowLimit = 128;
-constexpr uint64_t userGpuLimit = 192ull << 20;
+constexpr uint64_t userGpuLimit = 512ull << 20;
 std::string poseKey(const Json &record) { return record.value("pose", Json()).dump() + record.value("scale", Json()).dump(); }
 Json poseJson(const interaction::Transform &t) { return {{"position", array3(t.position)}, {"rotation", t.rotation}}; }
 std::array<float, 4> yawRotation(float yaw) { return {0, std::sin(yaw * .5f), 0, std::cos(yaw * .5f)}; }
@@ -1200,6 +1202,9 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
             for (auto &entry : entries) {
                 auto *e = catalogEntry(entry["ref"]);
                 entry["screen"] = e ? catalogScreen(*e) : Json(nullptr);
+                entry["warnings"] = e ? Json(e->warnings) : Json::array();
+                entry["provenance"] = e ? e->provenance : Json(nullptr);
+                entry["imported"] = e ? e->imported : Json(nullptr);
             }
         return Json{{"revision", catalogRevision}, {"entries", entries}};
     }

@@ -367,6 +367,51 @@ void screens() {
     check(std::any_of(e.begin(), e.end(), [](auto &x) { return x == "traits.mount anchor screen: node \"bezel\" not found in the glTF"; }),
           "frameNode missing");
 }
+// RFC-0014 imports (SDK `hyprune object import`), object format 0.11 sizes and import.json.
+void imports(const fs::path &fixture) {
+    namespace o = world::objects;
+    auto root = fixture.parent_path() / "imported";
+    auto barrel = world::scanObject(root / "barrel", "user/barrel", "user");
+    for (auto &e : barrel.errors)
+        std::fprintf(stderr, "  barrel: %s\n", e.c_str());
+    check(barrel.state == "ready" && barrel.placeable && barrel.triangles == 2000 && barrel.collisionTriangles.get<uint64_t>() > 12,
+          "an imported object is a ready, placeable catalog entry");
+    check(barrel.provenance == Json{{"license", "CC0-1.0"}, {"author", "Hyprune contributors"}, {"source", "https://github.com/hyprune/sdk"}} &&
+              barrel.imported.value("sourceName", "") == "barrel.gltf" && barrel.imported["at"].is_string(),
+          "provenance and imported come from import.json");
+    auto crate = world::scanObject(root / "crate", "user/crate", "user");
+    check(crate.state == "ready" && crate.provenance == Json{{"license", "LicenseRef-unknown"}, {"author", "unknown"}, {"source", "unknown"}},
+          "unknown provenance stays unknown, never refused");
+    auto manifest = Json::parse(std::ifstream(root / "barrel/object.json"));
+    auto scratch = world::loadObjectAsset(root / "barrel", manifest, {});
+    auto &a = scratch->objectAssets[0];
+    check(std::abs(a.low.y) < .01f && std::abs(a.high.y - 1.2f) < .01f && a.collision.size() == barrel.collisionTriangles.get<size_t>() &&
+              scratch->images.size() == 1 && scratch->images[0].width == 512,
+          "the imported GLB decodes: meshopt, quantised positions, KTX2 texture, proxy outside the scene");
+    // Sizes over the recommendations warn in 0.11 and still refuse in older formats.
+    Json m{{"formatVersion", "0.11"}, {"id", "big"}, {"version", "1.0.0"}, {"name", "Big"}, {"category", "other"},
+           {"scene", "object.glb"}, {"license", "CC0-1.0"},
+           {"attribution", Json::array({{{"path", "."}, {"author", "a"}, {"license", "CC0-1.0"}}})},
+           {"bounds", {{"min", {-.2, 0, -.2}}, {"max", {.2, 1.6, .2}}}}, {"traits", {{"movable", Json::object()}}}};
+    o::Options big;
+    big.measured.gpuBytes = 200ull << 20;
+    big.measured.maxTextureSize = 4096;
+    auto r = o::checkObject(m, big);
+    check(r.valid && r.warnings.size() == 2 && r.warnings[0].ends_with("(recommended; it still loads)"), "0.11 warns over the recommendations");
+    big.measured.maxTextureSize = 16384;
+    r = o::checkObject(m, big);
+    check(!r.valid && r.errors[0] == "textures: 16384 px exceeds 8192 px (the hard cap)", "0.11 hard caps");
+    m["formatVersion"] = "0.10";
+    big.measured.maxTextureSize = 4096;
+    check(!o::checkObject(m, big).valid, "0.10 keeps its budgets as errors");
+    auto record = Json::parse(std::ifstream(root / "barrel/import.json"));
+    check(o::checkImport(record).valid, "import.json validates");
+    record["license"]["spdx"] = "Bogus licence";
+    check(!o::checkImport(record).valid, "import.json SPDX");
+    record = Json::parse(std::ifstream(root / "barrel/import.json"));
+    record["extra"] = 1;
+    check(!o::checkImport(record).valid, "import.json is closed");
+}
 } // namespace
 int main(int argc, char **argv) {
     if (argc != 2) {
@@ -383,6 +428,7 @@ int main(int argc, char **argv) {
     archives(fixture, tmp);
     overlay();
     assets(fixture);
+    imports(fixture);
     support();
     fs::remove_all(tmp);
     std::cout << "PASS catalog: " << checked << " checks\n";
