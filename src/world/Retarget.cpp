@@ -132,6 +132,7 @@ Character::Clip retargetClip(const Character &target, const Character &source, c
     out.name = clip.name;
     out.duration = clip.duration;
     out.speed = clip.speed * local.scale;
+    out.retargeted = true;
     std::set<std::string> missing;
     for (auto &ch : clip.channels) {
         if (ch.joint < 0 || ch.joint >= int(source.joints.size()))

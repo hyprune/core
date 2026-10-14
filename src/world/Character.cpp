@@ -228,6 +228,17 @@ Character::SeatFit Character::measureSeat() const {
                     q = q + m[size_t(v.joints[k])].point(v.position) * v.weights[k];
             lowest = std::min(lowest, q.y);
         }
+    // A pack's sit (authored on another body): a coat or robe skinned to the thighs hangs below
+    // what the character sits on, so the seat is at most a fifth of the hip height (at rest)
+    // below the lower hip joint. A character's own sit keeps the plain measure it was fitted by.
+    if (int hips = role("hips"); hips >= 0 && lowest < 1e29f && sit->retargeted) {
+        auto rest = at(nullptr, 0, false);
+        float hip = rest[hips].v[13] - std::min(rest[hips].v[13], 0.f), joint = 1e30f;
+        for (int j : {left, right})
+            if (j >= 0)
+                joint = std::min(joint, sat[j].v[13]);
+        lowest = std::max(lowest, joint - .2f * hip);
+    }
     if (lowest > 1e29f)
         return fit;
     fit.valid = true;

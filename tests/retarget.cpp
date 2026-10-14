@@ -178,7 +178,29 @@ int main() {
         world::RetargetInfo info;
         world::retargetClip(partial, source, clip, {}, &info);
         check(info.unmatched == 1, "an unmatched target bone stays at rest");
-        std::cout << "retarget: mapping, aliases, rest-pose transfer, hip scaling, foot slip\n";
+        // Seat fit: a coat vertex skinned to a thigh hangs far below it. The character's own sit
+        // measures it (the plain measure); a pack's (retargeted) sit sits at most a fifth of the
+        // hip height below the hip joint.
+        auto coated = rig(1, false, "");
+        Character::Primitive prim;
+        for (float y : {-.1f, -.85f}) { // thigh-local: on the thigh, and a coat hem
+            Character::Vertex v;
+            v.position = {0, y, 0};
+            v.joints[0] = float(coated.role("leftupleg"));
+            v.weights[0] = 1;
+            prim.vertices.push_back(v);
+        }
+        coated.primitives.push_back(prim);
+        Character::Clip sit;
+        sit.name = "sit";
+        sit.duration = 1;
+        coated.clips.push_back(sit);
+        auto own = coated.measureSeat();
+        check(own.valid && std::abs(own.seatHeight - (L - .85f)) < 1e-3f, "own sit seat " + std::to_string(own.seatHeight));
+        coated.clips.back().retargeted = true;
+        auto packed = coated.measureSeat();
+        check(std::abs(packed.seatHeight - .8f * L) < 1e-3f, "retargeted sit seat " + std::to_string(packed.seatHeight));
+        std::cout << "retarget: mapping, aliases, rest-pose transfer, hip scaling, foot slip, seat fit\n";
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';
         return 1;
