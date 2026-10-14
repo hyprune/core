@@ -154,6 +154,8 @@ def run(args):
         STATE=STATE_ROOT/'.lock-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if getattr(args,'screens',False):
         STATE=STATE_ROOT/'.screens-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
+    if getattr(args,'screens_shell',False):
+        STATE=STATE_ROOT/'.screens-shell-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if getattr(args,'follow_corridor',False):
         STATE=STATE_ROOT/'.follow-corridor-state';os.environ['HYPRUNE_NESTED_STATE_DIR']=str(STATE)
     if getattr(args,'route_carry',False):
@@ -324,6 +326,9 @@ def run(args):
     if getattr(args,'screens',False):
         from screens import prepare
         prepare(installed)
+    if getattr(args,'screens_shell',False):
+        from screens_shell import prepare
+        prepare(installed)
     if getattr(args,'follow_corridor',False):
         from follow_corridor import prepare
         prepare(installed)
@@ -372,7 +377,7 @@ def run(args):
     if args.m3b:
         for grant in grants:grant['capabilities'].append('input.control')
     if getattr(args,'quests',False):grants[0]['capabilities']+=['shell.control','data.publish','input.control','camera.author','quest.control']
-    if getattr(args,'catalog',False) or getattr(args,'screens',False) or getattr(args,'npcs',False) or getattr(args,'gauges',False) or getattr(args,'data_sources',False) or getattr(args,'companion',False) or getattr(args,'spawn_spots',False) or getattr(args,'follow_corridor',False) or getattr(args,'route_carry',False) or getattr(args,'haze_depth',False):
+    if getattr(args,'catalog',False) or getattr(args,'screens',False) or getattr(args,'screens_shell',False) or getattr(args,'npcs',False) or getattr(args,'gauges',False) or getattr(args,'data_sources',False) or getattr(args,'companion',False) or getattr(args,'spawn_spots',False) or getattr(args,'follow_corridor',False) or getattr(args,'route_carry',False) or getattr(args,'haze_depth',False):
         grants[0]['capabilities']+=['shell.control','data.publish','input.control','quest.control','objects.control']
         grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','input.control','quest.control','objects.control']})
     if getattr(args,'quests',False):grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','input.control','quest.control']})
@@ -396,6 +401,9 @@ def run(args):
         grants+=extra()
     if getattr(args,'windows',False):
         from windows import grants as extra
+        grants+=extra()
+    if getattr(args,'screens_shell',False):
+        from screens_shell import grants as extra
         grants+=extra()
     if getattr(args,'lock',False):
         from lock import grants as extra
@@ -458,7 +466,7 @@ def run(args):
         for _ in range(50):
             if socketpath.is_socket():break
             time.sleep(.1)
-        client=Client(str(socketpath),token,getattr(args,"protocol",None) or ("0.27" if getattr(args,"screens",False) else "0.26" if getattr(args,"waypoint",False) or getattr(args,"companion",False) or getattr(args,"spawn_spots",False) or getattr(args,"follow_corridor",False) or getattr(args,"route_carry",False) or getattr(args,"haze_depth",False) or getattr(args,"lock",False) or getattr(args,"windows",False) or getattr(args,"debug_tool",False) else "0.24" if getattr(args,"data_sources",False) else "0.23" if getattr(args,"npcs",False) else "0.22" if getattr(args,"catalog",False) or getattr(args,"gauges",False) else "0.21" if getattr(args,"quests",False) else "0.19" if getattr(args,"reticle",False) or getattr(args,"gizmo",False) or getattr(args,"live_take",False) else "0.16" if getattr(args,"upscaler",False) or getattr(args,"live_findings",False) else "0.15" if getattr(args,"perf",False) or getattr(args,"autodrive",False) or getattr(args,"static_world",False) or getattr(args,"objects",False) or getattr(args,"feel",False) or getattr(args,"capture_pose",False) or getattr(args,"machines",False) or getattr(args,"handover",False) or getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) or getattr(args,"workspace_homes",False) or getattr(args,"long_titles",False) or getattr(args,"watermark",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1"))
+        client=Client(str(socketpath),token,getattr(args,"protocol",None) or ("0.27" if getattr(args,"screens",False) or getattr(args,"screens_shell",False) else "0.26" if getattr(args,"waypoint",False) or getattr(args,"companion",False) or getattr(args,"spawn_spots",False) or getattr(args,"follow_corridor",False) or getattr(args,"route_carry",False) or getattr(args,"haze_depth",False) or getattr(args,"lock",False) or getattr(args,"windows",False) or getattr(args,"debug_tool",False) else "0.24" if getattr(args,"data_sources",False) else "0.23" if getattr(args,"npcs",False) else "0.22" if getattr(args,"catalog",False) or getattr(args,"gauges",False) else "0.21" if getattr(args,"quests",False) else "0.19" if getattr(args,"reticle",False) or getattr(args,"gizmo",False) or getattr(args,"live_take",False) else "0.16" if getattr(args,"upscaler",False) or getattr(args,"live_findings",False) else "0.15" if getattr(args,"perf",False) or getattr(args,"autodrive",False) or getattr(args,"static_world",False) or getattr(args,"objects",False) or getattr(args,"feel",False) or getattr(args,"capture_pose",False) or getattr(args,"machines",False) or getattr(args,"handover",False) or getattr(args,"placement",False) or getattr(args,"ipc_warp",False) or getattr(args,"playable",False) or getattr(args,"workspace_homes",False) or getattr(args,"long_titles",False) or getattr(args,"watermark",False) else "0.14" if getattr(args,"ink",False) else "0.13" if args.authoring else "0.11" if args.climbing else os.environ.get("HYPRUNE_NESTED_PROTOCOL","0.8") if args.m3b else "0.5" if args.m3a else "0.4" if args.m2 else "0.3" if args.integration else "0.2" if args.m1 else "0.1"))
         print('hello:',client.hello['protocol'],client.hello['methods'],flush=True)
         if getattr(args,"live_take",False):
             from live_take import acceptance
@@ -502,6 +510,10 @@ def run(args):
             return
         if getattr(args,"screens",False):
             from screens import acceptance
+            acceptance(client,children,args,shell_token,socketpath)
+            return
+        if getattr(args,"screens_shell",False):
+            from screens_shell import acceptance
             acceptance(client,children,args,shell_token,socketpath)
             return
         if getattr(args,"follow_corridor",False):
@@ -869,6 +881,6 @@ def m1(client):
     print('PASS M1: camera, zone waypoint, route/autodrive, timed warp events, UI leases/hold, publishing/expiry',flush=True)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--ipc-warp',action='store_true');parser.add_argument('--perf',action='store_true');parser.add_argument('--upscaler',action='store_true');parser.add_argument('--autodrive',action='store_true');parser.add_argument('--static-world',action='store_true');parser.add_argument('--objects',action='store_true');parser.add_argument('--quests',action='store_true');parser.add_argument('--catalog',action='store_true');parser.add_argument('--gizmo',action='store_true');parser.add_argument('--debug-tool',action='store_true');parser.add_argument('--feel',action='store_true');parser.add_argument('--npcs',action='store_true');parser.add_argument('--companion',action='store_true');parser.add_argument('--spawn-spots',action='store_true');parser.add_argument('--lock',action='store_true');parser.add_argument('--screens',action='store_true');parser.add_argument('--follow-corridor',action='store_true');parser.add_argument('--route-carry',action='store_true');parser.add_argument('--haze-depth',action='store_true');parser.add_argument('--machines',action='store_true');parser.add_argument('--gauges',action='store_true');parser.add_argument('--data-sources',action='store_true');parser.add_argument('--handover',action='store_true');parser.add_argument('--capture-pose',action='store_true');parser.add_argument('--waypoint',action='store_true');parser.add_argument('--live-take',action='store_true');parser.add_argument('--playable',action='store_true');parser.add_argument('--workspace-homes',action='store_true');parser.add_argument('--long-titles',action='store_true');parser.add_argument('--windows',action='store_true');parser.add_argument('--live-findings',action='store_true');parser.add_argument('--render-fail',action='store_true');parser.add_argument('--placement',action='store_true');parser.add_argument('--reticle',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--watermark',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--ipc-warp',action='store_true');parser.add_argument('--perf',action='store_true');parser.add_argument('--upscaler',action='store_true');parser.add_argument('--autodrive',action='store_true');parser.add_argument('--static-world',action='store_true');parser.add_argument('--objects',action='store_true');parser.add_argument('--quests',action='store_true');parser.add_argument('--catalog',action='store_true');parser.add_argument('--gizmo',action='store_true');parser.add_argument('--debug-tool',action='store_true');parser.add_argument('--feel',action='store_true');parser.add_argument('--npcs',action='store_true');parser.add_argument('--companion',action='store_true');parser.add_argument('--spawn-spots',action='store_true');parser.add_argument('--lock',action='store_true');parser.add_argument('--screens',action='store_true');parser.add_argument('--screens-shell',action='store_true');parser.add_argument('--follow-corridor',action='store_true');parser.add_argument('--route-carry',action='store_true');parser.add_argument('--haze-depth',action='store_true');parser.add_argument('--machines',action='store_true');parser.add_argument('--gauges',action='store_true');parser.add_argument('--data-sources',action='store_true');parser.add_argument('--handover',action='store_true');parser.add_argument('--capture-pose',action='store_true');parser.add_argument('--waypoint',action='store_true');parser.add_argument('--live-take',action='store_true');parser.add_argument('--playable',action='store_true');parser.add_argument('--workspace-homes',action='store_true');parser.add_argument('--long-titles',action='store_true');parser.add_argument('--windows',action='store_true');parser.add_argument('--live-findings',action='store_true');parser.add_argument('--render-fail',action='store_true');parser.add_argument('--placement',action='store_true');parser.add_argument('--reticle',action='store_true');parser.add_argument('--ink',action='store_true');parser.add_argument('--watermark',action='store_true');parser.add_argument('--authoring',action='store_true');parser.add_argument('--climbing',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--live',action='store_true');parser.add_argument('--record',action='store_true');parser.add_argument('--m3b',action='store_true');parser.add_argument('--m3a',action='store_true');parser.add_argument('--m2',action='store_true');parser.add_argument('--m1',action='store_true');parser.add_argument('--integration',action='store_true');parser.add_argument('--visible',action='store_true');args=parser.parse_args()
     try:run(args)
     except KeyboardInterrupt:print("Nested session stopped.",flush=True)

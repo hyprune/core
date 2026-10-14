@@ -1,0 +1,105 @@
+{
+ "checks": [
+  {
+   "name": "the shell negotiates IPC 0.27 with objects.control",
+   "ok": true,
+   "evidence": "0.27"
+  },
+  {
+   "name": "Objects lists the four screens (Mine, \"screen\")",
+   "ok": true,
+   "evidence": {
+    "supported": true,
+    "control": true,
+    "view": "catalog",
+    "catalog": 5,
+    "catalogRevision": 2,
+    "catalogFor": 2,
+    "shown": 4,
+    "cursor": 0,
+    "confirm": "",
+    "selected": "",
+    "sections": [],
+    "feedback": null,
+    "pocket": [],
+    "selectedKind": "",
+    "gizmo": {
+     "pivot": "centre",
+     "snap": false,
+     "space": "world"
+    },
+    "instances": 1
+   }
+  },
+  {
+   "name": "tool 5 Primary placed the pocketed screen",
+   "ok": true,
+   "evidence": {
+    "position": [
+     -8.0,
+     0.005222201347351074,
+     7.34282922744751
+    ],
+    "rotation": [
+     0.0,
+     -0.0,
+     0.0,
+     1.0
+    ]
+   }
+  },
+  {
+   "name": "the placed screen shows the next free workspace (25)",
+   "ok": true,
+   "evidence": {
+    "aspect": "16:9",
+    "home": "screen-u-afb79c",
+    "size": [
+     3.2,
+     1.8
+    ],
+    "workspace": 25
+   }
+  },
+  {
+   "name": "Placed shows the Workspace section for the screen",
+   "ok": true,
+   "evidence": [
+    "transform",
+    "screen",
+    "lock",
+    "remove",
+    "data"
+   ]
+  },
+  {
+   "name": "typing 27 and Enter rebinds the screen",
+   "ok": true,
+   "evidence": 27
+  },
+  {
+   "name": "None empties it",
+   "ok": true,
+   "evidence": null
+  },
+  {
+   "name": "Next free binds 25 again",
+   "ok": true,
+   "evidence": 25
+  },
+  {
+   "name": "workspace 21 is refused and the page says why",
+   "ok": true,
+   "evidence": {
+    "level": "warning",
+    "text": "Workspace 21 is the home of sun-court (Rule: another home already shows that workspace)",
+    "at": 1792003416670
+   }
+  },
+  {
+   "name": "no QML runtime errors in the shell log",
+   "ok": true,
+   "evidence": []
+  }
+ ]
+}

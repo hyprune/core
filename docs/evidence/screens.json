@@ -56,7 +56,7 @@
   {
    "name": "objects.place put the stand screen in front of the player",
    "ok": true,
-   "evidence": "u-7570c2"
+   "evidence": "u-d023a3"
   },
   {
    "name": "the screen shows the next free workspace (25) as a home",
@@ -64,7 +64,7 @@
    "evidence": {
     "screen": {
      "aspect": "16:9",
-     "home": "screen-u-7570c2",
+     "home": "screen-u-d023a3",
      "size": [
       3.2,
       1.8
@@ -76,7 +76,7 @@
      "22": "array-hall",
      "23": "rime-vault",
      "24": "signal-rise",
-     "25": "screen-u-7570c2"
+     "25": "screen-u-d023a3"
     }
    }
   },
@@ -85,8 +85,8 @@
    "ok": true,
    "evidence": {
     "anchor": {
-     "areaId": "screen-u-7570c2",
-     "id": "screen-u-7570c2",
+     "areaId": "screen-u-d023a3",
+     "id": "screen-u-d023a3",
      "mount": {
       "interaction": "focus-in",
       "role": "mounted-workspace",
@@ -112,9 +112,9 @@
     },
     "area": {
      "dataAnchors": [],
-     "id": "screen-u-7570c2",
-     "primaryAnchor": "screen-u-7570c2",
-     "spawnId": "screen-u-7570c2",
+     "id": "screen-u-d023a3",
+     "primaryAnchor": "screen-u-d023a3",
+     "spawnId": "screen-u-d023a3",
      "theme": "Stand screen 16:9",
      "toolAnchors": [],
      "workspaceSlot": "25"
@@ -126,8 +126,8 @@
    "ok": true,
    "evidence": {
     "id": 25,
-    "label": "screen-u-7570c2",
-    "spawnId": "screen-u-7570c2",
+    "label": "screen-u-d023a3",
+    "spawnId": "screen-u-d023a3",
     "worldId": "com.hyprune.lumen-reach"
    }
   },
@@ -145,7 +145,7 @@
    "ok": true,
    "evidence": {
     "frame": {
-     "composed": 28,
+     "composed": 27,
      "id": "workspace-25",
      "position": [
       -8.0,
@@ -266,7 +266,7 @@
      "retryable": false,
      "rule": "workspace.taken"
     },
-    "message": "workspace 21 is the home of sun-court"
+    "message": "Workspace 21 is the home of sun-court"
    }
   },
   {
@@ -277,7 +277,7 @@
     "22": "array-hall",
     "23": "rime-vault",
     "24": "signal-rise",
-    "26": "screen-u-7570c2"
+    "26": "screen-u-d023a3"
    }
   },
   {
@@ -301,7 +301,7 @@
     "22": "array-hall",
     "23": "rime-vault",
     "24": "signal-rise",
-    "25": "screen-u-7570c2"
+    "25": "screen-u-d023a3"
    }
   },
   {
@@ -309,7 +309,7 @@
    "ok": true,
    "evidence": {
     "areaId": "sun-court",
-    "id": "u-7570c2",
+    "id": "u-d023a3",
     "pose": {
      "position": [
       -6.5,
@@ -340,7 +340,7 @@
    "evidence": {
     "screen": {
      "aspect": "16:9",
-     "home": "screen-u-7570c2",
+     "home": "screen-u-d023a3",
      "size": [
       3.2,
       1.8
@@ -352,7 +352,7 @@
      "22": "array-hall",
      "23": "rime-vault",
      "24": "signal-rise",
-     "25": "screen-u-7570c2"
+     "25": "screen-u-d023a3"
     }
    }
   },
@@ -388,7 +388,7 @@
   {
    "name": "a 21:9 screen placed in Switchyard",
    "ok": true,
-   "evidence": "u-19ba86"
+   "evidence": "u-6b0c82"
   },
   {
    "name": "it becomes a home on 21 (Switchyard has none of its own)",
@@ -396,7 +396,7 @@
    "evidence": {
     "screen": {
      "aspect": "21:9",
-     "home": "screen-u-19ba86",
+     "home": "screen-u-6b0c82",
      "size": [
       4.2,
       1.8
@@ -404,7 +404,7 @@
      "workspace": 21
     },
     "bindings": {
-     "21": "screen-u-19ba86"
+     "21": "screen-u-6b0c82"
     }
    }
   },
@@ -412,7 +412,7 @@
    "name": "workspace 21 is composed on the Switchyard screen",
    "ok": true,
    "evidence": {
-    "composed": 3,
+    "composed": 6,
     "id": "workspace-21",
     "position": [
      0.0,
@@ -443,9 +443,9 @@
    "evidence": [
     {
      "dataAnchors": [],
-     "id": "screen-u-19ba86",
-     "primaryAnchor": "screen-u-19ba86",
-     "spawnId": "screen-u-19ba86",
+     "id": "screen-u-6b0c82",
+     "primaryAnchor": "screen-u-6b0c82",
+     "spawnId": "screen-u-6b0c82",
      "theme": "Stand screen 21:9",
      "toolAnchors": [],
      "workspaceSlot": "21"

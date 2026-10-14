@@ -92,7 +92,7 @@ int Runtime::screenWorkspace(const Json &value, const std::string &placementId) 
         throw ipc::Error(-32602, "workspace must be 1-9999, \"next-free\" or null");
     int id = value.get<int>();
     if (auto holder = workspaceHolder(id, placementId); !holder.empty())
-        throw ipc::Error(-32005, "workspace " + std::to_string(id) + " is " + holder,
+        throw ipc::Error(-32005, "Workspace " + std::to_string(id) + " is " + holder,
                          Json{{"retryable", false},
                               {"rule", layout.reservedWorkspaces.contains(id) ? "workspace.reserved" : "workspace.taken"}});
     return id;
