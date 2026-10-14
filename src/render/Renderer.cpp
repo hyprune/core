@@ -1813,13 +1813,14 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     glDisable(GL_DEPTH_TEST);
     glUseProgram(sky_);
     uniform(sky_, "environmentMap", 6);
-    // The panorama (rotation baked into its faces) replaces the gradient and the environment.
+    // A world 0.11 panorama (rotation baked into its faces) is the world's own background: it
+    // is drawn at every sky setting but off, the low preset's gradient included (one lookup).
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_CUBE_MAP, panorama_);
     glBindSampler(7, 0);
     uniform(sky_, "panoramaMap", 7);
     glUniform1f(location(sky_, "panoramaIntensity"), profile.contains("panorama") ? profile["panorama"].value("intensity", 1.f) : 1.f);
-    uniform(sky_, "skyMode", graphics["sky"] == "gradient" ? 1 : panorama_ ? 3 : 2);
+    uniform(sky_, "skyMode", panorama_ ? 3 : graphics["sky"] == "gradient" ? 1 : 2);
     uniform(sky_, "zenith", vec(sky["zenith"]));
     uniform(sky_, "horizon", vec(sky["horizon"]));
     uniform(sky_, "ground", vec(sky["ground"]));

@@ -102,7 +102,17 @@ void Runtime::builderWrite(const Json &records) {
     for (auto &r : records) {
         if (!r["ref"].get<std::string>().starts_with("world/"))
             continue; // only copies inside the folder (builderCopy runs before every place)
-        Json p{{"id", r["id"]}, {"ref", r["ref"]}, {"pose", r["pose"]}, {"scale", r["scale"]}};
+        // Poses come from floats: 0.1 mm and 1e-6 in the quaternion keep the file readable.
+        auto round = [](const Json &v, double scale) {
+            Json out = Json::array();
+            for (auto &x : v)
+                out.push_back(std::round(x.get<double>() * scale) / scale + 0.0);
+            return out;
+        };
+        Json p{{"id", r["id"]},
+               {"ref", r["ref"]},
+               {"pose", {{"position", round(r["pose"]["position"], 1e4)}, {"rotation", round(r["pose"]["rotation"], 1e6)}}},
+               {"scale", std::round(r["scale"].get<double>() * 1e4) / 1e4}};
         for (auto k : {"workspace", "locked"})
             if (r.contains(k))
                 p[k] = r[k];

@@ -357,6 +357,17 @@ struct Runtime {
     void builderWrite(const Json &records);
     const world::CatalogEntry *builderCopy(const world::CatalogEntry &);
     Json builderState() const;
+    // The atmosphere as IPC carries it (state.presentation, atmosphere.get): world 0.11's
+    // panorama is a package asset, like environment faces' pixels, so it is left out
+    // (atmosphere.set keeps the loaded one).
+    Json ipcProfile() const {
+        if (!world)
+            return nullptr;
+        auto profile = renderer.profile;
+        if (profile.is_object())
+            profile.erase("panorama");
+        return profile;
+    }
     uint64_t catalogRevision = 0;
     std::future<world::CatalogSnapshot> catalogScan;
     bool catalogDirty = true;
@@ -1980,7 +1991,7 @@ void Runtime::publish() {
         {"apps", apps},
         {"mounts", layout.state(world.get())},
         {"presentation",
-         {{"profile", world ? renderer.profile : Json(nullptr)},
+         {{"profile", ipcProfile()},
           {"fov", camera.fov},
           {"quality", renderer.intelQuality ? "intel" : "high"}}},
         {"spatial", spatial},
@@ -5117,7 +5128,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         config["graphics"]["fov"] = configured["graphics"]["fov"] = f;
         publish();
         ipc->notify("presentation.changed", {{"presentation",
-                                              {{"profile", world ? renderer.profile : Json(nullptr)},
+                                              {{"profile", ipcProfile()},
                                                {"fov", camera.fov},
                                                {"quality", renderer.intelQuality ? "intel" : "high"}}}});
         return Json{{"revision", ipc->revision()}};
@@ -5125,11 +5136,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     if (method == "atmosphere.get") {
         if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
-        auto profile=world ? renderer.profile : Json(nullptr);
+        auto profile=ipcProfile();
         if(profile.is_object() && !ipc::protocol::atLeast(protocol,"0.13"))profile.erase("outline");
-        // World 0.11's panorama is a package asset, like environment faces' pixels: the IPC
-        // profile never carries it (atmosphere.set keeps the loaded one).
-        if(profile.is_object())profile.erase("panorama");
         return Json{{"profile",profile},{"quality", renderer.intelQuality ? "intel" : "high"}};
     }
     if (method == "atmosphere.set") {
