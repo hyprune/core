@@ -38,13 +38,24 @@ std::string num(const Json &v) {
 double at(const Json &a, size_t i) { return a.at(i).get<double>(); }
 bool has(const Json &j, const char *key) { return j.is_object() && j.contains(key); }
 const char *axis(int j) { return j == 0 ? "x" : j == 1 ? "y" : "z"; }
+} // namespace
+std::string screenAspect(double width, double height) {
+    double r = width / height;
+    if (std::abs(r / (16. / 9) - 1) <= .005)
+        return "16:9";
+    if (r >= 2.33 && r <= 2.39)
+        return "21:9";
+    return "";
+}
+namespace {
 const std::vector<std::string> &versionsList() {
-    static const std::vector<std::string> list{"0.9", "0.10"};
+    static const std::vector<std::string> list{"0.9", "0.10", "0.11"};
     return list;
 }
 std::map<std::string, std::string> reservedTraits(const std::string &version) {
-    std::map<std::string, std::string> r{{"mount", "reserved for props that hold a window (RFC-0011 P4)"},
-                                         {"interactive", "reserved for use actions (RFC-0011 P4)"}};
+    std::map<std::string, std::string> r{{"interactive", "reserved for use actions (RFC-0011 P4)"}};
+    if (!atLeast(version, "0.11"))
+        r["mount"] = "needs object format 0.11 (workspace screens)";
     if (!atLeast(version, "0.10")) {
         r["mover"] = "needs object format 0.10";
         r["machine"] = "reserved for RFC-0013 live objects (object format 0.10)";
@@ -54,9 +65,10 @@ std::map<std::string, std::string> reservedTraits(const std::string &version) {
 // Which traits may share an asset (RFC-0011 "Allowed combinations"; machine per RFC-0013).
 const std::map<std::string, std::set<std::string>> &traitPairs() {
     static const std::map<std::string, std::set<std::string>> pairs{
-        {"decorative", {"collidable", "movable", "seat", "mover", "machine"}},
-        {"collidable", {"decorative", "movable", "seat", "machine"}},
-        {"movable", {"decorative", "collidable", "seat", "machine"}},
+        {"decorative", {"collidable", "movable", "seat", "mover", "machine", "mount"}},
+        {"collidable", {"decorative", "movable", "seat", "machine", "mount"}},
+        {"movable", {"decorative", "collidable", "seat", "machine", "mount"}},
+        {"mount", {"decorative", "collidable", "movable"}},
         {"character", {}},
         {"mover", {"decorative"}},
         {"seat", {"decorative", "collidable", "movable"}},
@@ -437,6 +449,10 @@ void validateObjectGltf(const Json &value, const std::string &version, const Jso
     }
     for (auto &s : arrayOr(slots, "stacks"))
         node(s.at("node").get<std::string>(), "slots.stacks " + s.at("id").get<std::string>());
+    if (has(traits, "mount"))
+        for (auto &a : traits["mount"]["anchors"])
+            if (a.contains("frameNode"))
+                node(a["frameNode"].get<std::string>(), "traits.mount anchor " + a["id"].get<std::string>());
     std::map<std::string, std::string> levelNodes;
     for (auto &l : arrayOr(slots, "levels")) {
         auto where = "slots.levels " + l.at("id").get<std::string>();
@@ -911,6 +927,39 @@ void validateObjectManifest(const Json &value, const std::string &version, const
     }
     if (has(traits, "mover") && traits["mover"].contains("offset"))
         inside(traits["mover"]["offset"], "traits.mover offset");
+    if (has(traits, "mount")) {
+        auto &anchors = traits["mount"]["anchors"];
+        unique(anchors, "id", "traits.mount anchors", fail);
+        if (std::count_if(anchors.begin(), anchors.end(), [](auto &a) { return a["role"] == "mounted-workspace"; }) > 1)
+            fail("traits.mount: at most one mounted-workspace anchor");
+        for (auto &a : anchors) {
+            auto where = "traits.mount anchor " + a["id"].get<std::string>();
+            double w = at(a["size"], 0), h = at(a["size"], 1);
+            quat(a["pose"]["rotation"], where);
+            if (a["role"] == "mounted-workspace") {
+                if (screenAspect(w, h).empty())
+                    fail(where + ": a workspace screen is 16:9 or 21:9, not " + fixed(std::round(w / h * 1000) / 1000) + ":1");
+                if (h < ScreenLimits::minHeight)
+                    fail(where + ": at least 0.9 m high, is " + num(a["size"][1]));
+            }
+            // The rectangle's corners lie inside the bounds grown by 0.1 m.
+            auto &q = a["pose"]["rotation"];
+            double x = at(q, 0), y = at(q, 1), z = at(q, 2), qw = at(q, 3);
+            auto &p = a["pose"]["position"];
+            bool outside = false;
+            for (auto [sx, sy] : {std::pair{-1, -1}, {1, -1}, {1, 1}, {-1, 1}}) {
+                double v[3]{sx * w / 2, sy * h / 2, 0};
+                double tx = 2 * (y * v[2] - z * v[1]), ty = 2 * (z * v[0] - x * v[2]), tz = 2 * (x * v[1] - y * v[0]);
+                double c[3]{v[0] + qw * tx + y * tz - z * ty, v[1] + qw * ty + z * tx - x * tz, v[2] + qw * tz + x * ty - y * tx};
+                for (int j = 0; j < 3; ++j)
+                    if (at(p, j) + c[j] < at(b["min"], j) - ScreenLimits::boundsMargin ||
+                        at(p, j) + c[j] > at(b["max"], j) + ScreenLimits::boundsMargin)
+                        outside = true;
+            }
+            if (outside)
+                fail(where + ": lies outside the bounds grown by 0.1 m");
+        }
+    }
     for (auto &[kind, list] : slots.items()) {
         unique(list, "id", "slots." + kind, fail);
         for (auto &s : list) {

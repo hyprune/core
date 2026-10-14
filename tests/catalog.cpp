@@ -54,7 +54,7 @@ void manifests() {
     check(!o::checkObject(bad, {}).valid && o::checkObject(bad, {}).errors[0].starts_with("bounds: min y must be 0"), "floor origin");
     bad = m;
     bad["traits"]["mount"] = Json::object();
-    check(o::checkObject(bad, {}).errors[0] == "traits.mount: reserved for props that hold a window (RFC-0011 P4); rejected in object format 0.9",
+    check(o::checkObject(bad, {}).errors[0] == "traits.mount: needs object format 0.11 (workspace screens); rejected in object format 0.9",
           "reserved trait named plainly");
     bad = m;
     bad["traits"]["mover"] = Json::object();
@@ -64,7 +64,7 @@ void manifests() {
     check(!o::checkObject(bad, {}).valid, "character and movable can't combine");
     bad = m;
     bad["formatVersion"] = "0.8";
-    check(o::checkObject(bad, {}).errors[0] == "formatVersion: \"0.8\" is not an object format (0.9, 0.10)", "format named");
+    check(o::checkObject(bad, {}).errors[0] == "formatVersion: \"0.8\" is not an object format (0.9, 0.10, 0.11)", "format named");
     bad = m;
     bad["extra"] = 1;
     check(!o::checkObject(bad, {}).valid, "closed manifest");
@@ -304,6 +304,69 @@ void support() {
     check(interaction::checkPlacement(s, sign, {}).ok && interaction::checkPlacement(s, box, {}).ok, "either surface");
     check(interaction::brokenSoftRules(s, loose, {}).empty(), "support is not waived");
 }
+// Object format 0.11: workspace screens (the mount trait's mounted-workspace anchor).
+void screens() {
+    namespace o = world::objects;
+    check(o::screenAspect(3.2, 1.8) == "16:9" && o::screenAspect(1.6 * 1.004, .9) == "16:9" &&
+              o::screenAspect(1.6 * 1.006, .9).empty(),
+          "16:9 within 0.5 %");
+    check(o::screenAspect(2.1, .9) == "21:9" && o::screenAspect(2.56, 1.08) == "21:9" && o::screenAspect(3.44, 1.44) == "21:9" &&
+              o::screenAspect(2.4, .9).empty() && o::screenAspect(4, 3).empty(),
+          "21:9 from 2.33 to 2.39");
+    Json anchor{{"id", "screen"}, {"role", "mounted-workspace"}, {"mountType", "hanging-wall"},
+                {"pose", {{"position", {0, .96, .07}}, {"rotation", {0, 0, 0, 1}}}}, {"size", {3.2, 1.8}}, {"frameNode", "bezel"}};
+    Json m{{"formatVersion", "0.11"}, {"id", "screen"}, {"version", "1.0.0"}, {"name", "Screen"}, {"category", "signage"},
+           {"scene", "object.glb"}, {"license", "CC0-1.0"},
+           {"attribution", Json::array({{{"path", "."}, {"author", "a"}, {"license", "CC0-1.0"}}})},
+           {"bounds", {{"min", {-1.66, 0, 0}}, {"max", {1.66, 1.92, .08}}}},
+           {"traits", {{"mount", {{"anchors", Json::array({anchor})}}}, {"movable", {{"surfaces", {"wall"}}, {"scale", {.5, 2}}}}}}};
+    auto r = o::checkObject(m, {});
+    check(r.valid, "a 16:9 wall screen");
+    auto errors = [&](Json doc) { return o::checkObject(doc, {}).errors; };
+    auto first = [&](Json doc, const std::string &start) {
+        auto e = errors(doc);
+        return !e.empty() && std::any_of(e.begin(), e.end(), [&](auto &x) { return x.starts_with(start); });
+    };
+    auto bad = m;
+    bad["formatVersion"] = "0.10";
+    check(first(bad, "traits.mount: needs object format 0.11"), "mount needs 0.11");
+    bad = m;
+    bad["traits"]["mount"]["anchors"][0]["size"] = {2.4, 1.8};
+    check(first(bad, "traits.mount anchor screen: a workspace screen is 16:9 or 21:9, not 1.333:1"), "aspect");
+    bad = m;
+    bad["traits"]["mount"]["anchors"][0]["size"] = {1.2, .675};
+    check(first(bad, "traits.mount anchor screen: at least 0.9 m high"), "height");
+    bad = m;
+    bad["traits"]["mount"]["anchors"].push_back(anchor);
+    bad["traits"]["mount"]["anchors"][1]["id"] = "second";
+    check(first(bad, "traits.mount: at most one mounted-workspace anchor"), "one workspace anchor");
+    bad = m;
+    bad["traits"]["mount"]["anchors"][0]["pose"]["position"][1] = 1.2;
+    check(first(bad, "traits.mount anchor screen: lies outside the bounds grown by 0.1 m") && errors(bad).size() == 1, "inside the bounds, once");
+    bad = m;
+    bad["traits"]["mount"]["anchors"][0]["pose"]["rotation"] = {0, .7071068, 0, .7071068};
+    check(first(bad, "traits.mount anchor screen: lies outside the bounds grown by 0.1 m"), "rotated out");
+    bad = m;
+    bad["traits"]["seat"] = {{"anchors", Json::array({{{"id", "a"}, {"position", {0, 0, .5}}, {"yaw", 0}, {"height", .45}}})}};
+    check(first(bad, "traits: mount and seat can't be combined"), "mount and seat");
+    bad = m;
+    bad["traits"]["mount"]["anchors"][0]["role"] = "data-object";
+    check(!o::checkObject(bad, {}).valid, "role enum");
+    auto tool = m;
+    tool["traits"]["mount"]["anchors"].push_back({{"id", "tool"}, {"role", "tool-mount"}, {"mountType", "hanging-wall"},
+                                                  {"pose", {{"position", {1.2, .5, .07}}, {"rotation", {0, 0, 0, 1}}}}, {"size", {.4, .4}}});
+    check(o::checkObject(tool, {}).valid, "tool-mount anchors keep any aspect");
+    // frameNode names one scene node.
+    Json gltf{{"asset", {{"version", "2.0"}}}, {"scene", 0}, {"scenes", Json::array({{{"nodes", Json::array({0u})}}})},
+              {"nodes", Json::array({{{"name", "bezel"}}})}};
+    o::Options options;
+    options.gltf = &gltf;
+    check(o::checkObject(m, options).valid, "frameNode found");
+    gltf["nodes"][0]["name"] = "frame";
+    auto e = o::checkObject(m, options).errors;
+    check(std::any_of(e.begin(), e.end(), [](auto &x) { return x == "traits.mount anchor screen: node \"bezel\" not found in the glTF"; }),
+          "frameNode missing");
+}
 } // namespace
 int main(int argc, char **argv) {
     if (argc != 2) {
@@ -314,6 +377,7 @@ int main(int argc, char **argv) {
     char pattern[] = "/tmp/hn-catalog-XXXXXX";
     fs::path tmp = mkdtemp(pattern);
     manifests();
+    screens();
     refs();
     catalog(fixture, tmp);
     archives(fixture, tmp);

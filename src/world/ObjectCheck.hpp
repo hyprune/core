@@ -24,6 +24,12 @@ struct Limits {
     static constexpr size_t libraryFiles = 4000, libraryBytes = 512u << 20;
     static constexpr double boundsTolerance = .01, characterOriginTolerance = .05, slotMargin = .5;
 };
+// A workspace screen anchor's aspect (object format 0.11): "16:9" within 0.5 %, "21:9" from
+// 2.33 to 2.39 (21:9, 64:27 and 43:18 panels), else "" (screenAspect in the schema repository).
+std::string screenAspect(double width, double height);
+struct ScreenLimits {
+    static constexpr double minHeight = .9, boundsMargin = .1;
+};
 // Object manifest formats core knows (schema directories with an object schema).
 const std::vector<std::string> &formats();
 bool atLeast(const std::string &version, const std::string &minimum);

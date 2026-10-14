@@ -156,7 +156,7 @@ void validateObjectDocument(const Json &value, const std::string &kind, const st
     struct Pinned {
         const char *version, *object, *library;
     };
-    static constexpr Pinned pinned[]{{"0.9", objectSchema09, librarySchema09}, {"0.10", objectSchema010, librarySchema010}};
+    static constexpr Pinned pinned[]{{"0.9", objectSchema09, librarySchema09}, {"0.10", objectSchema010, librarySchema010}, {"0.11", objectSchema011, librarySchema011}};
     static std::map<std::string, Json> parsed;
     static std::mutex lock;
     static const Json common = Json::parse(commonSchema08);
