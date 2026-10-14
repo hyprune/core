@@ -2205,6 +2205,14 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         for (const auto &d : objectDraws)
             drawBatch(d.batch, false, d.first, d.count);
         depthOnly = false;
+        // Characters too (posed here as for the worker): blended world haze behind one stays
+        // behind it. Their colour comes from the worker's frame; npcsDrawn counts those.
+        if (!npcs.empty()) {
+            auto drawn = npcsDrawn;
+            passUniforms(skinned_);
+            drawNpcs(planes, visible, regions, tone, exposure);
+            npcsDrawn = drawn;
+        }
         glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
     } else {
     glUseProgram(upscale_);
