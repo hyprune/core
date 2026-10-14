@@ -201,7 +201,9 @@ def acceptance(client, children, args, token, socket):
     # Typing and the free cursor.
     facing(second, 3); keys('-k', 'e')
     expect('typing mode (E use): typing', 'typing')
+    check('in use, the window\'s "E USE / F FOCUS" prompt is hidden', not s.camera()['overlays']['interactionHints'], s.camera()['overlays'])
     chord(); wait(lambda: s.camera()['mode'] != 'typing'); expect('typing off (exit): back to target', 'target')
+    check('out of use, the prompt is back', s.camera()['overlays']['interactionHints'], s.camera()['overlays'])
     # E beyond the use distance (6 m): refused with "Too far" and the out-of-range flash.
     facing(second, 9); time.sleep(.3); n = len(notices('interaction.out_of_range')); keys('-k', 'e'); time.sleep(.4)
     check('E beyond the use distance: refused, "Too far", out-of-range flash', s.camera()['mode'] != 'typing' and

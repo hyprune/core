@@ -5643,7 +5643,7 @@ std::vector<surfaces::Surface> Runtime::frameSurfaces() {
             surfaces.push_back(fs->surface);
         }
     }
-    renderer.showInteractionHints = !freeCursor;
+    renderer.showInteractionHints = !freeCursor && !typing; // in use (E) the "E USE / F FOCUS" prompt is moot
     renderer.toolPrompt = nullptr;
     auto prompt = [&](Vec3 point, std::string text) {
         renderer.toolPrompt = {{"position", {point.x, point.y, point.z}}, {"text", text}};
