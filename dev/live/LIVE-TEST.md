@@ -391,3 +391,27 @@ you placed from Director → Objects:
 - [ ] Offload on (Settings → Performance): in the Rime Vault, stand so a resident walks or
   sits in front of the purge vent steam: the steam stays behind them. Toggle offload off and on
   while looking: the picture matches.
+
+## Workspace screens (IPC 0.27, object format 0.11)
+
+A placed screen is a home like an authored wall, so F, workspace travel and pulling windows
+off it use the same deferred focus, cursor and workspace paths as authored walls; the new code
+only adds the home (in the tick) and the screen's wall plane. Nested `--screens` and
+`--screens-shell` cover the logic; these cover the hardware cursor and the real monitor. With
+the starter screens in the user folder (or the starter kit 0.3.0 installed) and Lumen Reach:
+
+- [ ] Director → Objects → Catalog → a stand screen → Add to pocket; tool 5 Primary on open
+  floor: the screen stands there and a toast says which workspace it shows (25).
+- [ ] Open a terminal on that workspace (`hyprctl dispatch workspace 25`, open it, go back to
+  20): the screen shows it, at the monitor's aspect; the window is tiled on 25, not floating.
+- [ ] Aim at the screen and press F: the camera flies in and the cursor is the desktop's;
+  Super+Tab flies out with the cursor hidden again. No crash, no stuck cursor shape.
+- [ ] Super+LMB on the terminal's rectangle on the screen pulls it into the world (it moves to
+  the room and floats); dropping it back on the screen returns it to 25, tiled.
+- [ ] Switch to workspace 25 with your normal keybind from the room: you travel to the
+  screen's arrival spot facing it. Back to 20.
+- [ ] Director → Objects → Placed → the screen → Workspace: type 26 and Enter, then None,
+  then Next free: the wall follows each time (empty with None). Carry the screen a few metres
+  with Super+LMB: the wall moves with it on release.
+- [ ] A 21:9 wall screen on a wall: the workspace shows centred with dark bars on a 16:9
+  monitor, full width on a 21:9 one.
