@@ -681,6 +681,7 @@ struct Runtime {
     Json characterRecord(const world::CatalogEntry &, const std::string &id, const std::string &path, Vec3 at, float yaw,
                          const Json &settings);
     void requireRoute(const std::string &ref, const interaction::Body &, const std::string &except = "");
+    bool drawnPath(const std::string &ref) const;
     interaction::Body bodyOf(const world::CatalogEntry &);
     std::optional<std::pair<Vec3, float>> standingSpot(const interaction::Body &, const Json &pose,
                                                        interaction::WalkProblem *why = nullptr);

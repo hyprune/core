@@ -506,9 +506,12 @@ void Runtime::characterCarryTick() {
     CarryDrop drop;
     if (floor) {
         drop.at = {aimAt.x, *floor, aimAt.z};
-        // Routes of this world: the nearest within the snap distance at a walkable point.
+        // Routes of this world, and paths the user drew (they become routes when it is set down
+        // on one): the nearest within the snap distance, walkable for its body.
         float best = carrySnap;
-        auto consider = [&](const Json &p, const std::string &ref) {
+        auto consider = [&](Json p, const std::string &ref) {
+            if (drawnPath(ref))
+                p["use"] = "route";
             if (world::pathUse(p) != "route")
                 return;
             auto route = world::routeOf(p);

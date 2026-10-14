@@ -302,6 +302,10 @@ void Tools::point(const std::string &world, const std::string &area, Vec3 p) {
         {{"position", {p.x, p.y, p.z}}, {"type", std::array{"line", "curve", "arc"}[pathMode % 3]}});
 }
 void Tools::finishPath() {
+    // A path left without points (every point removed again) is dropped: nothing shows it.
+    auto it = std::find_if(paths.begin(), paths.end(), [&](const Json &p) { return p["id"] == activePath; });
+    if (it != paths.end() && it->value("points", Json::array()).empty())
+        paths.erase(it);
     activePath.clear();
 }
 bool Tools::locked(const std::string &world, const surfaces::Instance &i) const {

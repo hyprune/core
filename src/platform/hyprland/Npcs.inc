@@ -976,11 +976,16 @@ Json Runtime::characterRecord(const world::CatalogEntry &e, const std::string &i
             r[key] = settings[key];
     return r;
 }
-// Checks a route for a character: a walkable route path of this world with room for it.
+// Checks a route for a character: a walkable route path of this world with room for it. A
+// path the user drew (tool 3 draws generic paths) is taken too: it becomes a route when it is
+// walkable for the character (RFC-0011 amendment, "Drawn paths become routes").
 void Runtime::requireRoute(const std::string &ref, const interaction::Body &body, const std::string &except) {
     auto path = pathRecord(ref);
     if (path.is_null())
         throw ipc::Error(-32004, "unknown path " + ref);
+    bool drawn = drawnPath(ref);
+    if (drawn)
+        path["use"] = "route";
     if (world::pathUse(path) != "route")
         throw ipc::Error(-32007, ref + " is not a route", Json{{"retryable", false}, {"rule", "walkable"}});
     if (world->collision.empty())
@@ -995,6 +1000,18 @@ void Runtime::requireRoute(const std::string &ref, const interaction::Body &body
         bound += n.path == qualifiedPath(ref) && n.id != except;
     if (bound >= world::charactersPerPath)
         throw budgetError("characters per path (8)");
+    if (drawn) {
+        auto id = qualifiedPath(ref).substr(5);
+        auto before = editor.path(id);
+        editor.setPath(id, path);
+        editor.recordEdit("path", world->id, id, before, path);
+        saveEditor();
+    }
+}
+// A user path of this world with use generic (tool 3's own paths): one a character may be put on.
+bool Runtime::drawnPath(const std::string &ref) const {
+    auto path = pathRecord(ref);
+    return qualifiedPath(ref).starts_with("user/") && path.is_object() && world::pathUse(path) == "generic";
 }
 interaction::Body Runtime::bodyOf(const world::CatalogEntry &e) {
     auto traits = e.manifest.value("traits", Json::object()).value("character", Json::object());
@@ -1574,6 +1591,9 @@ Json Runtime::npcDiagnostics() {
             {"present", npcPresent},
             {"seatsTaken", Json(std::vector<std::string>(seatTaken.begin(), seatTaken.end()))},
             {"aimed", npcAimed},
+            {"carry", carried.empty() ? Json(nullptr)
+                                      : Json{{"id", carried}, {"valid", carryDrop.valid}, {"route", carryDrop.route},
+                                             {"at", vecJson(carryDrop.at)}, {"highlight", carryDrop.samples.size()}}},
             {"interaction", npcsState()["interaction"]}};
 }
 // The offload worker poses and draws characters itself (parity with the in-process draw):
