@@ -213,14 +213,20 @@ const Json *Layout::binding(int id, const world::World *w) const {
 void Layout::deriveDefaults(const world::World *w) {
     // Explicit homes win by area and by workspace ID (IDs are global across worlds).
     defaults = Json::array();
-    if (!w || workspaceBase <= 0)
+    screenBound.clear();
+    if (!w)
         return;
     std::set<int> taken = reservedWorkspaces;
     for (const auto &b : bindings)
         taken.insert(b.at("id").get<int>());
+    auto screen = [&](const Json &area) {
+        return std::any_of(screenHomes.begin(), screenHomes.end(), [&](auto &s) { return area.at("id") == s.second; });
+    };
     for (const auto &a : w->areas) {
-        if (bindings.size() + defaults.size() >= 32)
+        if (workspaceBase <= 0 || bindings.size() + defaults.size() >= 32)
             break;
+        if (screen(a))
+            continue;
         if (std::any_of(bindings.begin(), bindings.end(),
                         [&](auto &b) { return b.at("worldId") == w->id && b.at("areaId") == a.at("id"); }))
             continue;
@@ -231,6 +237,14 @@ void Layout::deriveDefaults(const world::World *w) {
         if (!taken.insert(id).second)
             continue;
         defaults.push_back({{"id", id}, {"worldId", w->id}, {"areaId", a.at("id")}});
+    }
+    // Screens show the workspace they were bound to, unless an explicit or authored home
+    // already has it.
+    for (auto &[id, areaId] : screenHomes) {
+        if (bindings.size() + defaults.size() >= 32 || !taken.insert(id).second)
+            continue;
+        defaults.push_back({{"id", id}, {"worldId", w->id}, {"areaId", areaId}});
+        screenBound.insert(areaId);
     }
 }
 Json Layout::effectiveBindings() const {
@@ -948,7 +962,7 @@ void Layout::mount(const Instance &i, const world::World *w, Surface s) {
     need(w && !overlaps(s, w->collision), -32005, "mount intersects geometry");
     auto b = homeOf(i, w);
     Json area = b ? b->at("areaId") : Json(spawnAreas.contains(i.id) ? spawnAreas.at(i.id) : "");
-    if (area == "" && !w->areas.empty())
+    if (area == "" && w->authoredHomes())
         area = w->areas.front().at("id");
     std::erase_if(placements.get_ref<Json::array_t &>(),
                   [&](auto &p) { return p.at("worldId") == w->id && p.at("areaId") == area && matches(p, i); });
@@ -995,7 +1009,7 @@ Json Layout::state(const world::World *w) const {
 }
 const Json *roomAnchor(const world::World &w, size_t index) {
     auto anchors = w.manifest.find("anchors");
-    if (!w.areas.empty() || anchors == w.manifest.end() || !anchors->is_array() || index >= anchors->size())
+    if (w.authoredHomes() || anchors == w.manifest.end() || !anchors->is_array() || index >= anchors->size())
         return nullptr;
     auto &a = (*anchors)[index];
     return a.value("screenType", "") == "com.hyprune.window" ? &a : nullptr;

@@ -374,6 +374,7 @@ struct Runtime {
     std::set<std::string> objectNotices;              // one-shot notices (blocked, substituted, missing)
     struct PocketObject {
         std::string itemId, ref, name;
+        int workspace = 0; // a pocketed workspace screen keeps its workspace for the next place
     };
     std::vector<PocketObject> pocketObjects;
     uint64_t pocketSerial = 0;
@@ -407,6 +408,14 @@ struct Runtime {
     void objectsTick();
     void objectsSync();
     void objectsWorldLoaded();
+    // Workspace screens (Screens.inc, IPC 0.27): user placements that are workspace homes.
+    size_t screenSignature = 0;
+    void screensSync();
+    Json catalogScreen(const world::CatalogEntry &) const;
+    Json instanceScreen(const ObjectInfo &) const;
+    std::string workspaceHolder(int workspace, const std::string &exceptPlacement) const;
+    int nextFreeWorkspace(const std::string &exceptPlacement = "") const;
+    int screenWorkspace(const Json &value, const std::string &placementId) const;
     ObjectInfo *objectInfo(const std::string &id);
     ObjectInfo *selectedInfo();
     interaction::Transform objectPose(const std::string &id);
@@ -2084,6 +2093,7 @@ void Runtime::finishLoad() {
         layout.freePoses.clear();
         layout.occupiedPoses.clear();
         layout.spawnAreas.clear();
+        layout.screenHomes.clear(); // the new world's screens become homes with its objects
         deriveHomes();
         restoreFullscreenWindows();
         fullscreen = {};
@@ -3778,6 +3788,7 @@ Vec3 objectOrigin(const world::World &w, const std::string &id) {
 } // namespace
 #include "Gizmo.inc"
 #include "Objects.inc"
+#include "Screens.inc"
 #include "Paths.inc"
 #include "Npcs.inc"
 #include "Companion.inc"

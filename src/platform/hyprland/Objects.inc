@@ -485,6 +485,7 @@ void Runtime::objectsSync() {
     }
     companionInject(infos);
     objectInfos = std::move(infos);
+    screensSync(); // screens are homes while placed, wherever they are (their own signature)
     // Collision, visibility and frames follow only a real change (a catalog rescan that
     // resolves the same objects changes nothing).
     uint64_t signature = 1469598103934665603ull;
@@ -626,6 +627,12 @@ interaction::PlacementVerdict Runtime::objectVerdict(int asset, const interactio
     if (self && *self < world->objectInstances.size()) {
         size_t first = world->objectInstances[*self].collisionFirst, count = world->objectInstances[*self].collisionCount;
         scene.ignore = [first, count](unsigned id) { return id >= first && id < first + count; };
+        // A workspace screen's own approach (IPC 0.27) never blocks moving that screen.
+        auto own = "screen-" + world->objectInstances[*self].id;
+        scene.approaches.clear();
+        for (auto &[id, zone] : interaction::namedApproachZones(*world, scene.ignore))
+            if (id != own)
+                scene.approaches.push_back(zone);
     }
     scene.support = support;
     scene.player = player;
@@ -979,11 +986,20 @@ void Runtime::placeFromPocket(bool surface) {
     auto id = newPlacementId();
     Json record{{"worldId", world->id}, {"id", id}, {"areaId", areaAt(t->position)}, {"ref", e->ref},
                 {"pose", poseJson(*t)}, {"scale", 1.0}};
+    // A workspace screen shows the workspace it had when it was pocketed, else the next free.
+    int workspace = 0;
+    if (!catalogScreen(*e).is_null()) {
+        workspace = item->workspace && workspaceHolder(item->workspace, id).empty() ? item->workspace : nextFreeWorkspace(id);
+        if (workspace)
+            record["workspace"] = workspace;
+    }
     auto name = item->name;
     pocketObjects.erase(item);
     unplacedSelected = pocketObjects.empty() ? "" : pocketObjects.back().itemId;
     objectEdit(id, nullptr, record);
     objectNotice("object.placed", "Placed " + name);
+    if (workspace)
+        objectNotice("screen.bound", name + " shows workspace " + std::to_string(workspace));
 }
 // Tool 5 Alternate on a user placement: it leaves the world and becomes the selected
 // pocket item (authored objects are hidden from the Director instead).
@@ -1009,7 +1025,9 @@ void Runtime::pocketAimedObject() {
     if (tooFar(aimed->second.distance, "reach_placement", "pocket") || pocketObjects.size() >= pocketObjectLimit)
         return;
     auto ref = info->ref, name = info->name, id = info->id;
-    pocketObjects.push_back({"pocket-" + std::to_string(++pocketSerial), ref, name});
+    auto placed = editor.placement(world->id, id);
+    pocketObjects.push_back({"pocket-" + std::to_string(++pocketSerial), ref, name,
+                             placed.is_object() ? placed.value("workspace", 0) : 0});
     unplacedSelected = pocketObjects.back().itemId;
     objectEdit(id, editor.placement(world->id, id), nullptr);
     ipc->notify("runtime.notice", {{"level", "info"}, {"code", "placement.pocketed"}, {"message", "Pocketed " + name}});
@@ -1038,7 +1056,8 @@ Json Runtime::objectsState() {
                              {"activity", nullptr},
                              {"seat", nullptr},
                              {"character", i.character},
-                             {"accent", nullptr}});
+                             {"accent", nullptr},
+                             {"screen", instanceScreen(i)}});
         // IPC 0.23: a character's route, what it is doing and the seat it holds.
         if (!i.character || !world)
             continue;
@@ -1176,6 +1195,12 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
                     entry["companion"] = companionCapability(*e);
                 else
                     entry["companion"] = nullptr;
+        // IPC 0.27: a workspace screen's anchor (aspect, size, mount type).
+        if (ipc::protocol::atLeast(methodProtocol, "0.27"))
+            for (auto &entry : entries) {
+                auto *e = catalogEntry(entry["ref"]);
+                entry["screen"] = e ? catalogScreen(*e) : Json(nullptr);
+            }
         return Json{{"revision", catalogRevision}, {"entries", entries}};
     }
     if (method == "libraries.list") {
@@ -1250,7 +1275,9 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         return revision({{"itemId", pocketObjects.back().itemId}});
     }
     if (method == "objects.place") {
-        only({"ref"}, {"pose", "scale"});
+        only({"ref"}, {"pose", "scale", "workspace"});
+        if (params.contains("workspace") && !ipc::protocol::atLeast(methodProtocol, "0.27"))
+            throw ipc::Error(-32602, "unknown parameter workspace");
         if (!params["ref"].is_string())
             throw ipc::Error(-32602, "ref must be a string");
         auto *e = catalogEntry(params["ref"]);
@@ -1317,10 +1344,21 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         if (!placed)
             throw refusal("Not placed", last);
         auto id = newPlacementId();
+        // Workspace screens (IPC 0.27) show a workspace from the start: the one asked for, else
+        // the next free one; null leaves the screen empty.
+        int workspace = 0;
+        if (!catalogScreen(*e).is_null())
+            workspace = screenWorkspace(params.contains("workspace") ? params["workspace"] : Json("next-free"), id);
+        else if (params.contains("workspace") && !params["workspace"].is_null())
+            throw ipc::Error(-32005, e->name + " is not a workspace screen");
         Json rec{{"worldId", world->id}, {"id", id}, {"areaId", areaAt(placed->position)}, {"ref", e->ref},
                  {"pose", poseJson(*placed)}, {"scale", scale}};
+        if (workspace)
+            rec["workspace"] = workspace;
         objectEdit(id, nullptr, rec);
         objectNotice("object.placed", "Placed " + e->name);
+        if (workspace)
+            objectNotice("screen.bound", e->name + " shows workspace " + std::to_string(workspace));
         return revision({{"id", id}});
     }
     if (method == "objects.transform") {
@@ -1434,22 +1472,44 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         auto &patch = params["patch"];
         if (!patch.is_object() || patch.empty())
             throw ipc::Error(-32602, "patch must name at least one setting");
+        bool screens = ipc::protocol::atLeast(methodProtocol, "0.27");
         for (auto &[k, v] : patch.items())
-            if (k != "locked" || !v.is_boolean())
-                throw ipc::Error(-32602, "IPC 0.22 configures only locked (a boolean)");
+            if (!(k == "locked" && v.is_boolean()) && !(k == "workspace" && screens))
+                throw ipc::Error(-32602, screens ? "objects.configure takes locked (a boolean) and workspace"
+                                                 : "IPC 0.22 configures only locked (a boolean)");
         if (i.character)
             throw ipc::Error(-32005, "characters are protected");
         if (!i.movable)
             throw ipc::Error(-32005, i.name + " is not movable");
         auto before = record(i);
         Json after = before.is_object() ? before : Json{{"worldId", world->id}, {"objectId", i.id}, {"areaId", i.areaId}};
-        if (patch["locked"].get<bool>())
-            after["locked"] = true;
-        else
-            after.erase("locked");
+        if (patch.contains("locked")) {
+            if (patch["locked"].get<bool>())
+                after["locked"] = true;
+            else
+                after.erase("locked");
+        }
+        // IPC 0.27: the workspace a screen shows (a number, "next-free" or null).
+        int workspace = -1;
+        if (patch.contains("workspace")) {
+            if (i.source != "user" || !i.entry || catalogScreen(*i.entry).is_null())
+                throw ipc::Error(-32005, i.name + " is not a workspace screen");
+            if (i.locked && !patch.contains("locked"))
+                throw ipc::Error(-32005, i.name + " is locked");
+            workspace = screenWorkspace(patch["workspace"], i.id);
+            if (workspace)
+                after["workspace"] = workspace;
+            else
+                after.erase("workspace");
+        }
         if (i.source == "authored" && after.size() == 3 && !after.contains("pose") && !after.contains("scale") && !after.contains("hidden"))
             after = nullptr;
+        auto name = i.name;
         objectEdit(i.id, before, after);
+        if (workspace > 0)
+            objectNotice("screen.bound", name + " shows workspace " + std::to_string(workspace));
+        else if (workspace == 0)
+            objectNotice("screen.unbound", name + " shows no workspace");
         return revision();
     }
     throw ipc::Error(-32601, "unknown method");

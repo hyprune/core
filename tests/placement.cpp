@@ -356,6 +356,34 @@ int main() {
         assert(!surfaces::roomAnchor(areas, 0) && surfaces::adoptRoomClient(areas, 0, true, false) == A::Pocket);
         world::World bare;
         assert(!surfaces::roomAnchor(bare, 0) && surfaces::adoptRoomClient(bare, 0, true, false) == A::Pocket);
+        // A user workspace screen's home (IPC 0.27) keeps an area-less world's room anchors.
+        world::World screened = docks;
+        screened.areas = {{{"id", "screen-u-000001"}}};
+        screened.screenHomes = 1;
+        assert(!screened.authoredHomes() && surfaces::roomAnchor(screened, 1));
+        assert(surfaces::adoptRoomClient(screened, 0, true, false) == A::Anchor);
+    }
+    {
+        // Workspace screens bind after the authored homes, on a workspace nobody else holds.
+        world::World w;
+        w.id = "w";
+        w.areas = world::Json::array({{{"id", "court"}, {"workspaceSlot", "01"}}, {{"id", "screen-u-a"}, {"workspaceSlot", "21"}},
+                                      {{"id", "screen-u-b"}, {"workspaceSlot", "23"}}, {{"id", "screen-u-c"}, {"workspaceSlot", "24"}}});
+        w.screenHomes = 3;
+        surfaces::Layout l;
+        l.workspaceBase = 20;
+        l.reservedWorkspaces = {20};
+        l.bindings = world::Json::array({{{"id", 24}, {"worldId", "other"}, {"areaId", "x"}}});
+        l.screenHomes = {{21, "screen-u-a"}, {23, "screen-u-b"}, {24, "screen-u-c"}};
+        l.deriveDefaults(&w);
+        assert(l.binding(21, &w) && l.binding(21, &w)->at("areaId") == "court"); // the authored home keeps 21
+        assert(l.binding(23, &w) && l.binding(23, &w)->at("areaId") == "screen-u-b");
+        assert((l.screenBound == std::set<std::string>{"screen-u-b"}));        // 24 is an explicit home elsewhere
+        assert(l.defaults.size() == 2);                                         // the screen areas derive no slot homes
+        l.workspaceBase = 0;
+        l.deriveDefaults(&w);
+        // Without slot homes (workspace_base 0) screens still bind, and 21 is free for one.
+        assert(l.defaults.size() == 2 && l.binding(21, &w)->at("areaId") == "screen-u-a" && l.binding(23, &w));
     }
     {
         // World-owned workspaces: room, homes (explicit and derived), world locations.

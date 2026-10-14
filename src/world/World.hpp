@@ -168,6 +168,13 @@ struct World {
     Json walkingNodes = Json::array(), walkingEdges = Json::array();
     Json areas = Json::array(), anchors = Json::array(), objects = Json::array(), placementZones = Json::array(),
          atmosphere;
+    // The package's own areas, anchors and spawns come first; user workspace screens (IPC 0.27)
+    // append a home each (area, anchor and arrival spawn) after them while they are placed.
+    size_t screenHomes = 0;
+    size_t authoredAreas() const { return areas.size() - std::min(screenHomes, areas.size()); }
+    // An area-less package keeps its room-anchor and free-pose rules for room windows even
+    // when user screens add homes.
+    bool authoredHomes() const { return authoredAreas() > 0; }
     std::array<Image, 6> environment;
     std::vector<CubeLevel> environmentHigh, environmentLow;
     const Spawn &spawn(const std::string &id = "") const;

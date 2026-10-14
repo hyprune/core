@@ -167,6 +167,11 @@ Json Server::visibleState(const Peer &p) const {
         if (state.contains("companion") && state["companion"].is_object())
             state["companion"].erase("pace");
     }
+    // IPC 0.27: workspace screens on object instances.
+    if (!protocol::atLeast(p.protocol, "0.27") && state.is_object() && state.contains("objects") && state["objects"].is_object() &&
+        state["objects"].contains("instances"))
+        for (auto &i : state["objects"]["instances"])
+            i.erase("screen");
     // IPC 0.24 (RFC-0013): the live state of bound machines.
     if (!protocol::atLeast(p.protocol, "0.24") && state.is_object())
         state.erase("live");

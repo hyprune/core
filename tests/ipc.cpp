@@ -132,6 +132,32 @@ void hudStreams(const std::string &runtime) {
 }
 // IPC 0.26: tool 9 named on the wire (editor.debugTool, the slot-9 definition, tool9), the
 // companion's pace and 128-item pocket and mount instance lists; 0.25 peers keep the 0.25 view.
+// IPC 0.27: object instances carry screen; 0.26 peers see the 0.26 instance shape.
+void workspaceScreens(const std::string &runtime) {
+    std::vector<LaunchGrant> grants{{randomId(), "org.hyprune.test", {"state.read"}}, {randomId(), "org.hyprune.test", {"state.read"}}};
+    Server server(runtime, "ipc027", grants, [](auto &, auto &) { return Json{{"ok", true}}; });
+    Json screen = {{"workspace", 23}, {"home", "screen-u-7c2e91"}, {"aspect", "16:9"}, {"size", {3.2, 1.8}}};
+    server.publish({{"objects", {{"instances", Json::array({Json{{"id", "u-7c2e91"}, {"screen", screen}},
+                                                           Json{{"id", "lamp"}, {"screen", nullptr}}})}}}});
+    size_t index = 0;
+    for (std::string version : {"0.26", "0.27"}) {
+        const bool latest = version == "0.27";
+        Client c(server.path());
+        auto request = [&](Json j) {
+            c.sendJson(j);
+            for (int i = 0; i < 3; ++i)
+                server.poll();
+            return c.receive();
+        };
+        auto h = hello(grants[index++].token);
+        h["params"]["protocols"] = {version};
+        check(request(h)["result"]["protocol"] == version, "0.27 negotiation");
+        auto state = request(req("sub", "state.subscribe", {{"topics", {"state"}}}))["result"]["snapshot"]["state"];
+        auto &instances = state["objects"]["instances"];
+        check(instances[0].contains("screen") == latest && instances[1].contains("screen") == latest, "screen projection");
+        check(!latest || instances[0]["screen"] == screen, "screen kept for 0.27");
+    }
+}
 void debugToolPacePocket(const std::string &runtime) {
     std::vector<LaunchGrant> grants{{randomId(), "org.hyprune.test", {"state.read"}}, {randomId(), "org.hyprune.test", {"state.read"}}};
     Server server(runtime, "ipc026", grants, [](auto &, auto &) { return Json{{"ok", true}}; });
@@ -428,6 +454,7 @@ int main() {
     try {
         inheritance(dir);
         debugToolPacePocket(dir);
+        workspaceScreens(dir);
         hudStreams(dir);
         renewals(dir);
         auto token = randomId(), token02 = randomId(), token03 = randomId(), token04 = randomId(), token05 = randomId();

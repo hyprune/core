@@ -262,7 +262,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             (!layout || (!layout->freePoses.contains(it->surface.id) && !layout->unplaced.contains(it->surface.id))))
             if (auto a = surfaces::roomAnchor(*world, std::distance(entries.begin(), it)))
                 surfaces::roomAnchorPose(it->surface, *a);
-        if (!attached && layout && world->areas.empty() && layout->freePoses.contains(it->surface.id)) {
+        if (!attached && layout && !world->authoredHomes() && layout->freePoses.contains(it->surface.id)) {
             auto pixels = it->surface;
             it->surface = layout->freePoses.at(it->surface.id);
             it->surface.title = pixels.title; // the pose was stored at spawn, before the client titled itself
@@ -278,7 +278,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 it->visible = false;
         }
         it->elsewhere = elsewhere;
-        if (!attached && layout && camera && world && !world->areas.empty() && !elsewhere) {
+        if (!attached && layout && camera && world && world->authoredHomes() && !elsewhere) {
             it->visible = false;
             auto placed = layout->locate(it->instance, world, *camera, it->surface.pixelWidth, it->surface.pixelHeight);
             // A floating room client nothing poses (moved in natively, from a home or another
@@ -707,7 +707,13 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         it->surface.title = area->at("theme").get<std::string>() + " / workspace " + std::to_string(id);
         it->surface.pixelWidth = 1280;
         it->surface.pixelHeight = 720;
-        surfaces::anchorPlane(it->surface, *anchor, 1280, 720);
+        // A user workspace screen (IPC 0.27; 16:9 or 21:9) shows the workspace at the monitor's
+        // aspect, centred in its frame; authored walls keep their 16:9 plane.
+        bool screen = size_t(area - world->areas.begin()) >= world->authoredAreas();
+        if (screen && monitor->m_size.x > 0 && monitor->m_size.y > 0)
+            surfaces::anchorPlane(it->surface, *anchor, int(monitor->m_size.x), int(monitor->m_size.y));
+        else
+            surfaces::anchorPlane(it->surface, *anchor, 1280, 720);
         // The workspace's windows in native stacking order: tiled, floating, pinned,
         // fullscreen; within a layer by the compositor's window list (a raise moves a
         // window to its end), so focus raises change the wall without a client commit.

@@ -355,7 +355,7 @@ void decidePlaceable(CatalogEntry &e) {
         return;
     }
     for (auto &t : e.traits)
-        if (t != "decorative" && t != "collidable" && t != "movable" && t != "seat" && t != "machine") {
+        if (t != "decorative" && t != "collidable" && t != "movable" && t != "seat" && t != "machine" && t != "mount") {
             e.reason = t + ": not placeable in this core";
             return;
         }

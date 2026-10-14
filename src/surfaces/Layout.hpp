@@ -17,6 +17,11 @@ class Layout {
     Json bindings = Json::array(), defaults = Json::array(), placements = Json::array(), instances = Json::array();
     int roomWorkspace = 20, workspaceBase = 0;
     std::set<int> reservedWorkspaces;
+    // User workspace screens of the loaded world (IPC 0.27): workspace -> the area id of the
+    // home it injected into the world. deriveDefaults binds them after the authored homes when
+    // their workspace is free; screenBound lists the ones it bound.
+    std::vector<std::pair<int, std::string>> screenHomes;
+    std::set<std::string> screenBound;
     void deriveDefaults(const world::World *);
     Json effectiveBindings() const;
     std::vector<std::string> pocketOrder;

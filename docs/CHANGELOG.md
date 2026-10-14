@@ -196,6 +196,28 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   previous projection: tool 1 for tool 9, five tool definitions, no `tool9`, `debugTool`
   or `pace`, 16-item lists (the selected and carried windows kept) and a count of at most
   32, also in `mounts.changed`.
+- **0.27** (draft) Workspace screens (RFC-0011 amendment; object format 0.11). No new
+  method, event or grant. A user placement of an object whose `mount` trait has a
+  `mounted-workspace` anchor is a workspace screen: while it is placed (active or still
+  loading) and bound to a workspace, it is that workspace's home in the loaded world, with
+  an area `screen-<placement id>` (its `workspaceSlot` is the workspace number), the
+  anchor at the instance pose and scale (`mount.role` mounted-workspace, `interaction`
+  focus-in) and an arrival spawn in front of it, all in `mounts` like an authored home; the
+  binding is a derived default (never persisted in the layout), after the world's own
+  homes. The wall, tiled home windows, F and workspace travel work as for authored walls;
+  the screen shows the workspace at the monitor's aspect, centred in its 16:9 or 21:9
+  frame. Required `objects.catalog` entry `screen` (null, or `{aspect 16:9|21:9, size,
+  mountType}`) and object instance `screen` (null, or `{workspace|null, home|null, aspect,
+  size}`, `home` the area id while it is a home). `objects.place` and the
+  `objects.configure` patch take `workspace`: 1-9999, `"next-free"` (the lowest workspace
+  above `workspace_base` that is no home of this world, no explicit home, not the room and
+  no configured location) or null (no home); `objects.place` and tool 5 bind a screen to
+  the next free workspace unless told otherwise, and a screen pocketed with tool 5 keeps its
+  workspace for the next place. A taken workspace is refused with -32005 and rule
+  `workspace.taken` (the room or a location: `workspace.reserved`). The placement record in
+  `editor.json` keeps `workspace`. Notices `screen.bound`, `screen.unbound`. A screen's
+  own approach zone never refuses moving it. Older sessions see no `screen` fields and
+  can't send `workspace`; the injected homes appear in their `mounts` too.
 
 ### Changes without a protocol bump
 
@@ -635,6 +657,13 @@ RFC-0005 "Amendment: reachable spawns, home windows and world switches":
   is withdrawn.
 
 Older packages remain accepted by core at every format version above.
+
+Object manifests (`object.json`, `library.json`) are numbered like world formats; core
+checks 0.9, 0.10 (draft) and **0.11** (draft): 0.11 switches on the `mount` trait for
+workspace screens (1-4 anchors, at most one `mounted-workspace` anchor, 16:9 within 0.5 %
+or 21:9 from 2.33 to 2.39, at least 0.9 m high, every rectangle inside the bounds grown by
+0.1 m, `frameNode` a scene node; `tool-mount` anchors are inert). Such objects are
+placeable; world packages can't author them yet.
 
 Optional world extensions, at any format version: `com.hyprune.map` 0.1 (overview
 map SVG and its affine frame) and, since IPC 0.20, `com.hyprune.blueprint` 0.1

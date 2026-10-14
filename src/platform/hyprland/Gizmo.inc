@@ -159,7 +159,11 @@ interaction::PlacementScene Runtime::placementScene() {
     }
     // Screen approaches: in front of every anchor, tool mount and workspace wall,
     // its width plus 0.3 m each side, from 0.1 m above its floor to its top edge, 1.5 m deep.
-    s.approaches = interaction::approachZones(*world, s.ignore);
+    // A workspace screen's own approach (IPC 0.27) never blocks moving that screen.
+    std::string own = instance ? "screen-" + world->objectInstances[*instance].id : "";
+    for (auto &[id, zone] : interaction::namedApproachZones(*world, s.ignore))
+        if (id != own)
+            s.approaches.push_back(zone);
     for (auto &z : world->placementZones)
         if (z.contains("bounds"))
             s.zones.push_back(interaction::aabbBox(vec3(z["bounds"]["min"]), vec3(z["bounds"]["max"])));
