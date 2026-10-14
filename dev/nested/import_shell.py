@@ -133,7 +133,11 @@ def acceptance(client, children, args, shell_token, socketpath):
           j['inspection'] == {'triangles': 12544, 'unitsGuess': 'cm'}, {'path': j['path'], 'inspection': j['inspection']})
 
     # 2. Review: Z up and a typed 5,000-triangle target; Import.
-    ui('importPatch', json.dumps({'up': 'z', 'licence': 'CC0-1.0', 'author': 'Hyprune contributors'}))
+    # The author starts as the user's git name (or empty), never the project's name.
+    expected = subprocess.run(['git', 'config', '--get', 'user.name'], capture_output=True, text=True, cwd=os.environ.get('HOME', '/')).stdout.strip()
+    check('the author field starts as the user\'s git name or empty', job()['form']['author'] == expected and expected != 'Hyprune contributors',
+          {'author': job()['form']['author']})
+    ui('importPatch', json.dumps({'up': 'z', 'licence': 'CC0-1.0'}))
     assert ui('focusNamed', 'import-triangles') == 'true'
     keys('-M', 'ctrl', '-k', 'a', '-m', 'ctrl'); keys('5000')
     wait(lambda: job()['form']['maxTriangles'] == '5000', 5)
@@ -158,6 +162,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     entry = next(e for e in client.call('objects.catalog', {})['entries'] if e['ref'] == 'user/barrel')
     check('core\'s catalog lists it within seconds, placeable, with provenance and imported',
           entry['placeable'] and entry['state'] == 'ready' and entry['provenance']['license'] == 'CC0-1.0' and
+          entry['provenance']['author'] == (expected or 'unknown') and
           entry['imported']['sourceName'] == 'barrel.gltf' and entry['triangles'] <= 5000 and entry['collisionTriangles'] > 12,
           {'seconds': round(time.monotonic() - done_at, 1), 'triangles': entry['triangles'], 'collision': entry['collisionTriangles'],
            'warnings': entry['warnings'], 'provenance': entry['provenance'], 'imported': entry['imported']})

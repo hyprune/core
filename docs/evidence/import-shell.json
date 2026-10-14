@@ -4,11 +4,18 @@
    "name": "the browser picks barrel.gltf and the review shows its measures",
    "ok": true,
    "evidence": {
-    "path": "/home/rick/.cache/tmp.tPGJ751gnO/.import-shell-state/models/barrel/barrel.gltf",
+    "path": "/home/rick/.cache/tmp.4UtENLewVu/.import-shell-state/models/barrel/barrel.gltf",
     "inspection": {
      "triangles": 12544,
      "unitsGuess": "cm"
     }
+   }
+  },
+  {
+   "name": "the author field starts as the user's git name or empty",
+   "ok": true,
+   "evidence": {
+    "author": "Richard"
    }
   },
   {
@@ -29,7 +36,7 @@
      "check"
     ],
     "error": null,
-    "seconds": 4.1
+    "seconds": 4.2
    }
   },
   {
@@ -68,17 +75,17 @@
    "name": "core's catalog lists it within seconds, placeable, with provenance and imported",
    "ok": true,
    "evidence": {
-    "seconds": 1.4,
+    "seconds": 1.2,
     "triangles": 4999,
     "collision": 444,
     "warnings": [],
     "provenance": {
-     "author": "Hyprune contributors",
+     "author": "Richard",
      "license": "CC0-1.0",
      "source": "unknown"
     },
     "imported": {
-     "at": "2026-10-14T19:18:51Z",
+     "at": "2026-10-14T19:29:14Z",
      "sourceName": "barrel.gltf"
     }
    }
@@ -132,7 +139,7 @@
   {
    "name": "one beside it is placed",
    "ok": true,
-   "evidence": "u-ff265f"
+   "evidence": "u-c0e3bc"
   },
   {
    "name": "no QML runtime errors in the shell log",
