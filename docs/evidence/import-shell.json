@@ -4,7 +4,7 @@
    "name": "the browser picks barrel.gltf and the review shows its measures",
    "ok": true,
    "evidence": {
-    "path": "/home/rick/.cache/tmp.4UtENLewVu/.import-shell-state/models/barrel/barrel.gltf",
+    "path": "<state>/.import-shell-state/models/barrel/barrel.gltf",
     "inspection": {
      "triangles": 12544,
      "unitsGuess": "cm"
