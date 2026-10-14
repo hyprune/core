@@ -1,0 +1,281 @@
+{
+ "checks": [
+  {
+   "name": "Build makes a git repository with the starter and warps into it in editor mode",
+   "ok": true,
+   "evidence": {
+    "seconds": 2.1,
+    "commits": [
+     "Create Harbour Test from the Flat land starter"
+    ],
+    "builder": {
+     "error": null,
+     "folder": "/home/rick/.cache/tmp.BkSS7Ykuhn/.builder-shell-state/datahome/hyprune/projects/harbour-test",
+     "mode": "edit",
+     "name": "Harbour Test",
+     "placements": 0,
+     "projectId": "harbour-test",
+     "revision": 0,
+     "sky": "sky/panorama.jpg",
+     "worldId": "local.harbour-test"
+    },
+    "files": [
+     ".gitattributes",
+     ".gitignore",
+     "ATTRIBUTION.md",
+     "LICENSE",
+     "builder/base.json",
+     "builder/project.json",
+     "sky/panorama.jpg",
+     "starter/land.glb",
+     "world.json"
+    ]
+   }
+  },
+  {
+   "name": "placing copies each object into the folder and writes builder/project.json, not editor.json",
+   "ok": true,
+   "evidence": {
+    "refs": {
+     "barrel": "world/barrel",
+     "screen": "world/workspace-screen-stand-16x9",
+     "crate": "world/crate"
+    },
+    "copies": [
+     "barrel",
+     "crate",
+     "workspace-screen-stand-16x9"
+    ],
+    "project": [
+     "world/barrel",
+     "world/workspace-screen-stand-16x9",
+     "world/crate"
+    ]
+   }
+  },
+  {
+   "name": "the copied screen is a home for workspace 21",
+   "ok": true,
+   "evidence": {
+    "aspect": "16:9",
+    "home": "screen-u-2f7c25",
+    "size": [
+     3.2,
+     1.8
+    ],
+    "workspace": 21
+   }
+  },
+  {
+   "name": "the Builder page shows the unsaved changes",
+   "ok": true,
+   "evidence": {
+    "pending": "Unsaved: placed 3 objects (12 files)",
+    "counts": {
+     "added": 11,
+     "modified": 1,
+     "deleted": 0,
+     "total": 12
+    }
+   }
+  },
+  {
+   "name": "Save makes one commit; world.json holds the objects and the home",
+   "ok": true,
+   "evidence": {
+    "message": "Place a barrel, a screen and a crate",
+    "error": null,
+    "objects": [
+     "barrel",
+     "workspace-screen-stand-16x9",
+     "crate"
+    ],
+    "license": "CC0-1.0 AND CC-BY-4.0",
+    "homes": [
+     {
+      "slot": "01",
+      "workspace": 21,
+      "placement": "u-2f7c25"
+     }
+    ]
+   }
+  },
+  {
+   "name": "a second Save commits the move with the default message",
+   "ok": true,
+   "evidence": {
+    "message": "Save 2026-10-14 22:27 \u00b7 moved 1"
+   }
+  },
+  {
+   "name": "Release without a remote makes the annotated tag v0.1.0",
+   "ok": true,
+   "evidence": {
+    "result": {
+     "tag": "v0.1.0",
+     "pushed": false,
+     "release": null
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "leaving the folder keeps no placements for it in editor.json",
+   "ok": true,
+   "evidence": {
+    "editor.json": false,
+    "placements": 0
+   }
+  },
+  {
+   "name": "reloading the folder restores the same placements, poses and screen binding, with nothing pending",
+   "ok": true,
+   "evidence": {
+    "before": {
+     "u-96b157": {
+      "ref": "world/barrel",
+      "pose": {
+       "position": [
+        2.4000000953674316,
+        0.0,
+        -5.0
+       ],
+       "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "screen": null
+     },
+     "u-2f7c25": {
+      "ref": "world/workspace-screen-stand-16x9",
+      "pose": {
+       "position": [
+        -1.5,
+        0.0,
+        -7.0
+       ],
+       "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "screen": {
+       "aspect": "16:9",
+       "home": "screen-u-2f7c25",
+       "size": [
+        3.2,
+        1.8
+       ],
+       "workspace": 21
+      }
+     },
+     "u-6b3ef0": {
+      "ref": "world/crate",
+      "pose": {
+       "position": [
+        3.4000000953674316,
+        0.0,
+        -6.5
+       ],
+       "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "screen": null
+     }
+    },
+    "after": {
+     "u-96b157": {
+      "ref": "world/barrel",
+      "pose": {
+       "position": [
+        2.4000000953674316,
+        0.0,
+        -5.0
+       ],
+       "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "screen": null
+     },
+     "u-2f7c25": {
+      "ref": "world/workspace-screen-stand-16x9",
+      "pose": {
+       "position": [
+        -1.5,
+        0.0,
+        -7.0
+       ],
+       "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "screen": {
+       "aspect": "16:9",
+       "home": "screen-u-2f7c25",
+       "size": [
+        3.2,
+        1.8
+       ],
+       "workspace": 21
+      }
+     },
+     "u-6b3ef0": {
+      "ref": "world/crate",
+      "pose": {
+       "position": [
+        3.4000000953674316,
+        0.0,
+        -6.5
+       ],
+       "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "screen": null
+     }
+    },
+    "pending": {
+     "added": 0,
+     "modified": 0,
+     "deleted": 0,
+     "total": 0
+    },
+    "git": ""
+   }
+  },
+  {
+   "name": "the released package passes the SDK validator and hyprune-world-check",
+   "ok": true,
+   "evidence": {
+    "sdk": 0,
+    "core": 0,
+    "stderr": "",
+    "files": 18
+   }
+  },
+  {
+   "name": "no QML runtime errors in the shell log",
+   "ok": true,
+   "evidence": []
+  }
+ ]
+}
