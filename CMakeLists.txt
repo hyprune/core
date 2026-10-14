@@ -184,6 +184,12 @@ if(BUILD_TESTING)
  add_executable(nested-subsurface-client dev/nested/subsurface-client.c ${CMAKE_CURRENT_BINARY_DIR}/xdg-shell.c)
  target_include_directories(nested-subsurface-client PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
  target_link_libraries(nested-subsurface-client PRIVATE PkgConfig::WAYLAND_CLIENT)
+ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/ext-session-lock.h ${CMAKE_CURRENT_BINARY_DIR}/ext-session-lock.c
+  COMMAND ${WAYLAND_SCANNER} client-header ${WAYLAND_PROTOCOLS_DIR}/staging/ext-session-lock/ext-session-lock-v1.xml ${CMAKE_CURRENT_BINARY_DIR}/ext-session-lock.h
+  COMMAND ${WAYLAND_SCANNER} private-code ${WAYLAND_PROTOCOLS_DIR}/staging/ext-session-lock/ext-session-lock-v1.xml ${CMAKE_CURRENT_BINARY_DIR}/ext-session-lock.c)
+ add_executable(nested-lock-client dev/nested/lock-client.c ${CMAKE_CURRENT_BINARY_DIR}/ext-session-lock.c)
+ target_include_directories(nested-lock-client PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+ target_link_libraries(nested-lock-client PRIVATE PkgConfig::WAYLAND_CLIENT)
 endif()
 if(BUILD_TESTING)
  add_executable(m3b-tests tests/m3b.cpp)

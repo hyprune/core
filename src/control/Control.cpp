@@ -391,9 +391,23 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
             require(std::find(outputs.begin(), outputs.end(), o) != outputs.end(), -32003, "unknown output");
             require(unique.insert(o.get<std::string>()).second, -32602, "duplicate output");
             for (const auto &l : leases)
-                require(std::find(l["outputs"].begin(), l["outputs"].end(), o) == l["outputs"].end(), -32004,
-                        "output already leased");
+                require(owners.at(l["id"].get<std::string>()) == actor ||
+                            std::find(l["outputs"].begin(), l["outputs"].end(), o) == l["outputs"].end(),
+                        -32004, "output already leased");
         }
+        // The holder claiming again (its HUD surfaces went away with a session lock or a
+        // display power cycle and came back): a renewal. Its old leases on these outputs end.
+        eraseJson(leases, [&](const Json &l) {
+            auto lease = l["id"].get<std::string>();
+            if (owners.at(lease) != actor ||
+                std::none_of(l["outputs"].begin(), l["outputs"].end(), [&](const Json &o) { return unique.contains(o.get<std::string>()); }))
+                return false;
+            for (auto &o : l["overlays"])
+                if (o["visible"] == true)
+                    events.emplace_back("ui.closed", Json{{"leaseId", lease}, {"outputId", o["outputId"]}});
+            owners.erase(lease);
+            return true;
+        });
         std::string id = "lease-" + ipc::randomId().substr(0, 16);
         owners[id] = actor;
         Json overlays = Json::array();

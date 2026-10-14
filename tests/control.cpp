@@ -86,6 +86,19 @@ int main(int argc, char **argv) {
         check(control.uiVisible(), "ui open");
         call("ui.close", {{"leaseId", lease}, {"outputId", "output"}});
         check(!control.uiVisible(), "ui close");
+        // The holder claiming its output again (its HUD came back after a session lock or a
+        // display power cycle) renews the lease; another connection is still refused.
+        call("ui.open", {{"leaseId", lease}, {"outputId", "output"}, {"panel", "overview"}});
+        control.events.clear();
+        auto renewed = call("shell.claim", {{"outputs", {"output"}}})["leaseId"];
+        check(renewed != lease && control.leases.size() == 1 && control.leases[0]["id"] == renewed &&
+                  control.ownsLease("a", renewed.get<std::string>()) && !control.ownsLease("a", lease.get<std::string>()),
+              "a repeated claim from the holder is not a renewal");
+        check(!control.uiVisible() && !control.events.empty() && control.events.back().first == "ui.closed",
+              "the renewed lease's open panel did not close");
+        rejects("shell.claim", {{"outputs", {"output"}}}, -32004, "b");
+        rejects("shell.release", {{"leaseId", lease}}, -32004);
+        lease = renewed;
         control.hold(true);
         for (int i = 0; i < 3; i++)
             control.tick(.1f, camera, world.get());

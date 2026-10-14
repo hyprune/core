@@ -4853,7 +4853,9 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         publish();
         return Json::object();
     }
-    if (locked())
+    // Locked: nothing changes the world, but a shell may still give its lease back (it
+    // leaves with world mode; refusing it left a lease the shell could never claim again).
+    if (locked() && method != "shell.release")
         throw ipc::Error(-32005, "session locked");
     if (world::objectMethods().contains(method)) {
         objectsProtocol = protocol;

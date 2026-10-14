@@ -347,3 +347,27 @@ and redo. Nested has a software cursor, so check on the real session:
 - [ ] RMB on a middle point removes that point; LMB on a segment inserts one there.
 - [ ] Switch tools (1, 4, 5) in the middle of a drag: the drag cancels cleanly, no stuck
   button, no crash.
+
+## Session lock and display power: the HUD comes back (core 0.8.3)
+
+Locking left world mode, but core refused the shell's lease release while locked (every
+method was refused), so after the unlock the shell's new claim was refused ("output already
+leased") and it had no HUD. Core now takes `shell.release` while locked and treats a repeat
+claim from the lease holder as a renewal; the shell retries its claim on the next entry. The
+lock transition itself adds no cursor or surface work (world mode exits as before, from the
+tick). Nested runs a real ext-session-lock client and the DPMS dispatcher
+(`dev/nested/run.sh --lock`) but has a software cursor and no real display, so check on the
+real session:
+
+- [ ] In world mode, lock with your lock combo; the screen may turn off. Unlock. On the
+  desktop the cursor is normal (shown, the right shape) and native binds work; no crash.
+- [ ] Super+Shift+H: the world shows with the HUD (tool deck, compass, hints). Hold TAB: the
+  Director opens and draws; Esc closes it and the reticle returns. The shell log has no
+  "already leased".
+- [ ] Lock again, wait until the display powers off (or `hyprctl dispatch dpms off` from a
+  TTY-safe binding), wake it, unlock: the same checks.
+- [ ] Without locking, in world mode: `dpms off`, wait 5 s, `dpms on`. The world and the
+  HUD come back without re-entering; the Director opens; the cursor stays hidden in world
+  control and shows/hides once for Super+Tab (free cursor) and back.
+- [ ] Lock while the Director is open, and while using a window (E): after unlock and
+  re-entry, no stuck input grab, the Director opens and closes normally.
