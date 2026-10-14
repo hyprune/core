@@ -1,0 +1,126 @@
+{
+ "nestedOnly": true,
+ "world": "com.hyprune.lumen-reach",
+ "checks": [
+  {
+   "name": "before the lock: one lease, held by the shell, HUD mapped",
+   "ok": true,
+   "evidence": {
+    "leases": [
+     {
+      "id": "lease-a8bc88cb8a0201e3",
+      "outputs": [
+       "output-1"
+      ]
+     }
+    ],
+    "shellLease": "lease-a8bc88cb8a0201e3",
+    "hud": true
+   }
+  },
+  {
+   "name": "the nested lock client locks the session",
+   "ok": true,
+   "evidence": "locked"
+  },
+  {
+   "name": "locked: world mode left, the lease given back",
+   "ok": true,
+   "evidence": {
+    "leases": [],
+    "shellLease": ""
+   }
+  },
+  {
+   "name": "the lock client unlocks",
+   "ok": true,
+   "evidence": null
+  },
+  {
+   "name": "after unlock: one lease, held by the shell, HUD mapped",
+   "ok": true,
+   "evidence": {
+    "leases": [
+     {
+      "id": "lease-a16e5db11ad83230",
+      "outputs": [
+       "output-1"
+      ]
+     }
+    ],
+    "shellLease": "lease-a16e5db11ad83230",
+    "hud": true
+   }
+  },
+  {
+   "name": "after unlock: no \"already leased\" refusal in the shell log",
+   "ok": true,
+   "evidence": {
+    "lease": "lease-a16e5db11ad83230",
+    "first": "lease-a8bc88cb8a0201e3"
+   }
+  },
+  {
+   "name": "after unlock: the Director opens with exclusive input",
+   "ok": true,
+   "evidence": {
+    "exclusive": true
+   }
+  },
+  {
+   "name": "DPMS off",
+   "ok": true,
+   "evidence": null
+  },
+  {
+   "name": "after DPMS off and on: one lease, held by the shell, HUD mapped",
+   "ok": true,
+   "evidence": {
+    "leases": [
+     {
+      "id": "lease-a16e5db11ad83230",
+      "outputs": [
+       "output-1"
+      ]
+     }
+    ],
+    "shellLease": "lease-a16e5db11ad83230",
+    "hud": true
+   }
+  },
+  {
+   "name": "after DPMS: the Director opens with exclusive input",
+   "ok": true,
+   "evidence": {
+    "exclusive": true
+   }
+  },
+  {
+   "name": "another connection claiming a leased output is refused",
+   "ok": true,
+   "evidence": {
+    "code": -32004,
+    "message": "output already leased"
+   }
+  },
+  {
+   "name": "the shell keeps its lease",
+   "ok": true,
+   "evidence": [
+    {
+     "id": "lease-a16e5db11ad83230",
+     "outputs": [
+      "output-1"
+     ],
+     "overlays": [
+      {
+       "exclusiveInput": false,
+       "outputId": "output-1",
+       "visible": false
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
