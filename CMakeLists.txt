@@ -301,4 +301,5 @@ add_test(NAME depth-precision COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOUR
  add_test(NAME screen-fixtures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/screen-fixtures.py $<TARGET_FILE:hyprune-object-check>)
  add_test(NAME playable-package COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/playable-package.py $<TARGET_FILE:hyprune-world-check> ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/atrium)
  add_test(NAME walk-check COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/walk-check.py $<TARGET_FILE:hyprune-walk-check> ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/atrium)
+ add_test(NAME human-driver COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/human-driver.py)
 endif()
