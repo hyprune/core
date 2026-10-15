@@ -441,7 +441,7 @@ def run(args):
         from lock import grants as extra
         grants[0]['capabilities']+=['shell.control'];grants+=extra()
     read,write=os.pipe();os.write(write,json.dumps(grants).encode());os.close(write)
-    environment=os.environ.copy();environment.update(HYPRUNE_VALIDATE_IPC='1',AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read),HYPRUNE_LAYOUT_FILE=str(STATE/"layout.json"),HYPRUNE_INPUT_FILE=str(STATE/"input.json"),HYPRUNE_GRAPHICS_FILE=str(STATE/"graphics.json"),HYPRUNE_PLAYER_FILE=str(STATE/"player.json"),HYPRUNE_SETTINGS_FILE=str(STATE/"settings.json"),HYPRUNE_MACHINES_FILE=str(STATE/"machines.json"),HYPRUNE_EDITOR_FILE=str(STATE/"editor.json"),HYPRUNE_COMPANION_FILE=str(STATE/"companion.json"),XDG_STATE_HOME=str(STATE/"statehome"),XDG_CACHE_HOME=str(STATE/"cache"/secrets.token_hex(8)))
+    environment=os.environ.copy();environment.update(HYPRUNE_VALIDATE_IPC='1' if getattr(args,'wire_audit',True) else '0',AQ_BACKEND='wayland',HYPRUNE_WORLD_DIR=str(installed),HYPRUNE_LAUNCH_FD=str(read),HYPRUNE_LAYOUT_FILE=str(STATE/"layout.json"),HYPRUNE_INPUT_FILE=str(STATE/"input.json"),HYPRUNE_GRAPHICS_FILE=str(STATE/"graphics.json"),HYPRUNE_PLAYER_FILE=str(STATE/"player.json"),HYPRUNE_SETTINGS_FILE=str(STATE/"settings.json"),HYPRUNE_MACHINES_FILE=str(STATE/"machines.json"),HYPRUNE_EDITOR_FILE=str(STATE/"editor.json"),HYPRUNE_COMPANION_FILE=str(STATE/"companion.json"),XDG_STATE_HOME=str(STATE/"statehome"),XDG_CACHE_HOME=str(STATE/"cache"/secrets.token_hex(8)))
     if args.integration: environment['HYPRUNE_WORKSPACE_LOCATIONS']=str(STATE/'locations.json')
     config=str(HERE/'hyprland.lua')
     if os.environ.get('HYPRUNE_NESTED_4K')=='1':

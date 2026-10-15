@@ -69,6 +69,29 @@ static void command(struct wl_display *d, struct zwlr_virtual_pointer_v1 *p, int
             zwlr_virtual_pointer_v1_frame(p);
             wl_display_flush(d);
         }
+    } else if (argc == 3 && !strcmp(argv[0], "play")) {
+        // A recorded or synthesised hand: one "dx dy" line per event of FILE at hz, with
+        // absolute deadlines (humanised look motion for demo takes).
+        long hz = atol(argv[1]), period = 1000000000L / (hz > 0 ? hz : 1);
+        FILE *f = fopen(argv[2], "r");
+        double dx, dy;
+        struct timespec next;
+        clock_gettime(CLOCK_MONOTONIC, &next);
+        while (f && fscanf(f, "%lf %lf", &dx, &dy) == 2) {
+            next.tv_nsec += period;
+            while (next.tv_nsec >= 1000000000L) {
+                next.tv_nsec -= 1000000000L;
+                next.tv_sec++;
+            }
+            clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
+            if (dx != 0 || dy != 0) {
+                zwlr_virtual_pointer_v1_motion(p, now(), wl_fixed_from_double(dx), wl_fixed_from_double(dy));
+                zwlr_virtual_pointer_v1_frame(p);
+                wl_display_flush(d);
+            }
+        }
+        if (f)
+            fclose(f);
     } else if (argc == 2) {
         zwlr_virtual_pointer_v1_motion(p, now(), wl_fixed_from_double(atof(argv[0])),
                                        wl_fixed_from_double(atof(argv[1])));

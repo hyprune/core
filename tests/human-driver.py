@@ -70,4 +70,19 @@ times = [r['ns'] for r in out if 'ns' in r]
 check(times == sorted(times) and out[-1]['kind'] == 'end', 'look smoothing keeps the recording in time order')
 per = [r['event']['dx'] for r in out if r['kind'] == 'input' and 10 < r['frame'] < 50]
 check(max(per) - min(per) < 1.0, 'look smoothing evens the per-tick motion out')
-print('human driver: deterministic takes, walks, looks, pointer, typing, recording smoothing')
+hand = lambda: human.LookHand(hz=250, seed=4)
+a_, b_ = hand(), hand()
+ev = a_.turn(math.radians(50), math.radians(-8))
+check(ev == b_.turn(math.radians(50), math.radians(-8)), 'the look hand repeats exactly for a seed')
+yaw = sum(dx for dx, _ in ev) * .0025
+pitch = -sum(dy for _, dy in ev) * .0025
+check(abs(yaw - math.radians(50)) < .01 and abs(pitch - math.radians(-8)) < .01, f'a turn ends on target ({yaw:.4f}, {pitch:.4f})')
+cum, peak = 0.0, 0.0
+for dx, _ in ev:
+    cum += dx * .0025; peak = max(peak, cum)
+check(peak > math.radians(50) * 1.02, 'a turn overshoots a little, then settles')
+rest = a_.rest(1.0)
+check(0 < max(abs(dx) for dx, _ in rest) < 2 and abs(sum(dx for dx, _ in rest)) * .0025 < .02, 'a resting hand wanders, faintly')
+steer = a_.steer(.4, .5)
+check(abs(sum(dx for dx, _ in steer) * .0025 - .1) < .02 and abs(steer[0][0]) < abs(steer[-1][0]), 'steering eases into its rate')
+print('human driver: deterministic takes, walks, looks, pointer, typing, recording smoothing, the look hand')

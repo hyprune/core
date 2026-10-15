@@ -211,3 +211,16 @@ speed variation, path wobble, head bob and glances; idle drift; Fitts-law pointe
 moves on curved paths with overshoot and micro-corrections; natural clicks and
 typing rhythm. Every take is seeded, so it repeats exactly. `tests/human-driver.py`
 (CTest `human-driver`) checks determinism and the motion properties.
+
+`dev/nested/showcase.py` drives a demo through core's real input instead of a camera path,
+in two nested stages. `--stage take` plays a scripted story with human timing: keys through
+wtype, mouse look from `human.LookHand` (minimum-jerk turns a few percent past the target
+with a short settle and a corrective sub-movement, hand tremor and a slow wander, smooth
+steering while walking, turns that start with the walk) played by `nested-pointer play HZ
+FILE` at 250 Hz with absolute deadlines; each action is aimed from the camera's pose and
+core records the take (`recording.start`, a mark where the harness launches a window).
+`--stage render` starts from the same state: the home workspace's desktop as a still, the
+exported pull-out into the world, then `replay.start` of the take (long ticks split into
+1/60 s ones so one tick per presented frame moves evenly, look smoothed over 70 ms) with the
+window launched again at its mark. Output: `<name>-1080p60.mp4`, `gate.json` (the cinema gate
+over the recorded turns), `cut.json`.

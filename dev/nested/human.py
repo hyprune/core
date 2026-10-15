@@ -362,6 +362,81 @@ class Pointer:
 
 
 # ---------------------------------------------------------------------------- keyboard
+class LookHand:
+    """Mouse-look counts from a hand on a real mouse, for nested takes that drive core's own
+    input (dev/nested/pointer.c `play`): one (dx, dy) per event at `hz`. Angles are radians;
+    counts follow core's look_sensitivity (radians per count; +dx turns right, -dy looks up).
+      turn(dyaw, dpitch)  a look: minimum-jerk, a few percent past the target, a short settle,
+                          a corrective sub-movement; a slight arc and hand tremor throughout.
+      rest(seconds)       the hand resting on the mouse (its slow wander and tremor are always on).
+      steer(rate, seconds) smooth pursuit at a yaw rate (rad/s) eased from the previous chunk's,
+                          for steering while walking.
+    Each returns the event list; the hand remembers its last pursuit rate. Seeded."""
+
+    def __init__(self, hz=250, sensitivity=.0025, seed=None):
+        self.hz, self.dt, self.k = hz, 1.0 / hz, 1.0 / sensitivity
+        self.rng = random.Random(seed)
+        r = self.rng
+        self.t, self.rate = 0.0, 0.0
+        self.tremor = (Noise(r, [8.5, 11.0], [.00016, .0001]), Noise(r, [9.2, 12.5], [.00013, .00008]))
+        self.wander = (Noise(r, [.07, .19, .5], [.004, .0018, .0006]), Noise(r, [.06, .16, .41], [.0025, .0012, .0004]))
+        self.last = self._noise(0.0)
+
+    def _noise(self, t):
+        # Tremor and a slow wander, always on (switching them per action would step the view).
+        return (self.tremor[0](t) + self.wander[0](t), self.tremor[1](t) + self.wander[1](t))
+
+    def _events(self, path):
+        """Counts for a list of (yaw, pitch) offsets per event (relative to the start)."""
+        out, py, pp = [], 0.0, 0.0
+        for y, p in path:
+            self.t += self.dt
+            n = self._noise(self.t)  # on top, relative to the start
+            y, p = y + n[0] - self.last[0], p + n[1] - self.last[1]
+            out.append(((y - py) * self.k, -(p - pp) * self.k))
+            py, pp = y, p
+        self.last = self._noise(self.t)
+        return out
+
+    def turn(self, dyaw, dpitch=0.0, seconds=None, overshoot=None):
+        amp = math.hypot(dyaw, dpitch)
+        if amp < 1e-4:
+            return self.rest(.05)
+        r = self.rng
+        seconds = seconds or (.26 + .38 * math.sqrt(math.degrees(amp) / 90)) * r.uniform(.92, 1.1)
+        over = overshoot if overshoot is not None else min(math.radians(3.5), max(math.radians(.4), amp * r.uniform(.04, .08)))
+        ux, uy = dyaw / amp, dpitch / amp
+        arc = amp * r.uniform(-.035, .035)  # the wrist's arc: a little off the straight line
+        y1, p1 = dyaw + ux * over, dpitch + uy * over * .6
+        n1, n2 = max(1, int(seconds * self.hz)), max(1, int(r.uniform(.04, .09) * self.hz))
+        n3 = max(1, int(r.uniform(.15, .26) * self.hz))
+        path = []
+        for i in range(1, n1 + 1):
+            u = min_jerk(i / n1)
+            bend = arc * math.sin(math.pi * u)
+            path.append((y1 * u - uy * bend, p1 * u + ux * bend))
+        path += [(y1, p1)] * n2
+        for i in range(1, n3 + 1):
+            u = min_jerk(i / n3)
+            path.append((y1 + (dyaw - y1) * u, p1 + (dpitch - p1) * u))
+        self.rate = 0.0
+        return self._events(path)
+
+    def rest(self, seconds):
+        return self._events([(0.0, 0.0)] * max(1, int(seconds * self.hz)))
+
+    def steer(self, rate, seconds, pitch_rate=0.0):
+        n = max(1, int(seconds * self.hz))
+        r0, path, y, p = self.rate, [], 0.0, 0.0
+        for i in range(1, n + 1):
+            u = min_jerk(i / n)
+            w = r0 + (rate - r0) * u
+            y += w * self.dt; p += pitch_rate * self.dt
+            path.append((y, p))
+        self.rate = rate
+        return self._events(path)
+
+
 def typing_args(text, wpm=62, seed=None):
     """wtype arguments typing `text` like a person: per-key delays (-s ms) drawn around `wpm`,
     longer after spaces and punctuation, sometimes a pause before a word. '-' goes as the
