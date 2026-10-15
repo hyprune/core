@@ -30,7 +30,9 @@ def validate(item):
             return [leaf for child in error.context for leaf in leaves(child)] if error.context else [error]
         error=max([leaf for e in errors for leaf in leaves(e)],key=lambda e:len(e.absolute_path))
         where='/'+ '/'.join(map(str,error.absolute_path))
-        raise AssertionError(f'protocol {version} {frame.get("method",method) or "error"} at {where}: {error.validator}')
+        # A missing property's name is schema vocabulary, not payload: name it.
+        missing=[k for k in error.validator_value if isinstance(error.instance,dict) and k not in error.instance] if error.validator=='required' else []
+        raise AssertionError(f'protocol {version} {frame.get("method",method) or "error"} at {where}: {error.validator}'+(f' {missing}' if missing else ''))
 if __name__=='__main__':
     for line in sys.stdin.buffer:
         try:validate(json.loads(line))
