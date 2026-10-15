@@ -425,3 +425,19 @@ Loader fix only (`editor.json` restore); no render, cursor or focus change. With
   back on its route and walking. No "invalid placement" notice.
 - [ ] Signal Rise: walk, run (Shift) and autodrive from the foot of the snow-service stairs
   towards the ramp foot, along the passage wall: you stop at the wall, never drop through.
+
+## Data sources page, HTTP sources and secrets (core 0.9.1)
+
+Helper and shell only (no render, cursor or focus change). With a gauge placed (Director →
+Objects → Catalog → a gauge, tool 5):
+
+- [ ] Director → Objects → **Data sources**: the gauge's demo source is listed with its state;
+  typing in the editor (V, L, H, R included) never switches the view or locks anything.
+- [ ] **New HTTP** with the gauge's id, a public JSON API you use (or a local one) and its
+  token as a secret header: **Test** names the missing secret; paste it and **Store in file**:
+  `~/.config/hyprune/secrets.json` is mode 0600 and `sources.json` holds the name only.
+- [ ] **Test** again: the raw response, the mapped values and the gauge preview agree with the
+  API; **Save**: the gauge in the world shows the value, colour (level) and display within one
+  interval.
+- [ ] If the desktop keyring is unlocked and `secret-tool` is installed: **Keyring** stores a
+  second secret; `secret-tool lookup application hyprune secret <name>` prints it.

@@ -316,6 +316,28 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Core 0.9.1 (no wire change)
+
+Data sources phase 2 ([RFC-0013 amendment](https://hyprune.com/rfcs/0013-live-objects/#amendment-data-sources-phase-2-helper-and-shell)),
+in the bundled source helper (`libexec/hyprune/source-helper`); core's IPC is unchanged.
+
+- **Secrets by name:** `{"secret": "name"}` in a header or `{secret:name}` in the URL, a header
+  string or the body, resolved at fetch time from `HYPRUNE_SOURCES_SECRET_<NAME>`, the secrets
+  file (`--secrets`, default `$XDG_CONFIG_HOME/hyprune/secrets.json`, read only at mode 0600)
+  or the desktop keyring (`secret-tool`; `--no-keyring` skips it). Never in `sources.json`,
+  publications, logs, errors or control answers.
+- **HTTP sources:** `GET`, `POST`, `PUT`, `PATCH`; a JSON or text `body`; `json`, `number`,
+  `text` or `lines` output.
+- **Selectors and the gauge map:** fields take JSONPath-like `path`s (members, indexes,
+  slices, `*`, `..name`, `[?(@.a op value)]` filters) with `count`/`sum`/`avg`/`min`/`max`/
+  `first`/`last`; a source's `map` publishes a gauge's `value` (scaled to 0-100), `level`
+  (`ok`/`warn`/`fail` by thresholds or matched text), `display` (a template) and `label`, for
+  command and HTTP sources.
+- **Control channel:** `test` also answers the raw response (4 KiB), the HTTP status and type
+  and where each secret was found; a new `secrets` op lists the configured secret names and
+  their origin (never values). The reference shell's Director → Objects → Data sources uses
+  both.
+
 ## Core 0.9.0
 
 A minor release with the contract round of @hyprune/schema 0.13.0: **IPC 0.27** (workspace
