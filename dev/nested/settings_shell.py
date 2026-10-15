@@ -82,6 +82,12 @@ def acceptance(client, children, args, shell_token, socketpath):
         ui('settingsCategory', cat)
         audit = shot(f'settings-{cat}')
         check(f'{cat}: drawn, no clipped or overlapping labels', True, {'labels': audit.get('labels')})
+    # Keyboard: Down and Up on the focused category list step through the categories.
+    ui('settingsCategory', 'movement'); time.sleep(.5); ui('settingsFocusCategory'); time.sleep(.3)
+    keys('-k', 'Down'); wait(lambda: status()['settings']['category'] == 'controls', timeout=5)
+    keys('-k', 'Down'); wait(lambda: status()['settings']['category'] == 'hud', timeout=5)
+    keys('-k', 'Up', '-k', 'Up', '-k', 'Up'); wait(lambda: status()['settings']['category'] == 'display', timeout=5)
+    check('the category list follows Down and Up', True, status()['settings'])
     for cat in ['display', 'controls', 'hud']:
         s.ctl('eval', 'hl.monitor({output="HEADLESS-1",mode="1920x1080@60",position="1600x0",scale=2})'); time.sleep(1.5)
         ui('settingsCategory', cat)
