@@ -568,6 +568,27 @@ def acceptance(client, children, args, shell_token, socketpath):
     s.ctl('eval', 'hl.plugin.hyprune.camera(0,1.6,-10.5,0,-.05)')
     time.sleep(1)
     shot('builder-behaviours.png')
+    if os.environ.get('HYPRUNE_BEHAVIOURS_CLIP') == '1':
+        # The gallery clip: the camera slides past while the API value swings and a CPU burst
+        # (busy processes for 4 s) makes the cube grow; core exports every presented frame.
+        import cinema, math as m
+        cam = cinema.Cinema(s)
+        cam.hold([-3.5, 1.7, -10.5], target=[0, 1, -16])
+        time.sleep(1)
+        raw = out / 'behaviours-clip.mkv'
+        with cam.recording(raw):
+            cam.path([{'t': 0, 'eye': [-3.5, 1.7, -10.5], 'target': [0, 1, -16]}, {'t': 14, 'eye': [3.5, 1.9, -10.0], 'target': [0, 1, -16]}])
+            burners = []
+            for i in range(28):
+                queue['queue']['depth'] = round(26 + 22 * m.sin(i / 3.5))
+                if i == 8:
+                    burners = [subprocess.Popen([sys.executable, '-c', 'import time\nt=time.time()+4\nwhile time.time()<t: pass'])
+                               for _ in range(os.cpu_count() or 4)]
+                time.sleep(.5)
+            for b in burners:
+                b.wait()
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(raw), *cinema.ENCODE, str(out / 'behaviours-clip.mp4')], check=True)
+        print('clip:', out / 'behaviours-clip.mp4', flush=True)
     api.shutdown()
     log = shell_log.read_text()
 
