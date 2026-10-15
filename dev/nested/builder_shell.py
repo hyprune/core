@@ -444,8 +444,9 @@ def acceptance(client, children, args, shell_token, socketpath):
     missing = client.call('objects.remove', {'key': 'nothing-here'})
     cat = client.call('objects.catalog', {})['entries']
     prim = builtins.next((e['primitive'] for e in cat if e['ref'] == tower['ref']), None)
-    check('the Placed panel resizes a shape (a new folder, the same id) and renames its key; removing a missing key succeeds',
-          tower['id'] == beacon and tower['ref'] != old_ref and (prim or {}).get('size') == [0.6, 2.4, 0.6] and missing.get('removed') is False,
+    check('the Placed panel resizes a shape (a new folder, the same id, its glow kept) and renames its key; removing a missing key succeeds',
+          tower['id'] == beacon and tower['ref'] != old_ref and (prim or {}).get('size') == [0.6, 2.4, 0.6] and missing.get('removed') is False and
+          ((prim or {}).get('material') or {}).get('glow') == {'colour': '#30e0ff', 'strength': 4},
           {'tower': {k: tower[k] for k in ('id', 'ref', 'key')}, 'primitive': prim, 'missing': missing})
     close_director()
     s.ctl('eval', 'hl.plugin.hyprune.camera(0,1.7,-5,0,-.08)')
