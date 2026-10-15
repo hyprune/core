@@ -20,7 +20,7 @@ the steady middle of the pan it reports:
   ageMs         mean age of the camera sample shown (latency inside core)
   newAgeStdMs   spread of that age over new frames: motion judder in ms (0 = every new
                 frame shows the scene exactly the same time before it is drawn)
-GPU-bound worker (the owner's case: a 4K output whose worker can't keep the cap): set
+GPU-bound worker (e.g. a 4K output whose worker can't keep the cap): set
 HYPRUNE_NESTED_4K=1, HYPRUNE_NESTED_REFRESH=98 and HYPRUNE_DEV_WORKER_COST_MS=12:3 (on top of
 the real 4K render and transfer, about 13 ms on the work host: about 25 ms a frame); HYPRUNE_DEV_PACING_BEFORE=1 runs the previous pacing (the
 cap's divisor alone) for an A/B. Each round reports newRefreshes (how many refreshes each new
