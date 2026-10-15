@@ -149,8 +149,8 @@ def acceptance(client,children,args,shell_token,socketpath):
  for key in ['k','w','Up','j','s','Down','h','a','Left','l','d','Right']:
   pose(client,[0,2.3,4]);before=state()['movement']['position'];keys('-P',key,'-s','140','-p',key);check('move_'+key,state()['movement']['position']!=before)
  pose(client,[0,2.3,4]);keys('-P','space','-s','180','-p','space');check('Space_fly_up',state()['movement']['position'][1]>2.4)
- pose(client,[0,2.3,4]);keys('-P','Control_L','-s','450','-p','Control_L');check('Ctrl_fly_down',state()['movement']['position'][1]<2.2)
- # Ctrl+R (record.toggle) is a chord: it starts and stops a recording without flying down.
+ pose(client,[0,2.3,4]);keys('-P','Control_L','-s','180','-p','Control_L');check('Ctrl_fly_down',state()['movement']['position'][1]<2.2)
+ # Ctrl+R (record.toggle): Ctrl flies down at once, the chord puts the height back, both times.
  pose(client,[0,2.3,4]);time.sleep(.2);y0=state()['movement']['position'][1]
  keys('-M','ctrl','-P','Control_L','-s','90','-k','r','-p','Control_L','-m','ctrl');time.sleep(.5);y1=state()['movement']['position'][1]
  keys('-M','ctrl','-P','Control_L','-s','90','-k','r','-p','Control_L','-m','ctrl');time.sleep(.5);y2=state()['movement']['position'][1]
@@ -159,7 +159,7 @@ def acceptance(client,children,args,shell_token,socketpath):
  keys('-k','v');check('V_noclip',state()['interaction']['noclip']);keys('-k','v');check('V_collision_restore',not state()['interaction']['noclip']);keys('-k','F4');check('F4_fly_toggle',state()['movement']['modeId']=='com.hyprune.walk');keys('-k','F4');check('F4_back_fly',state()['movement']['modeId']=='com.hyprune.fly')
  keys('-k','z');state();check('Z_transport_notice',any(v['method']=='runtime.notice' and v['params']['code']=='transport.pending' for v in client.events))
  client.call('route.set',{'points':[{'position':[0,2.3,-8]}]});keys('-k','x');check('X_autopilot_on',state()['location']['autodrive'],{'diag':diag(),'location':state()['location']});keys('-k','x');check('X_autopilot_off',not state()['location']['autodrive'])
- client.call('movement.set',{'modeId':'com.hyprune.walk'});pose(client,[0,1.7,4]);crouch=s.envrun('wtype','-P','Control_L','-s','1000','-p','Control_L');children.append(crouch);time.sleep(.45);captured=diag();check('Ctrl_crouch',captured['eyeHeight']==1,captured);crouch.wait(timeout=5);time.sleep(.15);check('Ctrl_stand_height_restore',abs(diag()['eyeHeight']-1.7)<.001,diag()['eyeHeight'])
+ client.call('movement.set',{'modeId':'com.hyprune.walk'});pose(client,[0,1.7,4]);crouch=s.envrun('wtype','-P','Control_L','-s','850','-p','Control_L');children.append(crouch);time.sleep(.2);captured=diag();check('Ctrl_crouch',captured['eyeHeight']==1,captured);crouch.wait(timeout=5);time.sleep(.15);check('Ctrl_stand_height_restore',abs(diag()['eyeHeight']-1.7)<.001,diag()['eyeHeight'])
  pose(client,[0,1.7,4]);keys('-P','space','-s','180','-p','space');check('Space_walk_jump',state()['movement']['position'][1]>1.9)
  pose(client,[-4,1.7,2]);keys('-P','k','-s','750','-p','k');time.sleep(.2);check('walk_stair_step_up',state()['movement']['position'][1]>2,state()['movement']['position'])
  pose(client,[0,-35,4]);wait(lambda:state()['movement']['position'][1]>1);check('fall_respawn',True)

@@ -288,9 +288,9 @@ struct Runtime {
     void pathRemove();
     void pathDraw();
     Json pathDiagnostics() const;
-    // Ctrl presses held back in world mode where a Ctrl chord can follow (Gizmo.inc): their
-    // actions (crouch / fly down) run after a short delay unless a chord (Ctrl+R, undo/redo)
-    // consumes them; a release is dropped if they never ran or a chord already ended them.
+    // Ctrl presses held back in tools 3 and 4 (Gizmo.inc): their actions (crouch / fly down)
+    // run after a short delay unless an undo/redo chord consumes them; a release is dropped if
+    // they never ran or a chord already ended them.
     struct PendingCtrl {
         uint32_t code = 0;
         std::vector<interaction::Action> actions;
@@ -301,6 +301,14 @@ struct Runtime {
     bool deferCtrl(const std::string &key, bool down, uint32_t code, const std::vector<interaction::Action> &actions);
     void consumePendingCtrl();
     bool ctrlChord(const std::string &key) const;
+    // Ctrl held for down elsewhere: where it went down from, until a chord ends it (Gizmo.inc).
+    struct CtrlHold {
+        uint32_t code = 0;
+        float y = 0, eyeHeight = 1.7f;
+        bool moved = false, ended = false;
+    };
+    std::optional<CtrlHold> ctrlHold;
+    void ctrlHoldKey(const std::string &key, bool down, uint32_t code, const std::vector<interaction::Action> &actions);
     void ctrlTick();
     bool snapHeld() const;
     void ghostEdges();
@@ -7176,15 +7184,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                                        (runtime->editor.activeHandle >= 0 && runtime->superHeld);
                 auto actions =
                     runtime->inputEvent(runtime->inputMode(), key, runtime->modifiers, down, now, 0, gestureMovement);
-                // Ctrl's own actions (crouch / fly down) wait briefly where a Ctrl chord can
-                // follow, so Ctrl+R / Ctrl+Z consume the whole chord instead of dipping the
-                // camera first.
+                // Tools 3 and 4: Ctrl's own actions (crouch / fly down) wait briefly, so Ctrl+Z /
+                // Ctrl+Y consume the whole chord; elsewhere a Ctrl chord undoes the descent.
                 if (runtime->deferCtrl(key, down, event.keycode, actions)) {
                     info.cancelled = true;
                     if (down)
                         runtime->swallowedKeys.insert(event.keycode);
                     return;
                 }
+                runtime->ctrlHoldKey(key, down, event.keycode, actions);
                 if (!actions.empty()) {
                     info.cancelled = true;
                     if (down)

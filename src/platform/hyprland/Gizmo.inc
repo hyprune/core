@@ -935,9 +935,9 @@ void Runtime::cancelGizmo() {
     editor.activeHandle = -1;
     windowBlocked.reset();
 }
-// Ctrl's own actions (crouch / fly down by default) wait briefly in world mode wherever a
-// Ctrl chord can follow: tools 3 and 4 (Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y) and any Ctrl binding of
-// the mode (Ctrl+R records), so the chord never dips the camera first.
+// Tools 3 and 4: Ctrl's own actions (crouch / fly down) wait briefly, so Ctrl+Z / Ctrl+Y
+// consume the whole chord (as before IPC 0.29's key swap). Elsewhere Ctrl acts at once and a
+// chord undoes it (ctrlHoldKey).
 bool Runtime::deferCtrl(const std::string &key, bool down, uint32_t code, const std::vector<interaction::Action> &actions) {
     if (!down) {
         auto it = std::find_if(pendingCtrl.begin(), pendingCtrl.end(), [&](auto &p) { return p.code == code; });
@@ -948,13 +948,13 @@ bool Runtime::deferCtrl(const std::string &key, bool down, uint32_t code, const 
         return !dispatched; // never ran (or a chord already ended it): drop the release too
     }
     if (!key.starts_with("Control_")) {
-        // A key bound as a Ctrl chord while Ctrl is held: the chord owns Ctrl.
+        // A key bound as a Ctrl chord while Ctrl is held back: the chord owns Ctrl.
         if (!pendingCtrl.empty() && ctrlChord(key))
             consumePendingCtrl();
         return false;
     }
-    if (actions.empty() || !active || typing || layerCursor || freeCursor || control.uiVisible() || inputMode() != "world" ||
-        (editor.slot != 4 && editor.slot != 3 && !ctrlChord("")))
+    if (actions.empty() || !active || (editor.slot != 4 && editor.slot != 3) || typing || layerCursor || freeCursor ||
+        control.uiVisible() || inputMode() != "world")
         return false;
     std::erase_if(pendingCtrl, [&](auto &p) { return p.code == code; });
     pendingCtrl.push_back(PendingCtrl{code, actions, std::chrono::steady_clock::now()});
@@ -1000,6 +1000,40 @@ void Runtime::ctrlTick() {
                 runtime->action(a);
         });
     }
+}
+// Ctrl goes down at once (crouch, fly down). A Ctrl chord (Ctrl+R, any Ctrl+key binding of the
+// mode) while Ctrl is held ends the descent for the rest of the hold and, if no other movement
+// key came since Ctrl went down, puts the height and crouch back where they were at the press,
+// so Ctrl+R never leaves the camera lower.
+void Runtime::ctrlHoldKey(const std::string &key, bool down, uint32_t code, const std::vector<interaction::Action> &actions) {
+    auto has = [&](std::initializer_list<const char *> names) {
+        return std::any_of(actions.begin(), actions.end(), [&](auto &a) {
+            return a.pressed && std::any_of(names.begin(), names.end(), [&](auto n) { return a.name == n; });
+        });
+    };
+    if (key.starts_with("Control_")) {
+        if (down && has({"down"}) && inputMode() == "world")
+            ctrlHold = CtrlHold{code, camera.position.y, camera.eyeHeight};
+        else if (!down && ctrlHold && ctrlHold->code == code)
+            ctrlHold.reset();
+        return;
+    }
+    if (!down || !ctrlHold || ctrlHold->ended)
+        return;
+    if (ctrlChord(key)) {
+        ctrlHold->ended = true;
+        deferInput([hold = *ctrlHold] {
+            runtime->action({"down", false}); // no more descending this hold
+            runtime->smoothIntent.up = 0;
+            if (!hold.moved && !runtime->climbing.active()) {
+                // The height (and crouch) from the Ctrl press: where the camera just was.
+                runtime->camera.position.y = hold.y;
+                runtime->camera.eyeHeight = hold.eyeHeight;
+                runtime->camera.verticalSpeed = 0;
+            }
+        });
+    } else if (has({"forward", "back", "left", "right", "up", "jump"}))
+        ctrlHold->moved = true;
 }
 // Snapping (gizmo drags, path points): Shift, the sprint key, as before IPC 0.29's swap.
 bool Runtime::snapHeld() const {

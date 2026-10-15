@@ -66,10 +66,10 @@ the pivot is excluded, so the object being edited never hides its handles.
 | End, Shift+End | drop the selected object onto the surface below it; align it to the aimed surface |
 
 The keys in the last four rows are handled by core while tool 4 is active in world
-mode; a key that an action binds with the same modifiers keeps its binding. In world
-mode a Ctrl press's own actions (crouch, fly down) wait up to 180 ms wherever a Ctrl chord
-can follow (undo/redo in tools 3 and 4, Ctrl+R everywhere): the chord in that window
-consumes Ctrl entirely; held longer, Ctrl acts as usual until a chord ends it.
+mode; a key that an action binds with the same modifiers keeps its binding. In tool 4
+a Ctrl press's own actions (crouch, fly down) wait up to 180 ms: an undo/redo chord in
+that window consumes Ctrl entirely; Ctrl held longer acts as usual. Elsewhere Ctrl goes down
+at once, and a Ctrl chord (Ctrl+R) ends the descent and puts the height back.
 
 ## Targets
 

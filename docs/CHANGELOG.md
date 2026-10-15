@@ -297,9 +297,10 @@ These are wire-compatible behavior changes that integrators may notice:
 
 - **World keys back: Shift sprints, Ctrl goes down.** The input version 3 defaults of IPC 0.29
   swapped them; that is undone (still version 3, no wire change). Ctrl+R still toggles a debug
-  recording in world mode, and a Ctrl chord never moves the camera: wherever one can follow,
-  Ctrl's own actions wait up to 180 ms, and a chord consumes them (or ends them, held
-  longer). Snapping is Shift again. A keymap still at exactly the swapped pair (sprint
+  recording in world mode, and a Ctrl chord never leaves the camera lower: Ctrl goes down at
+  once, and a Ctrl chord (Ctrl+R, any Ctrl binding) ends the descent for the rest of the hold
+  and, if no other movement key came since Ctrl went down, restores the height and crouch from
+  the Ctrl press. Snapping is Shift again. A keymap still at exactly the swapped pair (sprint
   Control_L, down Shift_L) is restored once at startup (marker in
   `$XDG_STATE_HOME/hyprune/migrations.json`); customised bindings stay. A version 2 file only
   gains Ctrl+R where it is free.
