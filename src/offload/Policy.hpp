@@ -69,6 +69,44 @@ inline Policy policy(const Supply &s, const std::string &mode, int fps, std::opt
 }
 // Independent software watchdog; no privileged hardware power-limit changes.
 // Missing telemetry never means zero watts. A breach immediately withdraws the lease.
+// Power over the cap throttles before it ends offload (the laptop may run on USB-C PD, so
+// the limit stays hard): every sample over the cap (they come every 500 ms) lowers the
+// worker's rate a step (25 % fewer frames, down to 30 FPS, target_fps's own floor; even
+// pacing follows with a larger divisor), and only power still over the cap 2 s after the first step ends offload. Under
+// 90 % of the cap for 3 s, one step back.
+struct PowerThrottle {
+    enum Result { Ok, Throttled, Exceeded };
+    int level = 0;
+    double overSince = -1, lastStep = -1e9, underSince = -1;
+    static constexpr int MaxLevel = 4;
+    Result sample(double watts, double cap, double nowMs) {
+        if (watts > cap) {
+            underSince = -1;
+            if (overSince < 0)
+                overSince = nowMs;
+            if (level < MaxLevel && nowMs - lastStep >= 450)
+                ++level, lastStep = nowMs;
+            return nowMs - overSince >= 2000 ? Exceeded : Throttled;
+        }
+        overSince = -1;
+        if (watts < cap * .9) {
+            if (underSince < 0)
+                underSince = nowMs;
+            if (level > 0 && nowMs - underSince >= 3000)
+                --level, underSince = nowMs;
+        } else
+            underSince = -1;
+        return level ? Throttled : Ok;
+    }
+    int fps(int base) const {
+        return level ? std::max(std::min(base, 30), int(std::lround(base * std::pow(.75, level)))) : base;
+    }
+};
+// Temperature, a finite reading and a fresh sample stay hard limits.
+inline bool safeReading(double watts, double temperature, double ageMs) {
+    return std::isfinite(watts) && watts >= 0 && std::isfinite(temperature) && temperature >= 0 && temperature <= 75 &&
+           ageMs >= 0 && ageMs <= 1500;
+}
 inline bool safeSample(double watts, double temperature, double ageMs, double cap) {
     return std::isfinite(watts) && watts >= 0 && std::isfinite(temperature) && temperature >= 0 && watts <= cap &&
            temperature <= 75 && ageMs >= 0 && ageMs <= 1500;

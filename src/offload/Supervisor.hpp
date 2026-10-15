@@ -3,6 +3,8 @@
 #include "Policy.hpp"
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <dlfcn.h>
 #include <filesystem>
 #include <fstream>
@@ -172,6 +174,7 @@ class Supervisor {
     int control_ = -1;
     bool failed_ = false;
     double next_ = 0, nextMeter_ = 0, measured_ = 0, watts_ = -1, temperature_ = -1, killAt_ = 0;
+    PowerThrottle throttle_;
     Meter meter_;
     std::function<Supply()> supply_;
     std::function<std::vector<Device>()> discover_;
@@ -246,6 +249,7 @@ class Supervisor {
         }
         deviceError_.clear(); // an explicit off/on retry selects again
         stop();
+        throttle_ = {};
         request_ = std::move(j);
         failed_ = false;
         next_ = 0;
@@ -343,18 +347,54 @@ class Supervisor {
             publish();
             return;
         }
+        bool fresh = false;
         if (now >= nextMeter_) {
             nextMeter_ = now + 500;
-            if (sample_ ? sample_(watts_, temperature_) : meter_.sample(watts_, temperature_))
+            if (sample_ ? sample_(watts_, temperature_) : meter_.sample(watts_, temperature_)) {
                 measured_ = now;
+                fresh = true;
+                // Nested tests only: HYPRUNE_DEV_POWER_MODEL="offset:perFps" adds offset + perFps
+                // x the worker's rate to the reading (a GPU whose draw follows the frame rate).
+                static const auto model = [] {
+                    std::pair<double, double> m{0, 0};
+                    if (auto e = getenv("HYPRUNE_DEV_POWER_MODEL")) {
+                        m.first = std::atof(e);
+                        if (auto colon = std::strchr(e, ':'))
+                            m.second = std::atof(colon + 1);
+                    }
+                    return m;
+                }();
+                if (model.first || model.second)
+                    watts_ = std::max(0., watts_) + model.first + model.second * throttle_.fps(policy_.fps);
+            }
         }
-        if (!safeSample(watts_, temperature_, now - measured_, policy_.cap)) {
+        if (!safeReading(watts_, temperature_, now - measured_)) {
             reason_ = "power/temperature watchdog";
             failed_ = true;
             stop();
             publish();
             return;
         }
+        // Over the power cap: fewer frames first (PowerThrottle), the end only if it lasts.
+        if (fresh) {
+            auto result = throttle_.sample(watts_, policy_.cap, now);
+            char text[160];
+            if (result == PowerThrottle::Exceeded) {
+                std::snprintf(text, sizeof text, "power cap exceeded: %.0f W over the %.0f W cap after throttling", watts_, policy_.cap);
+                reason_ = text;
+                failed_ = true;
+                stop();
+                publish();
+                return;
+            }
+            if (result == PowerThrottle::Throttled) {
+                std::snprintf(text, sizeof text, "power cap: throttled to %d FPS (%.0f W, cap %.0f W)", throttle_.fps(policy_.fps), watts_,
+                              policy_.cap);
+                reason_ = text;
+            } else if (reason_.starts_with("power cap: throttled"))
+                reason_ = "warming";
+        }
+        policy_.fps = throttle_.fps(policy_.fps);
         if (child_ <= 0) {
             int data[2], ctl[2];
             if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, data))
@@ -426,7 +466,8 @@ class Supervisor {
             }
             control_ = ctl[0];
             killAt_ = 0;
-            reason_ = "warming";
+            if (!throttle_.level) // a worker started while throttled keeps saying so
+                reason_ = "warming";
             // Before startup uploads begin, grant an initial, bounded power lease.
             sendPacket(control_, {{"untilMs", now + 500}, {"fps", policy_.fps}});
             try {

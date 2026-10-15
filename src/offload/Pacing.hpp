@@ -23,8 +23,8 @@ inline int evenDivisor(double refreshHz, double fps) {
 // Even pacing needs a divisor the worker can keep: a 60 FPS cap on 98 Hz asks for a frame
 // every second refresh (20.4 ms), but a worker taking 25 ms fills only some of those slots
 // and frames land 2 or 3 refreshes apart. The divisor is the larger of the cap's and this
-// one, which rises at once and falls once the frames fit a whole refresh sooner with 5 %
-// to spare, at most every 2 s. Service time does not depend on the divisor (an idle worker
+// one, which rises at once and falls once the frames fit a whole refresh sooner with 10 %
+// to spare, at most every 3 s (a worker near a boundary must not flap between two divisors). Service time does not depend on the divisor (an idle worker
 // starts each frame when its pose arrives), so the choice does not feed back on itself.
 struct Throughput {
     std::deque<double> service;
@@ -49,7 +49,7 @@ struct Throughput {
         if (refreshMs <= 0 || p90 <= 0)
             return ticks;
         int need = std::clamp(int(std::ceil((p90 + 1) / refreshMs)), 1, 8);
-        if (need > ticks || (p90 + 1 < (ticks - 1) * refreshMs * .95 && lastDone - changed >= 2000)) {
+        if (need > ticks || (p90 + 1 < (ticks - 1) * refreshMs * .9 && lastDone - changed >= 3000)) {
             if (need != ticks)
                 changed = lastDone;
             ticks = need;

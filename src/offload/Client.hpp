@@ -32,6 +32,10 @@ class Client {
     Throughput throughput_;
     // Round trip of the latest promoted frames (ms after the pose was sent): packet, copy, front.
     std::deque<std::array<double, 3>> trips_;
+    // Per promoted frame (diagnostics, the latency breakdown): sequence, the present its motion
+    // follows (content time), pose sent, worker start and done, packet in, copy issued,
+    // promoted; steady ms. The draw and the present that show it are in the pacing probe.
+    std::deque<std::array<double, 8>> timeline_;
     // Frame ticks (diagnostics): time, promoted sequence, sent sequence, slot phases, budget.
     std::deque<std::array<double, 6>> ticks_;
     std::string lastSent_; // the last pose request without its identity: unchanged means no new frame
@@ -42,6 +46,7 @@ class Client {
     std::string error;
     Json capabilities, timings;
     bool connected() const { return fd_ >= 0; }
+    int fd() const { return fd_; }
     // Presentation clock (the backend's latest present, steady ms): even pacing counts from
     // the present a pose followed, not from when the tick got round to sending it.
     void display(double ms) { displayMs_ = ms; }
@@ -87,6 +92,7 @@ class Client {
         return {{"front", front_}, {"frontSequence", frontSequence_}, {"sequence", sequence_}, {"phases", phases},
                 {"frontAgeMs", front_ >= 0 ? Json(now() - frontReply_.at("sent").get<double>()) : Json(nullptr)},
                 {"trips", Json(std::vector<std::array<double, 3>>(trips_.begin(), trips_.end()))},
+                {"timeline", Json(std::vector<std::array<double, 8>>(timeline_.begin(), timeline_.end()))},
                 {"ticks", Json(std::vector<std::array<double, 6>>(ticks_.begin(), ticks_.end()))}};
     }
     sim::Camera camera() const {
@@ -166,6 +172,11 @@ class Client {
                         trips_.push_back({b.received - sent, b.copying - sent, now() - sent});
                         while (trips_.size() > 240)
                             trips_.pop_front();
+                        timeline_.push_back({b.reply.at("sequence").get<double>(), b.sentDisplay, sent,
+                                             b.reply.value("workerStart", 0.), b.reply.value("workerDone", 0.), b.received,
+                                             b.copying, now()});
+                        while (timeline_.size() > 400)
+                            timeline_.pop_front();
                     }
                     glDeleteSync(b.copied);
                     b.copied = nullptr;

@@ -183,6 +183,7 @@ int main(int argc, char **argv) {
             int acquire = -1;
             Json request;
             bool pending = false;
+            double started = 0; // when its pose was read (now(), ms)
         };
         Slot slots[2];
         VkPhysicalDeviceProperties properties;
@@ -323,7 +324,7 @@ int main(int argc, char **argv) {
         send(sock, {{"type", "ready"}});
         note("ready");
         offload::RateCap cap; // the watchdog's FPS as an average, not a spacing (Pacing.hpp)
-        Json lastGraphics, lastProfile;
+        Json lastGraphics, lastGraphicsRaw, lastProfile;
         uint64_t sequence = 0;
         GLenum layout = GL_LAYOUT_GENERAL_EXT;
         for (;;) {
@@ -348,6 +349,7 @@ int main(int argc, char **argv) {
                     reply["transferGpuMs"] = (t[1] - t[0]) * properties.limits.timestampPeriod / 1e6;
                     reply["producerReadyMs"] = now() - reply["sent"].get<double>();
                     reply["workerDone"] = now();
+                    reply["workerStart"] = b.started; // began this frame (its pose read)
                     auto timing = renderer.timings();
                     reply["renderScale"] = timing["renderScale"];
                     reply["msaaSamples"] = timing["msaaSamples"];
@@ -395,12 +397,17 @@ int main(int argc, char **argv) {
                 break;
             check(p["version"] == 2 && p["type"] == "pose", "protocol");
             note("pose " + std::to_string(p.value("sequence", uint64_t(0))) + " (" + std::to_string(p.dump().size()) + " bytes)");
-            auto graphics =
-                interaction::configPatch(interaction::defaultConfig(), {{"graphics", p.at("graphics")}}).at("graphics");
-            if (graphics != lastGraphics) {
-                renderer.applyGraphics(graphics);
-                renderer.intelQuality = false;
-                lastGraphics = graphics;
+            // Validated only when it changed: building and checking the whole config cost a few
+            // ms of every frame's latency.
+            if (p.at("graphics") != lastGraphicsRaw) {
+                auto graphics =
+                    interaction::configPatch(interaction::defaultConfig(), {{"graphics", p.at("graphics")}}).at("graphics");
+                lastGraphicsRaw = p.at("graphics");
+                if (graphics != lastGraphics) {
+                    renderer.applyGraphics(graphics);
+                    renderer.intelQuality = false;
+                    lastGraphics = graphics;
+                }
             }
             if (p.at("profile") != lastProfile) {
                 renderer.profile = p.at("profile");
@@ -412,6 +419,7 @@ int main(int argc, char **argv) {
             check(p["sequence"].get<uint64_t>() > sequence, "sequence");
             sequence = p["sequence"];
             auto &b = slots[i];
+            b.started = now();
             cap.spend();
             if (p.contains("objects") && !p["objects"].is_null()) {
                 objects.apply(p["objects"], scene->objectAssets.size(), loadAsset);

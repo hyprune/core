@@ -268,7 +268,7 @@ static void pacing() {
     }
     assert(slow.divisor(10.2) == 3);
     // Faster again (a lower render scale): back to 2 only with room to spare (p90 + 1 ms
-    // under 95 % of two refreshes, 19.4 ms), not at 19 ms; then at 17 ms.
+    // under 90 % of two refreshes, 18.4 ms), not at 19 ms; then at 17 ms.
     for (int k = 0; k < 60; ++k) {
         double sent = 3000 + k * 30.6;
         slow.frame(sent, sent + 19);
@@ -279,19 +279,19 @@ static void pacing() {
         slow.frame(sent, sent + 17);
     }
     assert(slow.divisor(10.2) == 2);
-    // Not back up and down within 2 s: a rise is immediate, the next fall waits.
+    // Not back up and down within 3 s: a rise is immediate, the next fall waits.
     for (int k = 0; k < 60; ++k) {
         double sent = 9000 + k * 20.4;
         slow.frame(sent, sent + 22);
     }
     assert(slow.divisor(10.2) == 3);
-    for (int k = 0; k < 60; ++k) { // 1.2 s of fast frames, all within 2 s of the rise: stays
+    for (int k = 0; k < 60; ++k) { // 1.2 s of fast frames, all within 3 s of the rise: stays
         double sent = 10300 + k * 20.4;
         slow.frame(sent, sent + 12);
     }
     assert(slow.p90Ms() < 13 && slow.divisor(10.2) == 3);
     for (int k = 0; k < 60; ++k) {
-        double sent = 12500 + k * 20.4;
+        double sent = 13500 + k * 20.4;
         slow.frame(sent, sent + 12);
     }
     assert(slow.divisor(10.2) == 2);
@@ -465,6 +465,29 @@ int main(int argc, char **argv) {
     for (auto v : {51., -1.})
         assert(!safeSample(v, 70, 500, 50));
     assert(!safeSample(40, 76, 500, 50) && !safeSample(40, 70, 1501, 50));
+    // Over the power cap: throttle a step per sample, end only if still over 2 s after the
+    // first step; recover a step after 3 s under 90 % of the cap.
+    {
+        assert(safeReading(200, 70, 500) && !safeReading(40, 76, 500) && !safeReading(40, 70, 1501));
+        PowerThrottle p;
+        assert(p.sample(40, 50, 0) == PowerThrottle::Ok && p.fps(60) == 60);
+        assert(p.sample(55, 50, 500) == PowerThrottle::Throttled && p.level == 1 && p.fps(60) == 45);
+        assert(p.sample(52, 50, 1000) == PowerThrottle::Throttled && p.fps(60) == 34);
+        assert(p.sample(45, 50, 1500) == PowerThrottle::Throttled && p.level == 2); // under, but not long enough
+        for (double t = 2000; t < 4600; t += 500)
+            assert(p.sample(40, 50, t) == PowerThrottle::Throttled);
+        assert(p.sample(40, 50, 5000) == PowerThrottle::Throttled && p.level == 1); // 3 s under 45 W
+        assert(p.sample(40, 50, 8000) == PowerThrottle::Ok && p.level == 0);
+        PowerThrottle q;
+        for (double t = 0; t < 2000; t += 500)
+            assert(q.sample(80, 50, t) == PowerThrottle::Throttled);
+        assert(q.sample(80, 50, 2000) == PowerThrottle::Exceeded && q.fps(60) == 30); // the floor
+        assert(q.fps(10) == 10); // never above the base
+        PowerThrottle r; // over, back under before 2 s: not ended, the clock restarts
+        r.sample(80, 50, 0), r.sample(80, 50, 1500), r.sample(48, 50, 1900);
+        assert(r.sample(80, 50, 2400) == PowerThrottle::Throttled && r.sample(80, 50, 4300) == PowerThrottle::Throttled);
+        assert(r.sample(80, 50, 4400) == PowerThrottle::Exceeded);
+    }
     auto defaults = interaction::defaultConfig();
     assert(defaults["graphics"]["offload"] == "off");
     for (auto patch :
@@ -532,6 +555,57 @@ int main(int argc, char **argv) {
         std::this_thread::sleep_for(std::chrono::milliseconds(110));
         supervisor.tick();
         assert(supervisorState["pid"].is_null());
+    }
+    // Over the power cap (80 W on full AC with a battery): the worker keeps running at a lower
+    // rate, then ends with the reason only if the draw stays over 2 s after throttling.
+    full.usb = false;
+    {
+        double watts = 100;
+        Supervisor supervisor(
+            std::filesystem::canonical(argv[0]),
+            [&](Json j, int channel) {
+                if (channel < 0)
+                    supervisorState = j.at("state");
+            },
+            [&] { return full; }, [] { return std::vector<Device>{{"/dev/null", "fake"}}; },
+            [&](double &w, double &t) {
+                w = watts;
+                t = 40;
+                return true;
+            });
+        auto config = defaults["graphics"];
+        config["offload"] = "on";
+        config["target_fps"] = 60;
+        supervisor.request({{"enabled", true}, {"graphics", config}, {"worldPath", "/unused"}, {"width", 16}, {"height", 16}, {"generation", 1}});
+        supervisor.tick();
+        auto pid = supervisorState["pid"];
+        assert(pid.is_number_integer() && supervisorState["targetFPS"] == 45);
+        assert(supervisorState["reason"].get<std::string>().starts_with("power cap: throttled to 45 FPS"));
+        for (int k = 0; k < 14; ++k) { // 1.5 s, still over: lower, still running
+            std::this_thread::sleep_for(std::chrono::milliseconds(110));
+            supervisor.tick();
+        }
+        assert(supervisorState["pid"] == pid && supervisorState["targetFPS"] == 30);
+        for (int k = 0; k < 8; ++k) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(110));
+            supervisor.tick();
+        }
+        assert(supervisorState["reason"].get<std::string>().starts_with("power cap exceeded: 100 W over the 80 W cap"));
+        std::this_thread::sleep_for(std::chrono::milliseconds(110));
+        supervisor.tick();
+        assert(supervisorState["pid"].is_null());
+        // Off and on (a new generation) retries, unthrottled; under the cap it stays.
+        watts = 60;
+        config["offload"] = "off";
+        supervisor.request({{"enabled", false}, {"graphics", config}, {"worldPath", "/unused"}, {"width", 16}, {"height", 16}, {"generation", 2}});
+        supervisor.tick();
+        config["offload"] = "on";
+        supervisor.request({{"enabled", true}, {"graphics", config}, {"worldPath", "/unused"}, {"width", 16}, {"height", 16}, {"generation", 3}});
+        for (int k = 0; k < 12; ++k) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(110));
+            supervisor.tick();
+        }
+        assert(supervisorState["pid"].is_number_integer() && supervisorState["targetFPS"] == 60);
     }
     render::Resolution resolution;
     resolution.minimum = .75f;
