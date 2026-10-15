@@ -279,7 +279,9 @@ void Behaviours::tick(double dt, const Json &sources, int64_t nowMs, bool still,
                 l.condition = Condition::Error;
             else
                 l.condition = nowMs - (*entry).value("monotonicMs", nowMs) > staleMs ? Condition::Stale : Condition::Fresh;
-            // Missing, stale or unreadable data holds the last value (A before any).
+            // Missing, stale or unreadable data holds the last value (A before any). The first value
+            // shows at once: nothing to ease from.
+            bool first = !l.known;
             if (value && l.condition != Condition::Error) {
                 if (b.property == Behaviour::Visible)
                     l.target = (!b.above || *value >= *b.above) && (!b.below || *value < *b.below) ? 1 : 0;
@@ -288,7 +290,7 @@ void Behaviours::tick(double dt, const Json &sources, int64_t nowMs, bool still,
                 l.known = true;
             }
             double before = l.shown;
-            if (b.property == Behaviour::Visible || still || b.smoothing <= 0 || !l.known)
+            if (b.property == Behaviour::Visible || still || b.smoothing <= 0 || first)
                 l.shown = l.target;
             else
                 l.shown += (l.target - l.shown) * (1 - std::exp(-dt / b.smoothing));

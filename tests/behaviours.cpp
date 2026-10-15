@@ -63,7 +63,7 @@ int main() {
     b.tick(.016, publish("com.hyprune.sources.u-00c001", {{"value", 50}}), 1000, false);
     std::vector<world::ObjectDrawState> states;
     b.apply(w, states);
-    auto &d = states[0].display;
+    auto d = states[0].display;
     // Scale y = 0.1 + (3 - 0.1) * 0.5 = 1.55 about the bottom face: the top at 1.55, the base still at 0.
     check(states[0].bound && states[0].displayed && near(d.v[5], 1.55f) && near(d.point({0, 0, 0}).y, 0) && near(d.point({0, 1, 0}).y, 1.55f),
           "scale about the bottom face follows the value");
