@@ -392,6 +392,13 @@ These are wire-compatible behavior changes that integrators may notice:
   the plugin and the offload worker pose the same skeleton (`seatDrop` in the pose record).
   The official companions (seat heights 0.46-0.60 m) and Ash now sit on Lumen Reach's 0.40 m
   benches. Seats more than 45 cm too high or 25 cm too low are still refused.
+- **Air speed off a drop.** Walking off a real drop (more than a metre of air under the feet),
+  a horizontal speed above 10 m/s (the default run speed) eases down to 10 m/s in about 0.1 s.
+  A run at the `run_speed` ceiling (30 m/s) off a raised deck used to carry up to 60 m through
+  the air, past the world's perimeter backstops; it now lands like a 10 m/s run. Speeds up to
+  10 m/s, stairs and short hops keep full air control; flight and noclip are unchanged.
+  Worlds can rely on it: a falling walker is at least `9.81 (d - 2)^2 / 200` metres below where
+  it left the floor `d` metres away (`hyprune-walk-check` uses the same walker).
 
 ## Core 0.10.0
 

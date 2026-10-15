@@ -109,6 +109,34 @@ int main() {
     for (int i = 0; i < 50; i++)
         walk.step(camera, {.forward = 1}, 1.f / 60, stairs);
     assert(camera.position.z < -.4 && camera.position.y > 1.94);
+    // Running off a raised deck: past a real drop (10 m), a speed above 10 m/s eases down to
+    // it in the air, so a 30 m/s run lands near the deck; 10 m/s and a short drop keep full
+    // air control.
+    auto airborneRun = [&](float deckHeight, float speed) {
+        std::vector<Triangle> deck;
+        auto add = [&](Vec3 a, Vec3 b, Vec3 cc, Vec3 d) {
+            deck.push_back({a, b, cc});
+            deck.push_back({a, cc, d});
+        };
+        add({-5, deckHeight, 3}, {5, deckHeight, 3}, {5, deckHeight, 0}, {-5, deckHeight, 0});
+        add({-5, 0, 0}, {5, 0, 0}, {5, 0, -200}, {-5, 0, -200});
+        sim::Camera c;
+        c.position = {0, deckHeight + 1.7f, 2};
+        float leftAt = 0;
+        for (int i = 0; i < 600; i++) {
+            walk.step(c, {.forward = 1, .speed = speed / 3.5f}, 1.f / 60, deck);
+            if (!c.grounded && c.position.z < 0 && leftAt == 0)
+                leftAt = c.position.z;
+            if (c.grounded && leftAt != 0 && c.position.y < 1.8f)
+                return leftAt - c.position.z;
+        }
+        return 1e9f;
+    };
+    float fast = airborneRun(10, 30), run = airborneRun(10, 10), hop = airborneRun(.5f, 30), slowHop = airborneRun(.5f, 10);
+    float fall = std::sqrt(2 * 10 / 9.81f);
+    assert(fast < 10 * fall + 3 && fast > 10 * fall); // was 30 m/s x 1.43 s = 43 m
+    assert(std::abs(run - 10 * fall) < .5f);
+    assert(std::abs(hop - 3 * slowHop) < .3f);
     sim::Fly fly;
     camera.position = {0, 1.7, -3};
     for (int i = 0; i < 30; ++i)
@@ -120,5 +148,5 @@ int main() {
     fly.step(camera, {.forward = .01f}, .05f, {});
     assert(z - camera.position.z < .003f); // inertia tail must not move at full speed
     std::cout << "M3A config, hit offset, wheel, OBB sweep, independent client aspect, roll, arbitrary normal and "
-                 "stair tests passed\n";
+                 "stair and deck-run tests passed\n";
 }

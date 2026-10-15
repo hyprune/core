@@ -63,6 +63,46 @@ def acceptance(client,children,args,shell_token,socketpath):
         declares='playable' in json.loads((s.ROOT.parent/'worlds/dist'/name/'world.json').read_text())
         pose(0,120,0);hold('space',300);p=position()
         check(name+(' declares playable volumes: flight bounded' if declares else ' legacy unrestricted fly'),(p[1]<=120.2) if declares else (p[1]>120.2),p)
+    deck_runs(client,check,pose,position)
     client.call('runtime.exit',{})
     evidence={'nestedOnly':True,'lock':'/tmp/worldshell-nested.lock','checks':checks}
     (s.ROOT/'docs/evidence/playable-bounds.json').write_text(json.dumps(evidence,indent=2)+'\n')
+
+# Raised-deck edges of Lumen Reach (one per deck: the 30 m/s runs that left the world in the
+# 0.12.0 fall-through sweep). Eye position and heading (radians) toward the edge.
+DECK_EDGES=[[-18.47,5.7,-15.14,.698],[.99,6.48,-21.42,-.436],[-11.24,5.7,-57.04,-2.007],[-11.31,5.7,-57.59,-2.444],
+    [-4.86,23.3,-59.72,-2.253],[-5.92,23.3,-35.78,-.104],[-6.34,23.3,-36.18,.349],[6.99,6.48,-22.32,-1.222],
+    [9.23,6.48,-21.41,1.92],[23.55,23.3,-60.21,2.777],[14.14,6.48,-22.09,2.444],[39.38,5.7,-152.06,.873],
+    [39.38,5.7,-149.18,.873],[43.54,7.7,-151.34,-.873],[50.91,22.15,-148.42,-1.571],[48.38,6.12,-98.76,1.547],
+    [51.26,6.53,-123.32,-2.793],[56.47,22.15,-147.91,-1.92],[48.4,6.12,-97.94,1.547],[58.36,6.54,-123.36,2.793],
+    [64.91,22.15,-148.59,2.444],[64.0,22.15,-148.59,2.444]]
+
+def deck_runs(client,check,pose,position):
+    """Run (Shift+W, real keys) off every raised deck edge at the run_speed ceiling, 30 m/s:
+    the player must come down inside the world (above the backstops' bottom, no respawn)."""
+    client.call('world.load',{'worldId':'com.hyprune.lumen-reach'});client.call('movement.set',{'modeId':'com.hyprune.walk'})
+    s.ctl('eval','hl.plugin.hyprune.config({player={run_speed=30,move_inertia=0}})')
+    # The default sprint binding (whatever key it is), pressed as a plain key.
+    bindings=json.loads((s.ROOT/'config/input.default.json').read_text())
+    sprint=next(v for k,v in walk_items(bindings) if k=='sprint')[0].split('[')[0]
+    results=[]
+    for x,y,z,yaw in DECK_EDGES:
+        s.ctl('eval',f'hl.plugin.hyprune.camera({x},{y},{z},{yaw},0)');time.sleep(.5)
+        start=position()
+        keys('-P',sprint,'-P','w','-s','1100','-p','w','-p',sprint)
+        settled=None
+        for _ in range(60):
+            time.sleep(.1);p=position()
+            if settled and max(abs(a-b) for a,b in zip(p,settled))<.01:break
+            settled=p
+        far=((p[0]-start[0])**2+(p[2]-start[2])**2)**.5
+        results.append({'from':start,'end':p,'horizontal':round(far,2),'ok':p[1]>-20 and far<40})
+    bad=[r for r in results if not r['ok']]
+    check(f'30 m/s runs off {len(results)} raised deck edges stay in the world',not bad,bad or results)
+    s.ctl('eval','hl.plugin.hyprune.config({player={run_speed=10,move_inertia=0.05}})')
+
+def walk_items(j):
+    if isinstance(j,dict):
+        for k,v in j.items():
+            yield k,v
+            yield from walk_items(v)

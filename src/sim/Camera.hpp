@@ -9,6 +9,7 @@ struct Camera {
     float yaw = 0, pitch = 0, roll = 0, verticalSpeed = 0, fov = 60;
     float shiftX = 0, shiftY = 0; // lens centre offset in NDC, +right/+up
     bool grounded = false;
+    float airSpeed = 0; // Walk: horizontal speed limit while falling off a drop; 0 = not falling
     float eyeHeight = 1.7f;
     float climbBob = 0; // visual-only, metres; reduced motion sets this to zero
     Vec3 viewBob{};     // visual-only walking bob offset, metres; zero with reduced motion

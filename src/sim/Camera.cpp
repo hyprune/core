@@ -1,5 +1,6 @@
 #include "Camera.hpp"
 #include <algorithm>
+#include <cmath>
 #include "interaction/Hands.hpp"
 namespace hyprune::sim {
 namespace {
@@ -131,11 +132,30 @@ void Walk::step(Camera &c, Intent i, float dt, std::span<const Triangle> mesh, c
     // also at a fast run speed.
     int steps = std::max({1, int(std::ceil(dt / .002f)), int(std::ceil(3.5f * i.speed * dt / .008f))});
     float h = dt / steps;
+    // Off a real drop (over a metre of air under the feet) a horizontal speed above airSpeed
+    // eases down to it: a run at the run_speed ceiling (30 m/s) off a raised deck comes down
+    // near the deck, not far past the world's backstops. Speeds up to airSpeed (the default
+    // run speed), stairs and short hops keep full air control as before.
+    constexpr float airSpeed = 10, airDrag = .1f, dropDepth = 1;
     for (int k = 0; k < steps; k++) {
         bool supported = c.grounded && !i.jump;
+        float speed = 3.5f * i.speed;
+        if (c.grounded)
+            c.airSpeed = 0;
+        else if (speed > airSpeed) {
+            if (c.airSpeed <= 0) {
+                auto below = interaction::raycast(c.position, {0, -1, 0}, mesh, index);
+                if (!below || below->distance > c.eyeHeight + dropDepth)
+                    c.airSpeed = speed;
+            }
+            if (c.airSpeed > 0) {
+                c.airSpeed = airSpeed + (c.airSpeed - airSpeed) * std::exp(-h / airDrag);
+                speed = std::min(speed, c.airSpeed);
+            }
+        }
         c.verticalSpeed -= 9.81f * h;
         auto before = c;
-        auto desired = c.position + d * (3.5f * i.speed * h) + Vec3{0, c.verticalSpeed * h, 0};
+        auto desired = c.position + d * (speed * h) + Vec3{0, c.verticalSpeed * h, 0};
         c.position = desired;
         resolveCapsule(c, mesh, index);
         Vec3 lost = desired - c.position;

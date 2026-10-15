@@ -3976,12 +3976,14 @@ void Runtime::action(interaction::Action a) {
         noclip = !noclip;
         climbing.reset(camera);
         camera.verticalSpeed = 0;
+        camera.airSpeed = 0;
     } else if (a.name == "fly") {
         movement = movement == &walk ? static_cast<sim::MotionStrategy *>(&fly) : &walk;
         climbing.reset(camera);
         keys.clear();
         smoothIntent = {};
         camera.verticalSpeed = 0;
+        camera.airSpeed = 0;
     } else if (a.name == "transport")
         ipc->notify("runtime.notice", {{"level", "info"},
                                        {"code", "transport.pending"},
@@ -5552,6 +5554,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         climbing.reset(camera);
         smoothIntent = {};
         camera.verticalSpeed = 0;
+        camera.airSpeed = 0;
         keys.clear();
     } else if (method == "surface.focus") {
         if (params.size() != 2 || (params.at("intent") != "pointer" && params.at("intent") != "keyboard"))
@@ -5866,6 +5869,7 @@ void Runtime::tick() {
             camera.eyeHeight = 1.7f;
             camera.position = s.position + Vec3{0, 1.7f, 0};
             camera.verticalSpeed = 0;
+            camera.airSpeed = 0;
             keys.clear();
             smoothIntent = {};
             cancelGrab();
@@ -6474,6 +6478,7 @@ int luaCamera(lua_State *state) {
         runtime->camera.yaw = luaL_checknumber(state, 4);
         runtime->camera.pitch = std::clamp(float(luaL_checknumber(state, 5)), -1.48f, 1.48f);
         runtime->camera.verticalSpeed = 0;
+        runtime->camera.airSpeed = 0;
     }
     Json j = {
         {"position", {runtime->camera.position.x, runtime->camera.position.y, runtime->camera.position.z}},
