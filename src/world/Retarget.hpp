@@ -31,4 +31,10 @@ float plantedSpeed(const Character &, const Character::Clip &);
 // Foot slip of an in-place locomotion clip (speed > 0): the median of |planted foot velocity +
 // speed forward| / speed over the clip; -1 without feet, speed or a planted foot.
 float footSlip(const Character &, const Character::Clip &);
+// Grounding: a standing clip (walk, run, idle, talk, wave, turn, look, nod, guide; not a sit, a
+// stand or a dance, whose feet may leave the floor on purpose) whose feet never come down to the character's ground (the lowest foot or toe
+// joint over its `idle`, else at rest) by more than 2 cm is lowered by the difference: some
+// exporters keep the hips at rest height while the knees bend, so the character floats.
+// Never raises. Returns the clips lowered and by how much (metres).
+std::vector<std::pair<std::string, float>> groundClips(Character &);
 } // namespace hyprune::world

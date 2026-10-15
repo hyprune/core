@@ -1,5 +1,6 @@
 #include "Objects.hpp"
 #include "Motion.hpp"
+#include "Retarget.hpp"
 #include "Catalog.hpp"
 #include "Character.hpp"
 #include "Paths.hpp"
@@ -147,6 +148,8 @@ ObjectAsset characterAsset(const std::filesystem::path &glb, const std::string &
             clips.push_back({{"name", b.name}, {"role", b.role}, {"style", b.style.empty() ? Json(nullptr) : Json(b.style)}, {"pack", b.pack}});
         a.motion = {{"skeleton", binding.skeleton.empty() ? Json(nullptr) : Json(binding.skeleton)}, {"clips", clips}};
     }
+    // Feet on the ground: standing clips that float (own or bound) come down to its idle's level.
+    groundClips(*c);
     for (auto &image : c->images) {
         memory += image.rgba.size() * 4 / 3; // RGBA: runtime mips
         for (auto &level : image.levels)

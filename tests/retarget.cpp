@@ -215,7 +215,23 @@ int main() {
                   motion["styles"]["idle"].empty() && motion["dances"] == Json::array({"spin"}) && motion["packs"] == Json::array({"moves"}),
               "catalog motion preview " + motion.dump());
         check(world::characterMotionPreview(rigOnly, Json::object(), {pack})["packs"].empty(), "no skeleton, no packs");
-        std::cout << "retarget: mapping, aliases, rest-pose transfer, hip scaling, foot slip, seat fit, motion preview\n";
+        // Grounding: a walk whose hips stay 0.1 m too high comes down until its lowest foot joint
+        // is on the idle's floor (the synthetic toes dip 4 cm below it in stance: 6 cm); a
+        // grounded walk and a dance are left alone.
+        auto floating = rig(1, false, "");
+        Character::Clip idle;
+        idle.name = "idle", idle.duration = 1;
+        auto high = walk(floating), low = walk(floating), dance = walk(floating);
+        high.name = "walk", low.name = "walk_plain", dance.name = "dance_hop";
+        for (auto *cl : {&high, &dance})
+            for (size_t k = 1; k < cl->channels[0].values.size(); k += 3)
+                cl->channels[0].values[k] += .1f;
+        floating.clips = {idle, high, low, dance};
+        auto lowered = world::groundClips(floating);
+        check(lowered.size() == 1 && lowered[0].first == "walk" && lowered[0].second > .05f && lowered[0].second < .1f,
+              "grounding lowers the floating walk only: " + std::to_string(lowered.size()) + (lowered.empty() ? std::string() : " " + lowered[0].first + " " + std::to_string(lowered[0].second)));
+        check(world::groundClips(floating).empty(), "grounding twice changes nothing");
+        std::cout << "retarget: mapping, aliases, rest-pose transfer, hip scaling, foot slip, seat fit, motion preview, grounding\n";
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';
         return 1;
