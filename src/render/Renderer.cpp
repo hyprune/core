@@ -1721,7 +1721,10 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             presentPeriodMs_ += (period - presentPeriodMs_) * .05;
     }
     lastPresent_ = now;
-    bool behind = frameFences_.size() >= 2;
+    // The offload worker draws every pose it is sent (its client paces, and a skipped draw is
+    // a protocol error there): no presentation pacing and no "behind" repeat in it. Under a
+    // low target_fps or a busy GPU those repeats ended the worker ("reused frame").
+    bool behind = !worldOnly && frameFences_.size() >= 2;
     if (!idle) {
         int divisor = std::clamp(int(std::lround(1000. / presentPeriodMs_ / std::max(1., double(targetFPS)))), 1, 4);
         // Only an explicit target slower than the display paces (30 at 60 Hz: every second
@@ -1734,7 +1737,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
     // A worker frame is paced by the offload client (its own refresh divisor): pacing the
     // composite again on target_fps beat against it (a 45 cap at 98 Hz: worker frames every
     // third refresh, composites every second, so every other new frame showed a refresh late).
-    bool paced = !idle && !captureRequested && frames && !externalWorldFbo && ++presentsSinceNew_ < paceInterval;
+    bool paced = !worldOnly && !idle && !captureRequested && frames && !externalWorldFbo && ++presentsSinceNew_ < paceInterval;
     auto logPresent = [&](int kind) {
         presentLog.push_back({std::chrono::duration<double, std::milli>(now.time_since_epoch()).count(), double(kind),
                               camera.yaw, camera.pitch, camera.position.x, camera.position.y, camera.position.z});

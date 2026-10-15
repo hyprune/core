@@ -250,6 +250,57 @@ static void pacing() {
         if (burst.ready(10000 + k * .1, 45))
             burst.spend(), ++quick;
     assert(quick == 2);
+    // What the worker sustains (Throughput): a 98 Hz output (10.2 ms) and a 60 FPS cap ask
+    // for a frame every second refresh; a worker taking 22-26 ms a frame keeps every third.
+    Throughput slow;
+    double done = 0;
+    for (int k = 0; k < 40; ++k) {
+        double sent = k * 20.4, start = std::max(sent, done); // poses every second refresh: it queues
+        done = start + 22 + (k % 5); // 22-26 ms
+        slow.frame(sent, done);
+    }
+    assert(slow.divisor(10.2) == 3);
+    assert(std::max(evenDivisor(98, 60), slow.divisor(10.2)) == 3);
+    // Paced at every third refresh it idles between frames: still 22-26 ms each, still 3.
+    for (int k = 0; k < 60; ++k) {
+        double sent = 1000 + k * 30.6;
+        slow.frame(sent, sent + 22 + (k % 5));
+    }
+    assert(slow.divisor(10.2) == 3);
+    // Faster again (a lower render scale): back to 2 only with room to spare (p90 + 1 ms
+    // under 95 % of two refreshes, 19.4 ms), not at 19 ms; then at 17 ms.
+    for (int k = 0; k < 60; ++k) {
+        double sent = 3000 + k * 30.6;
+        slow.frame(sent, sent + 19);
+    }
+    assert(slow.divisor(10.2) == 3);
+    for (int k = 0; k < 60; ++k) {
+        double sent = 6000 + k * 30.6;
+        slow.frame(sent, sent + 17);
+    }
+    assert(slow.divisor(10.2) == 2);
+    // Not back up and down within 2 s: a rise is immediate, the next fall waits.
+    for (int k = 0; k < 60; ++k) {
+        double sent = 9000 + k * 20.4;
+        slow.frame(sent, sent + 22);
+    }
+    assert(slow.divisor(10.2) == 3);
+    for (int k = 0; k < 60; ++k) { // 1.2 s of fast frames, all within 2 s of the rise: stays
+        double sent = 10300 + k * 20.4;
+        slow.frame(sent, sent + 12);
+    }
+    assert(slow.p90Ms() < 13 && slow.divisor(10.2) == 3);
+    for (int k = 0; k < 60; ++k) {
+        double sent = 12500 + k * 20.4;
+        slow.frame(sent, sent + 12);
+    }
+    assert(slow.divisor(10.2) == 2);
+    // A fast worker: the cap decides (no data yet: 1).
+    Throughput fast;
+    assert(fast.divisor(10.2) == 1);
+    for (int k = 0; k < 20; ++k)
+        fast.frame(k * 20.4, k * 20.4 + 7);
+    assert(fast.divisor(10.2) == 1 && std::max(evenDivisor(98, 60), fast.divisor(10.2)) == 2);
 }
 static void machineSync() {
     using namespace offload;
@@ -457,6 +508,23 @@ int main(int argc, char **argv) {
                             {"generation", 1}});
         supervisor.tick();
         assert(supervisorState["pid"].is_number_integer() && supervisorState["profile"] == "full-ac");
+        // A live change (same generation: target_fps, the power cap) keeps the worker and
+        // updates its rate; a slider drag used to restart it on every step.
+        auto pid = supervisorState["pid"];
+        for (int fps : {33, 34, 35, 45, 110}) {
+            config["target_fps"] = fps;
+            config["offload_power_cap_w"] = 40 + fps % 7;
+            supervisor.request({{"enabled", true}, {"graphics", config}, {"worldPath", "/unused"}, {"width", 16}, {"height", 16}, {"generation", 1}});
+            std::this_thread::sleep_for(std::chrono::milliseconds(110));
+            supervisor.tick();
+            assert(supervisorState["pid"] == pid);
+        }
+        assert(supervisorState["targetFPS"] == 60); // 110 capped at the mains limit
+        config["target_fps"] = 33;
+        supervisor.request({{"enabled", true}, {"graphics", config}, {"worldPath", "/unused"}, {"width", 16}, {"height", 16}, {"generation", 1}});
+        std::this_thread::sleep_for(std::chrono::milliseconds(110));
+        supervisor.tick();
+        assert(supervisorState["pid"] == pid && supervisorState["targetFPS"] == 33);
         full.usb = true;
         std::this_thread::sleep_for(std::chrono::milliseconds(110));
         supervisor.tick();

@@ -3,6 +3,8 @@
 // anything shown changes, at the power policy's rate on average.
 #include <algorithm>
 #include <cmath>
+#include <deque>
+#include <vector>
 namespace hyprune::offload {
 // Even pacing (graphics.frame_pacing "even"): a rate-capped worker gets a new pose every
 // n-th compositor frame, n the smallest refresh divisor whose rate stays within the cap
@@ -16,6 +18,46 @@ inline int evenDivisor(double refreshHz, double fps) {
         ++n;
     return n;
 }
+// What the worker sustains: each frame's service time (from when it could start, its pose
+// sent and the previous frame done, to its copy issued here), p90 over the recent frames.
+// Even pacing needs a divisor the worker can keep: a 60 FPS cap on 98 Hz asks for a frame
+// every second refresh (20.4 ms), but a worker taking 25 ms fills only some of those slots
+// and frames land 2 or 3 refreshes apart. The divisor is the larger of the cap's and this
+// one, which rises at once and falls once the frames fit a whole refresh sooner with 5 %
+// to spare, at most every 2 s. Service time does not depend on the divisor (an idle worker
+// starts each frame when its pose arrives), so the choice does not feed back on itself.
+struct Throughput {
+    std::deque<double> service;
+    double lastDone = -1, changed = -1e9;
+    int ticks = 1;
+    void frame(double sentMs, double doneMs) {
+        if (lastDone >= 0 && doneMs > lastDone)
+            service.push_back(doneMs - std::max(sentMs, lastDone));
+        lastDone = std::max(lastDone, doneMs);
+        while (service.size() > 60)
+            service.pop_front();
+    }
+    double p90Ms() const {
+        if (service.size() < 8)
+            return 0;
+        std::vector<double> v(service.begin(), service.end());
+        std::sort(v.begin(), v.end());
+        return v[size_t(.9 * double(v.size() - 1))];
+    }
+    int divisor(double refreshMs) {
+        auto p90 = p90Ms();
+        if (refreshMs <= 0 || p90 <= 0)
+            return ticks;
+        int need = std::clamp(int(std::ceil((p90 + 1) / refreshMs)), 1, 8);
+        if (need > ticks || (p90 + 1 < (ticks - 1) * refreshMs * .95 && lastDone - changed >= 2000)) {
+            if (need != ticks)
+                changed = lastDone;
+            ticks = need;
+        }
+        return ticks;
+    }
+    void reset() { *this = {}; }
+};
 // Constant latency: each frame becomes the front a whole number of compositor frames after
 // its pose was sent, enough for the worker's recent round trips (p90 plus a margin), so a
 // frame that happens to finish early is not shown early. Hysteresis: shorter only once the

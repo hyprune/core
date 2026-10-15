@@ -29,6 +29,7 @@ class Client {
     bool ready_ = false;
     Json frontReply_;
     FrameBudget budget_;
+    Throughput throughput_;
     // Round trip of the latest promoted frames (ms after the pose was sent): packet, copy, front.
     std::deque<std::array<double, 3>> trips_;
     // Frame ticks (diagnostics): time, promoted sequence, sent sequence, slot phases, budget.
@@ -57,6 +58,10 @@ class Client {
         std::sort(v.begin(), v.end());
         return v[size_t(.9 * double(v.size() - 1))];
     }
+    // Even pacing: the refresh divisor the worker sustains (Pacing.hpp Throughput), and the
+    // p90 service time it follows (ms; 0 without data).
+    int sustainedDivisor(double refreshMs) { return throughput_.divisor(refreshMs); }
+    double serviceP90Ms() const { return throughput_.p90Ms(); }
     // Stale (the in-process renderer stands in) when a requested frame is more than maxAgeMs
     // late; a front that nothing has replaced because nothing changed stays valid. Recordings
     // in lockstep accept any wait, the front being exactly the next frame in sequence.
@@ -270,6 +275,7 @@ class Client {
                     glFlush();
                     b.copying = now();
                     readyFromDisplay_.push_back(b.copying - b.sentDisplay);
+                    throughput_.frame(b.request.at("sent").get<double>(), b.copying);
                     while (readyFromDisplay_.size() > 120)
                         readyFromDisplay_.pop_front();
                     b.phase = 3;
@@ -381,6 +387,7 @@ class Client {
         lastSent_.clear();
         workerAssets_ = 0;
         budget_ = {};
+        throughput_.reset();
         front_ = -1;
         frontSequence_ = sequence_ = 0;
         nextSend_ = 0;

@@ -224,6 +224,17 @@ class Supervisor {
     void request(Json j) {
         if (j == request_)
             return;
+        // The same generation: a live change (target_fps, the power cap, rendering settings).
+        // The running worker stays; the next tick recomputes the policy and its heartbeat
+        // carries the new rate. Only a new generation (on/off, mode, GPU, world, size) restarts.
+        if (request_.is_object() && j.is_object() && j.value("generation", uint64_t(0)) == request_.value("generation", uint64_t(0)) &&
+            j.value("enabled", false) == request_.value("enabled", false) &&
+            j.at("graphics").value("offload", Json()) == request_.at("graphics").value("offload", Json()) &&
+            j.at("graphics").value("offload_device", Json()) == request_.at("graphics").value("offload_device", Json())) {
+            request_ = std::move(j);
+            next_ = 0;
+            return;
+        }
         auto selection = [](const Json &r) {
             return r.is_object() ? Json{r.value("compositorPci", ""), r.at("graphics").value("offload_device", "auto")} : Json();
         };
@@ -392,8 +403,14 @@ class Supervisor {
             if (!cacheRoot.empty()) std::filesystem::create_directories(cacheRoot/"hyprune/programs",cacheError);
             std::string cacheEnv = "XDG_CACHE_HOME=" + (cacheError ? std::string{} : cacheRoot.string());
             std::string debugEnv = getenv("HYPRUNE_DEBUG_RENDERER") ? "HYPRUNE_DEBUG_RENDERER=1" : "";
-            char *env[] = {path, cache, cacheEnv.data(), debugEnv.empty() ? nullptr : debugEnv.data(), nullptr};
-            int rc = posix_spawn(&child_, executable_.c_str(), &actions, &attr, av.data(), env);
+            auto cost = getenv("HYPRUNE_DEV_WORKER_COST_MS"); // nested tests: a slower GPU (VulkanWorker.cpp)
+            std::string costEnv = cost ? std::string("HYPRUNE_DEV_WORKER_COST_MS=") + cost : "";
+            std::vector<char *> env{path, cache, cacheEnv.data()};
+            for (auto *e : {&debugEnv, &costEnv})
+                if (!e->empty())
+                    env.push_back(e->data());
+            env.push_back(nullptr);
+            int rc = posix_spawn(&child_, executable_.c_str(), &actions, &attr, av.data(), env.data());
             posix_spawnattr_destroy(&attr);
             posix_spawn_file_actions_destroy(&actions);
             close(data[1]);

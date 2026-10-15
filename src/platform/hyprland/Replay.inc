@@ -82,6 +82,11 @@ void Runtime::recordTick(const Json &sections, std::chrono::steady_clock::time_p
                              {"readyP90Ms", offload.readyP90Ms()},
                              {"latencyRefreshes", offloadLatency.ticks},
                              {"divisor", offloadDivisor},
+                             {"serviceP90Ms", offload.serviceP90Ms()},
+                             // The front's worker side: GPU render and transfer time, render scale.
+                             {"renderGpuMs", (offload.timings.is_object() ? offload.timings.value("renderGpuMs", Json()) : Json())},
+                             {"transferGpuMs", (offload.timings.is_object() ? offload.timings.value("transferGpuMs", Json()) : Json())},
+                             {"renderScale", (offload.timings.is_object() ? offload.timings.value("renderScale", Json()) : Json())},
                              {"shown", renderedOffload}};
     auto &w = recordWindow;
     for (double p : recordPresents) {

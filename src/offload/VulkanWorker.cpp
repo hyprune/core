@@ -7,12 +7,15 @@
 #include "Watchdog.hpp"
 #include "interaction/Config.hpp"
 #include "render/Renderer.hpp"
+#include <cstring>
 #include <drm_fourcc.h>
 #include <fcntl.h>
 #include <gbm.h>
 #include <iostream>
 #include <poll.h>
+#include <random>
 #include <signal.h>
+#include <thread>
 #include <sys/prctl.h>
 using namespace hyprune;
 using namespace hyprune::offload;
@@ -26,6 +29,16 @@ struct Image {
 int main(int argc, char **argv) {
     // HYPRUNE_DEBUG_RENDERER (passed through by hypruned): progress on stderr.
     const bool debug = getenv("HYPRUNE_DEBUG_RENDERER") != nullptr;
+    // HYPRUNE_DEV_WORKER_COST_MS="mean[:jitter]" (dev and nested tests only, passed through by
+    // hypruned): every frame takes at least that long (normally distributed), a GPU-bound
+    // worker that can't keep the policy's rate (a 4K output under a power cap).
+    double costMean = 0, costJitter = 0;
+    if (auto c = getenv("HYPRUNE_DEV_WORKER_COST_MS")) {
+        costMean = std::max(0., std::atof(c));
+        if (auto colon = std::strchr(c, ':'))
+            costJitter = std::max(0., std::atof(colon + 1));
+    }
+    std::mt19937 costRandom(1);
     auto note = [&](const std::string &what) {
         if (debug)
             std::cerr << "Vulkan worker: " << what << '\n';
@@ -393,6 +406,7 @@ int main(int argc, char **argv) {
                 renderer.profile = p.at("profile");
                 lastProfile = p.at("profile");
             }
+            double frameStart = now();
             int i = p["slot"];
             check(i >= 0 && i < 2 && !slots[i].pending, "slot ownership");
             check(p["sequence"].get<uint64_t>() > sequence, "sequence");
@@ -450,6 +464,10 @@ int main(int argc, char **argv) {
             vkcheck(vkQueueSubmit(vk.queue, 1, &submit, VK_NULL_HANDLE), "copy submit");
             b.acquire = fdSemaphore(b.native, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT);
             b.pending = true;
+            if (costMean > 0) {
+                double cost = std::max(1., std::normal_distribution<double>(costMean, costJitter)(costRandom));
+                std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(frameStart + cost - now()));
+            }
         }
         // Child teardown is process-local; kernel/driver retire any submitted resources.
         renderer.destroy();

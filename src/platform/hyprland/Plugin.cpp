@@ -931,6 +931,10 @@ struct Runtime {
     // camera, ahead of the worker's) never alternates with held frames and steps back.
     double offloadStaleMs = 50;
     int offloadDivisor = 1; // even pacing: the refresh divisor of the last frame tick
+    // The rate the worker is paced to (the cap's even grid, refresh / divisor), the target its
+    // dynamic resolution holds instead of graphics.target_fps: a 110 FPS target the worker
+    // never reaches would hold every frame at the lowest scale. 0: not known yet.
+    int offloadGridFps = 0;
     double offloadClock = 0;      // the animation clock last given to the worker
     bool offloadClockSent = false;
     std::chrono::steady_clock::time_point offloadFrameTick{};
@@ -1684,7 +1688,22 @@ void Runtime::offloadTick() {
                     {"objectRoots", roots},
                     {"width", monitor ? int(monitor->m_pixelSize.x) : 0},
                     {"height", monitor ? int(monitor->m_pixelSize.y) : 0}};
-    if (request != offloadRequest) {
+    // Only what the worker starts with restarts it: on/off, the mode and GPU, the world, its
+    // object roots and the output size. Every other graphics key applies live: rendering
+    // settings travel in each pose, target_fps and the power cap in the supervisor's policy
+    // (a slider drag used to restart the worker on every step).
+    auto lifecycle = [](Json r) {
+        if (!r.is_object())
+            return r;
+        auto g = r["graphics"];
+        r["graphics"] = {{"offload", g.value("offload", Json())}, {"offload_device", g.value("offload_device", Json())}};
+        return r;
+    };
+    if (request != offloadRequest && lifecycle(request) == lifecycle(offloadRequest)) {
+        offloadRequest = request;
+        request["generation"] = offloadGeneration;
+        ipc->renderer(request); // the same generation: the supervisor updates its policy in place
+    } else if (request != offloadRequest) {
         // Diagnostics: what restarted the worker (each change is a new generation).
         Json changed = Json::object();
         for (auto &[key, value] : request.items())
@@ -1765,7 +1784,13 @@ void Runtime::offloadPump(int stage) {
             if (frames && offloadPresentedAt == std::chrono::steady_clock::time_point{})
                 intervals = double(std::min<uint64_t>(frames, 8));
             bool even = renderer.graphics.value("frame_pacing", Json("even")) == "even";
-            int divisor = offloadDivisor = offload::evenDivisor(1 / refresh, fps);
+            // Even: the cap's divisor, or a larger one while the worker can't keep that up.
+            // HYPRUNE_DEV_PACING_BEFORE=1 (nested A/B only): the cap's divisor alone and the
+            // worker's resolution on graphics.target_fps, as before.
+            static const bool before = getenv("HYPRUNE_DEV_PACING_BEFORE");
+            int divisor = offloadDivisor = even && !before ? std::max(offload::evenDivisor(1 / refresh, fps), offload.sustainedDivisor(refresh * 1000))
+                                                           : offload::evenDivisor(1 / refresh, fps);
+            offloadGridFps = before ? 0 : std::clamp(int(even ? 1 / refresh / offload::evenDivisor(1 / refresh, fps) : fps), 30, 240);
             share = frames ? (even ? intervals / divisor : intervals * fps * refresh)
                            : std::chrono::duration<double>(now - offloadFrameTick).count() * fps; // idle: timer ticks
             // Even pacing: each frame is shown a whole number of refreshes after its pose (half a
@@ -1777,7 +1802,10 @@ void Runtime::offloadPump(int stage) {
             offloadPresentedAt = presentedAt;
             offloadFrameTick = now;
         }
-        offload.tick(view, renderer.graphics, renderer.profile, fps, objects, [&] { offloadObjects.commit(), offloadMachines.commit(); },
+        auto workerGraphics = renderer.graphics;
+        if (offloadGridFps)
+            workerGraphics["target_fps"] = offloadGridFps;
+        offload.tick(view, workerGraphics, renderer.profile, fps, objects, [&] { offloadObjects.commit(), offloadMachines.commit(); },
                      stage == 0 ? Send::None : frameExport.active() ? (stage == 2 ? Send::Lockstep : Send::None)
                                                                     : stage == 1 ? Send::Promote : Send::Frame, share);
         if (!offload.connected()) {
@@ -6309,6 +6337,9 @@ int luaCamera(lua_State *state) {
         {"offloadRequests", runtime->offloadChanges},
         {"offloadClient", runtime->offload.diagnostics()},
         {"offloadDraws", runtime->offloadDraws},
+        {"offloadPacing", {{"divisor", runtime->offloadDivisor}, {"latencyRefreshes", runtime->offloadLatency.ticks},
+                           {"serviceP90Ms", runtime->offload.serviceP90Ms()}, {"readyP90Ms", runtime->offload.readyP90Ms()},
+                           {"gridFps", runtime->offloadGridFps}, {"staleMs", runtime->offloadStaleMs}}},
         {"grabbed", runtime->grabbed},
         {"gesture", int(runtime->hands.gesture)},
         {"activeHandle", runtime->editor.activeHandle},
