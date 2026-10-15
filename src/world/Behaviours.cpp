@@ -207,6 +207,7 @@ std::vector<Behaviour> parseBehaviours(const Json &list) {
             }
             break;
         }
+        b.json = j;
         out.push_back(std::move(b));
     }
     return out;
@@ -405,7 +406,8 @@ Json Behaviours::summary(const std::string &placementId) const {
                             {"property", propertyName(in.bound.list[i].property)},
                             {"condition", conditionName(l.condition)},
                             {"value", value},
-                            {"t", std::round(l.target * 100) / 100}});
+                            {"t", std::round(l.target * 100) / 100},
+                            {"behaviour", in.bound.list[i].json}});
         }
         return list;
     }

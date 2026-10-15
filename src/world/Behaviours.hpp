@@ -29,6 +29,7 @@ struct Behaviour {
     Vec3 colourFrom{1, 1, 1}, colourTo{1, 1, 1}, glow{1, 1, 1}; // linear
     std::optional<double> above, below;       // visible: shown while above <= value < below
     bool scroll = false;                      // texture: from/to are speeds (repeats per second)
+    nlohmann::json json;                      // as set (the IPC state gives it back for editing)
 };
 // The behaviours of one placement record (`behaviours`, JSON), checked: throws
 // std::invalid_argument naming the first problem.

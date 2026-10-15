@@ -67,7 +67,9 @@ int main() {
     // Scale y = 0.1 + (3 - 0.1) * 0.5 = 1.55 about the bottom face: the top at 1.55, the base still at 0.
     check(states[0].bound && states[0].displayed && near(d.v[5], 1.55f) && near(d.point({0, 0, 0}).y, 0) && near(d.point({0, 1, 0}).y, 1.55f),
           "scale about the bottom face follows the value");
-    check(b.summary("u-00c001")[0]["t"] == .5 && b.summary("u-00c001")[0]["condition"] == "fresh", "summary: t and condition");
+    check(b.summary("u-00c001")[0]["t"] == .5 && b.summary("u-00c001")[0]["condition"] == "fresh" &&
+              b.summary("u-00c001")[0]["behaviour"] == height[0],
+          "summary: t, condition and the behaviour as set");
     // Stale and missing data hold the last value.
     b.tick(.016, publish("com.hyprune.sources.u-00c001", {{"value", 50}}, 1000), 20000, false);
     states.clear(), b.apply(w, states);
