@@ -138,10 +138,14 @@ def first_session(client,children,args,shell_token,socketpath):
     ctl('dispatch','hl.dsp.focus({ workspace = "10" })')
     wait_for(lambda:state()['world']['id']=='com.hyprune.switchyard',25)
     wait_for(lambda:not status().get('warp'),5)
-    # A newer workspace wins even while the previous package is decoding.
-    ui('workspace',11)
+    # A newer workspace wins even while the previous package is decoding. The shell sends
+    # workspace.activate through its bridge asynchronously: wait until core has switched to 11
+    # (it does so before decoding), or the compositor's 10 could arrive first and 11 win.
+    ui('workspace',11);wait_for(lambda:state()['workspaces']['currentId']==11,10)
     ctl('dispatch','hl.dsp.focus({ workspace = "10" })')
-    wait_for(lambda:state()['workspaces']['currentId']==10 and state()['world']['id']=='com.hyprune.switchyard' and state()['location']['transition']['phase']!='loading',25)
+    try:wait_for(lambda:state()['workspaces']['currentId']==10 and state()['world']['id']=='com.hyprune.switchyard' and state()['location']['transition']['phase']!='loading',25)
+    except AssertionError:
+        st=state();print('final state:',json.dumps({'workspaces':st['workspaces'],'world':st['world'].get('id'),'transition':st['location']['transition']})[:3000],flush=True);raise
     if args.record:showcase(client,state,ui,status,pos)
     if args.serve:
         print('Interactive first session ready; ctl.py verifies every nested command. Ctrl+C exits.',flush=True)
