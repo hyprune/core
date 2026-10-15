@@ -308,6 +308,23 @@ These are wire-compatible behavior changes that integrators may notice:
   - Catalog entries carry `primitive` (from `primitive.json`, else null). A `world/<id>`
     directory generated after a folder loaded is found on its first use.
   - A world folder holds 512 placements of 256 distinct assets (other worlds 128 and 32).
+- **0.32** (draft) Content, sources and registry over IPC (RFC-0015 amendment). New grant
+  `content.control`.
+  - Methods `content.install`, `.confirm`, `.cancel`, `.update`, `.rollback`, `.pin` and
+    `.remove`; `sources.list`, `.add`, `.set`, `.remove` and `.refresh`; `registry.list` and
+    `registry.entry`. Every mutation is a job and returns `{jobId}`; install and update stop in
+    stage `confirm` with the plan until `content.confirm` (`autoConfirm` skips it unless the plan
+    changes the source or overrides system content).
+  - hypruned runs each job with the SDK's `hyprune` CLI (`$HYPRUNE_CLI`, else on `PATH`), with
+    no session socket or token; core opens no network connection. One job runs at a time, at
+    most 16 are listed, finished ones for 60 s.
+  - State key `content {revision, installs, updates, sources, jobs}`, refreshed from the CLI's
+    listings after every job and when content files change; `registry.list` filters core's copy
+    (query, type, sources, tags, cursor, limit 1..100). Older peers see no `content` key.
+  - Notices: `content.installed`, `content.updated`, `content.rolled-back`, `content.removed`,
+    `content.failed`, `source.added`, `source.failed`.
+  - Content sources live in `$XDG_CONFIG_HOME/hyprune/content-sources.json` (the SDK moves them
+    out of the data-source helper's `sources.json`).
 - **World keys back: Shift sprints, Ctrl goes down.** The input version 3 defaults of IPC 0.29
   swapped them; that is undone (still version 3, no wire change). Ctrl+R still toggles a debug
   recording in world mode, and a Ctrl chord never leaves the camera lower: Ctrl goes down at

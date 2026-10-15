@@ -21,6 +21,7 @@ class Client:
         if version >= (0,13):params['capabilities']+=['camera.author']
         if version >= (0,21):params['capabilities']+=['quest.control']
         if version >= (0,22):params['capabilities']+=['objects.control']
+        if version >= (0,32):params['capabilities']+=['content.control']
         if token:params['token']=token
         self.hello=self.call('session.hello',params)
     def receive(self):
@@ -389,6 +390,7 @@ def run(args):
     grants=[{'token':token,'client':'org.hyprune.nested','capabilities':['state.read','world.control','surface.control','movement.control','runtime.control']}]
     if args.m1 or args.integration or args.m2 or args.m3a or args.m3b or getattr(args,'perf',False):grants[0]['capabilities']+=['shell.control','data.publish']
     if args.authoring: grants[0]['capabilities'].append('camera.author')
+    if getattr(args,'content',False): grants[0]['capabilities'].append('content.control')
     shell_token=secrets.token_hex(32)
     if getattr(args,'upscaler',False):
         grants[0]['capabilities']+=['shell.control','data.publish','input.control','camera.author']

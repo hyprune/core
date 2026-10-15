@@ -174,6 +174,9 @@ Json Server::visibleState(const Peer &p) const {
         if (state.contains("companion") && state["companion"].is_object())
             state["companion"].erase("pace");
     }
+    // IPC 0.32 (RFC-0015 content over IPC): older peers see no content key.
+    if (!protocol::atLeast(p.protocol, "0.32") && state.is_object())
+        state.erase("content");
     // IPC 0.31 (builder primitives): placement keys on instances; a world folder holds up to 512
     // placements (older peers count at most 128).
     if (!protocol::atLeast(p.protocol, "0.31") && state.is_object()) {
@@ -526,13 +529,14 @@ void Server::frame(Peer &p, const std::string &bytes) {
             check(params["capabilities"].is_array(), -32602, "invalid capabilities");
             const std::set<std::string> known{"state.read",    "world.control",   "surface.control", "movement.control",
                                               "shell.control", "runtime.control", "data.publish",    "input.control", "camera.author",
-                                              "quest.control",  "objects.control"};
+                                              "quest.control",  "objects.control", "content.control"};
             std::set<std::string> requested;
             for (auto &cap : params["capabilities"]) {
                 check(cap.is_string(), -32602, "invalid capability");
                 auto name = cap.get<std::string>();
                 check(known.contains(name) && (name != "quest.control" || protocol::atLeast(p.protocol, "0.21")) &&
                           (name != "objects.control" || protocol::atLeast(p.protocol, "0.22")) &&
+                          (name != "content.control" || protocol::atLeast(p.protocol, "0.32")) &&
                           (name != "camera.author" || protocol::atLeast(p.protocol,"0.13")) && (name != "input.control" || protocol::atLeast(p.protocol, "0.6")) &&
                           (protocol::atLeast(p.protocol, "0.2") || name != "data.publish") &&
                           requested.insert(name).second,

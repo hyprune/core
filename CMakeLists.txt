@@ -31,7 +31,7 @@ set_source_files_properties(${MESHOPTIMIZER_SOURCES} PROPERTIES COMPILE_OPTIONS 
 set(BASISU_SOURCES third_party/basisu/transcoder/basisu_transcoder.cpp third_party/basisu/zstd/zstddeclib.c)
 set_source_files_properties(${BASISU_SOURCES} PROPERTIES COMPILE_OPTIONS "-w;-fno-strict-aliasing")
 add_library(hyprune_runtime STATIC ${MESHOPTIMIZER_SOURCES} ${BASISU_SOURCES} src/interaction/Tools.cpp src/interaction/DebugTool.cpp src/interaction/Gizmo.cpp src/interaction/Placement.cpp src/interaction/InputFile.cpp src/interaction/CaptureNotes.cpp src/interaction/Input.cpp src/interaction/Hands.cpp src/interaction/Config.cpp src/interaction/Settings.cpp src/world/Environment.cpp src/world/Mounts.cpp src/surfaces/Layout.cpp src/world/Spatial.cpp src/control/Control.cpp src/world/World.cpp src/world/Objects.cpp src/world/Paths.cpp src/world/Occlusion.cpp src/interaction/Walkability.cpp src/world/Machines.cpp src/world/Character.cpp src/world/Retarget.cpp src/world/Motion.cpp src/world/Playable.cpp src/world/Schema.cpp src/world/ObjectCheck.cpp src/world/Catalog.cpp src/render/PNG.cpp src/render/Watermark.cpp src/sim/Camera.cpp src/sim/Cinema.cpp src/sim/Climbing.cpp src/surfaces/Surface.cpp src/ipc/Server.cpp src/ipc/WireAudit.cpp src/ipc/Bridge.cpp
-  src/quests/Files.cpp src/quests/Guidance.cpp src/quests/Quests.cpp src/quests/Focus.cpp src/quests/Engine.cpp src/quests/Markers.cpp)
+  src/quests/Files.cpp src/quests/Guidance.cpp src/quests/Quests.cpp src/quests/Focus.cpp src/quests/Engine.cpp src/quests/Markers.cpp src/content/Engine.cpp)
 target_link_libraries(hyprune_runtime PUBLIC PkgConfig::SPATIAL PkgConfig::PLATFORM PkgConfig::OVERLAY)
 target_include_directories(hyprune_runtime PUBLIC src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_include_directories(hyprune_runtime SYSTEM PUBLIC third_party)
@@ -281,6 +281,9 @@ endif()
 
 if(BUILD_TESTING)
  find_package(Python3 COMPONENTS Interpreter REQUIRED)
+ add_executable(content-tests tests/content.cpp)
+ target_link_libraries(content-tests PRIVATE hyprune_runtime)
+ add_test(NAME content COMMAND content-tests ${CMAKE_CURRENT_SOURCE_DIR}/tests/content-fake-cli.py)
  add_executable(render-pass-tests tests/render-pass.cpp)
  target_include_directories(render-pass-tests PRIVATE src)
  add_test(NAME render-pass COMMAND render-pass-tests)

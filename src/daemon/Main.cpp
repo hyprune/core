@@ -3,6 +3,7 @@
 #include "ipc/Server.hpp"
 #include "ipc/GrantIssuer.hpp"
 #include "quests/Engine.hpp"
+#include "content/Engine.hpp"
 #include <algorithm>
 #include <csignal>
 #include <cstdlib>
@@ -52,6 +53,9 @@ int main() {
         if (const char *scale = getenv("HYPRUNE_FOCUS_TIME_SCALE"))
             focusScale = std::clamp(std::atof(scale), 1., 600.);
         hyprune::quests::Engine quests(hyprune::quests::Engine::Paths::fromEnvironment(), focusScale);
+        // RFC-0015 content engine (IPC 0.32): owns the `content` key and the content, sources and
+        // registry methods; its jobs run the SDK CLI as child processes off the compositor.
+        hyprune::content::Engine content;
         // Flushed on every exit path, including a plugin disconnect: core exit pauses a running session.
         struct QuestFlush {
             hyprune::quests::Engine &engine;
@@ -72,8 +76,9 @@ int main() {
         };
         auto republish = [&] {
             quests.changed = false;
+            content.changed = false;
             if (server && !pluginState.is_null())
-                server->publish(quests.decorate(pluginState, steadyMs()));
+                server->publish(content.decorate(quests.decorate(pluginState, steadyMs())));
         };
         auto receive = [&]() -> Json {
             char buffer[196609];
@@ -126,6 +131,7 @@ int main() {
             } else if (j.at("type") == "methods") {
                 auto methods = j.at("methods").get<std::map<std::string, std::string>>();
                 methods.merge(hyprune::quests::Engine::methods());
+                methods.merge(hyprune::content::Engine::methods());
                 server->advertise(std::move(methods));
                 advertised = true;
             }
@@ -138,6 +144,13 @@ int main() {
                 if (result.contains("revision"))
                     result["revision"] = server->revision();
                 questOutput();
+                return result;
+            }
+            if (hyprune::content::Engine::handles(method)) {
+                auto result = content.call(method, params);
+                republish();
+                if (result.contains("revision"))
+                    result["revision"] = server->revision();
                 return result;
             }
             auto id = std::to_string(++command);
@@ -213,8 +226,12 @@ int main() {
             renderer.tick();
             issuer.poll(endpoint);
             quests.tick(steadyMs(), std::time(nullptr));
-            if (quests.changed)
+            content.tick();
+            if (quests.changed || content.changed)
                 republish();
+            for (auto &[event, params] : content.notices)
+                endpoint.notify(event, params);
+            content.notices.clear();
             questOutput();
             // The plugin flushes its method table on its next bridge tick. Until
             // it arrives, clients wait in the listen backlog: a hello answered

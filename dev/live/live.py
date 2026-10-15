@@ -8,7 +8,7 @@ BUILD = pathlib.Path(os.environ.get('HYPRUNE_LIVE_BUILD_DIR', ROOT / 'build/live
 SHELL = pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR', ROOT.parent / 'shell'))
 DEFAULT_WORLD_ID = 'com.hyprune.lumen-reach'
 SOURCES_CLIENT = 'com.hyprune.sources'
-GRANTS = ['state.read', 'world.control', 'surface.control', 'movement.control', 'shell.control', 'runtime.control', 'input.control', 'quest.control', 'objects.control']
+GRANTS = ['state.read', 'world.control', 'surface.control', 'movement.control', 'shell.control', 'runtime.control', 'input.control', 'quest.control', 'objects.control', 'content.control']
 sys.path.insert(0, str(ROOT / 'dev'))
 import devenv
 
