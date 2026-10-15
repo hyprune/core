@@ -108,6 +108,7 @@ As version 1 below, with these differences:
   tick moved by: the live dt) and `timing`: `sections` (CPU ms per tick section), `tickMs`,
   `presents` (backend presentation times since the previous frame, ns since start),
   `refreshMs`, `vrr`, `renderedFrames`, `gpuMs` (last measured GPU time, null if none) and,
+  `compositorGpuMs` (the compositor's whole frame on this output, GPU, the latest measured);
   with the offload renderer, `offload` (front sequence, frontAgeMs, readyP90Ms,
   latencyRefreshes, divisor, serviceP90Ms (the worker's sustained per-frame time), the front's
   renderGpuMs, transferGpuMs and renderScale, shown, draw counts).

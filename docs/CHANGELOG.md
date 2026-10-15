@@ -294,6 +294,13 @@ their frozen state projections and enums. Unknown or unadvertised methods return
 
 These are wire-compatible behavior changes that integrators may notice:
 
+- **Offload power cap and latency.** Power over `offload_power_cap_w` first throttles the
+  worker (25 % fewer frames per sample, down to 30 FPS) and ends offload only if the draw is
+  still over the cap 2 s later; `runtime.notice` codes `offload.power.throttled` and
+  `offload.power.exceeded` say so, and `performance.reason` carries the numbers. Finished worker
+  frames are read as soon as they arrive, and the worker no longer revalidates its graphics on
+  every frame: about 10 ms less offload latency where the hold had drifted to an extra
+  refresh. Recordings add `compositorGpuMs`.
 - **Offload renderer reconfiguration and pacing.** `graphics.set` restarts the offload worker
   only for `offload` and `offload_device` (and on/off, world or output size changes);
   `target_fps`, `offload_power_cap_w` and rendering settings apply to the running worker.

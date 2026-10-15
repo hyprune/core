@@ -121,6 +121,55 @@ in-process. `dev/nested/offload_reconfigure.py` drags settings (80 changes 25 ms
 before, 75 worker restarts and no worker frames shown; after, none and every draw from the
 worker; offload off and on comes back in 2.7 s, and `target_fps` 33 on a busy worker runs.
 
+### Round 3: offload latency, the power cap, repaints
+
+**Latency breakdown.** The offload client keeps a per-frame timeline (the present the frame's
+motion follows, pose sent, worker start and done, packet in, copy issued, promoted), which
+`offload_pacing.py` joins with the probe's draws and presents. Nested, 4K at 98 Hz, a 15 ms
+worker (4K render 6.8 ms and transfer 5.9 ms on the work host), medians in ms from the
+content time to the present that shows the frame:
+
+| Stage | Before | After |
+| --- | --- | --- |
+| tick (present to pose sent) | 1.0 | 1.1 |
+| queue (pose sent to worker start) | 4.4 | 1.1 |
+| render and transfer | 15.2 | 15.1 |
+| packet (worker done to read here) | 2.0 | 1.0-1.2 |
+| copy issued | 0.1 | 0.1 |
+| hold (even pacing) | 9.8-19.5 | 11.1-11.7 |
+| promote to draw to present | 10.2 | 10.3 |
+| **total** | **41.3-51.3** | **40.9-41.0** |
+
+The worker validated its whole graphics configuration on every pose (now only when it
+changes), and finished frames waited for the 4 ms pump (the channel is now watched, so a
+frame is read when it arrives). The latency then holds at 3 refreshes instead of drifting
+to 4 when the ready time's p90 crept over a refresh. The rest is structural: a frame is shown
+one refresh after the hold ends, because the compositor renders right after a vblank, and
+even pacing holds every frame to the p90 ready time (+2 ms), so the total is
+(ceil((ready p90 + 2) / refresh) + 1) refreshes. Under 30 ms at 98 Hz needs a ready time
+under about 18 ms at p90 (a worker taking no more than about 14 ms to render and transfer),
+or showing a pose predicted for display time.
+
+**Power cap.** One power sample over the cap no longer ends offload: each sample over it
+(every 500 ms) lowers the worker's rate by a quarter (down to 30 FPS; even pacing follows
+with a larger divisor), and offload ends only if the draw is still over the cap 2 s after the
+first step; 3 s under 90 % of the cap restores a step. Both come with a notice
+(`offload.power.throttled`, `offload.power.exceeded`). Temperature and missing samples stay
+immediate stops.
+
+**Repainting every refresh.** With offload on, the compositor repaints on every refresh
+while the camera moves, though the world image only changes every few: nested, 65 % of
+repaints showed the same worker frame (282 of 433 at a 3-refresh divisor). Each repaint cost
+0.82-0.93 ms of GPU time at 4K on the work host (in-process frames, which draw the world:
+2.9-3.6 ms), about 6 % of that GPU. Skipping them is not a damage change: on a swapchain of 2-3
+buffers the frames right after a new world image must be redrawn in full anyway, so only not
+committing saves the work, and the tick, present-locked dt and the even-pacing hold are all
+driven by presents; a skipped repaint needs a vblank-aligned timer to drive them instead, and
+core-drawn elements that animate while moving (the dynamic reticle) would update at the
+worker's rate. Recordings now carry the compositor's GPU time per frame
+(`compositorGpuMs`), so the cost on an integrated GPU at 4K can be measured live before that
+change is made.
+
 ## Settings (IPC 0.29)
 
 Subjective behaviour is a setting with a default per preset; the objective fixes above are
