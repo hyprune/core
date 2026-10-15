@@ -236,6 +236,11 @@ def analyse(path, label):
         out['offload'] = {'frontAgeMs': summary([o['frontAgeMs'] for o in off if o.get('frontAgeMs', -1) >= 0]),
                           'latencyRefreshes': pct([o['latencyRefreshes'] for o in off], .5), 'divisor': pct([o['divisor'] for o in off], .5),
                           'readyP90Ms': pct([o['readyP90Ms'] for o in off], .5)}
+        for k in ('serviceP90Ms', 'renderGpuMs', 'transferGpuMs', 'renderScale'):  # newer recordings
+            v = [o[k] for o in off if isinstance(o.get(k), (int, float))]
+            if v:
+                out['offload'][k] = summary(v)
+        out['offload']['divisors'] = {str(d): sum(1 for o in off if o['divisor'] == d) for d in sorted({o['divisor'] for o in off})}
     # A carried window (format 2 timing.carry): the eased facing turn against its target.
     carry = [(f['tickNs'] / 1e9, f['timing']['carry']) for f in frames if f['timing'].get('carry')]
     if len(carry) > 10:

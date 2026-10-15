@@ -30,7 +30,7 @@ COMPANION = {'repo': 'rick-the-alien/hyprune-companion-drunk-ash', 'tag': 'v0.1.
 SCRIPT_OUTPUT = {'npcs_demo.py': 'npcs-demo.mp4'}
 # Cross-GPU scripts: every render node visible, the first one the compositor's, dGPU allowed.
 SCRIPT_ENV = {name: {'HYPRUNE_NESTED_GPU': 'all:0', 'HYPRUNE_NESTED_ALLOW_DGPU': '1'}
-              for name in ('offload_objects.py', 'offload_pacing.py', 'feel_record.py')}
+              for name in ('offload_objects.py', 'offload_pacing.py', 'feel_record.py', 'offload_reconfigure.py', 'translucent_windows.py')}
 
 
 def log(*a):

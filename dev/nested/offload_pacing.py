@@ -20,10 +20,18 @@ the steady middle of the pan it reports:
   ageMs         mean age of the camera sample shown (latency inside core)
   newAgeStdMs   spread of that age over new frames: motion judder in ms (0 = every new
                 frame shows the scene exactly the same time before it is drawn)
+GPU-bound worker (the owner's case: a 4K output whose worker can't keep the cap): set
+HYPRUNE_NESTED_4K=1, HYPRUNE_NESTED_REFRESH=98 and HYPRUNE_DEV_WORKER_COST_MS=12:3 (on top of
+the real 4K render and transfer, about 13 ms on the work host: about 25 ms a frame); HYPRUNE_DEV_PACING_BEFORE=1 runs the previous pacing (the
+cap's divisor alone) for an A/B. Each round reports newRefreshes (how many refreshes each new
+frame stays up) and pacing (divisor, latency, the worker's service p90); with
+HYPRUNE_PACING_VIDEO=1 the first pan of each configuration is also recorded (OUTDIR/<config>.mkv)
+for dev/feel/video.py.
 Gate (HYPRUNE_PACING_GATE=1): offload extra < 2 % in every round and the median round's
 frameCV within 0.05 of in-process.
 """
-import argparse, json, math, os, pathlib, shutil, statistics as st, time
+import argparse, json, math, os, pathlib, shutil, statistics as st, subprocess, time
+from collections import Counter
 import session as s
 import npcs
 import cinema
@@ -105,7 +113,9 @@ def analyse(probe, target, refresh=60., even=False):
             'frameCV': round(cv(gaps), 3) if gaps else None, 'newCV': round(cv(newGaps), 3) if len(newGaps) > 2 else None,
             'ageMs': round(st.mean(f[3] for f in mid), 1), 'ageP95Ms': round(sorted(f[3] for f in mid)[int(.95 * len(mid))], 1),
             'newAgeStdMs': round(st.pstdev(f[3] for f in new), 2) if len(new) > 2 else None,
-            'frontSteps': {str(k): steps.count(k) for k in sorted(set(steps))} if steps else None}
+            'frontSteps': {str(k): steps.count(k) for k in sorted(set(steps))} if steps else None,
+            # How many refreshes each new frame stays up (even pacing: one number).
+            'newRefreshes': {str(k): v for k, v in sorted(Counter(round(g / (1000 / refresh)) for g in newGaps).items())} if newGaps else None}
 
 
 def acceptance(client, children, args, shell_token, socketpath):
@@ -135,8 +145,19 @@ def acceptance(client, children, args, shell_token, socketpath):
         cam.hold(pan[0]['eye'], yaw=pan[0]['yaw'], pitch=pan[0]['pitch']); time.sleep(2.5)
         rounds = []
         for k in range(int(os.environ.get('HYPRUNE_PACING_ROUNDS', '2'))):
+            video = os.environ.get('HYPRUNE_PACING_VIDEO') == '1' and k == 0
+            if video:  # the pan as a screen capture records it, for dev/feel/video.py
+                rec = s.envrun('wf-recorder', '-o', 'HEADLESS-1', '-c', 'libx264', '-p', 'preset=ultrafast', '-p', 'crf=18', '-x', 'yuv420p',
+                               '-f', str(out / f'{name}.mkv'), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                children.append(rec); time.sleep(1.5)
             cam._call({'op': 'probe', 'on': True})
             cam.run(pan); time.sleep(.2)
+            if video:  # wf-recorder writes its last frame on the next damage: keep frames coming
+                rec.send_signal(2)
+                for n in range(300):
+                    if rec.poll() is not None:
+                        break
+                    s.ctl('eval', f'hl.plugin.hyprune.camera({x},{y + .5},{z},{1e-4 * (n % 2)},0)'); time.sleep(.1)
             probe = cam._call({'op': 'probe', 'on': False})
             (out / f'{name}-{k}.json').write_text(json.dumps(probe))
             a = analyse(probe, int(fps), refresh, offload != 'off' and (pacing or ['even'])[0] == 'even')
@@ -145,6 +166,9 @@ def acceptance(client, children, args, shell_token, socketpath):
             if w:
                 a['worker'] = {k: round(w[k], 2) for k in ('renderGpuMs', 'transferGpuMs', 'producerReadyMs') if isinstance(w.get(k), (int, float))}
                 a['worker']['scale'] = w.get('renderScale'); a['worker']['msaa'] = w.get('msaaSamples')
+            paced = s.camera().get('offloadPacing')
+            if offload != 'off' and paced:
+                a['pacing'] = {k: (round(v, 1) if isinstance(v, float) else v) for k, v in paced.items()}
             trips = (s.camera().get('offloadClient') or {}).get('trips') or []
             if trips:  # ms after the pose was sent: frame packet in, copy issued, promoted to the front
                 a['tripMs'] = [round(st.median(t[i] for t in trips), 1) for i in range(3)]
