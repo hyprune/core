@@ -1,6 +1,7 @@
 #include "control/Control.hpp"
 #include "interaction/CaptureNotes.hpp"
 #include "interaction/Config.hpp"
+#include "interaction/Settings.hpp"
 #include "interaction/Content.hpp"
 #include "interaction/Hands.hpp"
 #include "interaction/InputFile.hpp"
@@ -523,7 +524,40 @@ struct Runtime {
                                           interaction::configPatch(interaction::defaultConfig(), {{"player", patch}});
                                           return patch;
                                       }};
-    void applyPlayer(const Json &patch) { config["player"] = interaction::configPatch(configured, {{"player", patch}})["player"]; }
+    // IPC 0.30 global settings preset (settings.json; Settings.inc): the defaults every graphics
+    // and player setting falls back to. Null until the one-time migration chose it.
+    interaction::InputFile settingsFile{"settings", Json{{"version", 1}, {"preset", nullptr}}, [](const Json &j) {
+                                            if (!j.is_object() || j.value("version", 0) != 1 ||
+                                                !(j.value("preset", Json()).is_null() ||
+                                                  (j["preset"].is_string() && interaction::validPreset(j["preset"]))) ||
+                                                j.size() != 2)
+                                                throw std::runtime_error("settings.json needs version 1 and a known preset");
+                                            return j;
+                                        }};
+    std::string settingsPreset() const {
+        auto p = settingsFile.current.value("preset", Json());
+        return p.is_string() ? p.get<std::string>() : interaction::presetFromGraphics(graphicsFile.current);
+    }
+    // A section's layers: the preset's values (where Lua didn't set the key), then the file's
+    // overrides (a null graphics value inherits).
+    Json layered(const std::string &section, const Json &patch) const {
+        auto out = interaction::presetSection(settingsPreset(), section);
+        auto base = interaction::defaultConfig()[section];
+        for (auto it = out.begin(); it != out.end();)
+            if (configured[section].value(it.key(), Json()) != base.value(it.key(), Json()))
+                it = out.erase(it);
+            else
+                ++it;
+        for (auto &[key, value] : patch.items())
+            if (!value.is_null() || !out.contains(key))
+                out[key] = value;
+        return out;
+    }
+    void applyPlayer(const Json &patch) { config["player"] = interaction::configPatch(configured, {{"player", layered("player", patch)}})["player"]; }
+    std::string glRenderer();
+    Json settingsSnapshot();
+    Json settingsMethod(const std::string &method, const Json &params);
+    void migrateSettings();
     Json playerSettings() const {
         Json defaults = Json::object(), effective = Json::object(), ranges = Json::object();
         auto all = interaction::defaultConfig()["player"];
@@ -540,7 +574,7 @@ struct Runtime {
                 {"error", ipc::boundedText(playerFile.error, ipc::MessageLimit)}};
     }
     void applyGraphics(const Json &patch) {
-        auto next = interaction::configPatch(configured, {{"graphics", patch}});
+        auto next = interaction::configPatch(configured, {{"graphics", layered("graphics", patch)}});
         config["graphics"] = next["graphics"];
         // graphics.npc_motion (IPC 0.23) wins over Lua npc.motion; null inherits it.
         config["npc"]["motion"] = config["graphics"]["npc_motion"].is_string() ? config["graphics"]["npc_motion"]
@@ -4783,6 +4817,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (params.at("generation") == offloadGeneration) offloadPolicy = params;
         return Json::object();
     }
+    if (method == "settings.get" || method == "settings.set") // IPC 0.30 (Settings.inc)
+        return settingsMethod(method, params);
     if (method == "graphics.get" || method == "graphics.set") {
         if (renderPass.active())
             throw ipc::Error(-32004, "graphics update during render");
@@ -5438,6 +5474,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     return Json{{"revision", ipc->revision()}};
 }
 #include "Replay.inc"
+#include "Settings.inc"
 #include "Quests.inc"
 #include "Cinema.inc"
 void Runtime::tick() {
@@ -5498,6 +5535,10 @@ void Runtime::tick() {
         applyGraphics(*next);
     if (auto next = playerFile.poll())
         applyPlayer(*next);
+    if (settingsFile.poll()) { // the preset changed (another client, a hand edit)
+        applyGraphics(graphicsFile.current);
+        applyPlayer(playerFile.current);
+    }
     if (companionFile.poll()) { // edited by hand or another client: choose again
         ++companionRevision;
         objectsDirty = true;
@@ -6643,6 +6684,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     {"workspace.activate", "world.control"},
                     {"world.load", "world.control"},
                     {"surface.focus", "surface.control"},
+                    {"settings.get", "state.read"},
+                    {"settings.set", "world.control"},
                     {"graphics.get", "state.read"},
                     {"graphics.set", "world.control"},
                     {"recording.start", "input.control"}, {"recording.stop", "input.control"},
@@ -6664,6 +6707,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     runtime->deferInput([] {
         runtime->applyGraphics(runtime->graphicsFile.current);
         runtime->applyPlayer(runtime->playerFile.current);
+        safe([] { runtime->migrateSettings(); }); // once: settings.json gets its preset
     });
     HyprlandAPI::addDispatcherV2(handle, "hyprune.toggle", [](std::string arg) {
         deferToggle(arg);
