@@ -37,6 +37,11 @@ Json defaultConfig() {
           {"look_sensitivity", .0025},
           {"look_inertia", .03},
           {"move_inertia", .05},
+          // IPC 0.29 feel settings: the walking bob's head tilt (degrees at full stride), and how
+          // a carried window follows (seconds: the turn toward facing you, the grab point).
+          {"view_bob_roll", .4},
+          {"carry_turn", .11},
+          {"carry_follow", .04},
           {"step_height", .35},
           {"respawn_below", 30.0},
           // Player settings on the wire (player.get/set, IPC 0.19); Lua can set them too.
@@ -72,8 +77,12 @@ Json playerOptions() {
 Json playerRanges() {
     return {{"walk_speed", {.5, 20}},       {"run_speed", {.5, 30}},        {"reticle_size", {6, 64}},
             {"reticle_thickness", {1, 6}},  {"reticle_gap", {0, 20}},       {"reticle_opacity", {.2, 1}},
-            {"reach_grab", {1, 100}},       {"reach_mount", {1, 100}},      {"reach_placement", {1, 100}}};
+            {"reach_grab", {1, 100}},       {"reach_mount", {1, 100}},      {"reach_placement", {1, 100}},
+            // IPC 0.29 (feelPlayerKeys): look and movement smoothing (s), bob roll (deg), carry easing (s).
+            {"look_inertia", {0, .1}},      {"move_inertia", {0, .3}},      {"view_bob_roll", {0, 2}},
+            {"carry_turn", {0, .4}},        {"carry_follow", {0, .3}}};
 }
+Json feelPlayerKeys() { return {"look_inertia", "move_inertia", "view_bob_roll", "carry_turn", "carry_follow"}; }
 Json playerSettingsKeys() {
     Json keys = Json::array();
     for (auto &[key, value] : playerRanges().items())

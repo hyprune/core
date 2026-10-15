@@ -1713,6 +1713,11 @@ void Runtime::offloadPump(int stage) {
         auto view = camera;
         view.position.y += view.climbBob;
         view.climbBob = 0;
+        // The walking bob too (it was missing from worker frames) and its head tilt.
+        view.position = view.position + view.viewBob;
+        view.viewBob = {};
+        view.roll += view.viewRoll;
+        view.viewRoll = 0;
         // World objects: the animation clock in every pose, their state as a delta against
         // what the worker has, committed once the pose is sent.
         auto objects = [&] {
@@ -2714,8 +2719,10 @@ void Runtime::motionTick(float dt) {
                    !control.driving() && !control.uiVisible() && !control.photoHeld() && !handover.phase &&
                    fullscreen.phase == 0 && !layerCursor;
     auto level = reduced ? sim::ViewBob::Off : sim::ViewBob::level(config["player"]["view_bob"].get<std::string>());
-    viewBob.update(dt, motionSpeed, config["player"]["walk_speed"], config["player"]["run_speed"], level, walking, camera.yaw);
+    viewBob.update(dt, motionSpeed, config["player"]["walk_speed"], config["player"]["run_speed"], level, walking, camera.yaw,
+                   config["player"]["view_bob_roll"]);
     camera.viewBob = viewBob.offset;
+    camera.viewRoll = viewBob.roll;
 }
 bool Runtime::tooFar(float distance, const char *reachKey, const char *action) {
     float reach = config["player"][reachKey];
@@ -2893,6 +2900,10 @@ void Runtime::handTick(float dt) {
         gestureButton = 0;
         return;
     }
+    // Carry easing (IPC 0.29 player settings); reduced motion keeps the carry rigid.
+    bool rigid = config["graphics"]["reduced_motion"] == true;
+    hands.turnTime = rigid ? 0.f : config["player"]["carry_turn"].get<float>();
+    hands.followTime = rigid ? 0.f : config["player"]["carry_follow"].get<float>();
     if (hands.update(camera, pointerRay(), dt, world->collision, &world->collisionIndex)) {
         layout.freePoses[e->surface.id] = hands.pose;
         if ((hands.gesture == interaction::Gesture::Resize || hands.gesture == interaction::Gesture::CornerResize) &&
@@ -4863,8 +4874,10 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                 throw ipc::Error(-32602, "player patch required");
             auto merged = playerFile.current;
             auto keys = interaction::playerSettingsKeys();
+            auto feel = interaction::feelPlayerKeys();
             for (auto &[key, value] : params["patch"].items()) {
-                if (std::find(keys.begin(), keys.end(), key) == keys.end())
+                if (std::find(keys.begin(), keys.end(), key) == keys.end() ||
+                    (!ipc::protocol::atLeast(protocol, "0.29") && std::find(feel.begin(), feel.end(), key) != feel.end()))
                     throw ipc::Error(-32602, "unknown player setting: " + key);
                 if (value.is_null())
                     merged.erase(key); // back to the default
@@ -4881,7 +4894,12 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             publish();
         } else if (!params.empty())
             throw ipc::Error(-32602, "unexpected params");
-        return playerSettings();
+        auto response = playerSettings();
+        if (!ipc::protocol::atLeast(protocol, "0.29")) // the feel settings arrived with IPC 0.29
+            for (auto &key : interaction::feelPlayerKeys())
+                for (auto section : {"config", "defaults", "overrides", "ranges"})
+                    response[section].erase(key.get<std::string>());
+        return response;
     }
     if (method == "input.get") {
         if (!params.empty())
@@ -5939,7 +5957,7 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     auto part = [&](const char *) { parts.push_back(h.value); };
     auto &r = renderer;
     h(reinterpret_cast<uintptr_t>(world.get()))(camera.position)(camera.yaw)(camera.pitch)(camera.roll)(camera.fov);
-    h(camera.shiftX)(camera.shiftY)(camera.eyeHeight)(camera.climbBob);
+    h(camera.shiftX)(camera.shiftY)(camera.eyeHeight)(camera.climbBob)(camera.viewBob)(camera.viewRoll);
     part("camera");
     // NPCs: shown/hidden, placed and posed (a paused or still NPC keeps the key stable; an
     // animating one out of view doesn't change the image, and in view frames are forced).

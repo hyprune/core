@@ -1,6 +1,7 @@
 #include "Hands.hpp"
 #include "Resize.hpp"
 #include <algorithm>
+#include <tuple>
 #include <vector>
 namespace hyprune::interaction {
 std::optional<WorldHit> raycast(Vec3 o, Vec3 d, std::span<const Triangle> mesh, const sim::TriangleIndex *index) {
@@ -127,7 +128,28 @@ bool sweepSafe(const surfaces::Surface &a, const surfaces::Surface &b, std::span
     }
     return true;
 }
+namespace {
+// Critically damped approach to a moving target over `time` seconds (the usual closed-form
+// step, stable at any dt): no overshoot, velocity carried between frames.
+float damp(float current, float target, float &velocity, float time, float dt) {
+    if (time <= 0 || dt <= 0) {
+        velocity = 0;
+        return time <= 0 ? target : current;
+    }
+    float omega = 2 / time, x = omega * dt, e = 1 / (1 + x + .48f * x * x + .235f * x * x * x);
+    float change = current - target, temp = (velocity + omega * change) * dt;
+    velocity = (velocity - omega * temp) * e;
+    return target + (change + temp) * e;
+}
+Vec3 damp(Vec3 current, Vec3 target, Vec3 &velocity, float time, float dt) {
+    return {damp(current.x, target.x, velocity.x, time, dt), damp(current.y, target.y, velocity.y, time, dt),
+            damp(current.z, target.z, velocity.z, time, dt)};
+}
+} // namespace
 void Hands::begin(Gesture g, const surfaces::Surface &s, surfaces::Hit h, const sim::Camera &camera) {
+    turn = turnVelocity = 0;
+    grabVelocity = {};
+    grabSet = false;
     facePlayer = true;
     grabYaw = camera.yaw;
     gesture = g;
@@ -157,6 +179,7 @@ void Hands::facing(bool enabled, const sim::Camera &camera) {
     start = pose;
     grabYaw = camera.yaw;
     facePlayer = enabled;
+    turn = turnVelocity = 0; // the new start already holds the turn so far
 }
 void Hands::flipFrom(const surfaces::Surface &from, float seconds) {
     // Signed yaw from the target orientation back to the starting one (pure yaw pair).
@@ -182,17 +205,27 @@ bool Hands::update(const sim::Camera &camera, Vec3 ray, float dt, std::span<cons
     if (gesture == Gesture::None)
         return false;
     auto next = pose;
+    auto saved = std::tuple{turn, turnVelocity, grab, grabVelocity, grabSet};
     if (gesture == Gesture::Carry) {
         distance += (targetDistance - distance) * (1 - std::exp(-dt / .06f));
         if (flip) {
             float step = flipRate * dt;
             flip = std::abs(flip) <= step ? 0 : flip - std::copysign(step, flip);
         }
-        float angle = (facePlayer ? (grabYaw - camera.yaw) * .5f : 0) + flip * .5f;
+        // The facing turn eases toward the camera's (unwrapped next to the current one).
+        float target = facePlayer ? grabYaw - camera.yaw : 0;
+        target = turn + std::remainder(target - turn, 6.2831853f);
+        turn = damp(turn, target, turnVelocity, turnTime, dt);
+        float angle = turn * .5f + flip * .5f;
         std::array<float, 4> delta{0, std::sin(angle), 0, std::cos(angle)};
         next.rotation = quaternionProduct(delta, start.rotation);
         next.yaw = 0;
-        next.center = camera.position + ray * distance - rotate(delta, offset);
+        // The grab point follows the centre ray; the window pivots about it.
+        auto aim = camera.position + ray * distance;
+        if (!grabSet)
+            grab = aim, grabVelocity = {}, grabSet = true;
+        grab = damp(grab, aim, grabVelocity, followTime, dt);
+        next.center = grab - rotate(delta, offset);
     } else {
         auto h = surfaces::intersect(start, camera.position, ray, false);
         if (!h)
@@ -226,8 +259,13 @@ bool Hands::update(const sim::Camera &camera, Vec3 ray, float dt, std::span<cons
             }
         }
     }
-    if (!sweepSafe(pose, next, mesh, index))
+    if (!sweepSafe(pose, next, mesh, index)) {
+        // Blocked: the springs stay where the window is and lose their speed.
+        std::tie(turn, turnVelocity, grab, grabVelocity, grabSet) = saved;
+        turnVelocity = 0;
+        grabVelocity = {};
         return false;
+    }
     pose = next;
     return true;
 }

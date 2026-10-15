@@ -68,6 +68,14 @@ void Runtime::recordTick(const Json &sections, std::chrono::steady_clock::time_p
                    {"renderedFrames", renderer.frames},
                    {"recordMs", recordMs},
                    {"gpuMs", renderer.gpuFrameMs() >= 0 ? Json(renderer.gpuFrameMs()) : Json(nullptr)}};
+    // A carried window: where it is, the eased facing turn and where it is heading (the carry
+    // easing against the input that drives it).
+    if (hands.gesture == interaction::Gesture::Carry)
+        timing["carry"] = {{"center", {hands.pose.center.x, hands.pose.center.y, hands.pose.center.z}},
+                           {"grab", {hands.grab.x, hands.grab.y, hands.grab.z}},
+                           {"turn", hands.turn},
+                           {"turnTarget", hands.facePlayer ? hands.grabYaw - camera.yaw : 0.f},
+                           {"facing", hands.facePlayer}};
     if (offload.connected())
         timing["offload"] = {{"front", offload.frontSequence()},
                              {"frontAgeMs", offload.frontAgeMs()},

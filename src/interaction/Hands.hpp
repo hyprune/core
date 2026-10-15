@@ -13,6 +13,14 @@ class Hands {
     bool facePlayer = false;
     // Remaining turn (radians about world up) of an animated flip, and its rate.
     float flip = 0, flipRate = 0;
+    // Carry easing (player.carry_turn / carry_follow, seconds; 0 = rigid): the turn toward
+    // facing you and the grab point follow their targets as critically damped springs, so a
+    // carried window lags a little and settles, like an object held at arm's length. The
+    // collision sweep still decides every step.
+    float turnTime = 0, followTime = 0;
+    float turn = 0, turnVelocity = 0; // the eased facing turn (radians about world up)
+    Vec3 grab{}, grabVelocity{};
+    bool grabSet = false;
     void facing(bool, const sim::Camera &);
     // After facing(true): show the window turning from `from` to the new facing over
     // `seconds` (0 = at once, for reduced motion), around the grab point.

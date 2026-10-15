@@ -8,4 +8,6 @@ world::Json configPatch(const world::Json &current, const world::Json &patch);
 world::Json playerOptions();
 world::Json playerRanges();
 world::Json playerSettingsKeys();
+// Player settings added with IPC 0.29 (the feel settings): older peers never see them.
+world::Json feelPlayerKeys();
 } // namespace hyprune::interaction
