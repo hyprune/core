@@ -295,6 +295,19 @@ their frozen state projections and enums. Unknown or unadvertised methods return
 
 These are wire-compatible behavior changes that integrators may notice:
 
+- **0.31** (draft) Builder primitives and materials (RFC-0014 amendment). No new method,
+  event or grant.
+  - Placement keys: `objects.place {key, ifExists: error | update}`; `objects.transform`,
+    `objects.configure` and `objects.remove` take `{key}` instead of `{id}`; instances carry
+    `key`. A taken key is refused (`-32005`, rule `key.taken`, with the placement's `id`), or
+    with `ifExists: "update"` that placement moves there (`updated: true`). Removing a key
+    that names nothing returns `removed: false`.
+  - `dryRun: true` on place, transform and configure: every check, no change.
+  - `objects.configure` patch `ref` swaps a user placement to another catalog entry in place
+    (id, key and pose kept; placement rules on the new asset); patch `key` names it.
+  - Catalog entries carry `primitive` (from `primitive.json`, else null). A `world/<id>`
+    directory generated after a folder loaded is found on its first use.
+  - A world folder holds 512 placements of 256 distinct assets (other worlds 128 and 32).
 - **World keys back: Shift sprints, Ctrl goes down.** The input version 3 defaults of IPC 0.29
   swapped them; that is undone (still version 3, no wire change). Ctrl+R still toggles a debug
   recording in world mode, and a Ctrl chord never leaves the camera lower: Ctrl goes down at
