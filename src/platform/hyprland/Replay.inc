@@ -72,8 +72,7 @@ void Runtime::recordTick(const Json &sections, std::chrono::steady_clock::time_p
                              {"readyP90Ms", offload.readyP90Ms()},
                              {"latencyRefreshes", offloadLatency.ticks},
                              {"divisor", offloadDivisor},
-                             {"shown", renderedOffload},
-                             {"draws", offloadDraws}};
+                             {"shown", renderedOffload}};
     auto &w = recordWindow;
     for (double p : recordPresents) {
         if (w.lastPresentNs >= 0) {
@@ -129,7 +128,9 @@ void Runtime::recordStats(bool final) {
         for (size_t i = 0; i < w.presentMs.size() && hitches.size() < 32; ++i)
             if (w.presentMs[i] > 2.5 * median.get<double>() && w.presentMs[i] > 2 * refreshMs)
                 hitches.push_back({{"t", std::round(w.presentAt[i] * 1000) / 1000}, {"ms", std::round(w.presentMs[i] * 10) / 10}});
-    uint64_t newFrames = renderer.frames - w.frames0;
+    // New frames: the renderer's, or with the offload renderer shown the worker's fronts.
+    uint64_t newFrames = renderedOffload && offload.connected() ? offload.frontSequence() - std::min(w.front0, offload.frontSequence())
+                                                                : renderer.frames - w.frames0;
     recordingStats = {{"t", std::round(elapsed / 1e6) / 1000},
                       {"windowS", std::round(window * 1000) / 1000},
                       {"final", final},
@@ -142,7 +143,7 @@ void Runtime::recordStats(bool final) {
                       {"missedVblanks", w.missed},
                       {"hitches", hitches}};
     session.stats(recordingStats);
-    w = RecordWindow{elapsed, renderer.frames, w.lastPresentNs, 0, {}, {}, {}};
+    w = RecordWindow{elapsed, renderer.frames, offload.frontSequence(), w.lastPresentNs, 0, {}, {}, {}};
 }
 Json Runtime::recordingHeader() {
     auto m = monitor.lock();
@@ -295,7 +296,7 @@ Json Runtime::sessionMethod(const std::string &method, const Json &params) {
                                params.value("includeAppKeys", false));
         // Nothing about the motion is reset: the recording must not change the feel.
         editor.deterministicId = seed;
-        recordWindow = RecordWindow{0, renderer.frames, -1, 0, {}, {}, {}};
+        recordWindow = RecordWindow{0, renderer.frames, offload.frontSequence(), -1, 0, {}, {}, {}};
         recordPresents.clear();
         recordingStats = nullptr;
         recordingReminders = 0;

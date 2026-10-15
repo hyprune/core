@@ -119,7 +119,8 @@ As version 1 below, with these differences:
   (mean/std/max), `refreshMs`, `missedVblanks`, `hitches` ([{t, ms}], intervals over 2.5x the
   median and over two refreshes).
 
-Bounds: 64 MiB, 30 minutes (432,000 frames).
+Bounds: 128 MiB, 30 minutes (432,000 frames); floats are rounded (poses to 1e-6, timing to
+1e-3 ms), about 100 KB/s at 98 Hz with a 500 Hz mouse (about 20 minutes).
 
 ## Version 1 JSONL format
 

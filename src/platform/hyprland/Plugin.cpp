@@ -154,7 +154,7 @@ struct Runtime {
     bool tickDtSet = false;
     std::vector<double> recordPresents;
     struct RecordWindow {
-        uint64_t startNs = 0, frames0 = 0;
+        uint64_t startNs = 0, frames0 = 0, front0 = 0;
         double lastPresentNs = -1;
         int missed = 0;
         std::vector<double> presentMs, dtMs, presentAt; // presentAt: s since start, per interval

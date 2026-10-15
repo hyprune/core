@@ -43,6 +43,15 @@ inline sim::Camera camera(const Json &p) {
     c.eyeHeight = p.at("eyeHeight");
     return c;
 }
+// Format 2 keeps files small: floats rounded to `step` (1e-6 m or rad for poses, 1e-3 ms for
+// timing) print in a few digits instead of seventeen.
+inline void compact(Json &j, double step) {
+    if (j.is_number_float())
+        j = std::round(j.get<double>() / step) * step;
+    else if (j.is_structured())
+        for (auto &v : j)
+            compact(v, step);
+}
 inline bool finite(const Json &j) {
     if (j.is_number_float() && !std::isfinite(j.get<double>()))
         return false;
@@ -205,7 +214,7 @@ class Session {
         std::lock_guard lock(mutex_);
         if (!writeError_.empty())
             return;
-        if (queued_ + bytes.size() > 4 * 1024 * 1024 || total_ + bytes.size() > 64 * 1024 * 1024) {
+        if (queued_ + bytes.size() > 4 * 1024 * 1024 || total_ + bytes.size() > SizeLimit) {
             writeError_ = "recording size/queue limit";
             return;
         }
@@ -219,7 +228,8 @@ class Session {
     static constexpr double Step = 1. / 60.;
     // Version 2 (IPC 0.29) records live: each frame keeps the dt the tick really used and its
     // timing, and replay feeds that dt sequence back. Version 1 files ran (and replay) on fixed
-    // 1/60 s steps. Bounds: 64 MiB, 30 minutes of live frames (v1: 36,000 frames).
+    // 1/60 s steps. Bounds: 128 MiB, 30 minutes of live frames (v1: 64 MiB, 36,000 frames).
+    static constexpr size_t SizeLimit = 128ull * 1024 * 1024;
     static constexpr uint64_t FrameLimitV1 = 36000, FrameLimitV2 = 432000;
     static constexpr uint64_t DurationLimitNs = 30ull * 60 * 1000000000;
     bool recording = false, playing = false, includeAppKeys = false;
@@ -369,16 +379,20 @@ class Session {
     // Tests and tools: a frame on the fixed 1/60 s grid.
     void recordFrame(const Json &state) { recordFrame(state, Step, frame * 16666667ull, Json::object()); }
     // A live frame (one tick): its tick time, the dt it moved by, its state and timing.
-    void recordFrame(const Json &state, double dt, uint64_t tickStartNs, const Json &timing) {
+    void recordFrame(Json state, double dt, uint64_t tickStartNs, Json timing) {
         if (recording) {
+            compact(state, 1e-6);
+            compact(timing, 1e-3);
             emit({{"kind", "frame"}, {"frame", frame}, {"tickNs", tickStartNs}, {"dt", dt}, {"state", state}, {"timing", timing}});
             ++frame;
         }
     }
     // A completed 3D draw: the camera it showed and its timing (draw: CPU ms, ageMs: from the
     // camera sample to the draw; worker frames name the offload front they showed).
-    void view(const Json &camera, uint64_t renderedFrame, const Json &timing) {
+    void view(Json camera, uint64_t renderedFrame, Json timing) {
         if (recording) {
+            compact(camera, 1e-6);
+            compact(timing, 1e-3);
             Json j{{"kind", "view"}, {"frame", frame ? frame - 1 : 0}, {"renderedFrame", renderedFrame}, {"camera", camera}};
             j.update(timing);
             emit(std::move(j));
@@ -409,9 +423,9 @@ class Session {
         struct stat st{};
         if (fd < 0)
             throw std::runtime_error("recording unavailable");
-        if (fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_size > 64 * 1024 * 1024 || st.st_uid != getuid()) {
+        if (fstat(fd, &st) || !S_ISREG(st.st_mode) || size_t(st.st_size) > SizeLimit || st.st_uid != getuid()) {
             close(fd);
-            throw std::runtime_error("recording must be an owned regular file <=64 MiB");
+            throw std::runtime_error("recording must be an owned regular file <=128 MiB");
         }
         std::string bytes(st.st_size, '\0');
         size_t readBytes = 0;
