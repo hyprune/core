@@ -386,10 +386,11 @@ def typing_args(text, wpm=62, seed=None):
 
 # ---------------------------------------------------------------------------- recordings
 def smooth_recording_look(rows, ms):
-    """A recording (hyprune.session rows) with its world-mode mouse-look motion low-passed: per
-    frame, the motion of a centred window of frames (ms wide) averaged, sent as one event just
-    before the frame's tick. The total turn is kept; every other input (and motion in other
-    modes: a free cursor, a menu) is untouched."""
+    """A recording (hyprune.session rows) with its world-mode mouse-look motion low-passed: each
+    tick's motion spread over its neighbours with Gaussian weights (sigma ms/4, so most of it
+    within a centred ms window; a box average leaves per-tick steps that judder), sent as one
+    event just before each frame's tick. The total turn is kept; every other input (and motion
+    in other modes: a free cursor, a menu) is untouched."""
     if ms <= 0:
         return rows
     per = {}
@@ -402,15 +403,18 @@ def smooth_recording_look(rows, ms):
     ticks = [r for r in rows if r.get('kind') == 'frame']
     seconds = (ticks[-1]['ns'] - ticks[0]['ns']) / 1e9 if len(ticks) > 1 else 1
     rate = (len(ticks) - 1) / seconds if seconds > 0 else 60
-    half = max(1, int(round(ms / 1000 * rate / 2)))
-    # Each tick's motion spread evenly over the ticks of its window that exist (the sum stays).
+    sigma = max(.5, ms / 1000 * rate / 4)
+    reach = int(math.ceil(3 * sigma))
+    # Each tick's motion spread over the ticks around it that exist, weights summing to 1 (the sum stays).
     exists = {r['frame'] for r in ticks}
     out_motion = {}
     for g, (dx, dy) in per.items():
-        window = [f for f in range(g - half, g + half + 1) if f in exists] or [g]
-        for f in window:
+        window = [f for f in range(g - reach, g + reach + 1) if f in exists] or [g]
+        weights = [math.exp(-.5 * ((f - g) / sigma) ** 2) for f in window]
+        total = sum(weights)
+        for f, w in zip(window, weights):
             o = out_motion.setdefault(f, [0.0, 0.0])
-            o[0] += dx / len(window); o[1] += dy / len(window)
+            o[0] += dx * w / total; o[1] += dy * w / total
     # A tick's inputs come before its `frame` row: each new event goes just before it.
     merged, last = [], 0
     for r in rows:
