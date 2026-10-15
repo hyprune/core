@@ -160,7 +160,9 @@ unevenly per tick; `--smooth-look MS` spreads it over an MS window first (the
 total turn and every other input are kept). Times are seconds from the first
 frame or `recording.mark` names. `--trim` keeps a part; `--speed` plays a part
 faster (frames dropped evenly) or slower (frames repeated). Output:
-`DIR/<name>-1080p60.mp4`, `DIR/gate.json` (the cinema smoothness gate) and
+`DIR/<name>-1080p60.mp4`, `DIR/gate.json` (the cinema smoothness gate over the
+recorded camera's turns: its image measure can't see a walk straight ahead or a
+resting hand's drift, so the whole video's figures are kept for reference only) and
 `DIR/cut.json` (the frame-to-video mapping); `--encode-only` cuts the kept
 `DIR/replay.mkv` again.
 

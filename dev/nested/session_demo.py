@@ -20,10 +20,11 @@ A hand-held mouse delivers look motion unevenly per tick, and an exact replay ke
 judder; --smooth-look MS spreads the mouse-look motion over an MS window first (the total
 turn and every other input are kept).
 The result is encoded for the gallery (DIR/<name>-1080p60.mp4) and goes through the
-smoothness gate (DIR/gate.json; segments sped up or slowed down are gated as they play).
+smoothness gate where the recorded camera turns (DIR/gate.json, with the whole video's
+figures for reference; segments sped up or slowed down are gated as they play).
 DIR/cut.json records the recording's frame-to-video mapping and every part.
 """
-import argparse, builtins, json, os, pathlib, shutil, subprocess, sys, time
+import argparse, builtins, json, math, os, pathlib, shutil, subprocess, sys, time
 from types import SimpleNamespace
 
 p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
@@ -174,9 +175,57 @@ def encode(clip, cut, first, per_frame):
     graph = ';'.join(filters) + ';' + ''.join(labels) + f'concat=n={len(labels)}:v=1:a=0[out]'
     out = a.output / f'{a.name}-1080p60.mp4'
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(clip), '-filter_complex', graph, '-map', '[out]', *cinema.ENCODE, str(out)], check=True)
-    g = cinema.gate(out)
+    g = gate(out, cut['parts'])
     (a.output / 'gate.json').write_text(json.dumps(g, indent=1) + '\n')
-    print('DEMO', out.name, cinema.gate_summary(g), flush=True)
+    print('DEMO', out.name, g['summary'], flush=True)
+
+
+def turns(parts, min_speed=3.0, min_seconds=.6):
+    """Video spans [start, end] (seconds) where the recorded camera turns at least min_speed
+    deg/s for min_seconds, from the recording's own camera states."""
+    rate = 60.0
+    speed = {}
+    for f0, f1 in zip(FRAMES, FRAMES[1:]):
+        c0, c1 = f0['state']['camera'], f1['state']['camera']
+        dyaw = (c1['yaw'] - c0['yaw'] + math.pi) % math.tau - math.pi
+        speed[f0['frame']] = math.degrees(math.hypot(dyaw, c1['pitch'] - c0['pitch'])) * rate
+    spans, at = [], 0.0
+    for part in parts:
+        (p0, p1), sp = part['frames'], part['speed']
+        run = None
+        for f in range(p0, p1 + 1):
+            if f < p1 and speed.get(f, 0) >= min_speed:
+                run = f if run is None else run
+            elif run is not None:
+                if (f - run) / rate / sp >= min_seconds:
+                    spans.append([round(at + (run - p0) / sp / rate, 3), round(at + (f - p0) / sp / rate, 3)])
+                run = None
+        at += (p1 - p0) / sp / rate
+    return spans
+
+
+def gate(out, parts):
+    """The cinema gate where the recorded camera turns. The gate measures the picture's shift:
+    a walk straight ahead barely shifts it and a resting hand's drift is below its noise, so
+    over a whole session those read as repeated frames that are not there. Turns are what it
+    sees, and where a replay or export stutter would show; the whole video's figures are kept
+    (whole) for reference."""
+    spans = turns(parts)
+    parts_ = [dict(cinema.gate(out, s0, s1), span=[s0, s1]) for s0, s1 in spans]
+    measured = [g for g in parts_ if g.get('pass') is not None]
+    frames = sum(g['motionFrames'] for g in measured)
+    result = {'rule': 'cinema gate per recorded turn (>= 3 deg/s for >= 0.6 s)', 'turns': parts_, 'whole': cinema.gate(out)}
+    if measured:
+        result.update(motionFrames=frames, duplicatePct=round(sum(g['duplicatePct'] * g['motionFrames'] for g in measured) / max(1, frames), 2),
+                      identicalPct=round(sum(g['identicalPct'] * g['motionFrames'] for g in measured) / max(1, frames), 2),
+                      stepCV=max(g['stepCV'] for g in measured), cameraHz=min(g['cameraHz'] for g in measured),
+                      **{'pass': all(g['pass'] for g in measured)})
+        result['summary'] = (f"{'PASS' if result['pass'] else 'FAIL'} over {len(measured)} turns: duplicates {result['duplicatePct']}% "
+                             f"(identical {result['identicalPct']}%), worst step CV {result['stepCV']}, camera {result['cameraHz']} Hz; "
+                             f"whole video: {cinema.gate_summary(result['whole'])}")
+    else:
+        result.update({'pass': None, 'summary': 'no recorded turn to gate; whole video: ' + cinema.gate_summary(result['whole'])})
+    return result
 
 
 if a.encode_only:
