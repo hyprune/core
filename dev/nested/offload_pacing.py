@@ -118,6 +118,32 @@ def analyse(probe, target, refresh=60., even=False):
             'newRefreshes': {str(k): v for k, v in sorted(Counter(round(g / (1000 / refresh)) for g in newGaps).items())} if newGaps else None}
 
 
+def breakdown(probe, timeline):
+    """Where each shown worker frame's latency goes, ms: from the present its motion follows
+    (content time) to the present that shows it, by stage (medians and p90 over the frames the
+    probe saw newly shown)."""
+    rows = {int(r[0]): r for r in timeline}
+    presents = sorted(probe['presents'])
+    seen, stages = set(), []
+    for t, front, _, _ in probe['frames']:
+        if not front or front in seen or front not in rows:
+            continue
+        seen.add(front)
+        seq, content, sent, start, done, received, copied, promoted = rows[front]
+        shown = next((p for p in presents if p >= t), None)
+        if shown is None or not start:
+            continue
+        stages.append({'tick': sent - content, 'queue': start - sent, 'render': done - start, 'packet': received - done,
+                       'copy': copied - received, 'hold': promoted - copied, 'draw': t - promoted, 'present': shown - t,
+                       'total': shown - content})
+    if not stages:
+        return None
+    med = lambda k: round(st.median(s[k] for s in stages), 1)
+    p90 = lambda k: round(sorted(s[k] for s in stages)[int(.9 * (len(stages) - 1))], 1)
+    keys = ['tick', 'queue', 'render', 'packet', 'copy', 'hold', 'draw', 'present', 'total']
+    return {'frames': len(stages), 'median': {k: med(k) for k in keys}, 'p90': {k: p90(k) for k in keys}}
+
+
 def acceptance(client, children, args, shell_token, socketpath):
     out = pathlib.Path(args.output); out.mkdir(parents=True, exist_ok=True)
     cam = cinema.Cinema(s)
@@ -150,6 +176,7 @@ def acceptance(client, children, args, shell_token, socketpath):
                 rec = s.envrun('wf-recorder', '-o', 'HEADLESS-1', '-c', 'libx264', '-p', 'preset=ultrafast', '-p', 'crf=18', '-x', 'yuv420p',
                                '-f', str(out / f'{name}.mkv'), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 children.append(rec); time.sleep(1.5)
+            at = s.camera().get('offloadPacing') or {}
             cam._call({'op': 'probe', 'on': True})
             cam.run(pan); time.sleep(.2)
             if video:  # wf-recorder writes its last frame on the next damage: keep frames coming
@@ -166,9 +193,19 @@ def acceptance(client, children, args, shell_token, socketpath):
             if w:
                 a['worker'] = {k: round(w[k], 2) for k in ('renderGpuMs', 'transferGpuMs', 'producerReadyMs') if isinstance(w.get(k), (int, float))}
                 a['worker']['scale'] = w.get('renderScale'); a['worker']['msaa'] = w.get('msaaSamples')
+            if offload != 'off':
+                timeline = (s.camera().get('offloadClient') or {}).get('timeline') or []
+                a['latency'] = breakdown(probe, timeline)
             paced = s.camera().get('offloadPacing')
-            if offload != 'off' and paced:
-                a['pacing'] = {k: (round(v, 1) if isinstance(v, float) else v) for k, v in paced.items()}
+            if paced:
+                if offload != 'off':
+                    a['pacing'] = {k: (round(v, 1) if isinstance(v, float) else v) for k, v in paced.items()}
+                # The compositor's frames this round and those that repeated the worker's image.
+                n = paced.get('repaints', 0) - at.get('repaints', 0)
+                same = paced.get('repaintsSameFront', 0) - at.get('repaintsSameFront', 0)
+                spans = paced.get('compositorGpuCount', 0) - at.get('compositorGpuCount', 0)
+                gpu = (paced.get('compositorGpuTotalMs', 0) - at.get('compositorGpuTotalMs', 0)) / spans if spans else None
+                a['compositor'] = {'gpuMs': round(gpu, 3) if gpu is not None else None, 'repaints': n, 'sameFront': same}
             trips = (s.camera().get('offloadClient') or {}).get('trips') or []
             if trips:  # ms after the pose was sent: frame packet in, copy issued, promoted to the front
                 a['tripMs'] = [round(st.median(t[i] for t in trips), 1) for i in range(3)]

@@ -11,7 +11,8 @@ With the offload renderer on (two GPUs, like offload_pacing.py), while a pan run
   3. target_fps 33 (below half the refresh) for 8 s with the worker busy
      (HYPRUNE_DEV_WORKER_COST_MS, default here 25:3): no crash, frames from the worker.
 Results in OUTDIR/reconfigure.json; any failure raises. HYPRUNE_RECONFIGURE_STEPS (default
-"123") runs a subset, e.g. "3".
+"123") runs a subset, e.g. "3"; "4" checks the power cap (with HYPRUNE_DEV_POWER_MODEL, e.g.
+"0:3": 3 W per frame per second on top of the reading).
 """
 import argparse, json, os, pathlib, random, shutil, time
 import session as s
@@ -52,6 +53,7 @@ def acceptance(client, children, args, shell_token, socketpath):
         now = draws()
         return {k: now.get(k, 0) - before.get(k, 0) for k in ('shown', 'stale', 'missing')}
 
+    client.call('state.subscribe', {'topics': ['state']})  # runtime.notice goes to subscribed peers
     client.call('graphics.set', {'patch': {'offload': 'on', 'target_fps': 60, 'npc_motion': 'always'}})
     wait(lambda: perf()['activeRenderer'] == 'offload', 90)
     pid = perf().get('pid')
@@ -113,6 +115,37 @@ def acceptance(client, children, args, shell_token, socketpath):
                'pacing': s.camera().get('offloadPacing')}
         results['low'] = low
         print('LOW', json.dumps(low), flush=True)
+    if '4' in run:
+        # 4. Over the power cap (HYPRUNE_DEV_POWER_MODEL="offset:perFps" makes the reading follow
+        # the worker's rate): throttled with a notice and still running; a cap it can't get
+        # under ends offload with a notice after about 2 s; off and on comes back.
+        notices = lambda code: [e for e in client.events if e.get('method') == 'runtime.notice' and e['params']['code'] == code]
+        client.call('graphics.set', {'patch': {'target_fps': 60, 'offload_power_cap_w': 200}})
+        wait(lambda: perf()['activeRenderer'] == 'offload', 60)
+        pid = perf().get('pid')
+        wait(lambda: perf().get('reason', '').startswith('power cap: throttled'), 15)
+        wait(lambda: notices('offload.power.throttled') or (client.call('session.ping', {}) and False), 10)
+        time.sleep(4)
+        p = perf()
+        throttle = {'pid': p.get('pid'), 'pidBefore': pid, 'activeRenderer': p['activeRenderer'], 'reason': p.get('reason'),
+                    'targetFPS': p.get('targetFPS'), 'notice': notices('offload.power.throttled')[0]['params']['message'],
+                    'pacing': s.camera().get('offloadPacing'), 'restarts': (s.camera().get('offloadRequests') or {}).get('history')}
+        print('THROTTLE', json.dumps(throttle), flush=True)
+        assert p['activeRenderer'] == 'offload' and p.get('pid') == pid and p.get('targetFPS', 60) < 60, throttle
+        t0 = time.monotonic()
+        client.call('graphics.set', {'patch': {'offload_power_cap_w': 20}})
+        wait(lambda: perf()['activeRenderer'] == 'in-process', 15)
+        p = perf()
+        exceeded = {'seconds': round(time.monotonic() - t0, 1), 'reason': p.get('reason'), 'activeRenderer': p['activeRenderer'],
+                    'notice': (notices('offload.power.exceeded') or [{'params': {'message': None}}])[0]['params']['message']}
+        print('EXCEEDED', json.dumps(exceeded), flush=True)
+        assert p['reason'].startswith('power cap exceeded') and exceeded['notice'], exceeded
+        client.call('graphics.set', {'patch': {'offload': 'off', 'offload_power_cap_w': 300}})
+        wait(lambda: perf()['activeRenderer'] == 'in-process', 30)
+        client.call('graphics.set', {'patch': {'offload': 'on'}})
+        back = bool(wait(lambda: perf()['activeRenderer'] == 'offload', 60))
+        results['power'] = {'throttle': throttle, 'exceeded': exceeded, 'back': back}
+        print('POWER-BACK', back, flush=True)
     (out / 'reconfigure.json').write_text(json.dumps(results, indent=1) + '\n')
     if '3' in run:
         assert p['activeRenderer'] == 'offload' and p.get('pid') == pid and d['shown'] > 0, low

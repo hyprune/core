@@ -231,6 +231,10 @@ def analyse(path, label):
                          for k, v in sorted(sec.items(), key=lambda kv: -sum(kv[1]))[:14]}
     gpu = [f['timing']['gpuMs'] for f in frames if f['timing'].get('gpuMs') is not None]
     out['gpuMs'] = summary(gpu)
+    # The compositor's whole frame (GPU, newer recordings): what each repaint costs.
+    comp = [f['timing']['compositorGpuMs'] for f in frames if f['timing'].get('compositorGpuMs') is not None]
+    if comp:
+        out['compositorGpuMs'] = summary(comp)
     off = [f['timing']['offload'] for f in frames if f['timing'].get('offload')]
     if off:
         out['offload'] = {'frontAgeMs': summary([o['frontAgeMs'] for o in off if o.get('frontAgeMs', -1) >= 0]),
