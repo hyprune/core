@@ -157,3 +157,41 @@ void Runtime::migrateSettings() {
     applyGraphics(graphics);
     applyPlayer(player);
 }
+// Once (marker in $XDG_STATE_HOME/hyprune/migrations.json): IPC 0.29 swapped world sprint to
+// Ctrl and down to Shift; that was undone, and a keymap still at exactly the swapped pair goes
+// back to Shift sprint and Ctrl down. Customised bindings stay, and a user who picks the swapped
+// pair again afterwards keeps it.
+void Runtime::migrateKeymap() {
+    const char *xdg = getenv("XDG_STATE_HOME"), *home = getenv("HOME");
+    auto dir = xdg && *xdg ? std::filesystem::path(xdg) / "hyprune"
+               : home && *home ? std::filesystem::path(home) / ".local/state/hyprune"
+                               : std::filesystem::path();
+    if (dir.empty())
+        return;
+    auto marker = dir / "migrations.json";
+    Json done = Json::object();
+    if (std::ifstream in{marker}) {
+        try {
+            in >> done;
+        } catch (...) {
+            done = Json::object();
+        }
+        if (!done.is_object())
+            done = Json::object();
+    }
+    const char *key = "keymap.sprint-shift";
+    if (done.value(key, false))
+        return;
+    auto next = input.config;
+    auto &world = next["modes"]["world"];
+    if (world.value("sprint", Json()) == Json::array({"Control_L"}) && world.value("down", Json()) == Json::array({"Shift_L"})) {
+        world["sprint"] = Json::array({"Shift_L"});
+        world["down"] = Json::array({"Control_L"});
+        inputFile.save(next);
+        applyInput(next);
+    }
+    done[key] = true;
+    std::error_code error;
+    std::filesystem::create_directories(dir, error);
+    std::ofstream(marker) << done.dump(1) << "\n";
+}

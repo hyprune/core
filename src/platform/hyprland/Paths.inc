@@ -7,7 +7,7 @@ bool Runtime::pathsVisible() const {
     return editor.slot == 3 || showAllPaths || debug;
 }
 // The surface point a path point goes to under the reticle: on the aimed surface, 3 cm out;
-// The sprint key, Ctrl by default (or the gizmo's snap), snaps to the gizmo's 0.1 m grid, then a point on a floor
+// Shift (or the gizmo's snap) snaps to the gizmo's 0.1 m grid, then a point on a floor
 // settles back onto it.
 std::optional<Vec3> Runtime::pathTarget() {
     auto h = worldHit();

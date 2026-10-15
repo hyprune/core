@@ -89,9 +89,10 @@ Json legacyInputNames(Json j) {
 }
 Json validateInput(const Json &raw, bool migrate) {
     auto j = raw;
-    // Version 3 (IPC 0.29): Ctrl sprints and Shift goes down (FPS norms), and Ctrl+R toggles a
-    // recording in the world. A version 2 file changes only bindings still at the old
-    // defaults whose new key is free; a recording's own keymap (migrate = false) is kept.
+    // Version 3 (IPC 0.29): Ctrl+R toggles a recording in the world (where it is free). Shift
+    // sprints and Ctrl goes down as in version 2 (IPC 0.29's swap of the two was undone; a
+    // keymap still at that swap is restored once, Runtime::migrateKeymap). A recording's own
+    // keymap (migrate = false) is kept.
     if (j.is_object() && j.value("version", Json()) == 2) {
         if (migrate && j.contains("modes") && j["modes"].is_object() && j["modes"].contains("world") &&
             j["modes"]["world"].is_object()) {
@@ -105,12 +106,6 @@ Json validateInput(const Json &raw, bool migrate) {
                                 return true;
                 return false;
             };
-            bool sprint = w.value("sprint", Json()) == Json::array({"Shift_L"}) && !taken("Control_L", {"sprint", "down"});
-            bool down = w.value("down", Json()) == Json::array({"Control_L"}) && !taken("Shift_L", {"sprint", "down"});
-            if (sprint)
-                w["sprint"] = Json::array({"Control_L"});
-            if (down)
-                w["down"] = Json::array({"Shift_L"});
             if (w.value("record.toggle", Json::array()) == Json::array() && !taken("Ctrl+r", {}))
                 w["record.toggle"] = Json::array({"Ctrl+r"});
         }
@@ -341,7 +336,7 @@ std::vector<Action> Input::event(const std::string &mode, const std::string &key
                 return {{action, true, value}, {action, false, value, false}};
             return {{action, t.hold ? false : true, value}};
         }
-    // A tap/hold pair on an unmodified chord also works with sprint (Ctrl) or crouch (Shift) held.
+    // A tap/hold pair on an unmodified chord also works with sprint (Shift) or crouch (Ctrl) held.
     if (mode == "world" && (mods & (Shift | Ctrl)) && !(mods & ~(Shift | Ctrl)) && !key.starts_with("Wheel") &&
         key != "MouseMove")
         for (auto &[action, bindings] : config["modes"][mode].items())

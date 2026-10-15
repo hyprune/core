@@ -249,7 +249,7 @@ def acceptance(client, children, args, token, socket):
     w = walk_sample()
     check('walk speed about 4 m/s', 3.3 < w['peakSpeed'] < 4.5, w)
     check('subtle bob while walking, never above eye height, settles', -0.0105 < w['minBob'] < -0.004 and w['maxBob'] <= 0 and w['rest'] == [0, 0, 0], w)
-    r = walk_sample(('Control_L',))  # sprint (input version 3)
+    r = walk_sample(('Shift_L',))
     check('run speed about 10 m/s (or a wall first)', r['peakSpeed'] > 6, r)
     check('running bobs less than walking', r['minBob'] > w['minBob'], {'walk': w['minBob'], 'run': r['minBob']})
     player({'walk_speed': 2.0})

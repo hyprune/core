@@ -255,6 +255,7 @@ their frozen state projections and enums. Unknown or unadvertised methods return
     where it still has its old default and the new key is free. `input.get`, `input.preview`
     and the keymap state report version 2 to older sessions, whose `input.set` sends version 2.
     Snapping follows the sprint key (Ctrl); tools 3 and 4 hold back Shift like Ctrl for chords.
+    (Undone later: see "World keys back" under changes without a protocol bump.)
   - `graphics.frame_pacing` (`even`, `max_rate`, null = preset; every preset `even`): even
     pacing of a rate-capped offload worker on a refresh divisor at a constant latency.
     Independently of the setting, the worker's frame budget now counts refresh intervals, not
@@ -294,6 +295,14 @@ their frozen state projections and enums. Unknown or unadvertised methods return
 
 These are wire-compatible behavior changes that integrators may notice:
 
+- **World keys back: Shift sprints, Ctrl goes down.** The input version 3 defaults of IPC 0.29
+  swapped them; that is undone (still version 3, no wire change). Ctrl+R still toggles a debug
+  recording in world mode, and a Ctrl chord never moves the camera: wherever one can follow,
+  Ctrl's own actions wait up to 180 ms, and a chord consumes them (or ends them, held
+  longer). Snapping is Shift again. A keymap still at exactly the swapped pair (sprint
+  Control_L, down Shift_L) is restored once at startup (marker in
+  `$XDG_STATE_HOME/hyprune/migrations.json`); customised bindings stay. A version 2 file only
+  gains Ctrl+R where it is free.
 - **Offload power cap and latency.** Power over `offload_power_cap_w` first throttles the
   worker (25 % fewer frames per sample, down to 30 FPS) and ends offload only if the draw is
   still over the cap 2 s later; `runtime.notice` codes `offload.power.throttled` and

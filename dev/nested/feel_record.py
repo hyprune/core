@@ -7,7 +7,7 @@ Nested only. Lumen Reach from ../worlds/dist (HYPRUNE_FEEL_WORLD: an extracted p
 each configuration in HYPRUNE_FEEL_RECORD_CONFIGS (JSON list of graphics patches, default
 in-process and offload with even and max_rate pacing), Ctrl+R starts a recording, then:
 a 3 s walk (W), a 3 s steady pan (a 500 Hz relative pointer stream, like a mouse), a 3 s
-sprint (Ctrl+W) turning at the same time, and a short stop; Ctrl+R stops it and the
+sprint (Shift+W) turning at the same time, and a short stop; Ctrl+R stops it and the
 recording is labelled through recording.label. OUTDIR/<n>-<label>.jsonl are the recordings;
 OUTDIR/runs.json lists them with their configuration. HYPRUNE_NESTED_REFRESH sets the
 output's refresh (e.g. 98 for a 98 Hz external panel). HYPRUNE_FEEL_RECORD_BASELINE=1 also
@@ -62,7 +62,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     def movement():
         keys('-P', 'w', '-s', '3000', '-p', 'w'); time.sleep(.4)
         pointer('stream', 3.5, 0, 500, 3000); time.sleep(.4)  # 1750 px/s, steady
-        sprint = s.envrun('wtype', '-M', 'ctrl', '-P', 'Control_L', '-P', 'w', '-s', '3000', '-p', 'w', '-p', 'Control_L', '-m', 'ctrl')
+        sprint = s.envrun('wtype', '-M', 'shift', '-P', 'Shift_L', '-P', 'w', '-s', '3000', '-p', 'w', '-p', 'Shift_L', '-m', 'shift')
         children.append(sprint); time.sleep(.05)
         pointer('stream', -2.5, 0, 500, 2900)
         sprint.wait(timeout=10); time.sleep(.6)

@@ -128,8 +128,8 @@ def acceptance(client, children, args, shell_token, socketpath):
     client.call('ui.close', {'leaseId': lease, 'outputId': output})
     wait(lambda: state()['editor']['mode'] == 'world', 5)
     time.sleep(.5)
-    keys('-P', 'Control_L', '-k', 'Tab', '-p', 'Control_L')
-    check('a tap with Ctrl (sprint) held still reveals', wait(lambda: state()['markers']['reveal'], 3)['reason'] == 'tap')
+    keys('-P', 'Shift_L', '-k', 'Tab', '-p', 'Shift_L')
+    check('a tap with Shift (sprint) held still reveals', wait(lambda: state()['markers']['reveal'], 3)['reason'] == 'tap')
     client.call('markers.reveal', {'durationMs': 1500})
     r = state()['markers']['reveal']
     check('markers.reveal method restarts the reveal', r['reason'] == 'request' and r['holdMs'] == 1500, r)

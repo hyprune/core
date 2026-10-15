@@ -709,7 +709,7 @@ bool Runtime::gizmoKey(const std::string &key, unsigned mods, bool down, uint32_
             effect = [] {}; // swallow tool switches and stray keys mid-entry
     } else if ((mods & 4) && (key == "z" || key == "y")) {
         bool redo = key == "y" || (mods & 1);
-        consumePendingCtrl(); // the chord owns Ctrl and Shift: no sprint, no crouch, no fly down
+        consumePendingCtrl(); // the chord owns Ctrl: no crouch, no fly down
         effect = [redo] { runtime->applyUndo(redo); };
     } else if (key == "End" && !bound("End", mods & 1)) {
         consumePendingCtrl();
@@ -935,30 +935,61 @@ void Runtime::cancelGizmo() {
     editor.activeHandle = -1;
     windowBlocked.reset();
 }
+// Ctrl's own actions (crouch / fly down by default) wait briefly in world mode wherever a
+// Ctrl chord can follow: tools 3 and 4 (Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y) and any Ctrl binding of
+// the mode (Ctrl+R records), so the chord never dips the camera first.
 bool Runtime::deferCtrl(const std::string &key, bool down, uint32_t code, const std::vector<interaction::Action> &actions) {
     if (!down) {
         auto it = std::find_if(pendingCtrl.begin(), pendingCtrl.end(), [&](auto &p) { return p.code == code; });
         if (it == pendingCtrl.end())
             return false;
-        bool fired = it->fired;
+        bool dispatched = it->fired && !it->released;
         pendingCtrl.erase(it);
-        return !fired; // never ran: drop the release too (fired: normal release dispatch)
+        return !dispatched; // never ran (or a chord already ended it): drop the release too
     }
-    if (!key.starts_with("Control_") && !key.starts_with("Shift_"))
+    if (!key.starts_with("Control_")) {
+        // A key bound as a Ctrl chord while Ctrl is held: the chord owns Ctrl.
+        if (!pendingCtrl.empty() && ctrlChord(key))
+            consumePendingCtrl();
         return false;
-    if (actions.empty() || !active || (editor.slot != 4 && editor.slot != 3) || typing || layerCursor || freeCursor ||
-        control.uiVisible() || inputMode() != "world")
+    }
+    if (actions.empty() || !active || typing || layerCursor || freeCursor || control.uiVisible() || inputMode() != "world" ||
+        (editor.slot != 4 && editor.slot != 3 && !ctrlChord("")))
         return false;
     std::erase_if(pendingCtrl, [&](auto &p) { return p.code == code; });
     pendingCtrl.push_back(PendingCtrl{code, actions, std::chrono::steady_clock::now()});
     return true;
 }
+// Whether the world mode binds key (any key: "") with Ctrl.
+bool Runtime::ctrlChord(const std::string &key) const {
+    auto &world = input.config["modes"]["world"];
+    for (auto &[action, bindings] : world.items())
+        if (bindings.is_array())
+            for (auto &b : bindings) {
+                if (!b.is_string())
+                    continue;
+                auto chord = interaction::parseBinding(b.get<std::string>());
+                if ((chord.mods & interaction::Ctrl) && (key.empty() || chord.key == key))
+                    return true;
+            }
+    return false;
+}
+// A chord took Ctrl: its actions never run, or, held past the chord window, they end now.
 void Runtime::consumePendingCtrl() {
     for (auto &p : pendingCtrl)
         if (!p.fired)
             p.consumed = true;
+        else if (!p.released) {
+            p.released = true;
+            deferInput([actions = p.actions] {
+                for (auto a : actions) {
+                    a.pressed = false;
+                    runtime->action(a);
+                }
+            });
+        }
 }
-// Ctrl or Shift held alone past the chord window: its actions run, late by at most 180 ms.
+// Ctrl held alone past the chord window: its actions run, late by at most 180 ms.
 void Runtime::ctrlTick() {
     for (auto &p : pendingCtrl) {
         if (p.fired || p.consumed || std::chrono::steady_clock::now() - p.since < std::chrono::milliseconds(180))
@@ -970,14 +1001,7 @@ void Runtime::ctrlTick() {
         });
     }
 }
-// Snapping (gizmo drags, path points) follows the sprint key (Ctrl by default): holding it
-// never moves the camera, where the down key (Shift) would crouch or descend.
+// Snapping (gizmo drags, path points): Shift, the sprint key, as before IPC 0.29's swap.
 bool Runtime::snapHeld() const {
-    unsigned bits = 0;
-    if (input.config["modes"]["world"].contains("sprint"))
-        for (auto &b : input.config["modes"]["world"]["sprint"]) {
-            auto key = interaction::parseBinding(b.get<std::string>()).key;
-            bits |= key.starts_with("Shift_") ? interaction::Shift : key.starts_with("Control_") ? interaction::Ctrl : 0;
-        }
-    return editor.snap || (modifiers & bits) || keys.contains(KEY_LEFTSHIFT); // KEY_LEFTSHIFT: sprint held
+    return editor.snap || (modifiers & interaction::Shift) || keys.contains(KEY_LEFTSHIFT); // KEY_LEFTSHIFT: sprint held
 }

@@ -288,18 +288,19 @@ struct Runtime {
     void pathRemove();
     void pathDraw();
     Json pathDiagnostics() const;
-    // Ctrl and Shift presses held back in tools 3 and 4 (Gizmo.inc): their actions (sprint,
-    // crouch / fly down) run after a short delay unless a chord (undo/redo, Shift+End)
-    // consumes them; a release is dropped if they never ran.
+    // Ctrl presses held back in world mode where a Ctrl chord can follow (Gizmo.inc): their
+    // actions (crouch / fly down) run after a short delay unless a chord (Ctrl+R, undo/redo)
+    // consumes them; a release is dropped if they never ran or a chord already ended them.
     struct PendingCtrl {
         uint32_t code = 0;
         std::vector<interaction::Action> actions;
         std::chrono::steady_clock::time_point since;
-        bool fired = false, consumed = false;
+        bool fired = false, consumed = false, released = false;
     };
     std::vector<PendingCtrl> pendingCtrl;
     bool deferCtrl(const std::string &key, bool down, uint32_t code, const std::vector<interaction::Action> &actions);
     void consumePendingCtrl();
+    bool ctrlChord(const std::string &key) const;
     void ctrlTick();
     bool snapHeld() const;
     void ghostEdges();
@@ -566,6 +567,7 @@ struct Runtime {
     Json settingsSnapshot();
     Json settingsMethod(const std::string &method, const Json &params);
     void migrateSettings();
+    void migrateKeymap();
     Json playerSettings() const {
         Json defaults = Json::object(), effective = Json::object(), ranges = Json::object();
         auto all = interaction::defaultConfig()["player"];
@@ -2239,7 +2241,7 @@ void Runtime::publish() {
           {"ladderId", climbing.active() ? Json(climbing.ladderId) : Json(nullptr)},
           {"prompt",
            world && !noclip && movement == &walk && (climbing.active() || climbing.nearby(camera, world->climbables))
-               ? climbing.prompt(sim::climbMode(config["movement"]["climb_mode"].get<std::string>()), keyLabel("down", "Shift"))
+               ? climbing.prompt(sim::climbMode(config["movement"]["climb_mode"].get<std::string>()), keyLabel("down", "Ctrl"))
                : ""},
           {"orientation", camera.orientation()}}},
         {"shell", {{"leases", control.leases}}},
@@ -5792,7 +5794,7 @@ void Runtime::tick() {
             intent.crouch = keys.contains(KEY_LEFTCTRL) && movement == &walk;
             intent.jumpSpeed = config["player"]["jump_speed"];
             intent.stepHeight = config["player"]["step_height"];
-            // Walking runs at run_speed with sprint (Ctrl); flight scales by the same run/walk ratio.
+            // Walking runs at run_speed with sprint (Shift); flight scales by the same run/walk ratio.
             float walkSpeed = config["player"]["walk_speed"], runSpeed = config["player"]["run_speed"];
             bool running = keys.contains(KEY_LEFTSHIFT);
             intent.speed = movement == &walk ? (running ? runSpeed : walkSpeed) / 3.5f
@@ -6065,7 +6067,7 @@ std::vector<surfaces::Surface> Runtime::frameSurfaces() {
         (climbing.active() || climbing.nearby(camera, world->climbables)))
         prompt(camera.position + camera.forward() * 2,
                climbing.prompt(
-                   sim::climbMode(config["movement"]["climb_mode"].get<std::string>()), keyLabel("down", "Shift")));
+                   sim::climbMode(config["movement"]["climb_mode"].get<std::string>()), keyLabel("down", "Ctrl")));
     if (world && (!renderer.toolPrompt.is_object() || npcInteraction))
         npcPrompts();
     renderer.renderScale = control.photoHeld() ? control.photoScale :
@@ -6424,7 +6426,7 @@ int luaConfig(lua_State *L) {
                 throw std::runtime_error("unknown keysym for " + name);
             if (!used.insert(sym).second)
                 throw std::runtime_error("duplicate keysym for " + name);
-            if (sym == XKB_KEY_F12 || sym == XKB_KEY_Escape || sym == XKB_KEY_Tab || sym == XKB_KEY_Control_L ||
+            if (sym == XKB_KEY_F12 || sym == XKB_KEY_Escape || sym == XKB_KEY_Tab || sym == XKB_KEY_Shift_L ||
                 sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R || sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R ||
                 (sym >= XKB_KEY_1 && sym <= XKB_KEY_5))
                 throw std::runtime_error("core-owned key for " + name);
@@ -6826,6 +6828,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         runtime->applyGraphics(runtime->graphicsFile.current);
         runtime->applyPlayer(runtime->playerFile.current);
         safe([] { runtime->migrateSettings(); }); // once: settings.json gets its preset
+        safe([] { runtime->migrateKeymap(); }); // once: Shift sprints and Ctrl goes down again
     });
     HyprlandAPI::addDispatcherV2(handle, "hyprune.toggle", [](std::string arg) {
         deferToggle(arg);
@@ -7173,9 +7176,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                                        (runtime->editor.activeHandle >= 0 && runtime->superHeld);
                 auto actions =
                     runtime->inputEvent(runtime->inputMode(), key, runtime->modifiers, down, now, 0, gestureMovement);
-                // Tools 3 and 4: Ctrl's and Shift's own actions (sprint, crouch / fly down) wait
-                // briefly, so Ctrl+Z / Ctrl+Shift+Z / Shift+End consume the whole chord instead
-                // of dipping the camera first.
+                // Ctrl's own actions (crouch / fly down) wait briefly where a Ctrl chord can
+                // follow, so Ctrl+R / Ctrl+Z consume the whole chord instead of dipping the
+                // camera first.
                 if (runtime->deferCtrl(key, down, event.keycode, actions)) {
                     info.cancelled = true;
                     if (down)

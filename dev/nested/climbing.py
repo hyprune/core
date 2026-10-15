@@ -50,7 +50,7 @@ def acceptance(client, children, args, shell_token, socketpath):
             # Real alternative default bindings: K/J, arrows.
             hold('k',350);check(name+'_K_up',state()['position'][1]>after[1]+.15,state())
             before=state()['position'][1];hold('j',350);check(name+'_J_down',state()['position'][1]<before-.15,state())
-            before=state()['position'][1];hold('Shift_L',350);check(name+'_slide',state()['position'][1]<before-.4,state())
+            before=state()['position'][1];hold('Control_L',550);check(name+'_slide',state()['position'][1]<before-.4,state())
         keys('-k','space');time.sleep(.2);check(name+'_jump_off',not attached(),state())
         # Drop through the actual hatch. No input is needed to stop the fall.
         pose(y=10,pitch=-.4);wait(attached);caught=state();time.sleep(.4)
@@ -114,7 +114,7 @@ def record(client, children, pose, mode, hold, state):
                 hold('space',100);pause(.7)
                 pose(y=6.8,pitch=1.1);hold('w',1100);pause(1.5)
                 pose(y=10,pitch=-.65);pause(2.5);hold('space',100);pause(.6)
-                pose(x=-5,pitch=.95);hold('w',1100);hold('d',800);hold('Shift_L',400);hold('space',100)
+                pose(x=-5,pitch=.95);hold('w',1100);hold('d',800);hold('Control_L',600);hold('space',100)
                 pose(x=10,z=3,pitch=.85);hold('w',1800);pause(.7)
             pose(x=2,y=9,z=9,pitch=-.3)
             # Exactly 36 seconds for each labelled mechanic, including resets.
