@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/hyprune/schema",
-  "commit": "8a1bc1f639af3b21f10474486fbc118de788e6b9",
+  "commit": "99d4526a13cb759ec625ad100ccf523d0b11a5ab",
   "sha256": {
     "ipc.schema.json": "982df2596d2ae688a1572456330146dc5701e6b7a3571b16cbdeca470dea535f",
     "v0.10/ipc.schema.json": "ecdd7cb31c08fc6f5ebfa9c828741ab8ffb9a61a52b56275aa59f698ab3bc649",
@@ -31,6 +31,7 @@
     "v0.27/ipc.schema.json": "e0e6e326775334c5b577439c4e6c6e6f8ca8502ff3f3fa32f9bbd4519b4d559e",
     "v0.28/ipc.schema.json": "cf240e4de27ecffdc2782357ce21a423e3bfa6a329c33fd0f7821407ffcfc308",
     "v0.29/ipc.schema.json": "95ccfe29474dbd7105ff53f33a80d5b785ff71412810732e0a6d300ce33d674a",
-    "v0.30/ipc.schema.json": "d1e9e67422f6258d3b39a0e28d59eb32e294282613561c22dfc0a1008009e44b"
+    "v0.30/ipc.schema.json": "d1e9e67422f6258d3b39a0e28d59eb32e294282613561c22dfc0a1008009e44b",
+    "v0.31/ipc.schema.json": "c5f9eea6646ac2d12e1591dff36459e2fffa656f754849f47ed24c6e91f5fabc"
   }
 }

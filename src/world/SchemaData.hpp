@@ -19555,6 +19555,13 @@ inline constexpr const char *projectSchema011 = R"schema({
               },
               "locked": {
                 "type": "boolean"
+              },
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 48,
+                "pattern": "^[a-z][a-z0-9-]{0,47}$",
+                "description": "A stable name for the placement (RFC-0016), unique in the folder."
               }
             },
             "required": [
