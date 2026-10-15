@@ -4,9 +4,14 @@
 // existing files into a preset plus the values that differ from it. Interaction/Settings.cpp
 // holds the presets and their defaults.
 std::string Runtime::glRenderer() {
-    Render::GL::g_pHyprOpenGL->makeEGLCurrent();
-    auto s = glGetString(GL_RENDERER);
-    return s ? std::string(reinterpret_cast<const char *>(s)) : std::string();
+    // The compositor's GPU does not change while it runs: read it once.
+    static std::string name;
+    if (name.empty()) {
+        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        auto s = glGetString(GL_RENDERER);
+        name = s ? std::string(reinterpret_cast<const char *>(s)) : std::string();
+    }
+    return name;
 }
 Json Runtime::settingsSnapshot() {
     auto preset = settingsPreset();
