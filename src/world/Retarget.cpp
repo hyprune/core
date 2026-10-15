@@ -1,6 +1,7 @@
 #include "Retarget.hpp"
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <set>
 namespace hyprune::world {
 namespace {
@@ -234,5 +235,74 @@ float footSlip(const Character &c, const Character::Clip &clip) {
     for (auto v : plantedVelocities(c, clip))
         slips.push_back(length(Vec3{v.x, 0, v.z + clip.speed}) / clip.speed);
     return median(slips);
+}
+namespace {
+// The lowest foot or toe joint of a pose (world y), or nothing without feet.
+std::optional<float> lowestFoot(const Character &c, const Character::Clip *clip, float t, bool loop) {
+    std::vector<Mat4> m;
+    c.pose(clip, t, loop, m);
+    std::optional<float> low;
+    for (auto bone : {"leftfoot", "rightfoot", "lefttoebase", "righttoebase"})
+        if (int j = c.role(bone); j >= 0) {
+            float y = (m[j] * inverse(c.joints[j].inverseBind)).v[13];
+            low = low ? std::min(*low, y) : y;
+        }
+    return low;
+}
+std::optional<float> lowestOver(const Character &c, const Character::Clip &clip, bool loop) {
+    std::optional<float> low;
+    const int steps = 30;
+    for (int k = 0; k <= steps; ++k)
+        if (auto y = lowestFoot(c, &clip, clip.duration * k / steps, loop))
+            low = low ? std::min(*low, *y) : *y;
+    return low;
+}
+bool standing(const std::string &name) {
+    for (auto prefix : {"walk", "run", "idle", "talk", "wave", "turn", "look", "nod", "guide"})
+        if (name.starts_with(prefix))
+            return true;
+    return false;
+}
+} // namespace
+std::vector<std::pair<std::string, float>> groundClips(Character &c) {
+    std::vector<std::pair<std::string, float>> out;
+    int hips = c.role("hips");
+    if (hips < 0)
+        return out;
+    auto *idle = c.clip("idle");
+    auto ground = idle ? lowestOver(c, *idle, true) : lowestFoot(c, nullptr, 0, true);
+    if (!ground)
+        return out;
+    auto w = restWorld(c);
+    Mat4 parent = c.joints[hips].parent < 0 ? c.armature : w[c.joints[hips].parent];
+    Mat4 toLocal = inverse(parent);
+    // A world-space drop in the hips' parent space (direction only: no translation).
+    auto drop = [&](float metres) {
+        Vec3 a = point(toLocal, {0, 0, 0}), b = point(toLocal, {0, -metres, 0});
+        return b - a;
+    };
+    for (auto &clip : c.clips) {
+        if (!standing(clip.name) || clip.duration <= 0)
+            continue;
+        auto low = lowestOver(c, clip, true);
+        if (!low || *low - *ground <= .02f)
+            continue;
+        float offset = *low - *ground;
+        Vec3 d = drop(offset);
+        auto channel = std::find_if(clip.channels.begin(), clip.channels.end(), [&](auto &ch) { return ch.joint == hips && ch.path == 0; });
+        if (channel == clip.channels.end()) {
+            Character::Channel ch;
+            ch.joint = hips, ch.path = 0;
+            ch.times = {0};
+            auto t = c.joints[hips].translation;
+            ch.values = {t.x, t.y, t.z};
+            clip.channels.push_back(std::move(ch));
+            channel = clip.channels.end() - 1;
+        }
+        for (size_t k = 0; k + 2 < channel->values.size(); k += 3)
+            channel->values[k] += d.x, channel->values[k + 1] += d.y, channel->values[k + 2] += d.z;
+        out.push_back({clip.name, offset});
+    }
+    return out;
 }
 } // namespace hyprune::world

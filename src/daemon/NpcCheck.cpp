@@ -71,6 +71,17 @@ int main(int argc, char **argv) {
                               << '\n';
             }
         }
+        // Grounding, as core does at load: standing clips whose feet never reach the ground.
+        Json grounded = Json::object();
+        for (auto &[name, metres] : groundClips(c))
+            grounded[name] = std::round(metres * 1000) / 1000;
+        summary["grounded"] = grounded;
+        if (!json && !grounded.empty()) {
+            std::cout << "grounded (floating clips core lowers):";
+            for (auto &[name, metres] : grounded.items())
+                std::cout << ' ' << name << std::format(" {:.3f} m", metres.get<float>());
+            std::cout << '\n';
+        }
         // The sit clip's seat height (RFC-0011 clips.sit.seatHeight), measured as core does.
         auto seat = c.measureSeat();
         summary["seatHeight"] = seat.valid ? Json(std::round(seat.seatHeight * 1000) / 1000) : Json(nullptr);
