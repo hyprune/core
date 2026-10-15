@@ -8,7 +8,7 @@ Reach). For each configuration in HYPRUNE_PACING_CONFIGS (default
 "off:60,on:60,off:45,on:45": graphics.offload and graphics.target_fps, optionally a third
 field graphics.frame_pacing, e.g. on:45:max_rate; the offload policy caps the worker at
 target_fps, so 45 is the laptop-on-USB-C profile; HYPRUNE_NESTED_REFRESH sets the output's
-refresh, e.g. 98 like the owner's external panel), a 4 s pan
+refresh, e.g. 98 for a 98 Hz external panel), a 4 s pan
 is driven by core (cinema path, no recording: the live path) while the pacing probe
 records every presented frame's draw time, content hash, offload front and age. Over
 the steady middle of the pan it reports:

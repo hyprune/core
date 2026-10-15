@@ -10,7 +10,7 @@ a 3 s walk (W), a 3 s steady pan (a 500 Hz relative pointer stream, like a mouse
 sprint (Ctrl+W) turning at the same time, and a short stop; Ctrl+R stops it and the
 recording is labelled through recording.label. OUTDIR/<n>-<label>.jsonl are the recordings;
 OUTDIR/runs.json lists them with their configuration. HYPRUNE_NESTED_REFRESH sets the
-output's refresh (98 like the owner's external panel). HYPRUNE_FEEL_RECORD_BASELINE=1 also
+output's refresh (e.g. 98 for a 98 Hz external panel). HYPRUNE_FEEL_RECORD_BASELINE=1 also
 runs each configuration once without recording and keeps the renderer's presentation log
 (OUTDIR/<n>-unrecorded.json), so recording on and off can be compared.
 HYPRUNE_FEEL_RECORD_CARRY=1 first places a terminal ahead (tool 5) and records a carry:
