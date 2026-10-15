@@ -15,11 +15,12 @@ WORKSPACE = CORE.parent
 RUNS = pathlib.Path(os.environ.get('HYPRUNE_REMOTE_RUNS', str(pathlib.Path.home() / 'hyprune-remote-runs')))
 DEFAULT = ['ctest', 'workspace-homes', 'placement', 'playable', 'static-world', 'live-findings', 'ipc-warp']
 FIXTURES = ['generate', 'm2', 'm3a', 'm3b', 'climbing', 'visibility', 'materials', 'catalog']
-# Published, hash-pinned library inputs (beside the world pins in the meta repo): the starter
-# library from hyprune/libraries/releases.json; the companion character the --companion
-# suite uses, from its own repository's release; the optional official companions library
-# (not preinstalled, so not in the meta pins). Each sets these variables unless they are set;
-# --motion takes the three together (HYPRUNE_MOTION_LIBRARIES).
+# Library inputs, supplied to every run like the worlds: the starter library (a local
+# tools/library-pack build in worlds/build/libraries is kept, as an installed world is; else,
+# and always with --pinned, the published pin in hyprune/libraries/releases.json); the
+# companion character the --companion suite uses, from its own repository's release; the
+# optional official companions library (hyprune/libraries/optional.json). Each sets these
+# variables unless they are set; --motion takes the three together (HYPRUNE_MOTION_LIBRARIES).
 LIBRARY_ENV = {'starter': ('HYPRUNE_CATALOG_LIBRARY', 'HYPRUNE_NPCS_LIBRARY'), 'companion': ('HYPRUNE_COMPANION_LIBRARY',)}
 COMPANIONS = {'url': 'https://github.com/hyprune/worlds/releases/download/hyprune-companions-v0.1.0/com.hyprune.companions-0.1.0.tar.zst',
               'sha256': '0bf95a02831eaac82f1834648073ca7d54ae2d9902d46da4b65da034957fe4ce'}
@@ -131,19 +132,36 @@ def fetch(url, dest, sha256, gh_release=None):
     return dest
 
 
-def ensure_libraries():
-    """The pinned library archives in WORKSPACE/libraries: {key: path}."""
+def newest(pins, library_id):
+    """The newest published pin of library_id in a meta pins map, or None."""
+    found = [p for p in pins.values() if p.get('id') == library_id and p.get('published', True)]
+    return max(found, key=lambda p: [int(n) for n in re.findall(r'\d+', p['version'])]) if found else None
+
+
+def built_starter():
+    """The newest local tools/library-pack starter build in the worlds checkout, or None."""
+    built = sorted((WORKSPACE / 'worlds/build/libraries').glob('com.hyprune.starter-*.tar.zst'),
+                   key=lambda a: [int(n) for n in re.findall(r'\d+', a.name.rsplit('-', 1)[1])])
+    return built[-1] if built else None
+
+
+def ensure_libraries(pinned_only=False):
+    """The library archives: {key: path}, downloads cached in WORKSPACE/libraries. A local
+    starter build is kept unless pinned_only (the nightly), as ensure_world keeps a world."""
     cache = WORKSPACE / 'libraries'
-    pins = WORKSPACE / 'hyprune/libraries/releases.json'
+    meta = WORKSPACE / 'hyprune/libraries'
+    read = lambda name: json.loads((meta / name).read_text()) if (meta / name).is_file() else {}
     found = {}
-    starters = [p for p in (json.loads(pins.read_text()) if pins.is_file() else {}).values()
-                if p.get('id') == 'com.hyprune.starter' and p.get('published', True)]
-    if starters:
-        pin = max(starters, key=lambda p: [int(n) for n in re.findall(r'\d+', p['version'])])
+    local = None if pinned_only else built_starter()
+    pin = newest(read('releases.json'), 'com.hyprune.starter')
+    if local:
+        found['starter'] = local
+    elif pin:
         found['starter'] = fetch(pin['url'], cache / pin['url'].rsplit('/', 1)[1], pin['sha256'])
     found['companion'] = fetch(None, cache / COMPANION['asset'], COMPANION['sha256'],
                                (COMPANION['repo'], COMPANION['tag'], COMPANION['asset']))
-    found['companions'] = fetch(COMPANIONS['url'], cache / COMPANIONS['url'].rsplit('/', 1)[1], COMPANIONS['sha256'])
+    companions = newest(read('optional.json'), 'com.hyprune.companions') or COMPANIONS
+    found['companions'] = fetch(companions['url'], cache / companions['url'].rsplit('/', 1)[1], companions['sha256'])
     return found
 
 
@@ -235,14 +253,14 @@ def run(args):
         ensure_schema()
         summary['worlds'] = {'lumen-reach': ensure_world('lumen-reach', args.lumen, args.pinned),
                              'switchyard': ensure_world('switchyard', None, args.pinned)}
+        libraries = ensure_libraries(args.pinned)
+        summary['libraries'] = {k: p.name for k, p in libraries.items()}
+        for key, path in libraries.items():
+            for var in LIBRARY_ENV.get(key, ()):
+                os.environ.setdefault(var, str(path))
+        if {'starter', 'companions', 'companion'} <= set(libraries):
+            os.environ.setdefault('HYPRUNE_MOTION_LIBRARIES', ':'.join(str(libraries[k]) for k in ('starter', 'companions', 'companion')))
         if args.pinned:
-            libraries = ensure_libraries()
-            summary['libraries'] = {k: p.name for k, p in libraries.items()}
-            for key, path in libraries.items():
-                for var in LIBRARY_ENV.get(key, ()):
-                    os.environ.setdefault(var, str(path))
-            if {'starter', 'companions', 'companion'} <= set(libraries):
-                os.environ.setdefault('HYPRUNE_MOTION_LIBRARIES', ':'.join(str(libraries[k]) for k in ('starter', 'companions', 'companion')))
             # The workspace's shell and SDK (the shell suites); the SDK built at its HEAD first.
             summary['sdk'] = ensure_sdk()
             os.environ.setdefault('HYPRUNE_SHELL_DIR', str(WORKSPACE / 'shell'))
@@ -309,7 +327,7 @@ def main():
     parser.add_argument('--ref', help='git ref to test in a detached worktree (fetched from origin); default: this checkout')
     parser.add_argument('--lumen', help='hyprune/worlds release tag, e.g. lumen-reach-v0.9.0 (default: installed, else pinned)')
     parser.add_argument('--pinned', action='store_true', help='replace installed worlds with the published releases pinned in hyprune/worlds/releases.json, '
-                        'supply the pinned libraries (starter, companion) to suites that need them, and build the workspace SDK '
+                        'use the pinned starter library even when a local build exists, and build the workspace SDK '
                         '(its CLI) for the shell suites')
     parser.add_argument('--parallel', type=int, default=4, help='concurrent suites (each nested suite is an isolated instance)')
     parser.add_argument('--no-build', action='store_true')

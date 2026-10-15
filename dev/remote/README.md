@@ -26,11 +26,21 @@ live-findings ipc-warp`. Any `dev/nested/run.sh` mode works without its `--`
 | --- | --- |
 | `--ref REF` | `git fetch origin`, then test `REF` in a detached worktree `../core-remote-<sha10>` (beside `core/`, so `../worlds/dist` and `../schema` resolve). Without it, the current checkout is tested. |
 | `--lumen TAG` | Install that hyprune/worlds release (`lumen-reach-v0.9.0`) into `worlds/dist` after a SHA-256 check. Default: what is installed (perhaps a local build), else the pin in `hyprune/worlds/releases.json`. |
-| `--pinned` | Replace installed Lumen Reach and Switchyard packages with the published releases pinned in `hyprune/worlds/releases.json` (an unpublished pin keeps the install), and supply the pinned libraries: the starter library from `hyprune/libraries/releases.json` (`HYPRUNE_CATALOG_LIBRARY`, `HYPRUNE_NPCS_LIBRARY`) the companion character from its own release (`HYPRUNE_COMPANION_LIBRARY`) and the optional official companions library from its hyprune/worlds release (with the other two: `HYPRUNE_MOTION_LIBRARIES` for `--motion`), downloaded into `libraries/` beside core after a SHA-256 check. It also builds the `sdk/` checkout beside core at its HEAD (`npm ci`, skipped when `dist/.built-from` names that commit) and points `HYPRUNE_SDK_DIR` and `HYPRUNE_SHELL_DIR` at `sdk/` and `shell/`, for the suites that run the shell and the `hyprune` CLI. Variables already set win. The nightly passes it. |
+| `--pinned` | Replace installed Lumen Reach and Switchyard packages with the published releases pinned in `hyprune/worlds/releases.json` (an unpublished pin keeps the install), and use the pinned starter library even when a local build exists (see Libraries below). It also builds the `sdk/` checkout beside core at its HEAD (`npm ci`, skipped when `dist/.built-from` names that commit) and points `HYPRUNE_SDK_DIR` and `HYPRUNE_SHELL_DIR` at `sdk/` and `shell/`, for the suites that run the shell and the `hyprune` CLI. Variables already set win. The nightly passes it. |
 | `--parallel N` | Concurrent suites (default 4). |
 | `--no-build` | Skip CMake/Ninja and fixture generation. |
 | `--detach` | Run under a transient `systemd-run --user` unit. |
 | `--status ID` | Print a run's summary. Exit 0 pass, 1 fail/error, 2 unknown, 3 still running. |
+
+**Libraries.** Every run supplies the library archives, as it does the worlds,
+unless the variables are already set: the starter library (`HYPRUNE_CATALOG_LIBRARY`,
+`HYPRUNE_NPCS_LIBRARY`) is the newest local `tools/library-pack` build in
+`worlds/build/libraries`, else (and always with `--pinned`) the published pin in
+`hyprune/libraries/releases.json`; the companion character (`HYPRUNE_COMPANION_LIBRARY`)
+comes from its own release; the optional official companions library from
+`hyprune/libraries/optional.json`. `--motion` takes the three together
+(`HYPRUNE_MOTION_LIBRARIES`). Downloads are SHA-256 checked and cached in `libraries/`
+beside core.
 
 Each nested suite runs as an **isolated instance** (`dev/nested/isolated.py`):
 

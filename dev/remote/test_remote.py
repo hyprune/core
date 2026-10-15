@@ -1,6 +1,6 @@
 """Remote runner and nightly helpers: make -n parsing, which world release a run installs,
 the pinned library inputs and the harness scripts' arguments."""
-import hashlib, importlib.machinery, importlib.util, pathlib, tempfile, unittest
+import hashlib, json, importlib.machinery, importlib.util, pathlib, tempfile, unittest
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -71,6 +71,29 @@ class Inputs(unittest.TestCase):
             self.assertFalse((pathlib.Path(tmp) / 'cache/other.tar.zst').exists())
             src.unlink()  # cached with the right hash: no download
             self.assertEqual(run.fetch(src.as_uri(), dest, good), dest)
+
+    def test_libraries_without_pinned_keep_a_local_starter_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = pathlib.Path(tmp)
+            (ws / 'hyprune/libraries').mkdir(parents=True)
+            pin = {'id': 'com.hyprune.starter', 'version': '0.3.0', 'sha256': 'a' * 64,
+                   'url': 'https://example.invalid/com.hyprune.starter-0.3.0.tar.zst'}
+            (ws / 'hyprune/libraries/releases.json').write_text(json.dumps({'com.hyprune.starter@0.3.0': pin}))
+            fetched = []
+            saved = run.WORKSPACE, run.fetch
+            run.WORKSPACE, run.fetch = ws, lambda url, dest, sha, gh=None: fetched.append(dest.name) or dest
+            try:
+                # Nothing built: the published pin, as for a world with nothing installed.
+                self.assertEqual(run.ensure_libraries()['starter'].name, 'com.hyprune.starter-0.3.0.tar.zst')
+                built = ws / 'worlds/build/libraries'
+                built.mkdir(parents=True)
+                for v in ('0.3.1', '0.10.0'):
+                    (built / f'com.hyprune.starter-{v}.tar.zst').write_bytes(b'')
+                self.assertEqual(run.ensure_libraries()['starter'], built / 'com.hyprune.starter-0.10.0.tar.zst')
+                self.assertEqual(run.ensure_libraries(pinned_only=True)['starter'].name, 'com.hyprune.starter-0.3.0.tar.zst')
+                self.assertEqual(set(run.ensure_libraries()), {'starter', 'companion', 'companions'})
+            finally:
+                run.WORKSPACE, run.fetch = saved
 
     def test_scripts_get_their_output_argument(self):
         with tempfile.TemporaryDirectory() as tmp:
