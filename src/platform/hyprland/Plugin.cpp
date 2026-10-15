@@ -4757,6 +4757,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                 if (response[section].contains("fov") && response[section]["fov"].is_number())
                     response[section]["fov"] = std::min(110., response[section]["fov"].get<double>());
         if (ipc::protocol::atLeast(protocol, "0.10")) response["performance"] = performance();
+        else for (auto section : {"config", "effective", "overrides", "options"})
+            for (auto key : {"offload", "offload_power_cap_w", "scale_min", "scale_max"}) response[section].erase(key);
         if (!ipc::protocol::atLeast(protocol, "0.29")) // the feel settings arrived with IPC 0.29
             for (auto &key : render::feelGraphicsKeys()) {
                 for (auto section : {"config", "effective", "overrides", "options"})
@@ -4767,8 +4769,6 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                     for (auto section : {"requested", "effective", "controls"})
                         response["performance"][section].erase(key);
             }
-        else for (auto section : {"config", "effective", "overrides", "options"})
-            for (auto key : {"offload", "offload_power_cap_w", "scale_min", "scale_max"}) response[section].erase(key);
         if (!ipc::protocol::atLeast(protocol, "0.18")) {
             // Older schemas: the cap is a number in 20..100; no device selection.
             double effectiveCap = offloadPolicy.value("capW", 0.) > 0 ? offloadPolicy.value("capW", 0.) : 80.;
