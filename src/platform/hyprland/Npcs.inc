@@ -302,7 +302,7 @@ std::optional<std::pair<Vec3, std::vector<Vec3>>> Runtime::screenFront(const Jso
 }
 void Runtime::npcSync() {
     auto section = timed("npcs.sync");
-    npcSynced = {instanceRevision, pathRevision, builtObjects, companionRevision};
+    npcSynced = {instanceRevision, pathRevision, builtObjects, companionRevision, npcConfigRevision};
     if (!world) {
         npcs.clear();
         return;
@@ -568,7 +568,7 @@ void Runtime::npcTick(float dt) {
         renderer.npcs.clear();
         return;
     }
-    if (npcSynced != std::array<uint64_t, 4>{instanceRevision, pathRevision, builtObjects, companionRevision})
+    if (npcSynced != std::array<uint64_t, 5>{instanceRevision, pathRevision, builtObjects, companionRevision, npcConfigRevision})
         npcSync();
     if (npcs.empty()) {
         npcState = "none", npcReason.clear();
@@ -1272,6 +1272,7 @@ void Runtime::bindCharacter(const std::string &id, const Json &patch) {
     if (after.value("reverse", false) && !after.contains("path"))
         throw ipc::Error(-32602, "reverse needs a path");
     objectEdit(id, before, after);
+    ++npcConfigRevision; // settings alone don't move the instance: rebuild its agent too
 }
 // IPC 0.23 npcs.*, paths.* and interaction.choose. Throws ipc::Error.
 std::optional<Json> Runtime::npcsMethod(const std::string &method, const Json &params) {
@@ -1606,6 +1607,7 @@ Json Runtime::npcDiagnostics() {
                           {"mode", int(a.mode)},
                           {"clip", a.pose.clip},
                           {"played", n.resolve(a.pose.clip)}, // the styled clip a role plays (shared clip library)
+                          {"playedPrevious", a.pose.previous.empty() ? Json(nullptr) : Json(n.resolve(a.pose.previous))},
                           {"style", n.alias},
                           {"look", {a.pose.lookYaw, a.pose.lookPitch}},
                           {"lateral", a.lateral},
