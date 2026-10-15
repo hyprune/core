@@ -214,4 +214,5 @@ if __name__ == '__main__':
     npcs.prepare = prepare
     npcs.acceptance = acceptance
     s.run(argparse.Namespace(npcs=True, m3b=False, m3a=False, m2=False, m1=False, integration=False, live=False, serve=False,
-                             record=False, visible=False, authoring=False, climbing=False, output=str(pathlib.Path(a.output).resolve())))
+                             record=False, visible=False, authoring=False, climbing=False, output=str(pathlib.Path(a.output).resolve()),
+                             protocol='0.29'))  # IPC 0.29: graphics.frame_pacing
