@@ -264,6 +264,11 @@ def run():
                 summaries.append(json.loads(core.stdout))
             except ValueError:
                 summaries.append({'status': 'error', 'error': 'runner printed no JSON', 'results': []})
+            # Each suite's output beside the other logs (the run folder keeps state and stills).
+            for r in summaries[-1].get('results', []):
+                if r.get('log') and pathlib.Path(r['log']).is_file():
+                    (logs / 'suites').mkdir(exist_ok=True)
+                    shutil.copy2(r['log'], logs / 'suites' / (re.sub(r'[^A-Za-z0-9._-]+', '-', r['suite']) + '.log'))
         result['core'] = {**summaries[0], 'results': [r for s in summaries for r in s.get('results', [])],
                           'artifacts': ' '.join(s.get('artifacts', '') for s in summaries),
                           'status': 'error' if any(s.get('status') == 'error' for s in summaries) else

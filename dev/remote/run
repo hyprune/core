@@ -142,6 +142,20 @@ def ensure_libraries():
     return found
 
 
+def ensure_sdk():
+    """The SDK checkout built at its HEAD: --import-shell and --builder-shell run its hyprune
+    CLI (dist/src/cli.js). npm ci runs the package's prepare step, which builds dist/."""
+    sdk = WORKSPACE / 'sdk'
+    if not (sdk / 'package-lock.json').is_file():
+        return None
+    head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=sdk, text=True).strip()
+    stamp = sdk / 'dist/.built-from'
+    if not ((sdk / 'dist/src/cli.js').is_file() and stamp.is_file() and stamp.read_text().strip() == head):
+        sh(['npm', 'ci', '--no-audit', '--no-fund'], cwd=sdk, stdout=sys.stderr)
+        stamp.write_text(head + '\n')
+    return head
+
+
 def script_args(tree, suite, out):
     """The output argument a dev/nested script requires (none for the others)."""
     if not re.search(r"add_argument\('output'\)", (tree / 'dev/nested' / suite).read_text()):
@@ -222,6 +236,10 @@ def run(args):
             for key, path in libraries.items():
                 for var in LIBRARY_ENV[key]:
                     os.environ.setdefault(var, str(path))
+            # The workspace's shell and SDK (the shell suites); the SDK built at its HEAD first.
+            summary['sdk'] = ensure_sdk()
+            os.environ.setdefault('HYPRUNE_SHELL_DIR', str(WORKSPACE / 'shell'))
+            os.environ.setdefault('HYPRUNE_SDK_DIR', str(WORKSPACE / 'sdk'))
         summary['gpus'] = gpus()
         before = evidence_snapshot(tree)
         nested = [s for s in args.suites if s != 'ctest']
@@ -284,7 +302,8 @@ def main():
     parser.add_argument('--ref', help='git ref to test in a detached worktree (fetched from origin); default: this checkout')
     parser.add_argument('--lumen', help='hyprune/worlds release tag, e.g. lumen-reach-v0.9.0 (default: installed, else pinned)')
     parser.add_argument('--pinned', action='store_true', help='replace installed worlds with the published releases pinned in hyprune/worlds/releases.json, '
-                        'and supply the pinned libraries (starter, companion) to suites that need them')
+                        'supply the pinned libraries (starter, companion) to suites that need them, and build the workspace SDK '
+                        '(its CLI) for the shell suites')
     parser.add_argument('--parallel', type=int, default=4, help='concurrent suites (each nested suite is an isolated instance)')
     parser.add_argument('--no-build', action='store_true')
     parser.add_argument('--detach', action='store_true', help='start in the background and print the run id')

@@ -127,7 +127,9 @@ def acceptance(client, children, args, shell_token, socketpath):
         wait(lambda: job().get('phase') in ('inspecting', 'review'), 5)
     except AssertionError:
         keys('-k', 'Return')
-    wait(lambda: job().get('phase') == 'review', 30)
+    # A failed inspection (e.g. an SDK CLI without `object import --inspect`) ends the wait with its error.
+    wait(lambda: job().get('phase') in ('review', 'failed'), 30)
+    assert job().get('phase') == 'review', ('the inspection failed', CLI, job().get('error'))
     j = job()
     check('the browser picks barrel.gltf and the review shows its measures', j['path'].endswith('barrel.gltf') and
           j['inspection'] == {'triangles': 12544, 'unitsGuess': 'cm'}, {'path': j['path'], 'inspection': j['inspection']})

@@ -2,8 +2,8 @@
 
 Nested only. Lumen Reach and Switchyard (the worlds checkout's dist packages, or
 HYPRUNE_LUMEN_PACKAGE / HYPRUNE_SWITCHYARD_PACKAGE) and the starter kit's four screen
-objects copied into the user folder (HYPRUNE_SCREENS_DIR, default the worlds checkout's
-objects/screens). Checks:
+objects copied into the user folder (HYPRUNE_SCREENS_DIR, e.g. the starter kit's screens;
+default core's generated stand-ins, tests/fixtures/screens.py, written into the state dir). Checks:
  1. Contract: 0.27 hello; catalog entries of the screens carry screen {aspect, size, mountType}.
  2. objects.place without a workspace binds the next free one (Lumen's homes are 21-24: 25);
     the home is in mounts (area, anchor, binding) and the instance's screen names it.
@@ -20,7 +20,7 @@ objects/screens). Checks:
     workspace, while room windows keep the world's room anchors.
 Evidence: docs/evidence/screens.json and stills in the state dir.
 """
-import json, math, os, pathlib, shutil, subprocess, time
+import importlib.util, json, math, os, pathlib, shutil, subprocess, time
 import session as s
 from m2 import wait, keys
 
@@ -31,6 +31,19 @@ WALL21 = 'user/workspace-screen-wall-21x9'
 SCREENS = ['workspace-screen-wall-16x9', 'workspace-screen-wall-21x9', 'workspace-screen-stand-16x9', 'workspace-screen-stand-21x9']
 
 
+def screens_dir():
+    """HYPRUNE_SCREENS_DIR, else core's stand-in screens written into this run's state dir
+    (each suite its own copy: parallel suites never share them)."""
+    if os.environ.get('HYPRUNE_SCREENS_DIR'):
+        return pathlib.Path(os.environ['HYPRUNE_SCREENS_DIR'])
+    spec = importlib.util.spec_from_file_location('screen_fixtures', s.ROOT / 'tests/fixtures/screens.py')
+    fixtures = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixtures)
+    root = s.STATE / 'screen-fixtures'
+    shutil.rmtree(root, ignore_errors=True)
+    return fixtures.write(root)
+
+
 def prepare(installed):
     for world, env in [(LUMEN, 'HYPRUNE_LUMEN_PACKAGE'), (SWITCHYARD, 'HYPRUNE_SWITCHYARD_PACKAGE')]:
         source = pathlib.Path(os.environ.get(env, str(s.ROOT.parent / 'worlds/dist' / world)))
@@ -38,9 +51,9 @@ def prepare(installed):
             raise SystemExit(f'--screens needs {world} at {source} ({env})')
         shutil.rmtree(installed / world, ignore_errors=True)
         shutil.copytree(source, installed / world)
-    screens = pathlib.Path(os.environ.get('HYPRUNE_SCREENS_DIR', str(s.ROOT.parent / 'worlds/objects/screens')))
+    screens = screens_dir()
     if not all((screens / n / 'object.json').is_file() for n in SCREENS):
-        raise SystemExit(f'--screens needs the starter screens at {screens} (HYPRUNE_SCREENS_DIR)')
+        raise SystemExit(f'--screens needs the screen objects {SCREENS} at {screens} (HYPRUNE_SCREENS_DIR)')
     data = s.STATE / 'datahome'
     shutil.rmtree(data, ignore_errors=True)
     for n in SCREENS:

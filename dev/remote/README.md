@@ -26,7 +26,7 @@ live-findings ipc-warp`. Any `dev/nested/run.sh` mode works without its `--`
 | --- | --- |
 | `--ref REF` | `git fetch origin`, then test `REF` in a detached worktree `../core-remote-<sha10>` (beside `core/`, so `../worlds/dist` and `../schema` resolve). Without it, the current checkout is tested. |
 | `--lumen TAG` | Install that hyprune/worlds release (`lumen-reach-v0.9.0`) into `worlds/dist` after a SHA-256 check. Default: what is installed (perhaps a local build), else the pin in `hyprune/worlds/releases.json`. |
-| `--pinned` | Replace installed Lumen Reach and Switchyard packages with the published releases pinned in `hyprune/worlds/releases.json` (an unpublished pin keeps the install), and supply the pinned libraries: the starter library from `hyprune/libraries/releases.json` (`HYPRUNE_CATALOG_LIBRARY`, `HYPRUNE_NPCS_LIBRARY`) and the companion character from its own release (`HYPRUNE_COMPANION_LIBRARY`), downloaded into `libraries/` beside core after a SHA-256 check. Variables already set win. The nightly passes it. |
+| `--pinned` | Replace installed Lumen Reach and Switchyard packages with the published releases pinned in `hyprune/worlds/releases.json` (an unpublished pin keeps the install), and supply the pinned libraries: the starter library from `hyprune/libraries/releases.json` (`HYPRUNE_CATALOG_LIBRARY`, `HYPRUNE_NPCS_LIBRARY`) and the companion character from its own release (`HYPRUNE_COMPANION_LIBRARY`), downloaded into `libraries/` beside core after a SHA-256 check. It also builds the `sdk/` checkout beside core at its HEAD (`npm ci`, skipped when `dist/.built-from` names that commit) and points `HYPRUNE_SDK_DIR` and `HYPRUNE_SHELL_DIR` at `sdk/` and `shell/`, for the suites that run the shell and the `hyprune` CLI. Variables already set win. The nightly passes it. |
 | `--parallel N` | Concurrent suites (default 4). |
 | `--no-build` | Skip CMake/Ninja and fixture generation. |
 | `--detach` | Run under a transient `systemd-run --user` unit. |
@@ -126,5 +126,10 @@ Each run (`nightly run`, or `systemctl --user start hyprune-nightly`):
    `~/.local/state/hyprune/gallery`. It never commits. It keeps the
    last 14 runs: pages, runner artifacts (`~/hyprune-remote-runs/nightly-*`)
    and logs (`~/hyprune-nightly/logs/`).
+
+A run's logs are in `~/hyprune-nightly/logs/<stamp>/`: `update.log`, the
+runner's progress (`runner*.stderr.log`), one log per repo test and worlds
+step, and `suites/<suite>.log`, a copy of each core suite's output (the full
+run folder, with state and stills, is `~/hyprune-remote-runs/nightly-<stamp>*/<suite>/`).
 
 `nightly status` prints the latest result.

@@ -4,7 +4,7 @@ dev/nested/run.sh --builder-shell.
 Nested only. Lumen Reach to start from, the real shell at IPC 0.27 (HYPRUNE_SHELL_DIR, default
 the shell checkout), the SDK's hyprune CLI (HYPRUNE_CLI, default node <sdk>/dist/src/cli.js),
 an imported object in the user folder (core's tests/fixtures/imported/barrel), a workspace
-screen (HYPRUNE_SCREENS_DIR, default <worlds>/objects/screens) and a library
+screen (HYPRUNE_SCREENS_DIR, default core's stand-ins as for --screens) and a library
 (tests/fixtures/catalog/libraries/com.example.kit@1.0.0). World folders go to
 $XDG_DATA_HOME/hyprune/projects in the state dir.
 Checks:
@@ -26,13 +26,13 @@ import builtins, json, os, pathlib, secrets, shutil, subprocess, tempfile, time
 import session as s
 from ctl import verified
 from m2 import wait, keys
+from screens import screens_dir
 
 LUMEN = 'com.hyprune.lumen-reach'
 SHELL_TOKEN = secrets.token_hex(32)
 OUTPUT = 'HEADLESS-1'
 SDK = pathlib.Path(os.environ.get('HYPRUNE_SDK_DIR', str(s.ROOT.parent / 'sdk')))
 CLI = os.environ.get('HYPRUNE_CLI', f'node {SDK}/dist/src/cli.js')
-SCREENS = pathlib.Path(os.environ.get('HYPRUNE_SCREENS_DIR', str(s.ROOT.parent / 'worlds/objects/screens')))
 SCREEN = 'workspace-screen-stand-16x9'
 LIBRARY = 'com.example.kit@1.0.0'
 NAME = 'Harbour Test'
@@ -49,14 +49,15 @@ def prepare(installed):
     source = pathlib.Path(os.environ.get('HYPRUNE_LUMEN_PACKAGE', str(s.ROOT.parent / 'worlds/dist' / LUMEN)))
     if not (source / 'world.json').is_file():
         raise SystemExit(f'--builder-shell needs {LUMEN} at {source}')
-    if not (SCREENS / SCREEN / 'object.json').is_file():
-        raise SystemExit(f'--builder-shell needs the starter screens at {SCREENS} (HYPRUNE_SCREENS_DIR)')
+    screens = screens_dir()
+    if not (screens / SCREEN / 'object.json').is_file():
+        raise SystemExit(f'--builder-shell needs the screen object {SCREEN} at {screens} (HYPRUNE_SCREENS_DIR)')
     shutil.rmtree(installed / LUMEN, ignore_errors=True)
     shutil.copytree(source, installed / LUMEN)
     data = s.STATE / 'datahome'
     shutil.rmtree(data, ignore_errors=True)
     shutil.copytree(s.ROOT / 'tests/fixtures/imported/barrel', data / 'hyprune/objects/barrel')
-    shutil.copytree(SCREENS / SCREEN, data / 'hyprune/objects' / SCREEN)
+    shutil.copytree(screens / SCREEN, data / 'hyprune/objects' / SCREEN)
     shutil.copytree(s.ROOT / 'tests/fixtures/catalog/libraries' / LIBRARY, data / 'hyprune/libraries' / LIBRARY)
     os.environ['XDG_DATA_HOME'] = str(data)
     os.environ.pop('HYPRUNE_PROJECTS_DIR', None)

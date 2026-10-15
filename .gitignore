@@ -43,3 +43,4 @@ tests/fixtures/m3b/
 # Harness scripts: one state directory each (session.state_dir).
 /dev/nested/.*-state/
 /tests/fixtures/npcs/
+/tests/fixtures/screens/
