@@ -396,6 +396,11 @@ These are wire-compatible behavior changes that integrators may notice:
 
 ## Unreleased (no wire change)
 
+- **Builder project 0.2 (draft).** `builder/project.json` may be `projectVersion` 0.2: the Open
+  Plain starter (`open-plain@0.2`), `sky.preset`, an optional `floor` and up to 512 placements
+  (RFC-0014 amendment: the world wizard). Core reads 0.1 and 0.2 and writes back only the
+  placements, as before; no IPC change.
+
 - **Seat adaptation.** A character now takes a seat up to 25 cm lower than its own seat height
   (was 3 cm): the root sits lower and both legs bend more, a two-bone solve per leg that keeps
   each ankle where the clip put it relative to the floor (a little forward) with the foot flat;
