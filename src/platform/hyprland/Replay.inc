@@ -67,7 +67,9 @@ void Runtime::recordTick(const Json &sections, std::chrono::steady_clock::time_p
                    {"vrr", vrrActive()},
                    {"renderedFrames", renderer.frames},
                    {"recordMs", recordMs},
-                   {"gpuMs", renderer.gpuFrameMs() >= 0 ? Json(renderer.gpuFrameMs()) : Json(nullptr)}};
+                   {"gpuMs", renderer.gpuFrameMs() >= 0 ? Json(renderer.gpuFrameMs()) : Json(nullptr)},
+                   // The compositor's whole frame on this output (GPU), the latest measured.
+                   {"compositorGpuMs", compositorGpu.milliseconds >= 0 ? Json(compositorGpu.milliseconds) : Json(nullptr)}};
     // A carried window: where it is, the eased facing turn and where it is heading (the carry
     // easing against the input that drives it).
     if (hands.gesture == interaction::Gesture::Carry)

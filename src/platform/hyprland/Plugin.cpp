@@ -130,6 +130,14 @@ struct Runtime {
     std::string routeLineKey, routeTailKey; // the feet cell and the route the drawn line was laid for
     std::vector<Vec3> routeTail;            // the line from the route's first point on
     SP<CEventLoopTimer> offloadTimer;
+    // The worker's channel watched for frames (a dup of the client's fd, so a closed and reused
+    // number never touches another registration): a finished frame is read and copied at once,
+    // not on the next 4 ms pump (2-4 ms of every frame's latency).
+    wl_event_source *offloadSource = nullptr;
+    int offloadSourceFd = -1;
+    int offloadReadDeferred = 0;
+    void watchOffload();
+    void unwatchOffload();
     uint64_t offloadDeferred = 0;
     Json performance() const;
     Capture capture;
@@ -952,6 +960,12 @@ struct Runtime {
     render::FrameExport frameExport; // every presented frame of the world's output, for recordings
     uint64_t exportPasses = 0;
     render::FrameProbe frameProbe;  // pacing measurements (Cinema.inc "probe")
+    // The compositor's whole frame on this output (RENDER_PRE to RENDER_POST), GPU ms, and how
+    // many of its frames showed the same offload front as the one before (a repaint with no new
+    // world image): diagnostics for what repainting every refresh costs.
+    render::GPUSpan compositorGpu;
+    uint64_t repaints = 0, repaintsSameFront = 0, lastDrawnFront = 0;
+    bool compositorFrame = false;
     std::vector<double> probePresents; // presentation times (ms) while probing
     // While exporting, time is counted in presented frames: every tick moves the world (and
     // the camera, characters and animations) by one refresh interval per frame presented
@@ -965,6 +979,7 @@ struct Runtime {
     // camera, ahead of the worker's) never alternates with held frames and steps back.
     double offloadStaleMs = 50;
     int offloadDivisor = 1; // even pacing: the refresh divisor of the last frame tick
+    std::string offloadFailure; // the supervisor's reason for ending this generation's worker
     // The rate the worker is paced to (the cap's even grid, refresh / divisor), the target its
     // dynamic resolution holds instead of graphics.target_fps: a 110 FPS target the worker
     // never reaches would hold every frame at the lowest scale. 0: not known yet.
@@ -1640,14 +1655,15 @@ Json Runtime::performance() const {
     state["mode"] = config["graphics"]["offload"];
     state["activeRenderer"] = renderedOffload ? "offload" : "in-process";
     state["status"] = renderedOffload ? "active" : offload.connected() ? "warming" : "local";
-    if (renderedOffload) state["reason"] = "ready";
+    if (renderedOffload) // throttled for the power cap: say so while it runs
+        state["reason"] = offloadPolicy.value("reason", std::string{}).starts_with("power cap: throttled") ? offloadPolicy["reason"] : Json("ready");
     // A worker the supervisor stopped (watchdog, policy) looks like transport EOF to
     // the client: report the supervisor's reason, not the symptom.
     if (!offload.error.empty()) {
         auto supervised = offloadPolicy.value("reason", std::string{});
         bool running = supervised.empty() || supervised == "admitted" || supervised == "warming" ||
-                       supervised == "off" || supervised == "inactive";
-        state["reason"] = running ? offload.error : supervised;
+                       supervised == "off" || supervised == "inactive" || supervised.starts_with("power cap: throttled");
+        state["reason"] = !offloadFailure.empty() ? offloadFailure : running ? offload.error : supervised;
     }
     if (auto local = offloadLocalReason(); !local.empty() && config["graphics"]["offload"] != "off")
         state["reason"] = local;
@@ -1755,9 +1771,11 @@ void Runtime::offloadTick() {
             history.erase(history.begin());
         offloadChanges = {{"count", offloadChanges.value("count", 0) + 1}, {"history", history}};
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+        unwatchOffload();
         offload.stop(); renderedOffload = false;
         offload.error.clear();
         offloadRequest = request;
+        offloadFailure.clear();
         request["generation"] = ++offloadGeneration;
         ipc->renderer(request);
     }
@@ -1768,6 +1786,53 @@ void Runtime::offloadTick() {
                             {"targetFPS", offloadPolicy.value("targetFPS", 0)},
                             {"capW", offloadPolicy.value("capW", 0.)},
                             {"worker", offload.timings}};
+}
+void Runtime::unwatchOffload() {
+    if (offloadSource)
+        wl_event_source_remove(offloadSource);
+    if (offloadSourceFd >= 0)
+        close(offloadSourceFd);
+    offloadSource = nullptr;
+    offloadSourceFd = -1;
+}
+void Runtime::watchOffload() {
+    unwatchOffload();
+    if (!offload.connected())
+        return;
+    offloadSourceFd = fcntl(offload.fd(), F_DUPFD_CLOEXEC, 3);
+    if (offloadSourceFd < 0)
+        return;
+    offloadSource = wl_event_loop_add_fd(
+        g_pCompositor->m_wlEventLoop, offloadSourceFd, WL_EVENT_READABLE,
+        [](int, uint32_t mask, void *) -> int {
+            if (!runtime)
+                return 0;
+            if (mask & (WL_EVENT_HANGUP | WL_EVENT_ERROR) || !runtime->offload.connected()) {
+                // Not from inside the callback's own dispatch: the next idle removes it.
+                if (!runtime->offloadReadDeferred)
+                    runtime->offloadReadDeferred = g_pEventLoopManager->doLater([] {
+                        if (!runtime)
+                            return;
+                        runtime->offloadReadDeferred = 0;
+                        runtime->unwatchOffload();
+                    });
+                return 0;
+            }
+            if (!runtime->offloadReadDeferred)
+                runtime->offloadReadDeferred = g_pEventLoopManager->doLater([] {
+                    if (!runtime)
+                        return;
+                    runtime->offloadReadDeferred = 0;
+                    if (!runtime->offload.connected()) {
+                        runtime->unwatchOffload();
+                        return;
+                    }
+                    runtime->settleRenderPass();
+                    safe([] { runtime->offloadPump(); });
+                });
+            return 0;
+        },
+        nullptr);
 }
 void Runtime::offloadPump(int stage) {
     if (renderPass.active()) throw std::runtime_error("offload polling inside frame");
@@ -4808,13 +4873,33 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             close(params.at("fd").get<int>());
         else {
             offload.attach(params.at("fd"), offloadRequest.at("width"), offloadRequest.at("height"), offloadGeneration);
+            watchOffload();
+            offloadFailure.clear();
             offloadObjects.reset(packageAssets);
             offloadMachines.reset();
         }
         return Json::object();
     }
     if (method == "_renderer.state") {
-        if (params.at("generation") == offloadGeneration) offloadPolicy = params;
+        if (params.at("generation") == offloadGeneration) {
+            // The power cap: a notice when the worker is throttled and when offload ends for it.
+            auto was = offloadPolicy.value("reason", std::string{}), now = params.value("reason", std::string{});
+            auto throttled = [](const std::string &r) { return r.starts_with("power cap: throttled"); };
+            if (throttled(now) && !throttled(was))
+                ipc->notify("runtime.notice", {{"level", "warning"}, {"code", "offload.power.throttled"},
+                                               {"message", "Offload GPU over its power cap: " + now.substr(11) + "."}});
+            if (now.starts_with("power cap exceeded") && !was.starts_with("power cap exceeded"))
+                ipc->notify("runtime.notice", {{"level", "error"}, {"code", "offload.power.exceeded"},
+                                               {"message", "Offload stopped: " + now.substr(20) +
+                                                               ". Rendering here instead; switch offload off and on to retry."}});
+            // Why the supervisor ended this worker, kept: the stop that follows (enabled false)
+            // reports "inactive", and the reason must outlive it.
+            bool running = now.empty() || now == "admitted" || now == "warming" || now == "off" || now == "inactive" ||
+                           throttled(now);
+            if (!running)
+                offloadFailure = now;
+            offloadPolicy = params;
+        }
         return Json::object();
     }
     if (method == "settings.get" || method == "settings.set") // IPC 0.30 (Settings.inc)
@@ -6214,6 +6299,27 @@ class Pass final : public IPassElement {
     bool disableSimplification() override { return true; }
 };
 // The frame export's grab: last in the output's pass, after layers and cursors.
+// Diagnostics: a GPU timestamp at the start (first element) or end (last element) of this
+// output's frame (render::GPUSpan, timestamp queries only: no GL state, never waits).
+class GpuMarkPass final : public IPassElement {
+    bool start;
+
+  public:
+    explicit GpuMarkPass(bool begin) : start(begin) {}
+    std::vector<UP<IPassElement>> draw() override {
+        safe([this] {
+            if (runtime)
+                start ? runtime->compositorGpu.begin() : runtime->compositorGpu.end();
+        });
+        return {};
+    }
+    bool needsLiveBlur() override { return false; }
+    bool needsPrecomputeBlur() override { return false; }
+    const char *passName() override { return "HypruneGpuMark"; }
+    ePassElementType type() override { return EK_CUSTOM; }
+    bool undiscardable() override { return true; }
+    bool disableSimplification() override { return true; }
+};
 class ExportPass final : public IPassElement {
   public:
     std::vector<UP<IPassElement>> draw() override {
@@ -6380,7 +6486,10 @@ int luaCamera(lua_State *state) {
         {"offloadDraws", runtime->offloadDraws},
         {"offloadPacing", {{"divisor", runtime->offloadDivisor}, {"latencyRefreshes", runtime->offloadLatency.ticks},
                            {"serviceP90Ms", runtime->offload.serviceP90Ms()}, {"readyP90Ms", runtime->offload.readyP90Ms()},
-                           {"gridFps", runtime->offloadGridFps}, {"staleMs", runtime->offloadStaleMs}}},
+                           {"gridFps", runtime->offloadGridFps}, {"staleMs", runtime->offloadStaleMs},
+                           {"compositorGpuMs", runtime->compositorGpu.milliseconds}, {"compositorGpuTotalMs", runtime->compositorGpu.totalMs},
+                           {"compositorGpuCount", runtime->compositorGpu.count}, {"repaints", runtime->repaints},
+                           {"repaintsSameFront", runtime->repaintsSameFront}}},
         {"grabbed", runtime->grabbed},
         {"gesture", int(runtime->hands.gesture)},
         {"activeHandle", runtime->editor.activeHandle},
@@ -6848,6 +6957,24 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 runtime->renderPassLeaked(); // the previous pass never got RENDER_POST
             if (runtime->frameLog.file && stage == RENDER_PRE)
                 runtime->frameLog.renderStart = Runtime::FrameLog::now();
+            // This output's frame: flagged at RENDER_BEGIN (render data valid), counted at
+            // RENDER_POST. The GPU span is two pass elements, so it brackets the frame's GL
+            // work in the order the pass runs it, inside the GL context.
+            if (stage == RENDER_BEGIN) {
+                runtime->compositorFrame = runtime->active && g_pHyprRenderer->m_renderData.pMonitor == runtime->monitor;
+                if (runtime->compositorFrame)
+                    g_pHyprRenderer->addPassElement(makeUnique<GpuMarkPass>(true));
+            }
+            if (runtime->compositorFrame && stage == RENDER_LAST_MOMENT)
+                g_pHyprRenderer->addPassElement(makeUnique<GpuMarkPass>(false));
+            if (runtime->compositorFrame && stage == RENDER_POST) {
+                runtime->compositorFrame = false;
+                ++runtime->repaints;
+                auto front = runtime->renderedOffload ? runtime->offload.frontSequence() : 0;
+                if (front && front == runtime->lastDrawnFront)
+                    ++runtime->repaintsSameFront;
+                runtime->lastDrawnFront = front;
+            }
             if (runtime->frameLog.file && stage == RENDER_POST && runtime->frameLog.renderStart > 0) // the compositor's whole frame
                 runtime->frameLog.line({{"kind", "render"}, {"t", runtime->frameLog.renderStart},
                                         {"ms", Runtime::FrameLog::now() - runtime->frameLog.renderStart}});
@@ -7316,6 +7443,9 @@ APICALL EXPORT void PLUGIN_EXIT() {
     if (runtime->tickDeferred)
         g_pEventLoopManager->removeDoLater(runtime->tickDeferred);
     if (runtime->offloadDeferred) g_pEventLoopManager->removeDoLater(runtime->offloadDeferred);
+    if (runtime->offloadReadDeferred) g_pEventLoopManager->removeDoLater(runtime->offloadReadDeferred);
+    runtime->offloadReadDeferred = 0;
+    runtime->unwatchOffload(); // no callback into this .so may outlive it
     if (runtime->offloadTimer) g_pEventLoopManager->removeTimer(runtime->offloadTimer);
     for (auto id : runtime->inputDeferred)
         g_pEventLoopManager->removeDoLater(id);
@@ -7343,10 +7473,18 @@ APICALL EXPORT void PLUGIN_EXIT() {
     originalHideCursor = nullptr;
     originalKeyboardInput = nullptr;
     originalMove = nullptr;
+    // No pass element of ours may outlive this .so: one queued for a frame that never ran stays
+    // in the renderer's pass, and the compositor's cleanup destroyed one after the plugin was
+    // gone (SIGSEGV in its renderer deleter, once in a nested shutdown).
+    if (g_pHyprRenderer)
+        for (auto name : {"Hyprune", "HypruneExport", "HypruneGpuMark"})
+            g_pHyprRenderer->m_renderPass.removeAllOfType(name);
     if (Render::GL::g_pHyprOpenGL) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         runtime->captureGPU.destroy();
+        runtime->unwatchOffload();
         runtime->offload.stop();
+        runtime->compositorGpu.destroy();
         runtime->renderer.destroy();
     }
     runtime.reset();
