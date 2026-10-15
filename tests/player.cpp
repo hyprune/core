@@ -1,5 +1,6 @@
 // Player settings (IPC 0.19 player.get/set) validation and the walking view bob.
 #include "interaction/Config.hpp"
+#include "interaction/Hands.hpp"
 #include "render/OverlayStyle.hpp"
 #include "sim/ViewBob.hpp"
 #include <iostream>
@@ -33,7 +34,14 @@ void settings() {
         check(rejects({{"player", {{key, range[1].get<double>() + 1}}}}), "above range accepted: " + key);
         check(rejects({{"player", {{key, range[0].get<double>() - .01}}}}), "below range accepted: " + key);
     }
-    check(interaction::playerSettingsKeys().size() == 14, "fourteen player settings");
+    check(interaction::playerSettingsKeys().size() == 19, "nineteen player settings");
+    // IPC 0.29 feel settings: look/move smoothing, the bob's head tilt and carry easing.
+    for (auto &key : interaction::feelPlayerKeys()) {
+        auto keys = interaction::playerSettingsKeys();
+        check(std::find(keys.begin(), keys.end(), key) != keys.end(), "feel key not a player setting: " + key.get<std::string>());
+    }
+    check(p["look_inertia"] == .03 && p["move_inertia"] == .05 && p["view_bob_roll"] == .4 && p["carry_turn"] == .11 &&
+              p["carry_follow"] == .04, "feel defaults");
     // Separate walk and run speeds; the old multiplier is a Lua alias for run_speed.
     auto next = interaction::configPatch(c, {{"player", {{"walk_speed", 3.0}, {"run_speed", 12.5}}}});
     check(next["player"]["walk_speed"] == 3.0 && next["player"]["run_speed"] == 12.5, "walk/run patch");
@@ -134,11 +142,52 @@ void viewBob() {
     walk(b, 2, 4, sim::ViewBob::Subtle, true, 1 / 144.f);
     check(std::abs(a.envelope - b.envelope) < .0005f, "bob envelope depends on frame rate");
 }
+// A carried window eases its turn toward facing you and its grab point onto the ray; zero
+// times keep it rigid.
+void carry() {
+    for (float time : {0.f, .11f}) {
+        interaction::Hands hands;
+        surfaces::Surface s;
+        s.center = {0, 1.5f, -2};
+        s.width = 1.6f, s.height = .9f, s.pixelWidth = 1600, s.pixelHeight = 900;
+        sim::Camera cam;
+        cam.position = {0, 1.5f, 0};
+        hands.begin(interaction::Gesture::Carry, s, {.distance = 2, .u = .5f, .v = .5f}, cam);
+        hands.turnTime = time, hands.followTime = time / 2;
+        cam.yaw = .5f; // turn the head right
+        hands.update(cam, cam.forward(), 1 / 98.f, {});
+        float first = hands.turn;
+        for (int i = 0; i < 98; ++i)
+            hands.update(cam, cam.forward(), 1 / 98.f, {});
+        if (time == 0)
+            check(std::abs(first + .5f) < 1e-5f, "rigid carry turns at once");
+        else {
+            check(first > -.1f && first < 0, "eased carry lags the turn");
+            check(std::abs(hands.turn + .5f) < 2e-3f, "eased carry settles facing you");
+        }
+        auto aim = cam.position + cam.forward() * 2;
+        check(length(hands.grab - aim) < 2e-3f, "grab point settles on the ray");
+    }
+}
+void bobRoll() {
+    sim::ViewBob bob;
+    float most = 0;
+    for (int i = 0; i < 400; ++i) {
+        bob.update(1 / 98.f, 4, 4, 10, sim::ViewBob::Subtle, true, 0, .4f);
+        most = std::max(most, std::abs(bob.roll));
+    }
+    check(most > .006f && most < .0071f, "head tilt reaches 0.4 degrees");
+    for (int i = 0; i < 400; ++i)
+        bob.update(1 / 98.f, 0, 4, 10, sim::ViewBob::Subtle, true, 0, .4f);
+    check(bob.roll == 0, "head tilt fades out with the bob");
+}
 } // namespace
 int main() {
     try {
         settings();
         viewBob();
+        carry();
+        bobRoll();
     } catch (const std::exception &e) {
         std::cerr << "FAIL " << e.what() << '\n';
         return 1;
