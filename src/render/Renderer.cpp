@@ -1731,7 +1731,10 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         paceInterval = divisor;
     } else
         presentsSinceNew_ = paceInterval; // motion after idle starts at once
-    bool paced = !idle && !captureRequested && frames && ++presentsSinceNew_ < paceInterval;
+    // A worker frame is paced by the offload client (its own refresh divisor): pacing the
+    // composite again on target_fps beat against it (a 45 cap at 98 Hz: worker frames every
+    // third refresh, composites every second, so every other new frame showed a refresh late).
+    bool paced = !idle && !captureRequested && frames && !externalWorldFbo && ++presentsSinceNew_ < paceInterval;
     auto logPresent = [&](int kind) {
         presentLog.push_back({std::chrono::duration<double, std::milli>(now.time_since_epoch()).count(), double(kind),
                               camera.yaw, camera.pitch, camera.position.x, camera.position.y, camera.position.z});
