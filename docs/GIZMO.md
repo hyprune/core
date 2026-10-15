@@ -47,8 +47,10 @@ the pivot is excluded, so the object being edited never hides its handles.
   infinite guide line; rotations show the swept wedge with start and current spokes.
 - A readout beside the pointer shows the delta per axis in metres, the angle in degrees
   or the scale factor; the placement verdict is on a second line.
-- Shift (or the snapping toggle, tool Alternate) snaps to 0.1 m, 15 degrees and 0.1x
-  and draws tick marks along the guide or around the ring.
+- Ctrl, the sprint key (or the snapping toggle, tool Alternate), snaps to 0.1 m, 15 degrees
+  and 0.1x and draws tick marks along the guide or around the ring. Snapping follows the
+  sprint binding: holding it never moves the camera, where the down key (Shift) would
+  crouch or descend.
 
 ## Input
 
@@ -66,9 +68,10 @@ the pivot is excluded, so the object being edited never hides its handles.
 | End, Shift+End | drop the selected object onto the surface below it; align it to the aimed surface |
 
 The keys in the last four rows are handled by core while tool 4 is active in world
-mode; a key that an action binds with the same modifiers keeps its binding. In tool 4
-a Ctrl press's own actions (crouch, fly down) wait up to 180 ms: an undo/redo chord in
-that window consumes Ctrl entirely; Ctrl held longer acts as usual.
+mode; a key that an action binds with the same modifiers keeps its binding. In tools 3
+and 4 a Ctrl or Shift press's own actions (sprint; crouch, fly down) wait up to 180 ms:
+an undo/redo chord or Shift+End in that window consumes the modifier entirely; held
+longer it acts as usual.
 
 ## Targets
 

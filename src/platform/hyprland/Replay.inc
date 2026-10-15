@@ -143,7 +143,7 @@ Json Runtime::sessionMethod(const std::string &method, const Json &params) {
             throw ipc::Error(-32602, "invalid recording initial state");
         interaction::Tools checkedEditor;
         checkedEditor.restore(initial.at("editor"));
-        auto recordedInput = interaction::validateInput(session.header.at("input"));
+        auto recordedInput = interaction::validateInput(session.header.at("input"), false);
         auto checked = config;
         checked["player"] = session.header.at("player");
         checked = interaction::configPatch(config, {{"player", session.header.at("player")},

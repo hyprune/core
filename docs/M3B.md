@@ -19,13 +19,13 @@ modifier/layout changes until release. Four modes: world, interactive (E),
 focus (F), menu. E uses windows and workspace walls in place with a surface-relative
 virtual cursor. F transitions windows or workspaces to native 2D. Super+Tab or
 Back leaves either; TAB long hold opens Map; Esc leaves menu. Q holds scope with
-wheel magnification and optional vignette. Ctrl crouches with fixed feet, reduced
+wheel magnification and optional vignette. Crouch (Shift since input version 3, Ctrl before) keeps fixed feet, reduced
 eye height/capsule, and standing clearance checks. U writes a private timestamped
 capture with camera, modes/tools, surfaces, placements, recent IPC/events and a
 bounded recent input ring, and emits the file path as a notice.
 
 Tool slots: normal; window place/lock; path open/closed line/curve/arc; position
-move/rotate/scale; reserved. Shift snaps 0.1 m / 15° / 0.1 scale factors. Position
+move/rotate/scale; reserved. The sprint key (Ctrl since input version 3, Shift before) snaps 0.1 m / 15° / 0.1 scale factors. Position
 handles draw as axis arrows, rotation arcs, scale cubes and a uniform centre cube.
 Object transforms alter rendered meshes and collision triangles consistently.
 Window gestures preserve grabbed/corner offsets and send real client configure;

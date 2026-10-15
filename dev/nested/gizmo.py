@@ -5,7 +5,7 @@ else the worlds checkout's dist package) with a placed window and its world 0.8
 object (the Sun Court armillary), world objects and the universal mode enabled
 (HYPRUNE_GIZMO_OBJECTS=1, HYPRUNE_GIZMO_UNIVERSAL=1). Checks every mode on an
 object and a window: handle picks from the published anchors (including an
-end-on axis and an edge-on ring), drags with readouts, Shift snapping, numeric
+end-on axis and an edge-on ring), drags with readouts, Ctrl snapping, numeric
 entry, the world/local toggle, the base pivot, undo/redo, drop to floor, the
 red ghost refusing a pose inside a wall, the player and a keepClear volume, and
 stills of each mode from three angles (one near edge-on) for the demo sheet.
@@ -241,7 +241,7 @@ def acceptance(client, children, args, shell_token, socketpath):
             hold = None
             pointer('button', 272, 1); time.sleep(.2)
             if shift_:
-                hold = s.envrun('wtype', '-M', 'shift', '-P', 'Shift_L', '-s', str(int(seconds * 1000) + 900), '-p', 'Shift_L', '-m', 'shift')
+                hold = s.envrun('wtype', '-M', 'ctrl', '-P', 'Control_L', '-s', str(int(seconds * 1000) + 900), '-p', 'Control_L', '-m', 'ctrl')
                 children.append(hold); time.sleep(.25)
             n = max(4, int(seconds / .1))  # pointer() itself paces ~0.1 s per step
             for _ in range(n):
@@ -268,13 +268,13 @@ def acceptance(client, children, args, shell_token, socketpath):
             mark('Hover highlights; drag the X arrow with a live readout')
             aim('move-x'); time.sleep(.8)
             slow(*along('move-x', 150), seconds=1.6)
-            mark('Shift: 0.1 m snapping with tick marks')
+            mark('Ctrl: 0.1 m snapping with tick marks')
             aim('move-y'); time.sleep(.4)
             slow(*along('move-y', 110), seconds=1.8, shift_=True)
             mark('Plane square: move in X and Z')
             aim('plane-zx'); time.sleep(.4)
             slow(-70, 35, seconds=1.4)
-            mark('Rotate: rings face the camera; Shift snaps to 15 degrees')
+            mark('Rotate: rings face the camera; Ctrl snaps to 15 degrees')
             mode('rotate'); time.sleep(.6)
             aim('rotate-y'); time.sleep(.4)
             slow(-150, 60, seconds=2.0, shift_=True)
@@ -427,20 +427,20 @@ def acceptance(client, children, args, shell_token, socketpath):
           and during['readout'].startswith('dX +') and during['active'] == 'move-x', {'from': p0, 'to': p1, 'readout': during['readout']})
     rec = record()
     check('the move is an overlay record of the world object', rec and abs(rec['position'][0] - p1[0]) < 1e-4, rec)
-    # 2. Shift snaps: 0.1 m steps, tick marks drawn.
+    # 2. Ctrl (the sprint key) snaps: 0.1 m steps, tick marks drawn.
     look(three, c); aim('move-y')
     p0 = pos()
     plain = drag(*along('move-y', 70), release=False); pointer('button', 272, 0); time.sleep(.25)
     look(three, c); aim('move-y'); p0 = pos()
     pointer('button', 272, 1); time.sleep(.15)
-    hold = s.envrun('wtype', '-M', 'shift', '-P', 'Shift_L', '-s', '2200', '-p', 'Shift_L', '-m', 'shift'); children.append(hold); time.sleep(.3)
+    hold = s.envrun('wtype', '-M', 'ctrl', '-P', 'Control_L', '-s', '2200', '-p', 'Control_L', '-m', 'ctrl'); children.append(hold); time.sleep(.3)
     mx, my = along('move-y', 95)
     for _ in range(5):
         pointer(mx / 5, my / 5); time.sleep(.05)
     time.sleep(.3); snapped = gizmo()
     pointer('button', 272, 0); hold.wait(timeout=6); time.sleep(.3)
     p1 = pos(); dy_ = p1[1] - p0[1]
-    check('Shift snaps moves to 0.1 m and draws tick marks', abs(dy_) > .05 and abs(dy_ * 10 - round(dy_ * 10)) < 2e-3
+    check('Ctrl snaps moves to 0.1 m and draws tick marks', abs(dy_) > .05 and abs(dy_ * 10 - round(dy_ * 10)) < 2e-3
           and snapped['primitives'] > plain['primitives'] + 20, {'delta': dy_, 'primitives': [plain['primitives'], snapped['primitives']]})
     # 3. Plane: the horizontal (ZX) square keeps Y.
     look(three, c); aim('plane-zx'); p0 = pos()
@@ -460,16 +460,16 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('Ctrl+Z undoes the last transform', undone != before_undo and abs(undone['position'][1] - p0[1]) < 1e-3, {'before': before_undo['position'], 'after': undone['position']})
     keys('-M', 'ctrl', '-P', 'Control_L', '-M', 'shift', '-P', 'Shift_L', '-k', 'z', '-p', 'Shift_L', '-m', 'shift', '-p', 'Control_L', '-m', 'ctrl'); time.sleep(.4)
     check('Ctrl+Shift+Z redoes it', record()['position'] == before_undo['position'], record()['position'])
-    # The chord owns Ctrl: no fly-down (crouch in walk) on undo/redo; Ctrl alone still descends.
+    # The chords own Ctrl and Shift: no fly-down (crouch in walk) on undo/redo; Shift alone still descends.
     y0 = diag()['position'][1]
     undo(); time.sleep(.3)
-    keys('-M', 'ctrl', '-P', 'Control_L', '-k', 'y', '-p', 'Control_L', '-m', 'ctrl'); time.sleep(.4)
+    keys('-M', 'ctrl', '-P', 'Control_L', '-M', 'shift', '-P', 'Shift_L', '-k', 'z', '-p', 'Shift_L', '-m', 'shift', '-p', 'Control_L', '-m', 'ctrl'); time.sleep(.4)
     y1 = diag()['position'][1]
-    hold = s.envrun('wtype', '-M', 'ctrl', '-P', 'Control_L', '-s', '800', '-p', 'Control_L', '-m', 'ctrl'); children.append(hold)
+    hold = s.envrun('wtype', '-M', 'shift', '-P', 'Shift_L', '-s', '800', '-p', 'Shift_L', '-m', 'shift'); children.append(hold)
     hold.wait(timeout=5); time.sleep(.3)
     y2 = diag()['position'][1]
-    check('Ctrl+Z / Ctrl+Y consume Ctrl (no fly-down); Ctrl alone still flies down', abs(y1 - y0) < 1e-3 and y2 < y1 - .1
-          and record()['position'] == before_undo['position'], {'before': y0, 'afterChords': y1, 'afterCtrlHeld': y2})
+    check('Ctrl+Z / Ctrl+Shift+Z consume Ctrl and Shift (no fly-down); Shift alone still flies down', abs(y1 - y0) < 1e-3 and y2 < y1 - .1
+          and record()['position'] == before_undo['position'], {'before': y0, 'afterChords': y1, 'afterShiftHeld': y2})
     look(three, c)
     # 6. Numeric entry: start a drag, type, release, Enter.
     look(three, c); aim('move-y'); p0 = pos()
@@ -513,18 +513,18 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('placement rules on Lumen Reach: walls, keep-clear, approach, window, below the world',
           rules['open air']['ok'] and rules['walls']['rule'] == 'walls' and rules['keep-clear']['rule'] == 'keep-clear'
           and rules['approach']['rule'] == 'approach' and rules['window']['rule'] == 'window' and rules['playable']['rule'] == 'playable', rules)
-    # 10. Rotate: Y ring, Shift snaps to 15 degrees; view ring; trackball; an edge-on ring.
+    # 10. Rotate: Y ring, Ctrl snaps to 15 degrees; view ring; trackball; an edge-on ring.
     mode('rotate')
     look(three, c); aim('rotate-y'); q0 = transform()['rotation']
     pointer('button', 272, 1); time.sleep(.15)
-    hold = s.envrun('wtype', '-M', 'shift', '-P', 'Shift_L', '-s', '2000', '-p', 'Shift_L', '-m', 'shift'); children.append(hold); time.sleep(.3)
+    hold = s.envrun('wtype', '-M', 'ctrl', '-P', 'Control_L', '-s', '2000', '-p', 'Control_L', '-m', 'ctrl'); children.append(hold); time.sleep(.3)
     for _ in range(6):
         pointer(-20, 12); time.sleep(.05)
     time.sleep(.3); rot = gizmo()
     pointer('button', 272, 0); hold.wait(timeout=6); time.sleep(.3)
     q1 = transform()['rotation']
     angle = math.degrees(2 * math.atan2(q1[1], q1[3]))
-    check('the Y ring turns about Y only; Shift snaps to 15 degrees', abs(q1[0]) < 1e-3 and abs(q1[2]) < 1e-3 and abs(angle) > 7 and abs(angle / 15 - round(angle / 15)) < .01
+    check('the Y ring turns about Y only; Ctrl snaps to 15 degrees', abs(q1[0]) < 1e-3 and abs(q1[2]) < 1e-3 and abs(angle) > 7 and abs(angle / 15 - round(angle / 15)) < .01
           and rot['readout'].startswith('Y '), {'angle': angle, 'readout': rot['readout']})
     look(three, c); aim('rotate-view'); q0 = transform()['rotation']
     drag(30, 50)
@@ -562,19 +562,19 @@ def acceptance(client, children, args, shell_token, socketpath):
     dropped = pos()
     check('End drops the object onto the surface below it', lifted[1] - p0[1] > 1.4 and dropped[1] < lifted[1] - .3 and probe(*gizmo()['pivotPoint'])['supported'],
           {'lifted': lifted, 'dropped': dropped})
-    # 13. Scale (world objects: uniform only, from the ring); Shift snaps to 0.1x.
+    # 13. Scale (world objects: uniform only, from the ring); Ctrl snaps to 0.1x.
     mode('scale')
     g = gizmo()
     check('world objects offer uniform scale only', 'scale-uniform' in g['handles'] and not any(k in g['handles'] for k in ['scale-x', 'scale-y', 'scale-z']), sorted(g['handles']))
     look(three, c); aim('scale-uniform'); s0 = transform()['scale']
     pointer('button', 272, 1); time.sleep(.15)
-    hold = s.envrun('wtype', '-M', 'shift', '-P', 'Shift_L', '-s', '1800', '-p', 'Shift_L', '-m', 'shift'); children.append(hold); time.sleep(.3)
+    hold = s.envrun('wtype', '-M', 'ctrl', '-P', 'Control_L', '-s', '1800', '-p', 'Control_L', '-m', 'ctrl'); children.append(hold); time.sleep(.3)
     for _ in range(5):
         pointer(-12, -8); time.sleep(.05)
     time.sleep(.3); sc = gizmo()
     pointer('button', 272, 0); hold.wait(timeout=6); time.sleep(.3)
     s1 = transform()['scale']
-    check('uniform scale with Shift snaps to 0.1x', s1[0] == s1[1] == s1[2] and s1[0] != s0[0] and abs(s1[0] / s0[0] * 10 - round(s1[0] / s0[0] * 10)) < 1e-3
+    check('uniform scale with Ctrl snaps to 0.1x', s1[0] == s1[1] == s1[2] and s1[0] != s0[0] and abs(s1[0] / s0[0] * 10 - round(s1[0] / s0[0] * 10)) < 1e-3
           and sc['readout'].startswith('SCALE x'), {'from': s0, 'to': s1, 'readout': sc['readout']})
     # 13b. Scaling an object resting on the floor keeps it there: larger, it rises out of the
     # floor; smaller, it drops onto it. Neither is refused for "Needs a floor under it".

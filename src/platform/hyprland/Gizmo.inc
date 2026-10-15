@@ -615,7 +615,7 @@ void Runtime::gizmoUpdate() {
     if (!gizmo.dragging())
         return;
     auto view = gizmoView();
-    bool snap = editor.snap || (modifiers & 1) || keys.contains(KEY_LEFTSHIFT);
+    bool snap = snapHeld();
     auto [x, y] = gizmoPointer(view);
     auto r = gizmo.numeric() ? gizmo.applyTyped() : gizmo.drag(x, y, snap, view);
     auto t = gizmoTransform(r);
@@ -672,8 +672,7 @@ bool Runtime::gizmoKey(const std::string &key, unsigned mods, bool down, uint32_
         // point drag, period shows every path outside path mode too.
         if ((mods & 4) && (key == "z" || key == "y")) {
             bool redo = key == "y" || (mods & 1);
-            if (pendingCtrl && !pendingCtrl->fired)
-                pendingCtrl->consumed = true;
+            consumePendingCtrl();
             effect = [redo] { runtime->applyUndo(redo); };
         } else if (key == "Escape" && pathDrag)
             effect = [] { runtime->pathRelease(true); };
@@ -710,11 +709,12 @@ bool Runtime::gizmoKey(const std::string &key, unsigned mods, bool down, uint32_
             effect = [] {}; // swallow tool switches and stray keys mid-entry
     } else if ((mods & 4) && (key == "z" || key == "y")) {
         bool redo = key == "y" || (mods & 1);
-        if (pendingCtrl && !pendingCtrl->fired)
-            pendingCtrl->consumed = true; // the chord owns Ctrl: no crouch, no fly down
+        consumePendingCtrl(); // the chord owns Ctrl and Shift: no sprint, no crouch, no fly down
         effect = [redo] { runtime->applyUndo(redo); };
-    } else if (key == "End" && !bound("End", mods & 1))
+    } else if (key == "End" && !bound("End", mods & 1)) {
+        consumePendingCtrl();
         effect = [shift = bool(mods & 1)] { runtime->dropSelection(shift); };
+    }
     else if (key == "period" && !mods && !bound("period", 0))
         effect = [] {
             runtime->editor.pivotBase = !runtime->editor.pivotBase;
@@ -807,7 +807,7 @@ void Runtime::gizmoDraw() {
     auto [px, py] = gizmoPointer(view);
     if (!gizmo.dragging())
         gizmoHover = gizmo.pick(px, py);
-    bool snap = editor.snap || (modifiers & 1) || keys.contains(KEY_LEFTSHIFT);
+    bool snap = snapHeld();
     interaction::GizmoFrame frame;
     using interaction::Rgba;
     auto ghostColor = preview.valid ? Rgba{.43f, .95f, .69f, .55f} : interaction::palette::invalid;
@@ -937,29 +937,47 @@ void Runtime::cancelGizmo() {
 }
 bool Runtime::deferCtrl(const std::string &key, bool down, uint32_t code, const std::vector<interaction::Action> &actions) {
     if (!down) {
-        if (!pendingCtrl || pendingCtrl->code != code)
+        auto it = std::find_if(pendingCtrl.begin(), pendingCtrl.end(), [&](auto &p) { return p.code == code; });
+        if (it == pendingCtrl.end())
             return false;
-        bool fired = pendingCtrl->fired;
-        pendingCtrl.reset();
+        bool fired = it->fired;
+        pendingCtrl.erase(it);
         return !fired; // never ran: drop the release too (fired: normal release dispatch)
     }
-    if (key != "Control_L" && key != "Control_R")
+    if (!key.starts_with("Control_") && !key.starts_with("Shift_"))
         return false;
     if (actions.empty() || !active || (editor.slot != 4 && editor.slot != 3) || typing || layerCursor || freeCursor ||
         control.uiVisible() || inputMode() != "world")
         return false;
-    pendingCtrl = PendingCtrl{code, actions, std::chrono::steady_clock::now()};
+    std::erase_if(pendingCtrl, [&](auto &p) { return p.code == code; });
+    pendingCtrl.push_back(PendingCtrl{code, actions, std::chrono::steady_clock::now()});
     return true;
 }
-// Ctrl held alone past the chord window: its actions run, late by at most 180 ms.
+void Runtime::consumePendingCtrl() {
+    for (auto &p : pendingCtrl)
+        if (!p.fired)
+            p.consumed = true;
+}
+// Ctrl or Shift held alone past the chord window: its actions run, late by at most 180 ms.
 void Runtime::ctrlTick() {
-    if (!pendingCtrl || pendingCtrl->fired || pendingCtrl->consumed)
-        return;
-    if (std::chrono::steady_clock::now() - pendingCtrl->since < std::chrono::milliseconds(180))
-        return;
-    pendingCtrl->fired = true;
-    deferInput([actions = pendingCtrl->actions] {
-        for (auto a : actions)
-            runtime->action(a);
-    });
+    for (auto &p : pendingCtrl) {
+        if (p.fired || p.consumed || std::chrono::steady_clock::now() - p.since < std::chrono::milliseconds(180))
+            continue;
+        p.fired = true;
+        deferInput([actions = p.actions] {
+            for (auto a : actions)
+                runtime->action(a);
+        });
+    }
+}
+// Snapping (gizmo drags, path points) follows the sprint key (Ctrl by default): holding it
+// never moves the camera, where the down key (Shift) would crouch or descend.
+bool Runtime::snapHeld() const {
+    unsigned bits = 0;
+    if (input.config["modes"]["world"].contains("sprint"))
+        for (auto &b : input.config["modes"]["world"]["sprint"]) {
+            auto key = interaction::parseBinding(b.get<std::string>()).key;
+            bits |= key.starts_with("Shift_") ? interaction::Shift : key.starts_with("Control_") ? interaction::Ctrl : 0;
+        }
+    return editor.snap || (modifiers & bits) || keys.contains(KEY_LEFTSHIFT); // KEY_LEFTSHIFT: sprint held
 }

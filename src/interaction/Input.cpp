@@ -87,8 +87,35 @@ Json legacyInputNames(Json j) {
         j = "tool5";
     return j;
 }
-Json validateInput(const Json &raw) {
+Json validateInput(const Json &raw, bool migrate) {
     auto j = raw;
+    // Version 3 (IPC 0.29): Ctrl sprints and Shift goes down (FPS norms), and Ctrl+R toggles a
+    // recording in the world. A version 2 file changes only bindings still at the old
+    // defaults whose new key is free; a recording's own keymap (migrate = false) is kept.
+    if (j.is_object() && j.value("version", Json()) == 2) {
+        if (migrate && j.contains("modes") && j["modes"].is_object() && j["modes"].contains("world") &&
+            j["modes"]["world"].is_object()) {
+            auto &w = j["modes"]["world"];
+            auto taken = [&](const std::string &binding, std::initializer_list<const char *> except) {
+                for (auto &[action, bindings] : w.items())
+                    if (bindings.is_array() &&
+                        std::none_of(except.begin(), except.end(), [&](auto e) { return action == e; }))
+                        for (auto &b : bindings)
+                            if (b.is_string() && b == binding)
+                                return true;
+                return false;
+            };
+            bool sprint = w.value("sprint", Json()) == Json::array({"Shift_L"}) && !taken("Control_L", {"sprint", "down"});
+            bool down = w.value("down", Json()) == Json::array({"Control_L"}) && !taken("Shift_L", {"sprint", "down"});
+            if (sprint)
+                w["sprint"] = Json::array({"Control_L"});
+            if (down)
+                w["down"] = Json::array({"Shift_L"});
+            if (w.value("record.toggle", Json::array()) == Json::array() && !taken("Ctrl+r", {}))
+                w["record.toggle"] = Json::array({"Ctrl+r"});
+        }
+        j["version"] = 3;
+    }
     if (j.is_object() && j.contains("modes") && j["modes"].is_object() &&
         j["modes"].contains("world") && j["modes"]["world"].is_object()) {
         auto &w = j["modes"]["world"];
@@ -144,7 +171,7 @@ Json validateInput(const Json &raw) {
                     if (!j["modes"][mode].contains(action))
                         j["modes"][mode][action] = defaults["modes"][mode][action];
     if (!j.is_object() || j.size() != defaults.size())
-        throw std::runtime_error("input config requires all version 2 fields");
+        throw std::runtime_error("input config requires all version 3 fields");
     for (auto it = j.begin(); it != j.end(); ++it)
         if (!defaults.contains(it.key()))
             throw std::runtime_error("unknown input option");
@@ -152,7 +179,7 @@ Json validateInput(const Json &raw) {
         if (!j.at(k).is_number_integer() || j.at(k) < lo || j.at(k) > hi)
             throw std::runtime_error(std::string(k) + " out of range");
     };
-    integer("version", 2, 2);
+    integer("version", 3, 3);
     integer("longHoldMs", 100, 5000);
     integer("captureInputLimit", 16, 1024);
     if (!j.at("show_area_markers").is_boolean())
@@ -314,7 +341,7 @@ std::vector<Action> Input::event(const std::string &mode, const std::string &key
                 return {{action, true, value}, {action, false, value, false}};
             return {{action, t.hold ? false : true, value}};
         }
-    // A tap/hold pair on an unmodified chord also works with sprint (Shift) or crouch (Ctrl) held.
+    // A tap/hold pair on an unmodified chord also works with sprint (Ctrl) or crouch (Shift) held.
     if (mode == "world" && (mods & (Shift | Ctrl)) && !(mods & ~(Shift | Ctrl)) && !key.starts_with("Wheel") &&
         key != "MouseMove")
         for (auto &[action, bindings] : config["modes"][mode].items())

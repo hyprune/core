@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "longHoldMs": 1000,
   "scopeVignette": true,
   "invert_y": false,
@@ -38,13 +38,13 @@
         "Tab"
       ],
       "sprint": [
-        "Shift_L"
+        "Control_L"
       ],
       "up": [
         "space"
       ],
       "down": [
-        "Control_L"
+        "Shift_L"
       ],
       "use": [
         "e"
@@ -105,7 +105,9 @@
       "fly": [
         "F4"
       ],
-      "record.toggle": [],
+      "record.toggle": [
+        "Ctrl+r"
+      ],
       "exit": [
         "Super+Tab",
         "Back"

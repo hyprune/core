@@ -246,7 +246,8 @@ watched and validated without Hyprland reload. Defaults compile from
 `config/input.default.json`; the docs Keymap page is generated from it. HJKL /
 WASD / arrows move; E uses a window/workspace in place; F zooms into fullscreen;
 Super+Tab or Back returns. TAB hold defaults to 1000 ms and opens Map. Q scopes,
-Ctrl crouches, U captures debug state. Tools 1–5 show their wheel submodes in HUD.
+Ctrl sprints, Shift crouches (descends in flight), Ctrl+R toggles a debug recording,
+U captures debug state. Tools 1–5 show their wheel submodes in HUD.
 Settings captures up to three bindings per action through authenticated IPC 0.6.
 Matching actions steal colliding Hyprland bindings only in their active mode.
 

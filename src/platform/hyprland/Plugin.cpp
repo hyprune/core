@@ -260,17 +260,20 @@ struct Runtime {
     void pathRemove();
     void pathDraw();
     Json pathDiagnostics() const;
-    // A Ctrl press held back in tool 4 (Gizmo.inc): its actions run after a short delay
-    // unless an undo/redo chord consumes it; its release is dropped if they never ran.
+    // Ctrl and Shift presses held back in tools 3 and 4 (Gizmo.inc): their actions (sprint,
+    // crouch / fly down) run after a short delay unless a chord (undo/redo, Shift+End)
+    // consumes them; a release is dropped if they never ran.
     struct PendingCtrl {
         uint32_t code = 0;
         std::vector<interaction::Action> actions;
         std::chrono::steady_clock::time_point since;
         bool fired = false, consumed = false;
     };
-    std::optional<PendingCtrl> pendingCtrl;
+    std::vector<PendingCtrl> pendingCtrl;
     bool deferCtrl(const std::string &key, bool down, uint32_t code, const std::vector<interaction::Action> &actions);
+    void consumePendingCtrl();
     void ctrlTick();
+    bool snapHeld() const;
     void ghostEdges();
     void gizmoDraw();
     Json gizmoDiagnostics();
@@ -3588,7 +3591,7 @@ void Runtime::action(interaction::Action a) {
         held(KEY_SPACE);
         if (a.pressed && a.edge)
             climbing.jump();
-    } else if (a.name == "down")
+    } else if (a.name == "down") // KEY_LEFTCTRL / KEY_LEFTSHIFT mark the actions held, whatever key binds them
         held(KEY_LEFTCTRL);
     else if (a.name == "sprint")
         held(KEY_LEFTSHIFT);
@@ -4807,6 +4810,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                              {"path", ipc::boundedText(inputFile.path.string(), ipc::PathLimit)},
                              {"steals", steals(input.config)},
                              {"conflicts", interaction::inputConflicts(input.config)}};
+        if (!ipc::protocol::atLeast(protocol, "0.29"))
+            response = interaction::beforeInputVersion3(response);
         if (!ipc::protocol::atLeast(protocol, "0.26"))
             response = interaction::withoutDebugTool(response);
         if (!ipc::protocol::atLeast(protocol, "0.15"))
@@ -4842,6 +4847,9 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         Json next;
         try {
             auto requested = params["config"];
+            // Peers before IPC 0.29 send version 2 with the current bindings: nothing to migrate.
+            if (!ipc::protocol::atLeast(protocol, "0.29") && requested.is_object() && requested.value("version", Json()) == 2)
+                requested["version"] = 3;
             if (!ipc::protocol::atLeast(protocol,"0.12") && requested.contains("modes"))
                 for (auto &[mode,actions] : requested["modes"].items()) {
                     if(actions.contains("record.toggle")) throw std::runtime_error("record.toggle requires IPC 0.12");
@@ -4873,6 +4881,8 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         }
         if (method == "input.preview") {
             auto response = Json{{"config", next}, {"steals", steals(next)}, {"conflicts", interaction::inputConflicts(next)}};
+            if (!ipc::protocol::atLeast(protocol, "0.29"))
+                response = interaction::beforeInputVersion3(response);
             if (!ipc::protocol::atLeast(protocol, "0.26"))
                 response = interaction::withoutDebugTool(response);
             if (!ipc::protocol::atLeast(protocol, "0.15"))
@@ -5485,7 +5495,7 @@ void Runtime::tick() {
             intent.crouch = keys.contains(KEY_LEFTCTRL) && movement == &walk;
             intent.jumpSpeed = config["player"]["jump_speed"];
             intent.stepHeight = config["player"]["step_height"];
-            // Walking runs at run_speed with Shift; flight scales by the same run/walk ratio.
+            // Walking runs at run_speed with sprint (Ctrl); flight scales by the same run/walk ratio.
             float walkSpeed = config["player"]["walk_speed"], runSpeed = config["player"]["run_speed"];
             bool running = keys.contains(KEY_LEFTSHIFT);
             intent.speed = movement == &walk ? (running ? runSpeed : walkSpeed) / 3.5f
@@ -6078,7 +6088,7 @@ int luaConfig(lua_State *L) {
                 throw std::runtime_error("unknown keysym for " + name);
             if (!used.insert(sym).second)
                 throw std::runtime_error("duplicate keysym for " + name);
-            if (sym == XKB_KEY_F12 || sym == XKB_KEY_Escape || sym == XKB_KEY_Tab || sym == XKB_KEY_Shift_L ||
+            if (sym == XKB_KEY_F12 || sym == XKB_KEY_Escape || sym == XKB_KEY_Tab || sym == XKB_KEY_Control_L ||
                 sym == XKB_KEY_Super_L || sym == XKB_KEY_Super_R || sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R ||
                 (sym >= XKB_KEY_1 && sym <= XKB_KEY_5))
                 throw std::runtime_error("core-owned key for " + name);
@@ -6793,8 +6803,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                                        (runtime->editor.activeHandle >= 0 && runtime->superHeld);
                 auto actions =
                     runtime->inputEvent(runtime->inputMode(), key, runtime->modifiers, down, now, 0, gestureMovement);
-                // Tool 4: Ctrl's own actions (crouch / fly down) wait briefly, so Ctrl+Z / Ctrl+Y
-                // consume the whole chord instead of dipping the camera first.
+                // Tools 3 and 4: Ctrl's and Shift's own actions (sprint, crouch / fly down) wait
+                // briefly, so Ctrl+Z / Ctrl+Shift+Z / Shift+End consume the whole chord instead
+                // of dipping the camera first.
                 if (runtime->deferCtrl(key, down, event.keycode, actions)) {
                     info.cancelled = true;
                     if (down)

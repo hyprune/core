@@ -14,8 +14,8 @@ workspace wall; Super+Alt or the typing button returns. A carried window release
 while aiming a wall is tiled into that workspace. Dragging a client rectangle
 on a workspace wall pulls it into 3D. Super+Alt switches movement/typing. The
 virtual pointer routes hover, clicks and scroll to the real child surface.
-V toggles noclip; F4 toggles flight. WASD moves, Space jumps/ascends, Ctrl descends
-in flight, Shift runs. 1–5 select pointer, mount and three reserved path slots.
+V toggles noclip; F4 toggles flight. WASD moves, Space jumps/ascends, Shift descends
+in flight, Ctrl runs (Ctrl/Shift swapped in input version 3; originally Shift ran). 1–5 select pointer, mount and three reserved path slots.
 The mount tool clicks a window to tag it, then a surface to place it aligned with
 the surface normal. Escape cancels; F12 always exits.
 
@@ -64,13 +64,13 @@ core-owned controls. Keys in `input.bindings` are XKB symbol names.
 | input.bindings.left | a | XKB symbol for strafe left |
 | input.bindings.right | d | XKB symbol for strafe right |
 | input.bindings.jump | space | XKB symbol for jump / fly up |
-| input.bindings.down | Control_L | XKB symbol for fly down |
+| input.bindings.down | Shift_L | XKB symbol for fly down (Control_L before input version 3) |
 | input.bindings.focus | f | XKB symbol for wall fly-in |
 | input.bindings.noclip | v | XKB symbol for noclip toggle |
 | input.bindings.fly | F4 | XKB symbol for walk/flight toggle |
 | input.bindings.zoom | c | XKB symbol for held view zoom |
 | player.walk_speed | 4 | 0.5–20 metres/second (IPC 0.19 player setting) |
-| player.run_speed | 10 | 0.5–30 metres/second with Shift; flight scales by run/walk (IPC 0.19). The old `run_multiplier` is still accepted from Lua as run = walk × multiplier |
+| player.run_speed | 10 | 0.5–30 metres/second with sprint (Ctrl); flight scales by run/walk (IPC 0.19). The old `run_multiplier` is still accepted from Lua as run = walk × multiplier |
 | player.fly_speed | 5 | 0.1–20 metres/second |
 | player.jump_speed | 5 | 0–15 metres/second initial jump speed |
 | player.look_sensitivity | 0.0025 | 0.00001–0.05 radians/pointer count |

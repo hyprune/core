@@ -22,6 +22,52 @@ int main() {
     auto oldInput = inputDefaults(); oldInput["modes"]["world"].erase("exit");
     assert(validateInput(oldInput)["modes"]["world"]["exit"] == inputDefaults()["modes"]["world"]["exit"]);
     assert(!withoutRecordingAction(inputDefaults())["modes"]["world"].contains("exit"));
+    // Input version 3 (IPC 0.29): Ctrl sprints, Shift goes down, Ctrl+R records. A version 2 file
+    // changes only bindings still at the old defaults whose new key is free.
+    {
+        auto v3 = inputDefaults();
+        assert(v3["version"] == 3 && v3["modes"]["world"]["sprint"] == Json({"Control_L"}) &&
+               v3["modes"]["world"]["down"] == Json({"Shift_L"}) &&
+               v3["modes"]["world"]["record.toggle"] == Json({"Ctrl+r"}));
+        auto v2 = v3;
+        v2["version"] = 2;
+        v2["modes"]["world"]["sprint"] = {"Shift_L"};
+        v2["modes"]["world"]["down"] = {"Control_L"};
+        v2["modes"]["world"]["record.toggle"] = Json::array();
+        assert(validateInput(v2) == v3);
+        auto kept = validateInput(v2, false); // a recording's keymap replays as recorded
+        assert(kept["version"] == 3 && kept["modes"]["world"]["sprint"] == Json({"Shift_L"}) &&
+               kept["modes"]["world"]["down"] == Json({"Control_L"}) && kept["modes"]["world"]["record.toggle"] == Json::array());
+        auto custom = v2;
+        custom["modes"]["world"]["sprint"] = {"Alt_L"};
+        custom["modes"]["world"]["record.toggle"] = {"F8"};
+        auto c = validateInput(custom);
+        assert(c["modes"]["world"]["sprint"] == Json({"Alt_L"}) && c["modes"]["world"]["down"] == Json({"Shift_L"}) &&
+               c["modes"]["world"]["record.toggle"] == Json({"F8"}));
+        auto busy = v2; // Shift_L and Ctrl+R already do something else: those stay
+        busy["modes"]["world"]["scope"] = {"q", "Shift_L"};
+        busy["modes"]["world"]["noclip"] = {"Ctrl+r"};
+        auto b = validateInput(busy);
+        assert(b["modes"]["world"]["down"] == Json({"Control_L"}) && b["modes"]["world"]["sprint"] == Json({"Control_L"}) &&
+               b["modes"]["world"]["record.toggle"] == Json::array());
+        // Version 3 is never migrated again: the old layout, chosen on purpose, stays.
+        auto chosen = v3;
+        chosen["modes"]["world"]["sprint"] = {"Shift_L"};
+        chosen["modes"]["world"]["down"] = {"Control_L"};
+        assert(validateInput(chosen) == chosen);
+        assert(beforeInputVersion3(Json{{"config", v3}})["config"]["version"] == 2);
+        // Ctrl+R toggles, while Ctrl alone sprints and R alone turns a carried window.
+        Input keys;
+        auto sprint = keys.event("world", "Control_L", Ctrl, true, 0);
+        assert(sprint.size() == 1 && sprint[0].name == "sprint");
+        auto record = keys.event("world", "r", Ctrl, true, 10);
+        assert(record.size() == 1 && record[0].name == "record.toggle");
+        keys.event("world", "r", Ctrl, false, 20);
+        auto plain = keys.event("world", "r", 0, true, 30);
+        assert(plain.size() == 1 && plain[0].name == "carry.facing");
+        auto down = keys.event("world", "Shift_L", Shift, true, 40);
+        assert(down.size() == 1 && down[0].name == "down");
+    }
     Input hudInput;
     auto cycle = hudInput.event("world", "5", 0, true, 0);
     assert(cycle.size() == 1 && cycle[0].name == "tool5" && cycle[0].edge);

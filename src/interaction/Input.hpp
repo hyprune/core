@@ -18,7 +18,15 @@ inline bool freeCursorToggle(const std::string &key, unsigned mods) {
     return key == "Back" || (key == "Tab" && mods == Super);
 }
 Json inputDefaults();
-Json validateInput(const Json &);
+// `migrate`: a version 2 file takes the version 3 defaults where it still had the old ones
+// (false: a recording's keymap, replayed exactly as recorded).
+Json validateInput(const Json &, bool migrate = true);
+// IPC 0.29 input version 3 as older peers see it: the same bindings, version 2.
+inline Json beforeInputVersion3(Json response) {
+    if (response.is_object() && response.contains("config") && response["config"].is_object())
+        response["config"]["version"] = 2;
+    return response;
+}
 // Project canonical action names into frozen pre-0.9 responses (including capture/conflict metadata).
 Json legacyInputNames(Json);
 inline Json beforePlacementInput(Json j) {

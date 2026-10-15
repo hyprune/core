@@ -14,7 +14,7 @@ hl.plugin.hyprune.config({graphics={reduced_motion=true}})
 ```
 
 Grab is the default. Move into the climb face, then W/S, K/J or arrows climb
-up/down. Release to hold, strafe across a wide wall, Ctrl to slide, Space to jump
+up/down. Release to hold, strafe across a wide wall, Shift (down) to slide, Space to jump
 outward. Look-to-climb multiplies forward/back by sine of pitch (level view
 holds). Auto-traverse uses E at either end to reach the other end; Space cancels.
 All modes catch falling through the prism; automatic mode catches and holds

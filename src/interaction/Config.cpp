@@ -19,7 +19,7 @@ Json defaultConfig() {
             {"left", "a"},
             {"right", "d"},
             {"jump", "space"},
-            {"down", "Control_L"},
+            {"down", "Shift_L"},
             {"focus", "f"},
             {"noclip", "v"},
             {"fly", "F4"},
