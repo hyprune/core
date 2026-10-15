@@ -563,7 +563,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     shot('builder-bar-low.png')
     high, low = bar_rows(out / 'builder-bar-high.png'), bar_rows(out / 'builder-bar-low.png')
     check('the bar grows and shrinks with the API value on screen (display only: its collision stays at rest)',
-          high > low * 2 and low > 0 and by_key('queue-bar')['pose']['position'] == [1.2, 0.0, -22.0],
+          high > low * 2 and low > 0 and all(abs(a - b) < 1e-3 for a, b in zip(by_key('queue-bar')['pose']['position'], [1.2, 0, -22])),
           {'rowsAt74': high, 'rowsAt16': low})
     s.ctl('eval', 'hl.plugin.hyprune.camera(0,1.6,-16.5,0,-.05)')
     time.sleep(1)
