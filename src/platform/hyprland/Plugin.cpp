@@ -966,6 +966,9 @@ struct Runtime {
     render::GPUSpan compositorGpu;
     uint64_t repaints = 0, repaintsSameFront = 0, lastDrawnFront = 0;
     bool compositorFrame = false;
+    // The GPU marks are pass elements in the compositor's own frame: only while they are wanted
+    // (a recording, the frame log, or HYPRUNE_DEV_GPU_MARKS=1 for nested measurements).
+    bool gpuMarksDev = false, gpuMarkFrame = false;
     std::vector<double> probePresents; // presentation times (ms) while probing
     // While exporting, time is counted in presented frames: every tick moves the world (and
     // the camera, characters and animations) by one refresh interval per frame presented
@@ -6702,6 +6705,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     runtime->gizmoObjects = getenv("HYPRUNE_GIZMO_OBJECTS") && std::string(getenv("HYPRUNE_GIZMO_OBJECTS")) == "1";
     if (auto file = getenv("HYPRUNE_FRAME_LOG"))
         runtime->frameLog.file = std::fopen(file, "w");
+    runtime->gpuMarksDev = getenv("HYPRUNE_DEV_GPU_MARKS") && std::string(getenv("HYPRUNE_DEV_GPU_MARKS")) == "1";
     runtime->editor.universal = getenv("HYPRUNE_GIZMO_UNIVERSAL") && std::string(getenv("HYPRUNE_GIZMO_UNIVERSAL")) == "1";
     if (auto file = getenv("HYPRUNE_GIZMO_KEEPCLEAR"))
         try {
@@ -6962,11 +6966,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
             // work in the order the pass runs it, inside the GL context.
             if (stage == RENDER_BEGIN) {
                 runtime->compositorFrame = runtime->active && g_pHyprRenderer->m_renderData.pMonitor == runtime->monitor;
-                if (runtime->compositorFrame)
+                runtime->gpuMarkFrame =
+                    runtime->compositorFrame && (runtime->session.recording || runtime->frameLog.file || runtime->gpuMarksDev);
+                if (runtime->gpuMarkFrame)
                     g_pHyprRenderer->addPassElement(makeUnique<GpuMarkPass>(true));
             }
-            if (runtime->compositorFrame && stage == RENDER_LAST_MOMENT)
+            if (runtime->gpuMarkFrame && stage == RENDER_LAST_MOMENT) {
+                runtime->gpuMarkFrame = false;
                 g_pHyprRenderer->addPassElement(makeUnique<GpuMarkPass>(false));
+            }
             if (runtime->compositorFrame && stage == RENDER_POST) {
                 runtime->compositorFrame = false;
                 ++runtime->repaints;
