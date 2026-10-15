@@ -113,7 +113,7 @@
     "clip": "run",
     "played": "run",
     "previous": "walk_stroll",
-    "fade": 3.4359466098976554e-06,
+    "fade": 2.4429896257061046e-06,
     "speed": 0.75227290391922,
     "style": {
      "walk": "stroll"
@@ -189,9 +189,9 @@
      "pace": "walk",
      "path": null,
      "position": [
-      6.520280361175537,
+      6.510426998138428,
       0.3699999451637268,
-      7.597747325897217
+      7.597754955291748
      ],
      "reason": null,
      "ref": "library/com.hyprune.companions@0.1.0/neon-cyber-muse",
@@ -212,9 +212,9 @@
     "pace": "walk",
     "path": null,
     "position": [
-     6.520280361175537,
+     6.510426998138428,
      0.3699999451637268,
-     7.597747325897217
+     7.597754955291748
     ],
     "reason": null,
     "ref": "library/com.hyprune.companions@0.1.0/neon-cyber-muse",
@@ -229,7 +229,7 @@
   {
    "name": "Dance without an option dances one of hers",
    "ok": true,
-   "evidence": "boom"
+   "evidence": "hip-hop-4"
   },
   {
    "name": "walking off ends the dance",
