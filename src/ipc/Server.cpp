@@ -182,7 +182,7 @@ Json Server::visibleState(const Peer &p) const {
     if (!protocol::atLeast(p.protocol, "0.31") && state.is_object()) {
         if (state.contains("objects") && state["objects"].is_object() && state["objects"].contains("instances"))
             for (auto &i : state["objects"]["instances"])
-                i.erase("key");
+                i.erase("key"), i.erase("behaviours");
         if (state.contains("builder") && state["builder"].is_object() && state["builder"].value("placements", 0) > 128)
             state["builder"]["placements"] = 128;
     }

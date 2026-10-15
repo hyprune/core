@@ -110,7 +110,7 @@ void Runtime::builderSwitch(std::optional<std::filesystem::path> folder) {
     for (auto &p : project["placements"]) {
         Json rec{{"worldId", world->id}, {"id", p["id"]}, {"areaId", areaAt(vec3(p["pose"]["position"]))}, {"ref", p["ref"]},
                  {"pose", p["pose"]}, {"scale", p["scale"]}};
-        for (auto k : {"workspace", "locked", "key"})
+        for (auto k : {"workspace", "locked", "key", "behaviours"})
             if (p.contains(k))
                 rec[k] = p[k];
         editor.setPlacement(world->id, p["id"], rec);
@@ -136,7 +136,7 @@ void Runtime::builderWrite(const Json &records) {
                {"ref", r["ref"]},
                {"pose", {{"position", round(r["pose"]["position"], 1e4)}, {"rotation", round(r["pose"]["rotation"], 1e6)}}},
                {"scale", std::round(r["scale"].get<double>() * 1e4) / 1e4}};
-        for (auto k : {"workspace", "locked", "key"})
+        for (auto k : {"workspace", "locked", "key", "behaviours"})
             if (r.contains(k))
                 p[k] = r[k];
         placements.push_back(p);

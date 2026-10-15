@@ -3,7 +3,9 @@
 // prototype (HYPRUNE_MACHINES_PROTOTYPE; RFC-0013 draft) and read by the
 // renderer. Nothing here is part of the world format or IPC.
 #include "sim/Math.hpp"
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -23,7 +25,27 @@ struct ObjectDrawState {
     float saturation = 1, brightness = 1;
     bool moving = false;         // motion in progress: keep frames coming while in view
     uint64_t revision = 0;       // bumps on any change that is not continuous motion
+    // Data-driven behaviours (RFC-0014 amendment): a display-only transform in asset space,
+    // drawn as model x display (collision, picking and placement rules keep the rest pose),
+    // and a texture coordinate offset for every mesh. Both renderers draw them.
+    bool displayed = false;
+    Mat4 display = Mat4::identity();
+    float uvU = 0, uvV = 0;
 };
+// The largest factor `display` stretches a length by (for bounds), and whether it scales
+// unevenly (normals then need the inverse transpose).
+inline float displayStretch(const Mat4 &m) {
+    float s = 0;
+    for (int c = 0; c < 3; ++c)
+        s = std::max(s, std::sqrt(m.v[c * 4] * m.v[c * 4] + m.v[c * 4 + 1] * m.v[c * 4 + 1] + m.v[c * 4 + 2] * m.v[c * 4 + 2]));
+    return s;
+}
+inline bool displayUneven(const Mat4 &m) {
+    float l[3];
+    for (int c = 0; c < 3; ++c)
+        l[c] = std::sqrt(m.v[c * 4] * m.v[c * 4] + m.v[c * 4 + 1] * m.v[c * 4 + 1] + m.v[c * 4 + 2] * m.v[c * 4 + 2]);
+    return std::abs(l[0] - l[1]) > 1e-4f || std::abs(l[1] - l[2]) > 1e-4f;
+}
 // An extra draw of an asset (or of one node subtree of it): pooled items on a
 // track, effect pieces, count copies. Lit and culled with its owner instance.
 struct ObjectExtra {

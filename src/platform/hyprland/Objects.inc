@@ -1082,6 +1082,7 @@ Json Runtime::objectsState() {
                              {"accent", nullptr},
                              {"screen", instanceScreen(i)},
                              {"key", i.key.empty() ? Json(nullptr) : Json(i.key)}, // IPC 0.31 (older peers: erased)
+                             {"behaviours", i.source == "user" ? behaviours.summary(i.id) : Json(nullptr)}, // IPC 0.31
                              {"style", nullptr}}); // IPC 0.28 (older peers: erased)
         // IPC 0.23: a character's route, what it is doing and the seat it holds.
         if (!i.character || !world)
@@ -1625,8 +1626,8 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
             throw ipc::Error(-32602, "patch must name at least one setting");
         bool screens = ipc::protocol::atLeast(methodProtocol, "0.27");
         for (auto &[k, v] : patch.items())
-            if (!(k == "locked" && v.is_boolean()) && !(k == "workspace" && screens) && !((k == "ref" || k == "key") && keys))
-                throw ipc::Error(-32602, keys ? "objects.configure takes locked (a boolean), workspace, ref and key"
+            if (!(k == "locked" && v.is_boolean()) && !(k == "workspace" && screens) && !((k == "ref" || k == "key" || k == "behaviours") && keys))
+                throw ipc::Error(-32602, keys ? "objects.configure takes locked (a boolean), workspace, ref, key and behaviours"
                                          : screens ? "objects.configure takes locked (a boolean) and workspace"
                                                    : "IPC 0.22 configures only locked (a boolean)");
         if (i.character)
@@ -1667,6 +1668,21 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
                                      Json{{"rule", "key.taken"}, {"id", other->id}, {"key", k}, {"retryable", false}});
                 after["key"] = k;
             }
+        }
+        // IPC 0.31: the placement's behaviours (the whole list; [] removes them). Display only, so a
+        // locked placement takes them too.
+        if (patch.contains("behaviours")) {
+            if (i.source != "user")
+                throw ipc::Error(-32005, "only user placements have behaviours");
+            try {
+                world::parseBehaviours(patch["behaviours"]);
+            } catch (const std::invalid_argument &e) {
+                throw ipc::Error(-32602, std::string("behaviours: ") + e.what());
+            }
+            if (patch["behaviours"].empty())
+                after.erase("behaviours");
+            else
+                after["behaviours"] = patch["behaviours"];
         }
         // IPC 0.31: another catalog entry where the placement stands (a rebuilt primitive): the id,
         // key and pose stay; placement rules apply to the new asset.

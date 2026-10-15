@@ -1,3 +1,4 @@
+#include "world/Behaviours.hpp"
 #include "Tools.hpp"
 #include "world/Motion.hpp"
 #include "DebugTool.hpp"
@@ -5,6 +6,16 @@
 #include <chrono>
 #include <set>
 namespace hyprune::interaction {
+namespace {
+bool validBehaviours(const nlohmann::json &v) {
+    try {
+        world::parseBehaviours(v);
+        return true;
+    } catch (const std::exception &) {
+        return false;
+    }
+}
+} // namespace
 Mat4 Transform::matrix(Vec3 origin) const {
     auto m = Mat4::identity();
     auto x = rotate(rotation, {scale.x, 0, 0}), y = rotate(rotation, {0, scale.y, 0}),
@@ -501,6 +512,7 @@ void Tools::restore(const Json &input) {
                       : k == "speed"                                           ? v.is_number() && v.get<double>() >= .25 && v.get<double>() <= 2
                       : k == "workspace"                                       ? v.is_number_integer() && v.get<int64_t>() >= 1 && v.get<int64_t>() <= 9999
                       : k == "key" ? v.is_string() && validPlacementKey(v.get<std::string>()) // IPC 0.31: a placement's stable name
+                      : k == "behaviours" ? validBehaviours(v) // IPC 0.31: data-driven display behaviours
                       : k == "accent" ? v.is_array() && v.size() == 3 &&
                                             std::all_of(v.begin(), v.end(), [](auto &c) { return c.is_number() && c >= 0 && c <= 1; })
                       : k == "style"  ? world::validCharacterStyle(v) // IPC 0.28: a character's walk, run and idle styles

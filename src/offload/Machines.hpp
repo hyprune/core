@@ -48,7 +48,13 @@ inline Json stateJson(const world::ObjectDrawState &s) {
     for (size_t m = 0; m < s.meshes.size(); ++m)
         if (!defaultPaint(s.meshes[m]))
             meshes.push_back({m, paintJson(s.meshes[m])});
-    return Json{{"count", s.meshes.size()}, {"meshes", meshes}, {"turns", s.turns}, {"look", {s.saturation, s.brightness}}};
+    Json j{{"count", s.meshes.size()}, {"meshes", meshes}, {"turns", s.turns}, {"look", {s.saturation, s.brightness}}};
+    // Behaviours: the display transform and texture offset (the worker draws them alike).
+    if (s.displayed)
+        j["display"] = s.display.v;
+    if (s.uvU != 0 || s.uvV != 0)
+        j["uv"] = {s.uvU, s.uvV};
+    return j;
 }
 inline world::ObjectDrawState stateOf(const Json &j) {
     world::ObjectDrawState s;
@@ -65,6 +71,16 @@ inline world::ObjectDrawState stateOf(const Json &j) {
     }
     s.turns = j.at("turns").get<std::vector<double>>();
     s.saturation = j.at("look").at(0), s.brightness = j.at("look").at(1);
+    if (j.contains("display")) {
+        auto &d = j["display"];
+        if (!d.is_array() || d.size() != 16)
+            throw std::runtime_error("machine display");
+        for (size_t i = 0; i < 16; ++i)
+            s.display.v[i] = d[i].get<float>();
+        s.displayed = true;
+    }
+    if (j.contains("uv"))
+        s.uvU = j["uv"].at(0), s.uvV = j["uv"].at(1);
     return s;
 }
 inline bool translationOnly(const Mat4 &m) {

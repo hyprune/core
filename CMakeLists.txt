@@ -30,7 +30,7 @@ set_source_files_properties(${MESHOPTIMIZER_SOURCES} PROPERTIES COMPILE_OPTIONS 
 # zstd decoder (BSD) for KHR_texture_basisu / KTX2; see third_party/README.md.
 set(BASISU_SOURCES third_party/basisu/transcoder/basisu_transcoder.cpp third_party/basisu/zstd/zstddeclib.c)
 set_source_files_properties(${BASISU_SOURCES} PROPERTIES COMPILE_OPTIONS "-w;-fno-strict-aliasing")
-add_library(hyprune_runtime STATIC ${MESHOPTIMIZER_SOURCES} ${BASISU_SOURCES} src/interaction/Tools.cpp src/interaction/DebugTool.cpp src/interaction/Gizmo.cpp src/interaction/Placement.cpp src/interaction/InputFile.cpp src/interaction/CaptureNotes.cpp src/interaction/Input.cpp src/interaction/Hands.cpp src/interaction/Config.cpp src/interaction/Settings.cpp src/world/Environment.cpp src/world/Mounts.cpp src/surfaces/Layout.cpp src/world/Spatial.cpp src/control/Control.cpp src/world/World.cpp src/world/Objects.cpp src/world/Paths.cpp src/world/Occlusion.cpp src/interaction/Walkability.cpp src/world/Machines.cpp src/world/Character.cpp src/world/Retarget.cpp src/world/Motion.cpp src/world/Playable.cpp src/world/Schema.cpp src/world/ObjectCheck.cpp src/world/Catalog.cpp src/render/PNG.cpp src/render/Watermark.cpp src/sim/Camera.cpp src/sim/Cinema.cpp src/sim/Climbing.cpp src/surfaces/Surface.cpp src/ipc/Server.cpp src/ipc/WireAudit.cpp src/ipc/Bridge.cpp
+add_library(hyprune_runtime STATIC ${MESHOPTIMIZER_SOURCES} ${BASISU_SOURCES} src/interaction/Tools.cpp src/interaction/DebugTool.cpp src/interaction/Gizmo.cpp src/interaction/Placement.cpp src/interaction/InputFile.cpp src/interaction/CaptureNotes.cpp src/interaction/Input.cpp src/interaction/Hands.cpp src/interaction/Config.cpp src/interaction/Settings.cpp src/world/Environment.cpp src/world/Mounts.cpp src/surfaces/Layout.cpp src/world/Spatial.cpp src/control/Control.cpp src/world/World.cpp src/world/Objects.cpp src/world/Paths.cpp src/world/Occlusion.cpp src/interaction/Walkability.cpp src/world/Machines.cpp src/world/Behaviours.cpp src/world/Character.cpp src/world/Retarget.cpp src/world/Motion.cpp src/world/Playable.cpp src/world/Schema.cpp src/world/ObjectCheck.cpp src/world/Catalog.cpp src/render/PNG.cpp src/render/Watermark.cpp src/sim/Camera.cpp src/sim/Cinema.cpp src/sim/Climbing.cpp src/surfaces/Surface.cpp src/ipc/Server.cpp src/ipc/WireAudit.cpp src/ipc/Bridge.cpp
   src/quests/Files.cpp src/quests/Guidance.cpp src/quests/Quests.cpp src/quests/Focus.cpp src/quests/Engine.cpp src/quests/Markers.cpp src/content/Engine.cpp)
 target_link_libraries(hyprune_runtime PUBLIC PkgConfig::SPATIAL PkgConfig::PLATFORM PkgConfig::OVERLAY)
 target_include_directories(hyprune_runtime PUBLIC src ${CMAKE_CURRENT_BINARY_DIR}/generated)
@@ -250,6 +250,10 @@ if(BUILD_TESTING)
  target_link_libraries(objects-tests PRIVATE hyprune_runtime)
  target_compile_options(objects-tests PRIVATE -UNDEBUG)
  add_test(NAME world-objects COMMAND objects-tests ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/objects)
+ add_executable(behaviours-tests tests/behaviours.cpp)
+ target_link_libraries(behaviours-tests PRIVATE hyprune_runtime)
+ target_compile_options(behaviours-tests PRIVATE -UNDEBUG)
+ add_test(NAME behaviours COMMAND behaviours-tests)
  add_executable(machines-tests tests/machines.cpp)
  target_link_libraries(machines-tests PRIVATE hyprune_runtime)
  target_compile_options(machines-tests PRIVATE -UNDEBUG)

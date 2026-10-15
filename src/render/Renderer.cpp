@@ -49,10 +49,12 @@ layout(location=7) in vec4 instance3;layout(location=8) in vec4 instanceUp;layou
 // Per-instance paint (machines prototype): palette colour (rgb, a > .5 when painted) and
 // tint (painted emission, emissive scale, saturation, brightness).
 layout(location=10) in vec4 instancePaint;layout(location=11) in vec4 instanceTint;
+// Behaviours (display only): texture offset (xy) and z > .5 when the model scales unevenly.
+layout(location=12) in vec4 instanceUV;
 uniform mat4 vp,model;uniform mat3 normalMatrix;uniform int instanced;
 out vec3 n;out vec3 worldPosition;out vec2 uv;out vec2 lightUV;flat out vec4 probeUp;flat out vec4 probeDown;flat out vec4 paint;flat out vec4 tint;
 void main(){mat4 m=instanced!=0?mat4(instance0,instance1,instance2,instance3):model;vec4 pos=m*vec4(position,1);gl_Position=vp*pos;
-n=instanced!=0?mat3(m)*normal:normalMatrix*normal;uv=uv0;lightUV=uv1;worldPosition=pos.xyz;probeUp=instanceUp;probeDown=instanceDown;
+n=instanced!=0?(instanceUV.z>.5?transpose(inverse(mat3(m))):mat3(m))*normal:normalMatrix*normal;uv=uv0+(instanced!=0?instanceUV.xy:vec2(0));lightUV=uv1;worldPosition=pos.xyz;probeUp=instanceUp;probeDown=instanceDown;
 paint=instanced!=0?instancePaint:vec4(0);tint=instanced!=0?instanceTint:vec4(0,1,1,1);}
 )";
 // NPC characters: linear blend skinning with up to 4 joints per vertex from a joint
@@ -657,6 +659,19 @@ bool Renderer::instanceVisible(const world::ObjectInstance &o, const std::array<
             return false;
     return true;
 }
+// An instance with its behaviours' display transform: its swept sphere moved and grown.
+const world::ObjectInstance &Renderer::displayedInstance(size_t k) const {
+    const auto &o = world_->objectInstances[k];
+    if (k >= objectStates.size() || !objectStates[k].bound || !objectStates[k].displayed)
+        return o;
+    auto &shown = displayScratch_; // the few displayed instances only: the rest are not copied
+    shown = o;
+    const auto &d = objectStates[k].display;
+    const auto &asset = world_->objectAssets[o.asset];
+    shown.center = (o.model * d).point(asset.center);
+    shown.radius = o.radius * std::max(1.f, world::displayStretch(d));
+    return shown;
+}
 // NPC culling: rest bounds grown by 0.6 m for limbs in motion, then placed by the model.
 bool Renderer::npcVisible(const Npc &npc, const std::array<std::array<float, 4>, 6> &planes, const std::vector<bool> &areas,
                           bool regions) const {
@@ -710,7 +725,7 @@ bool Renderer::animationVisible(const sim::Camera &camera, float aspect) const {
         bool moving = k < objectStates.size() && objectStates[k].bound
                           ? objectStates[k].moving
                           : clock && o.speed > 0 && world_->objectAssets[o.asset].animated();
-        if (moving && instanceVisible(o, planes, areas, regions))
+        if (moving && instanceVisible(displayedInstance(k), planes, areas, regions))
             return true;
     }
     return false;
@@ -720,7 +735,7 @@ bool Renderer::objectInView(size_t instance, const sim::Camera &camera, float as
         return false;
     auto planes = frustumPlanes(camera.projection(aspect) * camera.view());
     auto areas = world::visibleAreas(*world_, camera.position);
-    return instanceVisible(world_->objectInstances[instance], planes, areas, graphics.value("visibility_culling", true));
+    return instanceVisible(displayedInstance(instance), planes, areas, graphics.value("visibility_culling", true));
 }
 std::vector<bool> Renderer::npcsInSight(const sim::Camera &camera, float aspect) const {
     std::vector<bool> drawn(npcs.size());
@@ -1947,7 +1962,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         std::vector<size_t> shown;
         std::vector<bool> instanceShown(world_->objectInstances.size(), false);
         for (size_t k = 0; k < world_->objectInstances.size(); ++k)
-            if (instanceVisible(world_->objectInstances[k], planes, visible, regions))
+            if (instanceVisible(displayedInstance(k), planes, visible, regions))
                 shown.push_back(k), instanceShown[k] = true;
         objectInstancesVisible_ = shown.size();
         // Extras (machines prototype: stack copies, items, effect pieces) draw with their
@@ -1969,7 +1984,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
         }
         std::vector<float> records;
         auto record = [&](const Mat4 &model, const world::ObjectInstance &o, const world::MeshPaint *paint, float saturation,
-                          float brightness) {
+                          float brightness, const world::ObjectDrawState *display = nullptr) {
             records.insert(records.end(), model.v.begin(), model.v.end());
             records.insert(records.end(), {o.ambientUp.x, o.ambientUp.y, o.ambientUp.z, o.sun, o.ambientDown.x,
                                            o.ambientDown.y, o.ambientDown.z, o.sunVisibility});
@@ -1977,6 +1992,9 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
             records.insert(records.end(), {painted ? paint->colour.x : 0.f, painted ? paint->colour.y : 0.f,
                                            painted ? paint->colour.z : 0.f, painted ? 1.f : 0.f, painted ? paint->emission : 0.f,
                                            paint ? paint->emissiveScale : 1.f, saturation, brightness});
+            bool shown = display && display->displayed;
+            records.insert(records.end(), {display ? display->uvU : 0.f, display ? display->uvV : 0.f,
+                                           shown && world::displayUneven(display->display) ? 1.f : 0.f, 0.f});
         };
         for (size_t i = 0; i < batches_.size(); ++i) {
             const auto &b = batches_[i];
@@ -2003,7 +2021,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
                     state && size_t(b.mesh) < state->meshes.size() ? &state->meshes[b.mesh] : nullptr;
                 if (paint && paint->hidden)
                     continue;
-                Mat4 model = o.model;
+                Mat4 model = state && state->displayed ? o.model * state->display : o.model;
                 if (paint && (paint->offset.x != 0 || paint->offset.y != 0 || paint->offset.z != 0)) {
                     auto offset = Mat4::identity();
                     offset.v[12] = paint->offset.x, offset.v[13] = paint->offset.y, offset.v[14] = paint->offset.z;
@@ -2013,7 +2031,7 @@ void Renderer::draw(GLuint target, int w, int h, const sim::Camera &camera, std:
                     model = model * (state && size_t(animation) < state->turns.size()
                                          ? world::animation::matrixAt(asset.animations[animation], state->turns[animation])
                                          : world::animation::matrix(asset.animations[animation], t, o.speed, o.phase));
-                record(model, o, paint, state ? state->saturation : 1.f, state ? state->brightness : 1.f);
+                record(model, o, paint, state ? state->saturation : 1.f, state ? state->brightness : 1.f, state);
                 add(model);
             }
             for (auto e : extras) {

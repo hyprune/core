@@ -248,7 +248,9 @@ class Renderer {
     std::vector<Batch> batches_;
     std::chrono::steady_clock::time_point animationEpoch_{};
     GLuint instanceVbo_ = 0; // per-frame instance records (model, probe lighting, paint, tint)
-    static constexpr GLuint recordFloats = 32;
+    static constexpr GLuint recordFloats = 36;
+    const world::ObjectInstance &displayedInstance(size_t instance) const;
+    mutable world::ObjectInstance displayScratch_;
     size_t objectInstancesVisible_ = 0, objectDrawCalls_ = 0, objectInstancesDrawn_ = 0;
     // Frustum and, with `regions`, visibility areas: a character shares the areas of the
     // scene around its current position, like a placed object (RFC-0010).

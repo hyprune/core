@@ -83,6 +83,7 @@ extern "C" {
 #include "interaction/Walkability.hpp"
 #include "world/Paths.hpp"
 #include "world/Machines.hpp"
+#include "world/Behaviours.hpp"
 #include "world/Character.hpp"
 #include "offload/Pci.hpp"
 #include "render/PNG.hpp"
@@ -905,6 +906,12 @@ struct Runtime {
     // id>), the user bindings file machines.json (re-read on change) and the development
     // override HYPRUNE_MACHINES_PROTOTYPE. Synced and applied in the tick only.
     world::Machines machines;
+    // Data-driven behaviours on user placements (RFC-0014 amendment, IPC 0.31 draft), drawn
+    // through the same draw states as machines, after them.
+    world::Behaviours behaviours;
+    std::string behavioursSignature;
+    bool behaviourStates = false;
+    void behavioursSync();
     interaction::InputFile machinesFile{"machines", Json{{"instances", Json::object()}}, [](const Json &j) {
                                             if (!j.is_object() || !j.value("instances", Json::object()).is_object())
                                                 throw std::runtime_error("machines.json: {\"instances\": {<instance id>: {...}}}");
@@ -2790,6 +2797,9 @@ void Runtime::machinesLoad() {
     // "staleMs", "effectAsset"}. Machines themselves sync in the tick, after the
     // world's objects (catalog placements merge later).
     machines = {};
+    behaviours = {};
+    behavioursSignature.clear();
+    behaviourStates = false;
     machinesDev = nullptr;
     machinesStale = true;
     machineHints.clear();
@@ -2843,17 +2853,59 @@ void Runtime::machinesTick(float dt) {
             renderer.worldLabels.clear();
         }
     }
-    if (!machines.active())
+    behavioursSync();
+    if (!machines.active() && !behaviours.active() && !behaviourStates)
         return;
     // Same clock as Control's publication monotonicMs. Still: reduced motion (states,
     // labels, counts and flashes change; nothing spins or travels), or a pinned animation
     // clock (tests: both renderers draw machines at rest, as they draw the pinned time).
     auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
     bool still = config["graphics"]["reduced_motion"] == true || renderer.animationClock.has_value();
-    machines.tick(dt, control.sources, now, still);
-    renderer.objectStates = machines.states;
-    renderer.objectExtras = machines.extras;
-    renderer.worldLabels = machines.labels;
+    if (machines.active()) {
+        machines.tick(dt, control.sources, now, still);
+        renderer.objectStates = machines.states;
+        renderer.objectExtras = machines.extras;
+        renderer.worldLabels = machines.labels;
+    } else
+        renderer.objectStates.clear(); // behaviours alone (or none left): rebuilt below
+    behaviourStates = behaviours.active();
+    if (behaviours.active()) {
+        // Behaviours fold into the draw states after machines (display, texture offset, paint).
+        behaviours.tick(dt, control.sources, now, still);
+        behaviours.apply(*world, renderer.objectStates);
+    }
+}
+// The user placements with behaviours (records' `behaviours`), resynced when they or the
+// instances change. A list core can't read is skipped with a notice (it was checked when set).
+void Runtime::behavioursSync() {
+    if (!world)
+        return;
+    std::string signature = std::to_string(instanceRevision);
+    for (auto &i : objectInfos) {
+        if (i.source != "user" || i.index < 0 || i.state != "active")
+            continue;
+        auto r = editor.placement(world->id, i.id);
+        if (!r.is_object() || !r.contains("behaviours") || !r["behaviours"].is_array() || r["behaviours"].empty())
+            continue;
+        signature += "\n" + i.id + "@" + std::to_string(i.index) + r["behaviours"].dump();
+    }
+    if (signature == behavioursSignature)
+        return;
+    behavioursSignature = signature;
+    std::vector<world::Behaviours::Bound> bound;
+    for (auto &i : objectInfos) {
+        if (i.source != "user" || i.index < 0 || i.state != "active")
+            continue;
+        auto r = editor.placement(world->id, i.id);
+        if (!r.is_object() || !r.contains("behaviours") || !r["behaviours"].is_array() || r["behaviours"].empty())
+            continue;
+        try {
+            bound.push_back({size_t(i.index), i.id, world::parseBehaviours(r["behaviours"])});
+        } catch (const std::exception &e) {
+            objectNotice("behaviour.invalid", (i.name + ": " + e.what()).substr(0, 240), "behaviour:" + i.id + e.what());
+        }
+    }
+    behaviours.sync(*world, std::move(bound));
 }
 void Runtime::motionTick(float dt) {
     // Measured motion (not intent): walking into a wall neither bobs nor spreads the reticle.
