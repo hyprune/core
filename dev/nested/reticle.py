@@ -297,8 +297,11 @@ def shots(client, children, pointer, player, palette, capture, queue, held, logo
     keys('-k', '5'); facing(second, 3); expect('shots: pocket valid', 'valid', 'pocket'); snap('valid')
     player({'reach_placement': 2}); expect('shots: out of range', 'out_of_range'); snap('out_of_range'); player({'reach_placement': None})
     # Invalid: a locked-in-place target is not available here; an occupied spot with a window to place is.
-    keys('-k', '5'); facing(first, 3); pointer('button', 274); wait(lambda: queue()['count'] == 1)
-    facing(second, 3); expect('shots: invalid place', 'invalid', 'place'); snap('invalid')
+    # The verdict tests the wall behind the aimed window (windows are not collision), so pocket the
+    # second window (carried and released in mid-air above, often with no wall behind it) and aim at
+    # the first, which is placed on a wall.
+    keys('-k', '5'); facing(second, 3); pointer('button', 274); wait(lambda: queue()['count'] == 1)
+    facing(first, 3); expect('shots: invalid place', 'invalid', 'place'); snap('invalid')
     place_ahead(0)
     keys('-k', '1'); facing(second, 3)
     h = held(logo, 1.5); wait(lambda: s.camera()['superHeld']); pointer('button', 272, 1); wait(lambda: s.camera()['gesture'] == 1); h.wait(timeout=5)
