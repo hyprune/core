@@ -1,7 +1,7 @@
-"""Build a world from the Director (RFC-0014 phase 1 as amended, IPC 0.27, world format 0.11):
+"""Build a world from the Director (RFC-0014 as amended, IPC 0.31, world format 0.11):
 dev/nested/run.sh --builder-shell.
 
-Nested only. Lumen Reach to start from, the real shell at IPC 0.27 (HYPRUNE_SHELL_DIR, default
+Nested only. Lumen Reach to start from, the real shell at IPC 0.31 (HYPRUNE_SHELL_DIR, default
 the shell checkout), the SDK's hyprune CLI (HYPRUNE_CLI, default node <sdk>/dist/src/cli.js),
 an imported object in the user folder (core's tests/fixtures/imported/barrel), a workspace
 screen (HYPRUNE_SCREENS_DIR, default core's stand-ins as for --screens) and a library
@@ -21,7 +21,13 @@ Checks:
     poses and screen binding.
  7. The released package (git archive v0.1.0) passes the SDK's validator and hyprune-world-check.
  8. The page's sky and floor tiles (paving, night) apply, reload the world, keep the placements.
- 9. No QML runtime errors.
+ 9. Shapes (IPC 0.31): a glowing box made from Objects > Shapes is pocketed, placed with a key
+    (dry run first; a taken key is refused with its id; ifExists update moves it); stairs from
+    the CLI stand on the floor; a cube inside the box is refused (its proxy collides); a material
+    made in the editor and changed rebuilds its box and swaps the placement (same id and key);
+    the Placed panel resizes a shape and renames its key; removing a missing key succeeds;
+    Save prunes the unplaced shapes and keeps the keys.
+10. No QML runtime errors.
 Stills: builder-*.png in the state dir (builder-wizard-*.png the wizard's steps, builder-sky.png looks
 towards the sunset); evidence docs/evidence/builder-shell.json.
 """
@@ -93,13 +99,13 @@ def acceptance(client, children, args, shell_token, socketpath):
 
     read, write = os.pipe(); os.write(write, (SHELL_TOKEN + '\n').encode()); os.close(write)
     _, environment = verified()
-    environment.update(HYPRUNE_TOKEN_FD=str(read), HYPRUNE_PROTOCOL='0.27', HYPRUNE_SOCKET=str(socketpath), HYPRUNE_CLI=CLI,
+    environment.update(HYPRUNE_TOKEN_FD=str(read), HYPRUNE_PROTOCOL='0.31', HYPRUNE_SOCKET=str(socketpath), HYPRUNE_CLI=CLI,
                        XDG_DATA_HOME=os.environ['XDG_DATA_HOME'], HYPRUNE_OUTPUT_SCREEN=OUTPUT, HYPRUNE_DEV_AUTOMATION='1',
                        HYPRUNE_SHELL_PREFERENCES=str(s.STATE / 'shell-preferences.json'))
     environment.pop('HYPRUNE_PROJECTS_DIR', None)
     shell_dir = pathlib.Path(os.environ.get('HYPRUNE_SHELL_DIR', str(s.ROOT.parent / 'shell')))
     shell_log = s.STATE / 'shell.log'
-    shell = subprocess.Popen(['python3', str(shell_dir / 'bridge/launch.py'), '--protocol', '0.27'], env=environment,
+    shell = subprocess.Popen(['python3', str(shell_dir / 'bridge/launch.py'), '--protocol', '0.31'], env=environment,
                              pass_fds=(read,), stdout=open(shell_log, 'w'), stderr=subprocess.STDOUT)
     os.close(read); children.append(shell)
 
@@ -160,7 +166,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     s.ctl('eval', f'hl.dispatch(hl.dsp.focus({{ monitor = "{OUTPUT}" }}))')
     client.call('world.load', {'worldId': LUMEN})
     s.ctl('eval', f'hl.plugin.hyprune.toggle("{OUTPUT}")'); wait(lambda: s.camera()['active'], 60)
-    wait(lambda: status().get('protocol') == '0.27' and status().get('lease'), 30)
+    wait(lambda: status().get('protocol') == '0.31' and status().get('lease'), 30)
 
     # 1. New world: the wizard (name, sky, floor, facing), then create and warp in.
     director()
@@ -343,6 +349,110 @@ def acceptance(client, children, args, shell_token, socketpath):
     wait(lambda: not status().get('warp') and status().get('phase') == 'arrived', 30)
     s.ctl('eval', 'hl.plugin.hyprune.camera(1,1.7,0,0,.25)')
     shot('builder-night.png')
+
+    # 9. Shapes (IPC 0.31): made in the Director, placed with keys, swapped, renamed, pruned.
+    def shapes():
+        return status().get('shapes') or {}
+
+    def shape_job(kind, button, seconds=90):
+        assert press(button), button
+        wait(lambda: (shapes().get('job') or {}).get('kind') == kind and (shapes().get('job') or {}).get('phase') in ('done', 'failed'), seconds)
+        return shapes()['job']
+
+    def refused(method, params):
+        try:
+            client.call(method, params)
+        except RuntimeError as e:
+            return e.args[0]
+        return None
+
+    def by_key(key):
+        return builtins.next((i for i in state()['objects']['instances'] if i.get('key') == key), None)
+    up = [0, 0, 0, 1]
+    director()
+    ui('tabNamed', 'objects')
+    ui('objectsView', 'shapes')
+    wait(lambda: shapes().get('supported') and status().get('tabName') == 'objects', 15)
+    glow = {'shape': 'box', 'size': ['0.6', '1.6', '0.6'], 'steps': None,
+            'material': {'kind': 'colour', 'colour': '#202020', 'key': '', 'glow': {'colour': '#30e0ff', 'strength': '4'}}}
+    assert ui('shapeForm', json.dumps(glow)) == 'true'
+    time.sleep(.5)
+    shot('builder-shapes.png')
+    j = shape_job('make', 'shape-make')
+    beacon_ref = (j.get('result') or {}).get('ref')
+    wait(lambda: any(o.get('ref') == beacon_ref for o in (state()['editor'].get('unplaced') or {}).get('objects', [])), 20)
+    dry = client.call('objects.place', {'ref': beacon_ref, 'pose': {'position': [0, 0, -11], 'rotation': up}, 'key': 'beacon', 'dryRun': True})
+    count = len(state()['objects']['instances'])
+    beacon = client.call('objects.place', {'ref': beacon_ref, 'pose': {'position': [0, 0, -11], 'rotation': up}, 'key': 'beacon'})['id']
+    taken = refused('objects.place', {'ref': beacon_ref, 'pose': {'position': [1, 0, -11], 'rotation': up}, 'key': 'beacon'})
+    moved = client.call('objects.place', {'ref': beacon_ref, 'pose': {'position': [0.5, 0, -11], 'rotation': up}, 'key': 'beacon', 'ifExists': 'update'})
+    check('a shape made in Objects > Shapes is pocketed; placing with a key: dry run, taken key refused with its id, ifExists update moves it',
+          j['phase'] == 'done' and beacon_ref.startswith('world/box-') and dry.get('dryRun') is True and count == len(state()['objects']['instances']) - 1 and
+          (taken or {}).get('data', {}).get('rule') == 'key.taken' and (taken or {}).get('data', {}).get('id') == beacon and
+          moved.get('updated') is True and moved['id'] == beacon and abs(by_key('beacon')['pose']['position'][0] - 0.5) < 1e-3,
+          {'job': j.get('result'), 'dry': dry, 'taken': taken, 'moved': moved})
+    stairs = json.loads(subprocess.run([*CLI.split(), 'builder', 'primitive', SLUG, '--shape', 'stairs', '--size', '1.2,1.8,3', '--material', 'paving', '--json'],
+                                       capture_output=True, text=True, env={**os.environ, 'HYPRUNE_PROJECTS_DIR': str(folder.parent)}).stdout.strip().split('\n')[-1])['result']
+    steps = client.call('objects.place', {'ref': stairs['ref'], 'pose': {'position': [-3, 0, -12], 'rotation': up}, 'key': 'steps'})['id']
+    blocked = refused('objects.place', {'ref': stairs['ref'], 'pose': {'position': [0.5, 0, -11], 'rotation': up}})
+    check('stairs from the CLI place on the floor; a shape inside the box is refused by its collision',
+          bool(steps) and by_key('steps')['state'] == 'active' and blocked is not None, {'stairs': stairs.get('name'), 'blocked': blocked})
+    # A material from the editor; a box in it; the material changed: the box is rebuilt and swapped.
+    assert ui('materialForm', json.dumps({'key': 'brick', 'name': 'Brick', 'colour': '#d08060', 'texture': {'kind': 'preset', 'preset': 'paving'},
+                                          'tile': '2', 'glow': None, 'roughness': '', 'metallic': '', 'fresh': True})) == 'true'
+    time.sleep(.4)
+    shot('builder-materials.png')
+    j = shape_job('material', 'material-save')
+    assert ui('shapeForm', json.dumps({'shape': 'box', 'size': ['3', '1.2', '0.3'], 'steps': None, 'material': {'kind': 'key', 'key': 'brick', 'colour': '#d08060', 'glow': None}})) == 'true'
+    wall_ref = shape_job('make', 'shape-make')['result']['ref']
+    wall = client.call('objects.place', {'ref': wall_ref, 'pose': {'position': [3, 0, -12], 'rotation': up}, 'key': 'wall'})['id']
+    wait(lambda: 'brick' in (shapes().get('materials') or []), 20)
+    assert ui('materialForm', json.dumps({'key': 'brick', 'name': 'Brick', 'colour': '#806040', 'texture': {'kind': 'keep'}, 'tile': '', 'glow': None,
+                                          'roughness': '', 'metallic': '', 'fresh': False, 'textured': True})) == 'true'
+    shape_job('material', 'material-save')
+    wait(lambda: (shapes().get('job') or {}).get('kind') == 'rebuild' and shapes()['job'].get('phase') == 'done', 60)
+    wait(lambda: by_key('wall')['ref'] != wall_ref, 20)
+    swapped = by_key('wall')
+    check('a material saved in the editor and changed rebuilds its shapes and swaps their placements (same id and key)',
+          j['phase'] == 'done' and swapped['id'] == wall and swapped['ref'].startswith('world/box-') and swapped['state'] == 'active',
+          {'before': wall_ref, 'after': swapped['ref']})
+    # The Placed panel: resize the beacon, then rename its key.
+    ui('objectsView', 'placed')
+    ui('selectObject', beacon)
+    wait(lambda: status().get('director'), 5)
+    time.sleep(.8)
+    assert ui('fieldText', 'shapeEditSizeY', '2.4') == 'true'
+    old_ref = by_key('beacon')['ref']
+    shot('builder-shape-edit.png')
+    shape_job('apply', 'shape-apply')
+    wait(lambda: by_key('beacon')['ref'] != old_ref, 20)
+    assert ui('fieldText', 'objectKey', 'tower') == 'true'
+    assert press('object-key-set')
+    wait(lambda: by_key('tower') is not None, 10)
+    tower = by_key('tower')
+    missing = client.call('objects.remove', {'key': 'nothing-here'})
+    cat = client.call('objects.catalog', {})['entries']
+    prim = builtins.next((e['primitive'] for e in cat if e['ref'] == tower['ref']), None)
+    check('the Placed panel resizes a shape (a new folder, the same id) and renames its key; removing a missing key succeeds',
+          tower['id'] == beacon and tower['ref'] != old_ref and (prim or {}).get('size') == [0.6, 2.4, 0.6] and missing.get('removed') is False,
+          {'tower': {k: tower[k] for k in ('id', 'ref', 'key')}, 'primitive': prim, 'missing': missing})
+    close_director()
+    s.ctl('eval', 'hl.plugin.hyprune.camera(0,1.7,-5,0,-.08)')
+    shot('builder-shapes-world.png')
+    director()
+    ui('tabNamed', 'builder')
+    ui('fieldText', 'builderMessage', 'Shapes: a beacon, stairs and a brick wall')
+    j = run_job('save', 'builder-save')
+    project = json.loads((folder / 'builder/project.json').read_text())
+    world = json.loads((folder / 'world.json').read_text())
+    placed_keys = sorted(p["key"] for p in project["placements"] if "key" in p)
+    left = sorted(p.name for p in (folder / 'objects').iterdir() if (p / 'primitive.json').exists())
+    used = sorted({p['ref'][6:] for p in project['placements'] if (folder / 'objects' / p['ref'][6:] / 'primitive.json').exists()})
+    check('Save keeps the keys, prunes the shapes nobody places and credits the materials',
+          j["phase"] == "done" and placed_keys == ["steps", "tower", "wall"] and left == used and len(left) == 3 and
+          any(a['path'].startswith('materials/brick/') for a in world['attribution']),
+          {"keys": placed_keys, "shapes": left, 'warnings': (j.get('result') or {}).get('warnings')})
+    close_director()
     log = shell_log.read_text()
     bad = [x for x in ['ReferenceError', 'TypeError', 'Binding loop', 'Unable to assign', 'is not defined', 'does not match the negotiated protocol'] if x in log]
     check('no QML runtime errors in the shell log', not bad, bad)
