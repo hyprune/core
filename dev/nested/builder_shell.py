@@ -8,8 +8,9 @@ screen (HYPRUNE_SCREENS_DIR, default core's stand-ins as for --screens) and a li
 (tests/fixtures/catalog/libraries/com.example.kit@1.0.0). World folders go to
 $XDG_DATA_HOME/hyprune/projects in the state dir.
 Checks:
- 1. Director > Builder > Build: the folder is a git repository with one commit (the Flat land
-    starter), and the shell warps into it in editor mode (state.builder, the panorama sky).
+ 1. Director > Builder > New world: the wizard (name, the sunset sky, the grass floor every 3 m,
+    facing the sun) makes a git repository with one commit (the Open Plain starter), and the shell
+    warps into it in editor mode (state.builder, the panorama sky).
  2. Placing an imported object, a workspace screen and a library object copies each into the
     folder's objects/ (refs world/<id>); the placements go to builder/project.json, never to
     editor.json; the screen is a home for workspace 21; the page counts unsaved changes.
@@ -19,8 +20,10 @@ Checks:
  6. Reload from the folder (Lumen Reach, then Builder > My worlds > Edit): the same placements,
     poses and screen binding.
  7. The released package (git archive v0.1.0) passes the SDK's validator and hyprune-world-check.
- 8. No QML runtime errors.
-Stills: builder-*.png in the state dir (builder-sky.png looks up at the panorama's sun); evidence docs/evidence/builder-shell.json.
+ 8. The page's sky and floor tiles (paving, night) apply, reload the world, keep the placements.
+ 9. No QML runtime errors.
+Stills: builder-*.png in the state dir (builder-wizard-*.png the wizard's steps, builder-sky.png looks
+towards the sunset); evidence docs/evidence/builder-shell.json.
 """
 import builtins, json, os, pathlib, secrets, shutil, subprocess, tempfile, time
 import session as s
@@ -159,28 +162,54 @@ def acceptance(client, children, args, shell_token, socketpath):
     s.ctl('eval', f'hl.plugin.hyprune.toggle("{OUTPUT}")'); wait(lambda: s.camera()['active'], 60)
     wait(lambda: status().get('protocol') == '0.27' and status().get('lease'), 30)
 
-    # 1. Build a world: name, Build, warp in.
+    # 1. New world: the wizard (name, sky, floor, facing), then create and warp in.
     director()
     ui('tabNamed', 'builder'); wait(lambda: status().get('tabName') == 'builder')
+    assert press('builder-new')
+    wait(lambda: (builder().get('wizard') or {}).get('step') == 0, 10)
     assert ui('fieldText', 'builderName', NAME) == 'true'
     time.sleep(.3)
-    shot('builder-new.png')
+    shot('builder-wizard-name.png')
+    assert press('builder-wizard-next')
+    wait(lambda: len(builder().get('skies') or []) == 4, 60)
+    assert press('builder-sky-preset:sunset')
+    time.sleep(1)
+    shot('builder-wizard-sky.png')
+    assert press('builder-wizard-next')
+    wait(lambda: len(builder().get('floors') or []) == 5, 60)
+    assert press('builder-floor-preset:grass')
+    assert ui('fieldText', 'builderTile', '3') == 'true'
+    time.sleep(1)
+    shot('builder-wizard-floor.png')
+    assert press('builder-wizard-next')
+    assert press('builder-facing:sun')
+    time.sleep(.3)
+    shot('builder-wizard-start.png')
+    wizard = builder().get('wizard')
     start = time.monotonic()
     j = run_job('create', 'builder-create')
     wait(lambda: (state().get('builder') or {}).get('projectId') == SLUG and (state().get('world') or {}).get('id') == f'local.{SLUG}', 60)
     b = state()['builder']
     commits = git('log', '--format=%s').split('\n')
-    check('Build makes a git repository with the starter and warps into it in editor mode',
-          j['phase'] == 'done' and commits == [f'Create {NAME} from the Flat land starter'] and b['mode'] == 'edit' and
-          b['folder'] == str(folder) and b['placements'] == 0 and b['sky'] == 'sky/panorama.jpg',
-          {'seconds': round(time.monotonic() - start, 1), 'commits': commits, 'builder': b, 'files': git('ls-files').split('\n')})
+    project = json.loads((folder / 'builder/project.json').read_text())
+    check('New world makes a git repository from Open Plain with the chosen sky, floor and facing, and warps into it in editor mode',
+          j['phase'] == 'done' and commits == [f'Create {NAME} from the Open Plain starter'] and b['mode'] == 'edit' and
+          b['folder'] == str(folder) and b['placements'] == 0 and b['sky'] == 'sky/panorama.jpg' and
+          project['starter'] == 'open-plain@0.2' and project['sky']['preset'] == 'sunset' and
+          project['floor']['preset'] == 'grass' and project['floor']['tile'] == 3,
+          {'seconds': round(time.monotonic() - start, 1), 'commits': commits, 'builder': b, 'wizard': wizard,
+           'sky': project['sky'], 'floor': project['floor'], 'files': git('ls-files').split('\n')})
     close_director()
     wait(lambda: not status().get('warp') and status().get('phase') == 'arrived', 30)
-    s.ctl('eval', 'hl.plugin.hyprune.camera(0,1.7,6,0,.05)')
+    spawn = json.loads((folder / 'builder/base.json').read_text())['spawns'][0]['pose']
+    yaw = -2 * __import__('math').atan2(spawn['rotation'][1], spawn['rotation'][3])  # the camera's heading (+yaw turns right)
+    s.ctl('eval', f'hl.plugin.hyprune.camera(0,1.7,0,{yaw:.3f},.02)')
     shot('builder-world.png')
-    # The panorama: up towards the starter's sun (behind and to the right of the spawn) and its clouds.
-    s.ctl('eval', 'hl.plugin.hyprune.camera(0,1.7,6,2.36,.5)')
+    # Towards the sunset (the spawn faces the sun) and down at the grass.
+    s.ctl('eval', f'hl.plugin.hyprune.camera(0,1.7,0,{yaw:.3f},.12)')
     shot('builder-sky.png')
+    s.ctl('eval', f'hl.plugin.hyprune.camera(0,1.7,0,{yaw + 3.14:.3f},-.5)')
+    shot('builder-floor.png')
 
     # 2. Place an imported object, a workspace screen (bound to 21) and a library object.
     def place(ref, position, **extra):
@@ -291,6 +320,28 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('the released package passes the SDK validator and hyprune-world-check', sdk.returncode == 0 and core.returncode == 0 and
           'builder/project.json' in files and not any(f.startswith('.git') for f in files),
           {'sdk': sdk.returncode, 'core': core.returncode, 'stderr': (sdk.stderr + core.stderr)[-400:], 'files': len(files)})
+
+    # 8. The sky and floor from the page: each tile applies, the world reloads with the placements.
+    director()
+    ui('tabNamed', 'builder')
+    wait(lambda: len(builder().get('floors') or []) == 5 and len(builder().get('skies') or []) == 4, 60)
+    loads = []
+    for kind, button in (('floor', 'builder-set-floor:paving'), ('sky', 'builder-set-sky:night')):
+        director()
+        ui('tabNamed', 'builder')
+        j = run_job(kind, button)
+        loads.append({'kind': kind, 'phase': j.get('phase'), 'error': j.get('error')})
+        wait(lambda: (state().get('builder') or {}).get('projectId') == SLUG and (state().get('world') or {}).get('id') == f'local.{SLUG}', 60)
+        wait(lambda: len(instances()) == 3 and all(i['state'] == 'active' for i in instances().values()), 60)
+    project = json.loads((folder / 'builder/project.json').read_text())
+    base = json.loads((folder / 'builder/base.json').read_text())
+    check('the page sets the floor and the sky; the world reloads with them and keeps its placements',
+          all(l['phase'] == 'done' for l in loads) and project['floor']['preset'] == 'paving' and project['sky']['preset'] == 'night' and
+          base['atmosphere']['exposure'] > 1 and len(project['placements']) == 3,
+          {'loads': loads, 'floor': project['floor'], 'sky': project['sky'], 'git': git('status', '--porcelain').split('\n')})
+    close_director()
+    s.ctl('eval', 'hl.plugin.hyprune.camera(1,1.7,0,0,.25)')
+    shot('builder-night.png')
     log = shell_log.read_text()
     bad = [x for x in ['ReferenceError', 'TypeError', 'Binding loop', 'Unable to assign', 'is not defined', 'does not match the negotiated protocol'] if x in log]
     check('no QML runtime errors in the shell log', not bad, bad)
