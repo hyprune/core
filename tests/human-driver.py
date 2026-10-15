@@ -46,8 +46,15 @@ check(max(math.hypot(px - 100 - (900 - 100) * 0, 0) for _, px, _ in p.trace) > 9
 near, far = p.fitts_seconds(100, 40), human.Pointer(send=None, seed=5).fitts_seconds(1600, 40)
 check(far > near, 'Fitts: farther takes longer')
 args = human.typing_args('git log --oneline', seed=1)
-check(''.join(x for x in args if not x.isdigit() and x != '-s') == 'git log --oneline' and all(int(args[i + 1]) >= 18 for i, x in enumerate(args) if x == '-s'),
-      'typing types the text with per-key delays')
+typed, i = '', 0
+while i < len(args):
+    if args[i] == '-s':
+        check(int(args[i + 1]) >= 18, 'a key delay of at least 18 ms'); i += 2
+    elif args[i] == '-k':
+        typed += {'minus': '-'}[args[i + 1]]; i += 2
+    else:
+        check(not args[i].startswith('-'), 'no text argument wtype would read as an option'); typed += args[i]; i += 1
+check(typed == 'git log --oneline', f'typing types the text with per-key delays ({typed!r})')
 
 rows = [{'kind': 'header'}]
 ns = 0

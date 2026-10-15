@@ -364,7 +364,8 @@ class Pointer:
 # ---------------------------------------------------------------------------- keyboard
 def typing_args(text, wpm=62, seed=None):
     """wtype arguments typing `text` like a person: per-key delays (-s ms) drawn around `wpm`,
-    longer after spaces and punctuation, sometimes a pause before a word."""
+    longer after spaces and punctuation, sometimes a pause before a word. '-' goes as the
+    keysym (`-k minus`)."""
     rng = random.Random(seed)
     base = 60.0 / (wpm * 5)  # seconds per character
     args = []
@@ -379,7 +380,7 @@ def typing_args(text, wpm=62, seed=None):
             elif prev in '.,;:/-_|':
                 d *= rng.uniform(1.2, 1.8)
             args += ['-s', str(max(18, int(round(d * 1000))))]
-        args.append(ch)
+        args += ['-k', 'minus'] if ch == '-' else [ch]  # a lone '-' would read as an option
     return args
 
 
