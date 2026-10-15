@@ -455,7 +455,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     # wall and the stairs rising away from the camera's side.
     s.ctl('eval', 'hl.plugin.hyprune.camera(0.5,2.2,-18.5,3.14,-.1)')
     shot('builder-shapes-world.png')
-    s.ctl('eval', 'hl.plugin.hyprune.camera(-6.5,1.9,-10.5,-2.0,-.12)')
+    s.ctl('eval', 'hl.plugin.hyprune.camera(-6.5,1.9,-10.5,1.17,-.12)')
     shot('builder-shapes-stairs.png')
     director()
     ui('tabNamed', 'builder')
