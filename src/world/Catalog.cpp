@@ -1,5 +1,6 @@
 #include "Catalog.hpp"
 #include "Format.hpp"
+#include "Schema.hpp"
 #include <cgltf.h>
 #include <cstring>
 #include <functional>
@@ -569,6 +570,20 @@ CatalogEntry scanObject(const fs::path &dir, const std::string &ref, const std::
             e.provenance = {{"license", known(attribution.value("license", manifest.value("license", Json())), 512)},
                             {"author", known(attribution.value("author", Json()), 256)},
                             {"source", known(attribution.value("source", Json()), 1024)}};
+        // primitive.json (RFC-0014 amendment: primitives and materials): how a primitive was
+        // generated, for the shell's size and material fields. A bad record is a warning only.
+        if (has("primitive.json")) {
+            try {
+                auto record = parseJson(readFile(dir, "primitive.json", 65536), "primitive.json");
+                validateObjectDocument(record, "primitive", "0.11");
+                auto &m = record["material"];
+                e.primitive = {{"shape", record["shape"]}, {"size", record["size"]},
+                               {"material", {{"key", m["key"]}, {"name", m["name"]}, {"colour", m["colour"]}, {"textured", m["textured"]}}}};
+            } catch (const std::exception &x) {
+                if (e.warnings.size() < 8)
+                    e.warnings.push_back(std::string("primitive.json: ") + x.what());
+            }
+        }
         e.state = errors.empty() ? "ready" : "invalid";
         decidePlaceable(e);
         if (cache) {

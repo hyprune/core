@@ -9,7 +9,9 @@ namespace fs = std::filesystem;
 // pocketWindowLimit: pocketed windows listed on the wire (IPC 0.26, the apps limit).
 // IPC 0.27 (RFC-0014 sizes): the per-world user totals are the physical limits; imported objects
 // over the per-asset recommendations still place (0.22-0.26: 400,000 triangles, 192 MiB, 10,000).
-constexpr size_t userPlacementLimit = 128, userAssetLimit = 32, userTriangleLimit = 2000000, userCollisionLimit = 100000,
+// A world folder (RFC-0014, builder project 0.2) holds up to 512 placements of up to 256 assets
+// (generated primitives are one asset per shape, size and material); the totals still apply.
+constexpr size_t userPlacementLimit = 128, userAssetLimit = 32, folderPlacementLimit = 512, folderAssetLimit = 256, userTriangleLimit = 2000000, userCollisionLimit = 100000,
                  pocketObjectLimit = 16, pocketWindowLimit = 128;
 constexpr uint64_t userGpuLimit = 512ull << 20;
 std::string poseKey(const Json &record) { return record.value("pose", Json()).dump() + record.value("scale", Json()).dump(); }
@@ -196,7 +198,7 @@ const world::CatalogEntry *Runtime::catalogEntry(const std::string &ref, std::st
         for (auto &e : worldCatalog)
             if (e.ref == ref)
                 return &e;
-        return nullptr;
+        return builderScanOne(r->id); // generated after the folder loaded
     }
     if (auto it = catalog->refs.find(ref); it != catalog->refs.end())
         return &it->second;
@@ -419,6 +421,7 @@ void Runtime::objectsSync() {
         info.rotation = r["pose"]["rotation"].get<std::array<float, 4>>();
         info.scale = r["scale"];
         info.locked = r.value("locked", false);
+        info.key = r.value("key", "");
         std::string substitute;
         auto *e = catalogEntry(info.ref, &substitute);
         info.name = e ? displayName(e->manifest, e->manifest.is_object() && e->manifest.contains("companion"), e->name)
@@ -679,10 +682,10 @@ std::optional<std::string> Runtime::budgetRefusal(const world::CatalogEntry &e, 
     uint64_t pool = 0;
     for (auto &[ref, bytes] : gpu)
         pool += bytes;
-    if (count + 1 > userPlacementLimit)
-        return "user placements per world (128)";
-    if (refs.size() > userAssetLimit)
-        return "distinct assets used by user placements (32)";
+    if (count + 1 > (builder ? folderPlacementLimit : userPlacementLimit))
+        return builder ? "placements in a world folder (512)" : "user placements per world (128)";
+    if (refs.size() > (builder ? folderAssetLimit : userAssetLimit))
+        return builder ? "distinct assets placed in a world folder (256)" : "distinct assets used by user placements (32)";
     if (triangles > userTriangleLimit)
         return "triangles drawn by user placements (400,000)";
     if (pool > userGpuLimit)
@@ -1078,6 +1081,7 @@ Json Runtime::objectsState() {
                              {"character", i.character},
                              {"accent", nullptr},
                              {"screen", instanceScreen(i)},
+                             {"key", i.key.empty() ? Json(nullptr) : Json(i.key)}, // IPC 0.31 (older peers: erased)
                              {"style", nullptr}}); // IPC 0.28 (older peers: erased)
         // IPC 0.23: a character's route, what it is doing and the seat it holds.
         if (!i.character || !world)
@@ -1119,8 +1123,8 @@ Json Runtime::objectsState() {
             {"pocket", pocketObjectsJson()},
             {"usage", {{"placements", placements}, {"assets", refs.size()}, {"triangles", triangles}, {"gpuBytes", gpu}, {"collisionTriangles", collision}}},
             {"limits",
-             {{"placements", userPlacementLimit},
-              {"assets", userAssetLimit},
+             {{"placements", builder ? folderPlacementLimit : userPlacementLimit},
+              {"assets", builder ? folderAssetLimit : userAssetLimit},
               {"triangles", userTriangleLimit},
               {"gpuBytes", userGpuLimit},
               {"collisionTriangles", userCollisionLimit}}}};
@@ -1183,7 +1187,33 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         if (!world || loading)
             throw ipc::Error(-32005, "no world loaded");
     };
+    bool keys = ipc::protocol::atLeast(methodProtocol, "0.31"); // placement keys, dry runs, asset swaps
+    auto keyed = [&](const std::string &k) -> ObjectInfo * {
+        for (auto &i : objectInfos)
+            if (i.source == "user" && i.key == k)
+                return &i;
+        return nullptr;
+    };
+    auto keyParam = [&](const Json &v) {
+        if (!v.is_string() || !interaction::validPlacementKey(v.get<std::string>()))
+            throw ipc::Error(-32602, "a key is a slug of 1 to 48 characters (letters, digits, -), a letter first");
+        return v.get<std::string>();
+    };
+    auto dryRun = [&] {
+        if (!params.contains("dryRun"))
+            return false;
+        if (!params["dryRun"].is_boolean())
+            throw ipc::Error(-32602, "dryRun must be a boolean");
+        return params["dryRun"].get<bool>();
+    };
     auto info = [&](const char *key = "id") -> ObjectInfo & {
+        if (keys && params.is_object() && params.contains("key") && !params.contains(key)) {
+            auto k = keyParam(params["key"]);
+            auto *i = keyed(k);
+            if (!i)
+                throw ipc::Error(-32004, "no placement is named " + k, Json{{"rule", "key.unknown"}, {"retryable", false}});
+            return *i;
+        }
         if (!params.contains(key) || !params[key].is_string())
             throw ipc::Error(-32602, "id required");
         auto *i = objectInfo(params[key].get<std::string>());
@@ -1238,6 +1268,12 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
                 entry["warnings"] = e ? Json(e->warnings) : Json::array();
                 entry["provenance"] = e ? e->provenance : Json(nullptr);
                 entry["imported"] = e ? e->imported : Json(nullptr);
+            }
+        // IPC 0.31: generated primitives' shape, size and material.
+        if (keys)
+            for (auto &entry : entries) {
+                auto *e = catalogEntry(entry["ref"]);
+                entry["primitive"] = e ? e->primitive : Json(nullptr);
             }
         return Json{{"revision", catalogRevision}, {"entries", entries}};
     }
@@ -1313,7 +1349,62 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         return revision({{"itemId", pocketObjects.back().itemId}});
     }
     if (method == "objects.place") {
-        only({"ref"}, {"pose", "scale", "workspace"});
+        if (keys)
+            only({"ref"}, {"pose", "scale", "workspace", "key", "ifExists", "dryRun"});
+        else
+            only({"ref"}, {"pose", "scale", "workspace"});
+        bool dry = dryRun();
+        std::string key = params.contains("key") ? keyParam(params["key"]) : "";
+        std::string ifExists = params.value("ifExists", "error");
+        if (ifExists != "error" && ifExists != "update")
+            throw ipc::Error(-32602, "ifExists is error or update");
+        // A key that names a placement: refused, or (ifExists update) that placement moves there.
+        if (auto *existing = key.empty() ? nullptr : keyed(key)) {
+            if (ifExists != "update")
+                throw ipc::Error(-32005, "the key " + key + " names " + existing->name + " (" + existing->id + ")",
+                                 Json{{"rule", "key.taken"}, {"id", existing->id}, {"key", key}, {"retryable", false},
+                                      {"hint", "Use ifExists: update to move it, or another key"}});
+            auto &i = *existing;
+            editable(i);
+            if (i.index < 0 || i.state != "active")
+                throw ipc::Error(-32005, i.name + " is " + i.state);
+            const world::CatalogEntry *swap = nullptr;
+            if (params["ref"] != i.ref) {
+                if (!params["ref"].is_string() || !(swap = catalogEntry(params["ref"])))
+                    throw ipc::Error(-32004, "unknown ref " + params["ref"].dump());
+                if (swap->has("character") || !swap->placeable)
+                    throw ipc::Error(-32005, swap->has("character") ? "characters are spawned with npcs.spawn" : swap->reason.empty() ? "not placeable" : swap->reason);
+            }
+            auto t = params.contains("pose") ? pose(params["pose"]) : objectPose("object:" + i.id);
+            float scale = params.contains("scale") && params["scale"].is_number() ? params["scale"].get<float>() : i.scale;
+            auto *target = swap ? swap : i.entry;
+            float lo = target && target->scale.is_array() ? target->scale[0].get<float>() : 1, hi = target && target->scale.is_array() ? target->scale[1].get<float>() : 1;
+            if (scale < lo - 1e-6f || scale > hi + 1e-6f)
+                throw ipc::Error(-32602, "scale outside the object's range");
+            t.scale = {scale, scale, scale};
+            int asset = swap ? assetFor(*swap) : int(world->objectInstances[i.index].asset);
+            if (asset == -1)
+                throw ipc::Error(-32004, swap->name + " is still loading; retry", Json{{"retryable", true}});
+            if (asset < 0)
+                throw ipc::Error(-32005, "can't load " + swap->name);
+            auto start = objectPose("object:" + i.id);
+            auto v = objectVerdict(asset, t, swap ? supportOf(*swap) : i.support, size_t(i.index), swap ? std::set<std::string>{} : objectWaived(asset, start, size_t(i.index)));
+            if (!v.ok)
+                throw refusal("Not moved", v);
+            if (dry)
+                return revision({{"id", i.id}, {"dryRun", true}, {"updated", true}});
+            if (swap && builder && (swap->source == "user" || swap->source == "library"))
+                swap = builderCopy(*swap);
+            auto after = placementRecord(i, t);
+            if (swap) {
+                after["ref"] = swap->ref;
+                if (catalogScreen(*swap).is_null())
+                    after.erase("workspace");
+            }
+            auto id = i.id;
+            objectEdit(id, record(i), after);
+            return revision({{"id", id}, {"updated", true}});
+        }
         if (params.contains("workspace") && !ipc::protocol::atLeast(methodProtocol, "0.27"))
             throw ipc::Error(-32602, "unknown parameter workspace");
         if (!params["ref"].is_string())
@@ -1381,6 +1472,8 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         }
         if (!placed)
             throw refusal("Not placed", last);
+        if (dry)
+            return revision({{"id", newPlacementId()}, {"dryRun", true}});
         // In a world folder, user and library objects are copied in first (RFC-0014).
         if (builder && (e->source == "user" || e->source == "library"))
             e = builderCopy(*e);
@@ -1396,6 +1489,8 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
                  {"pose", poseJson(*placed)}, {"scale", scale}};
         if (workspace)
             rec["workspace"] = workspace;
+        if (!key.empty())
+            rec["key"] = key;
         objectEdit(id, nullptr, rec);
         objectNotice("object.placed", "Placed " + e->name);
         if (workspace)
@@ -1403,7 +1498,11 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         return revision({{"id", id}});
     }
     if (method == "objects.transform") {
-        only({"id", "pose"}, {"scale"});
+        if (keys)
+            only({"pose"}, {"id", "key", "scale", "dryRun"});
+        else
+            only({"id", "pose"}, {"scale"});
+        bool dry = dryRun();
         auto &i = info();
         editable(i);
         if (i.index < 0 || i.state != "active")
@@ -1423,6 +1522,8 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         auto v = objectVerdict(asset, t, i.support, size_t(i.index), objectWaived(asset, start, size_t(i.index)));
         if (!v.ok)
             throw refusal("Not moved", v);
+        if (dry)
+            return revision({{"dryRun", true}});
         auto id = i.id;
         objectEdit(id, record(i), placementRecord(i, t));
         return revision();
@@ -1441,7 +1542,12 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
             objectNotice("object.removed", "Removed " + std::to_string(ids.size()) + " object" + (ids.size() == 1 ? "" : "s"));
             return revision();
         }
-        only({"id"});
+        if (keys && params.is_object() && params.contains("key")) {
+            only({"key"});
+            if (!keyed(keyParam(params["key"])))
+                return revision({{"removed", false}}); // removing a missing key succeeds (RFC-0016)
+        } else
+            only({"id"});
         auto &i = info();
         if (i.source != "user")
             throw ipc::Error(-32005, "authored objects are never deleted; hide them instead");
@@ -1508,16 +1614,21 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
         return revision();
     }
     if (method == "objects.configure") {
-        only({"id", "patch"});
+        if (keys)
+            only({"patch"}, {"id", "key", "dryRun"});
+        else
+            only({"id", "patch"});
+        bool dry = dryRun();
         auto &i = info();
         auto &patch = params["patch"];
         if (!patch.is_object() || patch.empty())
             throw ipc::Error(-32602, "patch must name at least one setting");
         bool screens = ipc::protocol::atLeast(methodProtocol, "0.27");
         for (auto &[k, v] : patch.items())
-            if (!(k == "locked" && v.is_boolean()) && !(k == "workspace" && screens))
-                throw ipc::Error(-32602, screens ? "objects.configure takes locked (a boolean) and workspace"
-                                                 : "IPC 0.22 configures only locked (a boolean)");
+            if (!(k == "locked" && v.is_boolean()) && !(k == "workspace" && screens) && !((k == "ref" || k == "key") && keys))
+                throw ipc::Error(-32602, keys ? "objects.configure takes locked (a boolean), workspace, ref and key"
+                                         : screens ? "objects.configure takes locked (a boolean) and workspace"
+                                                   : "IPC 0.22 configures only locked (a boolean)");
         if (i.character)
             throw ipc::Error(-32005, "characters are protected");
         if (!i.movable)
@@ -1542,6 +1653,61 @@ std::optional<Json> Runtime::objectsMethod(const std::string &method, const Json
                 after["workspace"] = workspace;
             else
                 after.erase("workspace");
+        }
+        // IPC 0.31: a placement's key (null removes it).
+        if (patch.contains("key")) {
+            if (i.source != "user")
+                throw ipc::Error(-32005, "only user placements have keys");
+            if (patch["key"].is_null())
+                after.erase("key");
+            else {
+                auto k = keyParam(patch["key"]);
+                if (auto *other = keyed(k); other && other->id != i.id)
+                    throw ipc::Error(-32005, "the key " + k + " names " + other->name + " (" + other->id + ")",
+                                     Json{{"rule", "key.taken"}, {"id", other->id}, {"key", k}, {"retryable", false}});
+                after["key"] = k;
+            }
+        }
+        // IPC 0.31: another catalog entry where the placement stands (a rebuilt primitive): the id,
+        // key and pose stay; placement rules apply to the new asset.
+        const world::CatalogEntry *swap = nullptr;
+        if (patch.contains("ref")) {
+            if (i.source != "user")
+                throw ipc::Error(-32005, "authored objects keep their asset");
+            if (i.locked && !patch.contains("locked"))
+                throw ipc::Error(-32005, i.name + " is locked");
+            if (!patch["ref"].is_string() || !(swap = catalogEntry(patch["ref"].get<std::string>())))
+                throw ipc::Error(-32004, "unknown ref " + patch["ref"].dump());
+            if (swap->has("character"))
+                throw ipc::Error(-32005, "characters are spawned with npcs.spawn");
+            if (!swap->placeable)
+                throw ipc::Error(-32005, swap->reason.empty() ? "not placeable" : swap->reason);
+            if (i.index < 0)
+                throw ipc::Error(-32005, i.name + " is " + i.state);
+            int asset = assetFor(*swap);
+            if (asset == -1)
+                throw ipc::Error(-32004, swap->name + " is still loading; retry", Json{{"retryable", true}});
+            if (asset < 0)
+                throw ipc::Error(-32005, "can't load " + swap->name);
+            if (auto limit = budgetRefusal(*swap, i.id))
+                throw budgetError(*limit);
+            auto t = objectPose("object:" + i.id);
+            float lo = swap->scale.is_array() ? swap->scale[0].get<float>() : 1, hi = swap->scale.is_array() ? swap->scale[1].get<float>() : 1;
+            float s = std::clamp(t.scale.x, lo, hi);
+            t.scale = {s, s, s};
+            auto v = objectVerdict(asset, t, supportOf(*swap), size_t(i.index));
+            if (!v.ok)
+                throw refusal("Not changed", v);
+            after["scale"] = s;
+            if (catalogScreen(*swap).is_null() && !patch.contains("workspace"))
+                after.erase("workspace");
+        }
+        if (dry)
+            return revision({{"dryRun", true}});
+        if (swap) {
+            if (builder && (swap->source == "user" || swap->source == "library"))
+                swap = builderCopy(*swap);
+            after["ref"] = swap->ref;
         }
         if (i.source == "authored" && after.size() == 3 && !after.contains("pose") && !after.contains("scale") && !after.contains("hidden"))
             after = nullptr;

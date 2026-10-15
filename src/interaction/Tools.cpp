@@ -479,7 +479,7 @@ void Tools::restore(const Json &input) {
             throw std::runtime_error("invalid object scale");
     };
     std::map<std::string, size_t> perWorld;
-    std::set<std::pair<std::string, std::string>> placementIds, overrideIds;
+    std::set<std::pair<std::string, std::string>> placementIds, overrideIds, placementKeys;
     for (auto &r : j["placements"]) {
         // {worldId, id, areaId, ref, pose, scale} plus the optional lock (IPC 0.22), a user
         // character's route and settings (0.23) and a workspace screen's workspace (0.27).
@@ -500,6 +500,7 @@ void Tools::restore(const Json &input) {
                       : k == "phase"                                           ? v.is_number() && v.get<double>() >= 0 && v.get<double>() < 1
                       : k == "speed"                                           ? v.is_number() && v.get<double>() >= .25 && v.get<double>() <= 2
                       : k == "workspace"                                       ? v.is_number_integer() && v.get<int64_t>() >= 1 && v.get<int64_t>() <= 9999
+                      : k == "key" ? v.is_string() && validPlacementKey(v.get<std::string>()) // IPC 0.31: a placement's stable name
                       : k == "accent" ? v.is_array() && v.size() == 3 &&
                                             std::all_of(v.begin(), v.end(), [](auto &c) { return c.is_number() && c >= 0 && c <= 1; })
                       : k == "style"  ? world::validCharacterStyle(v) // IPC 0.28: a character's walk, run and idle styles
@@ -509,6 +510,8 @@ void Tools::restore(const Json &input) {
         }
         if (!placementIds.insert({r["worldId"].get<std::string>(), r["id"].get<std::string>()}).second)
             throw std::runtime_error("duplicate placement id");
+        if (r.contains("key") && !placementKeys.insert({r["worldId"].get<std::string>(), r["key"].get<std::string>()}).second)
+            throw std::runtime_error("duplicate placement key");
         if (++perWorld[r["worldId"].get<std::string>()] > placementsPerWorld)
             throw std::runtime_error("placement budget");
     }

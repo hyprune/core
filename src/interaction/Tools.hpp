@@ -1,6 +1,15 @@
 #pragma once
 #include "Hands.hpp"
 namespace hyprune::interaction {
+// A placement key (IPC 0.31): a slug of 1 to 48 characters, a letter first.
+inline bool validPlacementKey(const std::string &key) {
+    if (key.empty() || key.size() > 48 || key[0] < 'a' || key[0] > 'z')
+        return false;
+    for (char c : key)
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'))
+            return false;
+    return true;
+}
 using Json = world::Json;
 struct Line {
     Vec3 a, b, color;

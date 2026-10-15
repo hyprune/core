@@ -401,6 +401,8 @@ struct Runtime {
     void builderScan();
     void builderSwitch(std::optional<std::filesystem::path> folder);
     void builderWrite(const Json &records);
+    const world::CatalogEntry *builderScanOne(const std::string &id);
+    std::map<std::string, std::chrono::steady_clock::time_point> worldMisses;
     const world::CatalogEntry *builderCopy(const world::CatalogEntry &);
     Json builderState() const;
     // The atmosphere as IPC carries it (state.presentation, atmosphere.get): world 0.11's
@@ -438,6 +440,7 @@ struct Runtime {
     std::vector<unsigned> originalCollisionNodes;
     struct ObjectInfo {
         std::string id, source, ref, name, areaId, state = "active", rule, support;
+        std::string key; // a user placement's key (IPC 0.31), else empty
         bool movable = false, locked = false, character = false;
         float scaleMin = .01f, scaleMax = 100;
         int index = -1; // world->objectInstances index, -1 when not instanced (missing, loading)

@@ -174,6 +174,15 @@ Json Server::visibleState(const Peer &p) const {
         if (state.contains("companion") && state["companion"].is_object())
             state["companion"].erase("pace");
     }
+    // IPC 0.31 (builder primitives): placement keys on instances; a world folder holds up to 512
+    // placements (older peers count at most 128).
+    if (!protocol::atLeast(p.protocol, "0.31") && state.is_object()) {
+        if (state.contains("objects") && state["objects"].is_object() && state["objects"].contains("instances"))
+            for (auto &i : state["objects"]["instances"])
+                i.erase("key");
+        if (state.contains("builder") && state["builder"].is_object() && state["builder"].value("placements", 0) > 128)
+            state["builder"]["placements"] = 128;
+    }
     // IPC 0.28 (shared clip library): character styles, the companion's dances and dance
     // interactions with their options; older peers see the 0.27 shapes (a dance as idle).
     if (!protocol::atLeast(p.protocol, "0.28") && state.is_object()) {

@@ -30,9 +30,10 @@ std::optional<std::filesystem::path> Runtime::projectFolder(const std::string &i
         return std::nullopt;
     return folder;
 }
-// Every object directory in <folder>/objects as world/<name> entries (at most 128).
+// Every object directory in <folder>/objects as world/<name> entries (at most 512).
 void Runtime::builderScan() {
     worldCatalog.clear();
+    worldMisses.clear();
     if (!builder)
         return;
     std::error_code ec;
@@ -42,12 +43,34 @@ void Runtime::builderScan() {
             dirs.push_back(d.path());
     std::sort(dirs.begin(), dirs.end());
     for (auto &dir : dirs) {
-        if (worldCatalog.size() >= 128)
+        if (worldCatalog.size() >= 512)
             break;
         auto e = world::scanObject(dir, "world/" + dir.filename().string(), "world", &scanCache);
         world::decidePlaceable(e);
         worldCatalog.push_back(std::move(e));
     }
+}
+// A world/<id> entry that appeared after the folder loaded (a primitive the CLI just generated,
+// RFC-0014 amendment: primitives and materials): scanned on its first use, so objects.place,
+// objects.pocket and objects.configure {ref} can name it at once. A miss is retried after 2 s.
+const world::CatalogEntry *Runtime::builderScanOne(const std::string &id) {
+    if (!builder || !projectSlug(id) || worldCatalog.size() >= 512)
+        return nullptr;
+    auto now = std::chrono::steady_clock::now();
+    if (auto miss = worldMisses.find(id); miss != worldMisses.end() && now - miss->second < std::chrono::seconds(2))
+        return nullptr;
+    auto dir = builder->folder / "objects" / id;
+    std::error_code ec;
+    if (fs::is_symlink(dir, ec) || !fs::is_regular_file(dir / "object.json", ec)) {
+        worldMisses[id] = now;
+        return nullptr;
+    }
+    worldMisses.erase(id);
+    auto e = world::scanObject(dir, "world/" + id, "world", &scanCache);
+    world::decidePlaceable(e);
+    worldCatalog.push_back(std::move(e));
+    ++catalogRevision;
+    return &worldCatalog.back();
 }
 // Called by finishLoad before the new world's objects resolve: the old folder's placements
 // are written and dropped, the new folder's are read.
@@ -87,7 +110,7 @@ void Runtime::builderSwitch(std::optional<std::filesystem::path> folder) {
     for (auto &p : project["placements"]) {
         Json rec{{"worldId", world->id}, {"id", p["id"]}, {"areaId", areaAt(vec3(p["pose"]["position"]))}, {"ref", p["ref"]},
                  {"pose", p["pose"]}, {"scale", p["scale"]}};
-        for (auto k : {"workspace", "locked"})
+        for (auto k : {"workspace", "locked", "key"})
             if (p.contains(k))
                 rec[k] = p[k];
         editor.setPlacement(world->id, p["id"], rec);
@@ -113,7 +136,7 @@ void Runtime::builderWrite(const Json &records) {
                {"ref", r["ref"]},
                {"pose", {{"position", round(r["pose"]["position"], 1e4)}, {"rotation", round(r["pose"]["rotation"], 1e6)}}},
                {"scale", std::round(r["scale"].get<double>() * 1e4) / 1e4}};
-        for (auto k : {"workspace", "locked"})
+        for (auto k : {"workspace", "locked", "key"})
             if (r.contains(k))
                 p[k] = r[k];
         placements.push_back(p);
@@ -143,8 +166,8 @@ const world::CatalogEntry *Runtime::builderCopy(const world::CatalogEntry &e) {
     for (auto &w : worldCatalog)
         if (w.digest == e.digest && w.state == "ready")
             return &w;
-    if (worldCatalog.size() >= 128)
-        throw ipc::Error(-32008, "This world folder holds 128 objects", Json{{"retryable", false}, {"rule", "budget"}});
+    if (worldCatalog.size() >= 512)
+        throw ipc::Error(-32008, "This world folder holds 512 objects", Json{{"retryable", false}, {"rule", "budget"}});
     auto base = e.id.substr(0, 60);
     if (!projectSlug(base))
         base = "object";
@@ -186,7 +209,7 @@ Json Runtime::builderState() const {
             {"folder", builder->folder.string()},
             {"mode", "edit"},
             {"revision", builder->revision},
-            {"placements", std::min<size_t>(placed, 128)},
+            {"placements", std::min<size_t>(placed, 512)},
             {"sky", builder->sky.empty() ? Json(nullptr) : Json(builder->sky)},
             {"error", builder->error.empty() ? Json(nullptr) : Json(builder->error.substr(0, 512))}};
 }

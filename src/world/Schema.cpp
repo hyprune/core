@@ -165,6 +165,11 @@ void validateObjectDocument(const Json &value, const std::string &kind, const st
         validate(value, schema, common, "", &schema);
         return;
     }
+    if (kind == "primitive") { // primitive.json (RFC-0014 amendment: primitives and materials), beside object format 0.11
+        static const Json schema = Json::parse(primitiveSchema011), common011 = Json::parse(commonSchema011);
+        validate(value, schema, common011, "", &schema);
+        return;
+    }
     if (kind == "project") { // builder/project.json (RFC-0014), projectVersion 0.1 or 0.2, beside world format 0.11
         static const Json schema = Json::parse(projectSchema011), common011 = Json::parse(commonSchema011);
         validate(value, schema, common011, "", &schema);
