@@ -340,6 +340,7 @@ def acceptance(client, children, args, shell_token, socketpath):
           base['atmosphere']['exposure'] > 1 and len(project['placements']) == 3,
           {'loads': loads, 'floor': project['floor'], 'sky': project['sky'], 'git': git('status', '--porcelain').split('\n')})
     close_director()
+    wait(lambda: not status().get('warp') and status().get('phase') == 'arrived', 30)
     s.ctl('eval', 'hl.plugin.hyprune.camera(1,1.7,0,0,.25)')
     shot('builder-night.png')
     log = shell_log.read_text()
