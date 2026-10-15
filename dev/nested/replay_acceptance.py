@@ -16,7 +16,7 @@ def acceptance(client,children,args,shell_token,socketpath):
     for quality in ['low','medium','high','ultra','low']:
         client.call('graphics.set',{'patch':{'quality':quality}});time.sleep(.08)
     after=client.call('graphics.get',{})['timings']['shaderCache'];assert before==after['hits']+after['misses']
-    config=client.call('input.get',{})['config'];assert config['modes']['world']['record.toggle']==[]
+    config=client.call('input.get',{})['config'];assert config['modes']['world']['record.toggle']==['Ctrl+r']
     config['modes']['world']['record.toggle']=['F8'];client.call('input.set',{'config':config})
     keys('-k','F8');wait(lambda:client.call('recording.status',{})['recording'])
     keys('-P','w','-s','450','-p','w');keys('-P','d','-s','300','-p','d')
@@ -32,6 +32,11 @@ def acceptance(client,children,args,shell_token,socketpath):
     assert {'input','frame','view','mark','end'} <= {j['kind'] for j in data}
     assert {'key','button','axis','motion'} <= {j['event']['type'] for j in data if j['kind']=='input'}
     assert path.stat().st_mode&0o777==0o600
+    # Format 2: live timing, not fixed steps; every frame keeps its dt and timing.
+    header=data[0];frames=[j for j in data if j['kind']=='frame']
+    assert header['version']==2 and header['timing']=='live' and header['system']['monitor'],header.get('system')
+    assert all(0<=f['dt']<=1 and 'presents' in f['timing'] for f in frames)
+    assert len({round(f['dt'],4) for f in frames})>1 or len(frames)<3,'dt varies with the live frames'
     results=[]
     for attempt in range(2):
         client.call('replay.start',{'path':str(path),'assertions':{'recorded':True,'tolerance':.002,'marks':{'end':{'tool':2,'mode':'world'},'free':{'mode':'cursor'}}}})
@@ -44,7 +49,7 @@ def acceptance(client,children,args,shell_token,socketpath):
     client.call('replay.start',{'path':str(path)});client.call('replay.stop',{});client.call('replay.stop',{})
     evidence=s.ROOT/'docs/evidence/replay';evidence.mkdir(exist_ok=True)
     shutil.copyfile(path,evidence/'scripted.jsonl')
-    (evidence/'acceptance.json').write_text(json.dumps({'replays':results,'camera':done,'shaderCache':after,'checks':['rebindable F8','raw key/button/axis/motion','per-frame view','marker assertions','two exact fixed-step replays','camera smoothing','idempotent stop','no new effect programs','free cursor mode replay']},indent=2)+'\n')
+    (evidence/'acceptance.json').write_text(json.dumps({'replays':results,'camera':done,'shaderCache':after,'checks':['rebindable F8','raw key/button/axis/motion','per-frame view','marker assertions','two exact replays of the recorded dt (format 2)','camera smoothing','idempotent stop','no new effect programs','free cursor mode replay']},indent=2)+'\n')
     (evidence/'assert.json').write_text(json.dumps({'recorded':True,'tolerance':.002,'marks':{'end':{'tool':2,'mode':'world'},'free':{'mode':'cursor'}}},indent=2)+'\n')
     # Verify the real keyboard routing boundary, not just the recorder's redaction helper.
     children.append(s.envrun('kitty','--class','replay-private','--title','Replay privacy','bash','--noprofile','--norc',stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
