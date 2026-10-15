@@ -57,4 +57,7 @@ MotionBinding bindMotion(Character &, const Json &characterTrait, const std::vec
 bool validCharacterStyle(const Json &);
 // The styles and dances a character can play (its own and bound clips): IPC 0.28 catalog motion.
 Json characterMotion(const Character &, const Json &binding);
+// The same for a character not loaded yet, from its skeleton and clip names (a clips-only load)
+// and the packs it would bind: no retargeting.
+Json characterMotionPreview(const Character &rig, const Json &characterTrait, const std::vector<std::shared_ptr<MotionPack>> &packs);
 } // namespace hyprune::world

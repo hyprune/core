@@ -1605,6 +1605,8 @@ Json Runtime::npcDiagnostics() {
                           {"activity", a.activity()},
                           {"mode", int(a.mode)},
                           {"clip", a.pose.clip},
+                          {"played", n.resolve(a.pose.clip)}, // the styled clip a role plays (shared clip library)
+                          {"style", n.alias},
                           {"look", {a.pose.lookYaw, a.pose.lookPitch}},
                           {"lateral", a.lateral},
                           {"yielding", a.yielding},
