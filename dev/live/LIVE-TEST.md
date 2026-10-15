@@ -441,3 +441,16 @@ Objects → Catalog → a gauge, tool 5):
   interval.
 - [ ] If the desktop keyring is unlocked and `secret-tool` is installed: **Keyring** stores a
   second secret; `secret-tool lookup application hyprune secret <name>` prints it.
+
+## Shared clip library: styles, retargeted sits (core 0.10.0)
+
+Animation only (no cursor, focus or render-pass change). With Lumen Reach 0.12.0 and the
+starter library 0.3.0 installed:
+
+- [ ] Sun Court: residents sit on the benches upright, on the seat (not perched on the edge,
+  not sunk into it), and stand up and walk off without a jump.
+- [ ] Walking residents and a spawned library character keep their feet on the ground (no
+  floating walk); feet don't slide visibly.
+- [ ] Director → Objects → Characters: a library character offers walk styles before it is
+  spawned; spawn it with a style: it walks with that style; clearing the style returns the
+  plain walk at once (no world reload).

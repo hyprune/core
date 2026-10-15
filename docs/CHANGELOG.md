@@ -236,6 +236,18 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   `builder.copied`). Older sessions see no `builder` key, no `world/` instances and no
   `world` catalog entries. Git, saves and releases are the SDK CLI's (`hyprune builder`);
   core never runs git.
+- **0.28** Shared clip library (RFC-0010 amendment). No new method, event or grant.
+  Characters may have a style per role: required `objectInstance.style` and the companion's
+  `style` (null, or `{walk?, run?, idle?}`, each a style name), `style` on `npcs.spawn` and
+  `npcs.bind` (null clears it) and on `companion.mode` (kept in `companion.json`). A styled
+  character plays `walk_<style>`, `run_<style>` or `idle_<style>` when it has that clip, else
+  the plain one. The companion dances: the aimed interaction type `dance` with required,
+  nullable `options` (one per dance it can play), `interaction.choose` takes `option` (a dance,
+  or none for any), and its `activity` may be `dancing`; required `companion.dance` names the
+  dance playing. Required `objects.catalog` entry `motion`: null for non-characters, else the
+  character's skeleton, its styles per role, its dances and the motion packs that give them.
+  Older sessions keep the 0.27 shapes (no `style`, `dance`, `motion` or `option`; `dancing`
+  reads `idle`).
 
 ### Changes without a protocol bump
 
@@ -315,6 +327,31 @@ These are wire-compatible behavior changes that integrators may notice:
   `gizmo.pivot`. Development switches (`HYPRUNE_GIZMO_OBJECTS`, `HYPRUNE_GIZMO_UNIVERSAL`)
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
+
+## Core 0.10.0
+
+A minor release with the contract round of @hyprune/schema 0.14.0: **IPC 0.28** (see its entry
+above) and **motion packs** (`motion/<id>/motion.json`, motionVersion 0.1) are released. Older
+protocols and formats are unchanged; object and world formats are unchanged.
+
+- **Motion packs:** a world package, an installed library or the user folder may ship packs
+  of clips on a named skeleton (`mixamo-v1`, the Mixamo humanoid; characters with its bones
+  are `mixamo-v1` without declaring it). At load, a pack fills the clips a character lacks:
+  retargeted through both rest poses (bones by canonical name, hips and speed scaled by hip
+  height); a character's own clips win. A pack's sit seats a character by its hip joints when
+  clothing skinned to the thighs hangs lower, and its sit and stand keep the source's travel
+  (seat anchors are placed in world distances). Library packs are taken by id, the newest
+  version first. The plugin and the offload worker bind the same packs.
+- **Grounded standing clips:** a walk, run, idle, talk, wave, turn, look, nod or guide clip
+  whose lowest foot never comes within 2 cm of the idle's is lowered by the difference at load
+  (some exporters keep the hips at rest height while the knees bend). Sits, stands and dances
+  are left alone.
+- `objects.catalog` motion is known before a character is first spawned (a clips-only load,
+  cached by content digest).
+- `npcs.bind` with settings only (speed, accent, phase, style) now takes effect at once; it
+  used to wait for the next world load.
+- `hyprune-npc-check --motion DIR` binds packs and lists the clips they fill, with the planted
+  speed and foot slip of walks and runs, and the clips grounded at load.
 
 ## Core 0.9.1 (no wire change)
 
