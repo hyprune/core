@@ -145,7 +145,7 @@ effect/preset toggles load or compile no new programs.
 `dev/nested/session_demo.py` turns a recording into a demo video, nested only:
 
 ```
-dev/nested/run.sh session_demo.py --recording REC.jsonl --package WORLD_PKG --output DIR \
+dev/nested/run.sh dev/nested/session_demo.py --recording REC.jsonl --package WORLD_PKG --output DIR \
     [--mode input|camera] [--smooth-look MS] [--hud on|off] [--trim START:END] \
     [--speed START:END=FACTOR ...] [--name demo] [--encode-only]
 ```

@@ -2,7 +2,7 @@
 """A demo video from a recorded session (`recording.start`/`stop` or the record.toggle bind:
 hyprune.session JSON lines).
 
-  dev/nested/run.sh session_demo.py --recording REC.jsonl --package PKG --output DIR
+  dev/nested/run.sh dev/nested/session_demo.py --recording REC.jsonl --package PKG --output DIR
       [--shell DIR] [--protocol 0.27] [--mode input|camera] [--smooth-ms N] [--hud on|off]
       [--trim START:END] [--speed START:END=FACTOR ...] [--name demo]
 
