@@ -450,6 +450,28 @@ void builder(const fs::path &fixture) {
         refused = true;
     }
     check(refused, "project placements name only world/<id> copies");
+    // projectVersion 0.2 (draft): the Open Plain starter, sky presets and the floor; 0.1 keeps its shape.
+    auto v2 = project;
+    v2["projectVersion"] = "0.2";
+    v2["starter"] = "open-plain@0.2";
+    v2["sky"]["preset"] = "sunset";
+    v2["floor"] = {{"preset", "grass"}, {"image", nullptr}, {"tile", 4}, {"license", "CC0-1.0"}, {"author", "Hyprune contributors"}, {"source", "generated"}};
+    world::validateObjectDocument(v2, "project", "0.1");
+    auto refusedDoc = [](const Json &doc) {
+        try {
+            world::validateObjectDocument(doc, "project", "0.1");
+        } catch (const std::exception &) {
+            return true;
+        }
+        return false;
+    };
+    auto tiny = v2;
+    tiny["floor"]["tile"] = 0.1;
+    auto old = project;
+    old["floor"] = v2["floor"];
+    auto unknown = v2;
+    unknown["projectVersion"] = "0.3";
+    check(refusedDoc(tiny) && refusedDoc(old) && refusedDoc(unknown), "project 0.2 takes a floor and presets; 0.1 and unknown versions don't");
     auto ref = world::parseRef("world/barrel");
     check(ref && ref->source == "world" && ref->id == "barrel" && !world::parseRef("world/Barrel") && !world::parseRef("world/a/b"),
           "world/<id> refs");
