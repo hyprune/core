@@ -167,8 +167,83 @@ std::vector<Mat4> globals(const Character &ch, const Locals &l, float lookYaw = 
     }
     return global;
 }
-void skin(const Character &ch, const Locals &l, std::vector<Mat4> &out, float lookYaw = 0, float lookPitch = 0) {
+Vec3 at(const Mat4 &m) { return {m.v[12], m.v[13], m.v[14]}; }
+// Rotation by `angle` about `axis` through `pivot`, as a world (character-space) transform.
+Mat4 about(Vec3 pivot, Vec3 axis, float angle) { return translation(pivot) * rotation(axis, angle) * translation(pivot * -1.f); }
+// The rotation (axis, angle) taking direction u onto v; false when they are parallel already.
+bool between(Vec3 u, Vec3 v, Vec3 &axis, float &angle) {
+    u = normalized(u), v = normalized(v);
+    Vec3 c = cross(u, v);
+    float s = length(c), d = std::clamp(dot(u, v), -1.f, 1.f);
+    if (s < 1e-6f)
+        return false;
+    axis = c * (1 / s), angle = std::atan2(s, d);
+    return true;
+}
+// Seat adaptation (PoseInput::seatDrop): the root sits `drop` metres lower than the clip's, so
+// each ankle's target is `drop` higher in character space (and drop/2 forward, +Z) and the leg
+// (upleg, leg, foot) reaches it with a two-bone solve in its current bend plane; the foot keeps
+// its world orientation. Joints below a moved bone move with it.
+void legsForSeat(const Character &ch, std::vector<Mat4> &g, float drop) {
+    auto under = [&](int root) {
+        std::vector<int> out;
+        for (int i = 0; i < int(ch.joints.size()); ++i)
+            for (int j = i; j >= 0; j = ch.joints[j].parent)
+                if (j == root) {
+                    out.push_back(i);
+                    break;
+                }
+        return out;
+    };
+    auto apply = [&](const std::vector<int> &set, const Mat4 &m) {
+        for (int i : set)
+            g[i] = m * g[i];
+    };
+    for (auto side : {"left", "right"}) {
+        int up = ch.role(std::string(side) + "upleg"), knee = ch.role(std::string(side) + "leg"), foot = ch.role(std::string(side) + "foot");
+        if (up < 0 || knee < 0 || foot < 0)
+            continue;
+        Vec3 H = at(g[up]), K = at(g[knee]), A = at(g[foot]);
+        float a = length(K - H), b = length(A - K);
+        if (a < 1e-4f || b < 1e-4f)
+            continue;
+        Vec3 P = A + Vec3{0, drop, drop * .5f};
+        float dist = length(P - H);
+        dist = std::clamp(dist, std::fabs(a - b) + 1e-3f, a + b - 1e-3f);
+        P = H + normalized(P - H) * dist;
+        // Bend plane: the knee's current one (its normal across the leg), else the character's X.
+        Vec3 n = cross(K - H, A - K);
+        n = length(n) > 1e-6f ? normalized(n) : Vec3{1, 0, 0};
+        float alpha = std::acos(std::clamp((a * a + dist * dist - b * b) / (2 * a * dist), -1.f, 1.f));
+        Vec3 dir = normalized(P - H);
+        Vec3 k1 = H + about({}, n, alpha).point(dir) * a, k2 = H + about({}, n, -alpha).point(dir) * a;
+        // The solution on the clip's knee side of the hip-ankle line; a straight leg bends its
+        // knee forward (+Z).
+        auto onSide = [&](Vec3 q) { return dot(cross(P - H, q - H), n); };
+        float s0 = dot(cross(A - H, K - H), n);
+        Vec3 Kn = std::fabs(s0) < 1e-5f ? (k1.z >= k2.z ? k1 : k2) : (onSide(k1) * s0 > 0 ? k1 : k2);
+        Vec3 axis{};
+        float angle = 0;
+        auto total = Mat4::identity();
+        if (between(K - H, Kn - H, axis, angle)) {
+            auto r = about(H, axis, angle);
+            apply(under(up), r);
+            total = rotation(axis, angle) * total;
+        }
+        Vec3 A1 = at(g[foot]);
+        if (between(A1 - Kn, P - Kn, axis, angle)) {
+            apply(under(knee), about(Kn, axis, angle));
+            total = rotation(axis, angle) * total;
+        }
+        // The foot (and toes) turn back: flat as the clip had it.
+        Vec3 F = at(g[foot]);
+        apply(under(foot), translation(F) * affineInverse(total) * translation(F * -1.f));
+    }
+}
+void skin(const Character &ch, const Locals &l, std::vector<Mat4> &out, float lookYaw = 0, float lookPitch = 0, float seatDrop = 0) {
     auto global = globals(ch, l, lookYaw, lookPitch);
+    if (seatDrop > 0)
+        legsForSeat(ch, global, seatDrop);
     out.resize(ch.joints.size());
     for (size_t i = 0; i < ch.joints.size(); ++i)
         out[i] = global[i] * ch.joints[i].inverseBind;
@@ -199,7 +274,7 @@ void Character::evaluate(const PoseInput &in, std::vector<Mat4> &out) const {
             lb.R[i] = nlerp(la.R[i], lb.R[i], w);
         }
     }
-    skin(*this, lb, out, in.lookYaw, in.lookPitch);
+    skin(*this, lb, out, in.lookYaw, in.lookPitch, in.seatDrop);
 }
 Character::SeatFit Character::measureSeat() const {
     SeatFit fit;

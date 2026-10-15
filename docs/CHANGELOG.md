@@ -360,6 +360,15 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
+## Unreleased (no wire change)
+
+- **Seat adaptation.** A character now takes a seat up to 25 cm lower than its own seat height
+  (was 3 cm): the root sits lower and both legs bend more, a two-bone solve per leg that keeps
+  each ankle where the clip put it relative to the floor (a little forward) with the foot flat;
+  the plugin and the offload worker pose the same skeleton (`seatDrop` in the pose record).
+  The official companions (seat heights 0.46-0.60 m) and Ash now sit on Lumen Reach's 0.40 m
+  benches. Seats more than 45 cm too high or 25 cm too low are still refused.
+
 ## Core 0.10.0
 
 A minor release with the contract round of @hyprune/schema 0.14.0: **IPC 0.28** (see its entry

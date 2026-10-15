@@ -126,12 +126,15 @@ struct NpcAgent {
     int blockedBy = -1, backoffFrom = 0, detour = -1;
     static constexpr float turnRate = 3.1416f, alignSeconds = .25f, fadeSeconds = .25f, accel = 2.5f, decel = 4.f,
                            maxRunRate = 1.8f, minWalkRate = .3f;
-    // Root lift for an anchor, if the character fits it.
+    // Root lift for an anchor, if the character fits it. A seat lower than the character's own
+    // seat height (down to seatAdapt) is still taken: the root sits lower (a negative lift) and
+    // the legs bend more to keep the feet on the floor (PoseInput::seatDrop).
+    static constexpr float seatAdapt = .25f;
     std::optional<float> seatLift(const NpcSeat &h) const {
         if (!seatKnown || !has("sit"))
             return std::nullopt;
         float lift = h.height - seatHeight, clearance = lift - seatSink;
-        if (clearance < -.03f || clearance > .45f)
+        if (clearance < -seatAdapt || clearance > .45f)
             return std::nullopt;
         return lift;
     }

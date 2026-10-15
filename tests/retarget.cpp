@@ -8,6 +8,7 @@
 #include "world/Retarget.hpp"
 #include <cmath>
 #include <iostream>
+#include <map>
 #include <stdexcept>
 using namespace hyprune;
 using world::Character;
@@ -123,8 +124,37 @@ float angleBetween(Vec3 a, Vec3 b) {
     return std::acos(d) * 57.2958f;
 }
 } // namespace
+// Seat adaptation (PoseInput::seatDrop): the hips sit lower than the clip's, the legs bend so each
+// ankle rises by the drop (and half of it forward) in character space; bone lengths hold, the
+// knee bends forward and the foot keeps its orientation.
+void seatAdaptation() {
+    auto c = rig(1, false, "mixamorig:");
+    auto world = [&](float drop) {
+        Character::PoseInput in;
+        in.seatDrop = drop;
+        std::vector<Mat4> skin;
+        c.evaluate(in, skin);
+        std::map<std::string, Vec3> at;
+        for (size_t i = 0; i < c.joints.size(); ++i) {
+            auto &m = skin[i]; // inverse binds are identity: joint world matrices
+            at[c.joints[i].name.substr(10)] = {m.v[12], m.v[13], m.v[14]};
+        }
+        return at;
+    };
+    auto rest = world(0), sat = world(.2f);
+    for (std::string side : {"Left", "Right"}) {
+        auto H = sat[side + "UpLeg"], K = sat[side + "Leg"], A = sat[side + "Foot"], T = sat[side + "ToeBase"];
+        auto h = rest[side + "UpLeg"], k = rest[side + "Leg"], a = rest[side + "Foot"], tt = rest[side + "ToeBase"];
+        check(std::abs(A.y - (a.y + .2f)) < 2e-3f && std::abs(A.z - (a.z + .1f)) < 2e-3f, side + " ankle rises by the drop, half of it forward");
+        check(std::abs(length(K - H) - length(k - h)) < 1e-3f && std::abs(length(A - K) - length(a - k)) < 1e-3f, side + " bone lengths hold");
+        check(K.z > H.z + .05f, side + " knee bends forward");
+        check(length((T - A) - (tt - a)) < 1e-3f, side + " foot keeps its orientation");
+        check(length(H - h) < 1e-5f, side + " hip joint stays");
+    }
+}
 int main() {
     try {
+        seatAdaptation();
         auto source = rig(1, false, "mixamorig:");
         auto clip = walk(source);
         // The source itself doesn't slip (the test's metric is sound).

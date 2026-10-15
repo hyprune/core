@@ -28,6 +28,7 @@ inline nlohmann::json characterRecord(unsigned asset, const std::string &ref, co
                 {"toLoop", in.toLoop},
                 {"weight", in.weight},
                 {"look", {in.lookYaw, in.lookPitch}},
+                {"seatDrop", in.seatDrop},
                 {"accent", accent ? Json{accent->x, accent->y, accent->z} : Json(nullptr)},
                 {"probe", probe},
                 {"moving", moving},
@@ -56,6 +57,7 @@ inline void applyCharacters(const nlohmann::json &records, const world::World &w
         in.fromLoop = c.at("fromLoop"), in.toLoop = c.at("toLoop");
         in.weight = c.at("weight");
         in.lookYaw = c.at("look").at(0), in.lookPitch = c.at("look").at(1);
+        in.seatDrop = c.value("seatDrop", 0.f);
         render::Renderer::Npc npc;
         npc.character = ch;
         npc.model.v = c.at("model").get<std::array<float, 16>>();

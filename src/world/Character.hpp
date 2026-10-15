@@ -68,6 +68,10 @@ struct Character {
         float fromTime = 0, toTime = 0, weight = 1;
         bool fromLoop = true, toLoop = true;
         float lookYaw = 0, lookPitch = 0;
+        // Seat adaptation: the hips sit this many metres lower than the clip puts them (a seat
+        // below the character's own seat height); both legs bend more (two-bone IK) so each
+        // ankle stays where the clip had it relative to the floor, a little forward, feet flat.
+        float seatDrop = 0;
     };
     void evaluate(const PoseInput &, std::vector<Mat4> &out) const;
     // What the `sit` clip was authored for, measured in its final pose: seatHeight is the lowest

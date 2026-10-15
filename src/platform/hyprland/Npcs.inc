@@ -649,6 +649,7 @@ void Runtime::npcTick(float dt) {
             }
             if (!in.to)
                 in.to = c.clip(n.resolve("idle"));
+            in.seatDrop = std::max(0.f, -a.seatOffset); // a seat below its own: the legs bend to keep the feet down
             c.evaluate(in, n.skin);
             n.posed = in;
             n.stillPosed = still;
