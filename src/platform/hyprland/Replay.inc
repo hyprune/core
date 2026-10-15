@@ -57,6 +57,7 @@ bool Runtime::timing() const { return frameLog.file || session.recording; }
 // One frame of the debug recording, at the end of each tick: the dt it moved by, its timing
 // (CPU sections, presents since the last frame, refresh, GPU, offload) and state.
 void Runtime::recordTick(const Json &sections, std::chrono::steady_clock::time_point started) {
+    auto recordStarted = std::chrono::steady_clock::now();
     auto m = monitor.lock();
     double refreshMs = refreshInterval() * 1000;
     Json timing = {{"sections", sections},
@@ -65,6 +66,7 @@ void Runtime::recordTick(const Json &sections, std::chrono::steady_clock::time_p
                    {"refreshMs", refreshMs},
                    {"vrr", m && m->m_vrrActive},
                    {"renderedFrames", renderer.frames},
+                   {"recordMs", recordMs},
                    {"gpuMs", renderer.gpuFrameMs() >= 0 ? Json(renderer.gpuFrameMs()) : Json(nullptr)}};
     if (offload.connected())
         timing["offload"] = {{"front", offload.frontSequence()},
@@ -97,6 +99,7 @@ void Runtime::recordTick(const Json &sections, std::chrono::steady_clock::time_p
                                        {"message", "Still recording (" + std::to_string(elapsed / 60000000000ull) +
                                                        " min) · Ctrl+R stops it"}});
     }
+    recordMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - recordStarted).count();
     if (session.frame >= replay::Session::FrameLimitV2 || elapsed >= replay::Session::DurationLimitNs ||
         !session.error().empty())
         sessionMethod("recording.stop", Json::object());

@@ -905,6 +905,10 @@ struct Runtime {
     PHLMONITORREF presentedMonitor;
     std::chrono::steady_clock::time_point lastPresented{};
     std::chrono::steady_clock::time_point presentedAt{}; // the backend's presentation time
+    // Present-locked dt: the presentation time and count the last tick's dt was measured to.
+    std::chrono::steady_clock::time_point dtPresentedAt{};
+    uint64_t dtPresents = 0;
+    double recordMs = 0; // the debug recorder's own cost in the last tick (format 2 timing)
     void framePresented(std::chrono::steady_clock::time_point);
     // Demo camera driver (Cinema.inc, nested dev hook): paths and follow shots moved per
     // presented frame.
@@ -5499,6 +5503,23 @@ void Runtime::tick() {
             renderer.animationClock = exportAnimation += dt;
     }
     presentsTicked = presents;
+    // Present-locked dt: a tick that follows a presentation moves by the time between the
+    // backend's presentation timestamps (whole refreshes on a fixed-refresh output; the
+    // measured interval under VRR), not by when the event loop got round to the tick, whose
+    // scheduling jitter otherwise lands in every frame's motion. With steady presents this is
+    // the display interval of the frames, so content and display keep a constant latency;
+    // a missed refresh is caught up in the next frame. Idle ticks (the timer) keep wall time.
+    if (!frameExport.active() && presents != dtPresents && dtPresentedAt != std::chrono::steady_clock::time_point{} &&
+        now - lastPresented < std::chrono::milliseconds(100)) {
+        double refresh = refreshInterval(), interval = std::chrono::duration<double>(presentedAt - dtPresentedAt).count();
+        auto m = monitor.lock();
+        if (interval > 0 && interval < .25)
+            dt = float(m && m->m_vrrActive ? interval : std::clamp(std::round(interval / refresh), 1., 8.) * refresh);
+    }
+    if (presents != dtPresents) {
+        dtPresentedAt = presentedAt;
+        dtPresents = presents;
+    }
     // Playback moves by the recorded frame's dt (version 1: the fixed step); recording changes
     // nothing: it keeps the live dt.
     if (session.playing)
@@ -6069,7 +6090,11 @@ class Pass final : public IPassElement {
                          {"worker", worker},
                          {"front", worker ? Json(runtime->offload.frontSequence()) : Json(nullptr)},
                          {"ageMs", worker ? runtime->offload.frontAgeMs()
-                                          : std::chrono::duration<double, std::milli>(drawStarted - runtime->lastTick).count()}});
+                                          : std::chrono::duration<double, std::milli>(drawStarted - runtime->lastTick).count()},
+                         // From the presentation the shown motion is locked to (the content clock).
+                         {"displayAgeMs", worker ? runtime->offload.frontDisplayAgeMs()
+                                                 : runtime->dtPresentedAt == std::chrono::steady_clock::time_point{} ? -1.
+                                                 : std::chrono::duration<double, std::milli>(drawStarted - runtime->dtPresentedAt).count()}});
                 }
                 runtime->displayedCamera = view;
                 runtime->renderedOffload = r.externalWorldFbo != 0;

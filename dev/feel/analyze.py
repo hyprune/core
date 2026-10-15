@@ -132,7 +132,10 @@ def analyse(path, label):
         k = bisect.bisect_left(presents, v['drawNs'])
         if k >= len(presents):
             continue
-        shown.append({'display': presents[k] / 1e9, 'content': (v['drawNs'] - v.get('ageMs', 0) * 1e6) / 1e9,
+        # Content time: the presentation the shown motion is locked to (displayAgeMs), else the
+        # camera sample's tick or send time (ageMs).
+        age = v['displayAgeMs'] if v.get('displayAgeMs', -1) >= 0 else v.get('ageMs', 0)
+        shown.append({'display': presents[k] / 1e9, 'content': (v['drawNs'] - age * 1e6) / 1e9,
                       'yaw': v['camera']['yaw'], 'pitch': v['camera']['pitch'], 'pos': v['camera']['position'], 'worker': v.get('worker', False)})
     # Several new frames can reach one present (a late frame): keep the last per present.
     dedup = {}

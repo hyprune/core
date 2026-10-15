@@ -24,7 +24,7 @@ class Client {
     } targets_[3];
     int fd_ = -1, w_ = 0, h_ = 0, front_ = -1;
     uint64_t generation_ = 0, sequence_ = 0, frontSequence_ = 0;
-    double started_ = 0, nextSend_ = 0, holdMs_ = 0, displayMs_ = 0;
+    double started_ = 0, nextSend_ = 0, holdMs_ = 0, displayMs_ = 0, frontSentDisplay_ = 0;
     std::deque<double> readyFromDisplay_; // copy issued, ms after the presentation its pose followed
     bool ready_ = false;
     Json frontReply_;
@@ -70,6 +70,9 @@ class Client {
     bool available(double maxAgeMs = 50) const { return fd_ >= 0 && front_ >= 0 && inFlightMs() <= maxAgeMs; }
     GLuint fbo(double maxAgeMs = 50) const { return available(maxAgeMs) ? targets_[front_].fbo : 0; }
     uint64_t frontSequence() const { return front_ >= 0 ? frontSequence_ : 0; }
+    // Age of the front from the presentation its pose followed (ms), or -1: the content clock
+    // of the debug recording (sent times include when the tick got round to sending).
+    double frontDisplayAgeMs() const { return front_ >= 0 && frontSentDisplay_ > 0 ? now() - frontSentDisplay_ : -1; }
     // Age of the newest complete frame (ms), or -1.
     double frontAgeMs() const { return front_ >= 0 ? now() - frontReply_.at("sent").get<double>() : -1; }
     Json diagnostics() const {
@@ -166,6 +169,7 @@ class Client {
                             targets_[front_].busy = false;
                         front_ = b.target;
                         frontSequence_ = b.reply.at("sequence");
+                        frontSentDisplay_ = b.sentDisplay;
                         promotedSeq = frontSequence_;
                         frontReply_ = b.reply;
                         timings = b.reply;

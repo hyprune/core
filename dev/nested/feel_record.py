@@ -72,7 +72,9 @@ def acceptance(client, children, args, shell_token, socketpath):
         start_pose()
         keys('-M', 'ctrl', '-P', 'Control_L', '-k', 'r', '-p', 'Control_L', '-m', 'ctrl')
         wait(lambda: client.call('recording.status', {})['recording'], timeout=10)
+        s.camera()  # clears the presentation log: compared with the unrecorded run's
         movement()
+        recorded_log = s.camera()['presentLog']
         keys('-M', 'ctrl', '-P', 'Control_L', '-k', 'r', '-p', 'Control_L', '-m', 'ctrl')
         status = wait(lambda: (lambda v: v if not v['recording'] else None)(client.call('recording.status', {})), timeout=10)
         labelled = client.call('recording.label', {'label': f'nested {name}', 'meta': {'harness': 'feel_record.py', 'config': patch}})
@@ -82,6 +84,7 @@ def acceptance(client, children, args, shell_token, socketpath):
         side = path.with_suffix('.json')
         if side.exists():
             shutil.copyfile(side, target.with_suffix('.json'))
+        (out / f'{i}-recorded-presentlog.json').write_text(json.dumps({'config': patch, 'presentLog': recorded_log}))
         stats = [json.loads(l) for l in target.read_text().splitlines() if '"kind":"stats"' in l]
         runs.append({'config': patch, 'recording': target.name, 'renderer': perf()['activeRenderer'],
                      'final': stats[-1] if stats else None})
