@@ -74,6 +74,53 @@ The nested headless output presents every refresh; the live capture showed the c
 presenting every 2-4 refreshes. That needs a live recording to explain (its per-tick section
 times and GPU time say where the time goes).
 
+### Round 2: a GPU-bound worker
+
+Further live captures (4K, 97.97 Hz, offload on, `target_fps` 110, dynamic resolution on)
+still showed new frames 2 or 3 refreshes apart unpredictably (2: 53%, 3: 36%, 4: 8%); a
+fifth of the steady-pan frames repeated the previous image exactly. At 4K under an 80 W
+cap the worker sustained about 40 frames/s, but even pacing took its divisor from the
+policy cap alone (60 FPS on mains: every second refresh, 49/s), a grid the worker could not
+fill. Causes and fixes (objective, no setting):
+
+1. **The divisor follows what the worker sustains.** Each frame's service time (from when it
+   could start, its pose sent and the previous frame done, to its copy issued) is kept for
+   the last 60 frames; even pacing uses the larger of the cap's divisor and
+   ceil((p90 + 1 ms) / refresh), rising at once and falling only once the frames fit a whole
+   refresh sooner with 5 % to spare, at most every 2 s. Service time does not depend on the
+   divisor, so the choice does not feed back on itself.
+2. **The worker's dynamic resolution targets the cap's grid rate** (refresh / divisor), not
+   `target_fps`: an unreachable 110 held every frame at the lowest scale.
+3. **Reconfiguring the worker no longer restarts it.** Every `graphics.set` (a slider step)
+   was a new worker generation; only `offload`, `offload_device`, on/off, the world and the
+   output size restart it now. `target_fps`, the power cap and rendering settings apply to the
+   running worker.
+4. **The worker never skips a draw.** Its renderer applied the in-process presentation
+   pacing (`target_fps` below the pose rate) and the two-frames-behind repeat; a skipped draw
+   ends the worker ("reused frame"), so a low target or a busy GPU ended offload.
+
+`dev/nested/offload_pacing.py` reproduces the case: `HYPRUNE_NESTED_4K=1`,
+`HYPRUNE_NESTED_REFRESH=98`, `HYPRUNE_DEV_WORKER_COST_MS=12:3` (a worker taking about 25 ms
+a frame on the work host), `HYPRUNE_DEV_PACING_BEFORE=1` for the previous pacing. A pan,
+2-3 rounds per target:
+
+| Offload, target | Divisor | New frames/s | New-frame interval CV | Shown 3 refreshes apart | Camera age (ms) |
+| --- | --- | --- | --- | --- | --- |
+| In-process 33 (not GPU-bound here) | - | 31.6-32.5 | 0.09-0.23 | 44-92% | 7-10 |
+| 33, before | 3 | 30.4-32.5 | 0.19-0.51 | 18-76% | 60-86 |
+| 33, after | 3 | 32.6-32.8 | 0.15-0.22 | 64-86% | 57-60 |
+| 49, before | 2 | 35.9-37.9 | 0.47-0.50 | 23-26% | 71-72 |
+| 49, after | 3 | 32.6-32.8 | 0.09-0.10 | 91-93% | 51 |
+| 110, before | 2 | 36.2-38.1 | 0.51-0.52 | 16-21% | 71-72 |
+| 110, after | 3 | 32.5-32.9 | 0.15-0.22 | 63-86% | 51-59 |
+
+video.py over screen recordings of the same pans (pan frames within ±25% of their interval):
+110 before 0.19, after 0.45; 49 before 0.29, after 0.36; in-process 0.43. Offload latency
+stays about 50-60 ms (render, transfer and a whole number of refreshes) against 7-10 ms
+in-process. `dev/nested/offload_reconfigure.py` drags settings (80 changes 25 ms apart):
+before, 75 worker restarts and no worker frames shown; after, none and every draw from the
+worker; offload off and on comes back in 2.7 s, and `target_fps` 33 on a busy worker runs.
+
 ## Settings (IPC 0.29)
 
 Subjective behaviour is a setting with a default per preset; the objective fixes above are

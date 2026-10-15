@@ -109,7 +109,8 @@ As version 1 below, with these differences:
   `presents` (backend presentation times since the previous frame, ns since start),
   `refreshMs`, `vrr`, `renderedFrames`, `gpuMs` (last measured GPU time, null if none) and,
   with the offload renderer, `offload` (front sequence, frontAgeMs, readyP90Ms,
-  latencyRefreshes, divisor, shown, draw counts).
+  latencyRefreshes, divisor, serviceP90Ms (the worker's sustained per-frame time), the front's
+  renderGpuMs, transferGpuMs and renderScale, shown, draw counts).
 - `view`: per completed 3D draw, `camera` (the pose shown), `drawNs`, `drawMs` (CPU), `worker`,
   `front` and `ageMs` (from the camera sample to the draw).
 - `input`: as before; `ns` is the compositor's receive time. Presses synthesized for keys

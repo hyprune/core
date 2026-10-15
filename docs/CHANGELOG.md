@@ -277,6 +277,14 @@ their frozen state projections and enums. Unknown or unadvertised methods return
 
 These are wire-compatible behavior changes that integrators may notice:
 
+- **Offload renderer reconfiguration and pacing.** `graphics.set` restarts the offload worker
+  only for `offload` and `offload_device` (and on/off, world or output size changes);
+  `target_fps`, `offload_power_cap_w` and rendering settings apply to the running worker.
+  Even pacing uses the larger of the cap's refresh divisor and the one the worker measurably
+  sustains (p90 of its per-frame service time, with hysteresis), and the worker's dynamic
+  resolution targets that cap's grid rate instead of `target_fps`. The worker never skips a
+  draw (its renderer's own target_fps pacing ended it, "reused frame"). Recordings' offload
+  timing gains `serviceP90Ms`, `renderGpuMs`, `transferGpuMs` and `renderScale`.
 - **World format 0.11** (RFC-0014 builder world amendment) loads: it follows 0.9 (there
   is no world format 0.10) and adds `atmosphere.panorama`, an equirectangular PNG or JPEG
   (2:1, 1,024 to 8,192 px wide; its centre looks along -Z, u grows towards +X) resampled on
