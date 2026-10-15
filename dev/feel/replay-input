@@ -2,6 +2,7 @@
 """Play a debug recording's raw input back through a virtual input device (uinput).
 
     dev/feel/replay-input REC.jsonl [--speed 1] [--countdown 3] [--abort-key F12] [--from S] [--to S]
+    dev/feel/replay-input REC.jsonl --map Control_L=Shift_L   # where the other setup sprints with Shift
     dev/feel/replay-input REC.jsonl --dry-run          # print what would be sent, inject nothing
     dev/feel/replay-input REC.jsonl --readback OUT.json  # also read the device back (testing)
 
@@ -47,7 +48,7 @@ for row, start in (('qwertyuiop', 16), ('asdfghjkl', 30), ('zxcvbnm', 44)):
     KEYS.update({c: start + i for i, c in enumerate(row)})
 
 
-def events(path, start, end):
+def events(path, start, end, remap=None):
     """(seconds, kind, payload) for the world input of a format 2 recording."""
     out, t0 = [], None
     with open(path) as f:
@@ -70,8 +71,8 @@ def events(path, start, end):
                 out.append((t, 'key', (BUTTONS[e['key']], e['down'])))
             elif e['type'] == 'axis':
                 out.append((t, 'wheel', (e['key'], e['value'])))
-            elif e['type'] == 'key' and e['key'] in KEYS:
-                out.append((t, 'key', (KEYS[e['key']], e['down'])))
+            elif e['type'] == 'key' and (remap or {}).get(e['key'], e['key']) in KEYS:
+                out.append((t, 'key', (KEYS[(remap or {}).get(e['key'], e['key'])], e['down'])))
     return [(t - out[0][0], k, p) for t, k, p in out] if out else []
 
 
@@ -193,10 +194,16 @@ def main():
     ap.add_argument('--abort-key', default='F12')
     ap.add_argument('--from', dest='start', type=float, default=0.0, help='start at this many seconds into the recording')
     ap.add_argument('--to', dest='end', type=float, default=None)
+    ap.add_argument('--map', action='append', default=[], metavar='FROM=TO',
+                    help='send key TO where the recording pressed FROM (e.g. Control_L=Shift_L)')
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--readback', help='(testing) write the device\'s own events to this JSON file')
     a = ap.parse_args()
-    plan = events(a.recording, a.start, a.end)
+    remap = dict(m.split('=', 1) for m in a.map)
+    for k, v in remap.items():
+        if v not in KEYS:
+            raise SystemExit(f'unknown key in --map: {v}')
+    plan = events(a.recording, a.start, a.end, remap)
     kinds = {k: sum(1 for _, kk, _ in plan if kk == k) for k in ('motion', 'key', 'wheel')}
     print(f'replay-input: {len(plan)} events over {plan[-1][0] / a.speed if plan else 0:.1f} s {kinds}', file=sys.stderr)
     if a.dry_run:
