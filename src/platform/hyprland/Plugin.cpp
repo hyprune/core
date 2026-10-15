@@ -938,6 +938,11 @@ struct Runtime {
     double exportAnimation = 0;
     bool exportPinnedAnimation = false;
     double refreshInterval();
+    // VRR really in use on the world's output (the monitor's flag can be set without it).
+    bool vrrActive() const {
+        auto m = monitor.lock();
+        return m && m->m_output && m->m_output->vrrCapable && m->m_output->vrrActive;
+    }
     void exportStart(const std::string &path, int width, int height, size_t queueBytes, int every = 1);
     void exportStop();
     bool cinemaCollide = false, cinemaTracing = false;
@@ -5512,9 +5517,8 @@ void Runtime::tick() {
     if (!frameExport.active() && presents != dtPresents && dtPresentedAt != std::chrono::steady_clock::time_point{} &&
         now - lastPresented < std::chrono::milliseconds(100)) {
         double refresh = refreshInterval(), interval = std::chrono::duration<double>(presentedAt - dtPresentedAt).count();
-        auto m = monitor.lock();
         if (interval > 0 && interval < .25)
-            dt = float(m && m->m_vrrActive ? interval : std::clamp(std::round(interval / refresh), 1., 8.) * refresh);
+            dt = float(vrrActive() ? interval : std::clamp(std::round(interval / refresh), 1., 8.) * refresh);
     }
     if (presents != dtPresents) {
         dtPresentedAt = presentedAt;

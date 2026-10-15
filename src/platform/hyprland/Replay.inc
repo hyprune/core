@@ -64,7 +64,7 @@ void Runtime::recordTick(const Json &sections, std::chrono::steady_clock::time_p
                    {"tickMs", std::round(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count() * 1000) / 1000},
                    {"presents", recordPresents},
                    {"refreshMs", refreshMs},
-                   {"vrr", m && m->m_vrrActive},
+                   {"vrr", vrrActive()},
                    {"renderedFrames", renderer.frames},
                    {"recordMs", recordMs},
                    {"gpuMs", renderer.gpuFrameMs() >= 0 ? Json(renderer.gpuFrameMs()) : Json(nullptr)}};
@@ -157,7 +157,8 @@ Json Runtime::recordingHeader() {
     };
     Json manifest = world ? world->manifest : Json::object();
     return {{"monitor", m ? Json{{"name", m->m_name}, {"width", m->m_pixelSize.x}, {"height", m->m_pixelSize.y},
-                                 {"refreshHz", m->m_refreshRate}, {"vrr", m->m_vrrActive}, {"scale", m->m_scale}}
+                                 {"refreshHz", m->m_refreshRate}, {"vrr", vrrActive()}, {"vrrCapable", m->m_output && m->m_output->vrrCapable},
+                                 {"scale", m->m_scale}}
                           : Json(nullptr)},
             {"gpu", {{"vendor", gl(GL_VENDOR)}, {"renderer", gl(GL_RENDERER)}, {"version", gl(GL_VERSION)}}},
             {"profile", {{"graphics", renderer.graphics},
