@@ -171,9 +171,12 @@ def readback(stop, out):
         time.sleep(.05)
     fd = os.open(f'/dev/input/{node}', os.O_RDONLY | os.O_NONBLOCK)
     got = []
-    while not stop.is_set() or select.select([fd], [], [], .2)[0]:
+    while not stop.is_set():
         if select.select([fd], [], [], .05)[0]:
-            data = os.read(fd, EVENT.size * 256)
+            try:
+                data = os.read(fd, EVENT.size * 256)
+            except OSError:
+                break
             for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
                 sec, usec, t, c, v = EVENT.unpack_from(data, i)
                 if t != EV_SYN:
@@ -230,11 +233,12 @@ def main():
             sent += 1
         print(f'replay-input: sent {sent} of {len(plan)}' + (' (aborted)' if stop.is_set() else ''), file=sys.stderr)
     finally:
-        device.close()
+        time.sleep(.3)  # the readback catches the last events before the device goes
         finished.set()
-        stop.set()
         for t in threads[1:]:
             t.join(timeout=5)
+        device.close()
+        stop.set()
 
 
 if __name__ == '__main__':
