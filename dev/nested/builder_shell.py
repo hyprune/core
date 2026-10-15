@@ -420,8 +420,8 @@ def acceptance(client, children, args, shell_token, socketpath):
     wait(lambda: 'brick' in (shapes().get('materials') or []), 20)
     assert ui('materialForm', json.dumps({'key': 'brick', 'name': 'Brick', 'colour': '#806040', 'texture': {'kind': 'keep'}, 'tile': '', 'glow': None,
                                           'roughness': '', 'metallic': '', 'fresh': False, 'textured': True})) == 'true'
-    shape_job('material', 'material-save')
-    wait(lambda: (shapes().get('job') or {}).get('kind') == 'rebuild' and shapes()['job'].get('phase') == 'done', 60)
+    assert press('material-save')  # saved, then (stale shapes) rebuilt: the job becomes the rebuild
+    wait(lambda: (shapes().get('job') or {}).get('kind') == 'rebuild' and shapes()['job'].get('phase') == 'done', 90)
     wait(lambda: by_key('wall')['ref'] != wall_ref, 20)
     swapped = by_key('wall')
     check('a material saved in the editor and changed rebuilds its shapes and swaps their placements (same id and key)',
