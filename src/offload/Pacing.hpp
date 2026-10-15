@@ -2,7 +2,34 @@
 // Live pacing of the offload renderer: one fresh worker frame per compositor frame while
 // anything shown changes, at the power policy's rate on average.
 #include <algorithm>
+#include <cmath>
 namespace hyprune::offload {
+// Even pacing (graphics.frame_pacing "even"): a rate-capped worker gets a new pose every
+// n-th compositor frame, n the smallest refresh divisor whose rate stays within the cap
+// (10% slack): 45 FPS on 98 Hz runs at 49 (every second refresh), on 60 Hz at 30. An
+// uneven 45 on 60 Hz shows frames for 1, 1, 1 and 2 refreshes while each carries the
+// motion of its own send interval: judder at any rate.
+inline int evenDivisor(double refreshHz, double fps) {
+    int n = 1;
+    while (n < 8 && refreshHz / n > fps * 1.1)
+        ++n;
+    return n;
+}
+// Constant latency: each frame becomes the front a whole number of compositor frames after
+// its pose was sent, enough for the worker's recent round trips (p90 plus a margin), so a
+// frame that happens to finish early is not shown early. Hysteresis: shorter only once the
+// trips fit a whole frame earlier with room to spare.
+struct Latency {
+    int ticks = 1;
+    int update(double refreshMs, double readyP90Ms) {
+        if (refreshMs <= 0)
+            return ticks;
+        int need = std::max(1, int(std::ceil((readyP90Ms + 2) / refreshMs)));
+        if (need > ticks || readyP90Ms + 2 < (ticks - 1.25) * refreshMs)
+            ticks = need;
+        return ticks;
+    }
+};
 // The plugin's per-frame budget: each compositor frame tick adds frames x fps / refresh
 // (a 45 FPS policy on a 60 Hz output: 0.75 a frame, so 3 frames in 4 get a new pose,
 // evenly); a pose spends one. Fractions carry over, but an idle stretch banks at most one

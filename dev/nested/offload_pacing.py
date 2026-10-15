@@ -5,8 +5,10 @@
 
 World: HYPRUNE_PACING_WORLD (an extracted package; default the worlds checkout's dist Lumen
 Reach). For each configuration in HYPRUNE_PACING_CONFIGS (default
-"off:60,on:60,off:45,on:45": graphics.offload and graphics.target_fps; the offload
-policy caps the worker at target_fps, so 45 is the laptop-on-USB-C profile), a 4 s pan
+"off:60,on:60,off:45,on:45": graphics.offload and graphics.target_fps, optionally a third
+field graphics.frame_pacing, e.g. on:45:max_rate; the offload policy caps the worker at
+target_fps, so 45 is the laptop-on-USB-C profile; HYPRUNE_NESTED_REFRESH sets the output's
+refresh, e.g. 98 like the owner's external panel), a 4 s pan
 is driven by core (cinema path, no recording: the live path) while the pacing probe
 records every presented frame's draw time, content hash, offload front and age. Over
 the steady middle of the pan it reports:
@@ -16,6 +18,8 @@ the steady middle of the pan it reports:
   newHz         new frames per second; presentHz
   frameCV       CV of present-to-present intervals; newCV the same over new frames
   ageMs         mean age of the camera sample shown (latency inside core)
+  newAgeStdMs   spread of that age over new frames: motion judder in ms (0 = every new
+                frame shows the scene exactly the same time before it is drawn)
 Gate (HYPRUNE_PACING_GATE=1): offload extra < 2 % in every round and the median round's
 frameCV within 0.05 of in-process.
 """
@@ -71,7 +75,15 @@ def cv(xs):
     return st.pstdev(xs) / m if m else 0.
 
 
-def analyse(probe, target, refresh=60.):
+def even_divisor(refresh, fps):
+    """Core's even pacing (offload/Pacing.hpp evenDivisor)."""
+    n = 1
+    while n < 8 and refresh / n > fps * 1.1:
+        n += 1
+    return n
+
+
+def analyse(probe, target, refresh=60., even=False):
     frames = probe['frames']
     t0, t1 = frames[0][0], frames[-1][0]
     mid = [f for f in frames if t0 + 450 <= f[0] <= t1 - 450]
@@ -79,7 +91,9 @@ def analyse(probe, target, refresh=60.):
     n = len(mid) - 1
     span = (mid[-1][0] - mid[0][0]) / 1000
     new = [b for a, b in zip(mid, mid[1:]) if a[2] != b[2]]
-    expected = max(0., 1 - min(target, refresh) / refresh)  # inherent repeats at the target rate
+    # Inherent repeats at the target rate (even pacing: a steady refresh divisor; the offload
+    # policy caps the worker at 60 on mains power).
+    expected = 1 - 1 / even_divisor(refresh, min(target, 60)) if even else max(0., 1 - min(target, refresh) / refresh)
     presents = [p for p in probe['presents'] if mid[0][0] - 20 <= p <= mid[-1][0] + 20]
     gaps = [b - a for a, b in zip(presents, presents[1:])]
     newGaps = [b[0] - a[0] for a, b in zip(new, new[1:])]
@@ -90,6 +104,7 @@ def analyse(probe, target, refresh=60.):
             'presentHz': round(n / span, 1), 'newHz': round(len(new) / span, 1),
             'frameCV': round(cv(gaps), 3) if gaps else None, 'newCV': round(cv(newGaps), 3) if len(newGaps) > 2 else None,
             'ageMs': round(st.mean(f[3] for f in mid), 1), 'ageP95Ms': round(sorted(f[3] for f in mid)[int(.95 * len(mid))], 1),
+            'newAgeStdMs': round(st.pstdev(f[3] for f in new), 2) if len(new) > 2 else None,
             'frontSteps': {str(k): steps.count(k) for k in sorted(set(steps))} if steps else None}
 
 
@@ -109,10 +124,12 @@ def acceptance(client, children, args, shell_token, socketpath):
            {'t': 3, 'eye': [x + .9, y + .5, z - .9], 'yaw': .45, 'pitch': -.08, 'ease': 'out'},
            {'t': 4, 'eye': [x + 1.2, y + .5, z - 1.2], 'yaw': .9, 'pitch': -.08}]
     configs = [c.split(':') for c in os.environ.get('HYPRUNE_PACING_CONFIGS', 'off:60,on:60,off:45,on:45').split(',')]
-    for offload, fps in configs:
-        name = f'offload-{offload}-{fps}'
+    refresh = float(os.environ.get('HYPRUNE_NESTED_REFRESH', '60'))
+    for offload, fps, *pacing in configs:
+        name = f'offload-{offload}-{fps}' + (f'-{pacing[0]}' if pacing else '')
         client.call('graphics.set', {'patch': {'offload': offload, 'target_fps': int(fps), 'npc_motion': 'always', 'quality': 'high',
-                                               'dynamic_resolution': False, 'render_scale': 1}})
+                                               'dynamic_resolution': False, 'render_scale': 1,
+                                               'frame_pacing': pacing[0] if pacing else None}})
         want = 'offload' if offload != 'off' else 'in-process'
         wait(lambda: perf()['activeRenderer'] == want, 60)
         cam.hold(pan[0]['eye'], yaw=pan[0]['yaw'], pitch=pan[0]['pitch']); time.sleep(2.5)
@@ -122,7 +139,7 @@ def acceptance(client, children, args, shell_token, socketpath):
             cam.run(pan); time.sleep(.2)
             probe = cam._call({'op': 'probe', 'on': False})
             (out / f'{name}-{k}.json').write_text(json.dumps(probe))
-            a = analyse(probe, int(fps))
+            a = analyse(probe, int(fps), refresh, offload != 'off' and (pacing or ['even'])[0] == 'even')
             a['renderer'] = perf()['activeRenderer']
             w = perf().get('workerTimings') or {}
             if w:

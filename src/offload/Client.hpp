@@ -16,6 +16,7 @@ class Client {
         GLsync copied = nullptr;
         Json request, reply;
         double received = 0, copying = 0; // when the frame packet arrived, when its copy was issued
+        double sentDisplay = 0; // the latest presentation time when its pose was sent
     } slots_[2];
     struct Target {
         GLuint tex = 0, fbo = 0;
@@ -23,7 +24,8 @@ class Client {
     } targets_[3];
     int fd_ = -1, w_ = 0, h_ = 0, front_ = -1;
     uint64_t generation_ = 0, sequence_ = 0, frontSequence_ = 0;
-    double started_ = 0, nextSend_ = 0;
+    double started_ = 0, nextSend_ = 0, holdMs_ = 0, displayMs_ = 0;
+    std::deque<double> readyFromDisplay_; // copy issued, ms after the presentation its pose followed
     bool ready_ = false;
     Json frontReply_;
     FrameBudget budget_;
@@ -39,6 +41,22 @@ class Client {
     std::string error;
     Json capabilities, timings;
     bool connected() const { return fd_ >= 0; }
+    // Presentation clock (the backend's latest present, steady ms): even pacing counts from
+    // the present a pose followed, not from when the tick got round to sending it.
+    void display(double ms) { displayMs_ = ms; }
+    // Even pacing: a finished frame becomes the front (Send::Promote) only once the display
+    // clock is ms past the present its pose followed, a constant latency (0: as soon as its
+    // copy is done).
+    void hold(double ms) { holdMs_ = std::max(0., ms); }
+    // p90 of the recent frames' ready times (copy issued), ms after the present their pose
+    // followed; 0 without data.
+    double readyP90Ms() const {
+        std::vector<double> v(readyFromDisplay_.begin(), readyFromDisplay_.end());
+        if (v.empty())
+            return 0;
+        std::sort(v.begin(), v.end());
+        return v[size_t(.9 * double(v.size() - 1))];
+    }
     // Stale (the in-process renderer stands in) when a requested frame is more than maxAgeMs
     // late; a front that nothing has replaced because nothing changed stays valid. Recordings
     // in lockstep accept any wait, the front being exactly the next frame in sequence.
@@ -122,6 +140,11 @@ class Client {
                     if (b.phase == 3 && (!oldest || b.reply.at("sequence").get<uint64_t>() < oldest->reply.at("sequence").get<uint64_t>()))
                         oldest = &b;
                 if (!oldest)
+                    break;
+                // Not due yet (even pacing): it is shown on its own frame, not early.
+                // Without presents (none yet, or none for 50 ms past due) it is shown at once.
+                if (send == Send::Promote && holdMs_ > 0 && displayMs_ > 0 &&
+                    displayMs_ < oldest->sentDisplay + holdMs_ && now() < oldest->sentDisplay + holdMs_ + 50)
                     break;
                 auto &b = *oldest;
                 {
@@ -242,6 +265,9 @@ class Client {
                     b.copied = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
                     glFlush();
                     b.copying = now();
+                    readyFromDisplay_.push_back(b.copying - b.sentDisplay);
+                    while (readyFromDisplay_.size() > 120)
+                        readyFromDisplay_.pop_front();
                     b.phase = 3;
                     check(glGetError() == GL_NO_ERROR, "offload import/copy");
                 }
@@ -268,6 +294,7 @@ class Client {
                     if (slots_[i].phase == 0) {
                         auto &b = slots_[i];
                         auto sent = now();
+                        b.sentDisplay = displayMs_ > 0 ? displayMs_ : sent;
                         b.request = {{"type", "pose"},
                                      {"version", 2},
                                      {"slot", i},

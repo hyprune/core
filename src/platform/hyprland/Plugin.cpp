@@ -896,6 +896,12 @@ struct Runtime {
     // since the last tick, so each exported frame advances by the same amount.
     uint64_t presents = 0, presentsTicked = 0;
     uint64_t offloadPresents = 0; // presents counted at the last offload frame tick
+    std::chrono::steady_clock::time_point offloadPresentedAt{}; // the backend present time then
+    offload::Latency offloadLatency; // even pacing: compositor frames from pose to front
+    // A worker frame later than this (ms) is replaced by an in-process stand-in. Even pacing
+    // holds frames on purpose: the limit covers its latency, so a stand-in (the current
+    // camera, ahead of the worker's) never alternates with held frames and steps back.
+    double offloadStaleMs = 50;
     double offloadClock = 0;      // the animation clock last given to the worker
     bool offloadClockSent = false;
     std::chrono::steady_clock::time_point offloadFrameTick{};
@@ -1614,6 +1620,7 @@ void Runtime::offloadTick() {
     if (renderPass.active()) throw std::runtime_error("offload lifecycle inside frame");
     auto g = config["graphics"];
     g.erase("npc_motion"); // not a renderer setting: changing it never restarts the worker
+    g.erase("frame_pacing"); // paced here, not in the worker
     bool enabled = active && world && monitor && !loading && !locked() && g["offload"] != "off" &&
                    offloadLocalReason().empty();
     // Catalog objects decode in the worker too: it may read the object roots that exist
@@ -1692,14 +1699,31 @@ void Runtime::offloadPump(int stage) {
         // rate while anything changes; while a recording exports frames, in lockstep. The
         // in-between pump receives and imports. share: the frame budget this tick adds.
         using Send = offload::Client::Send;
+        offload.display(std::chrono::duration<double, std::milli>(presentedAt.time_since_epoch()).count());
         int fps = offloadPolicy.value("targetFPS", 30);
         double share = 0;
         if (stage == 2) {
             auto now = std::chrono::steady_clock::now();
             auto frames = presents - offloadPresents;
-            share = frames ? double(frames) * fps * refreshInterval()
+            // The budget follows display time: refresh intervals since the last frame tick, from
+            // the backend's presentation times. Counting presents assumed one per refresh; a
+            // compositor presenting every second refresh then got a new worker frame on only
+            // about half of them (a 45 FPS cap at 98 Hz: 0.46 a present), the rest repeated.
+            double refresh = refreshInterval();
+            double intervals = frames ? std::clamp(std::round(std::chrono::duration<double>(presentedAt - offloadPresentedAt).count() / refresh), 1., 8.) : 0;
+            if (frames && offloadPresentedAt == std::chrono::steady_clock::time_point{})
+                intervals = double(std::min<uint64_t>(frames, 8));
+            bool even = renderer.graphics.value("frame_pacing", Json("even")) == "even";
+            int divisor = offload::evenDivisor(1 / refresh, fps);
+            share = frames ? (even ? intervals / divisor : intervals * fps * refresh)
                            : std::chrono::duration<double>(now - offloadFrameTick).count() * fps; // idle: timer ticks
+            // Even pacing: each frame is shown a whole number of refreshes after its pose (half a
+            // refresh of slack before that present), the same for every frame.
+            int latency = offloadLatency.update(refresh * 1000, offload.readyP90Ms());
+            offload.hold(even && !frameExport.active() ? (latency - .5) * refresh * 1000 : 0);
+            offloadStaleMs = even ? std::max(50., (latency + divisor + 2) * refresh * 1000) : 50;
             offloadPresents = presents;
+            offloadPresentedAt = presentedAt;
             offloadFrameTick = now;
         }
         offload.tick(view, renderer.graphics, renderer.profile, fps, objects, [&] { offloadObjects.commit(), offloadMachines.commit(); },
@@ -4683,6 +4707,10 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                 throw ipc::Error(-32602, "setting requires IPC 0.16");
             if (!ipc::protocol::atLeast(protocol, "0.23") && params["patch"].contains("npc_motion"))
                 throw ipc::Error(-32602, "setting requires IPC 0.23");
+            if (!ipc::protocol::atLeast(protocol, "0.29"))
+                for (auto &key : render::feelGraphicsKeys())
+                    if (params["patch"].contains(key))
+                        throw ipc::Error(-32602, "setting requires IPC 0.29");
             if (params["patch"].contains("npc_motion") && !params["patch"]["npc_motion"].is_string())
                 throw ipc::Error(-32602, "npc_motion must be auto, always, still or off");
             if (!ipc::protocol::atLeast(protocol, "0.18")) {
@@ -4729,6 +4757,16 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
                 if (response[section].contains("fov") && response[section]["fov"].is_number())
                     response[section]["fov"] = std::min(110., response[section]["fov"].get<double>());
         if (ipc::protocol::atLeast(protocol, "0.10")) response["performance"] = performance();
+        if (!ipc::protocol::atLeast(protocol, "0.29")) // the feel settings arrived with IPC 0.29
+            for (auto &key : render::feelGraphicsKeys()) {
+                for (auto section : {"config", "effective", "overrides", "options"})
+                    response[section].erase(key);
+                for (auto &preset : response["presets"])
+                    preset.erase(key);
+                if (response.contains("performance"))
+                    for (auto section : {"requested", "effective", "controls"})
+                        response["performance"][section].erase(key);
+            }
         else for (auto section : {"config", "effective", "overrides", "options"})
             for (auto key : {"offload", "offload_power_cap_w", "scale_min", "scale_max"}) response[section].erase(key);
         if (!ipc::protocol::atLeast(protocol, "0.18")) {
@@ -5951,7 +5989,7 @@ class Pass final : public IPassElement {
             auto &r = runtime->renderer;
             auto key = runtime->frameKey(surfaces);
             r.reuseFrame = !runtime->frameForced() && key == runtime->renderedKey;
-            r.externalWorldFbo = runtime->control.photoHeld() ? 0 : runtime->offload.fbo(runtime->frameExport.active() ? 1000 : 50);
+            r.externalWorldFbo = runtime->control.photoHeld() ? 0 : runtime->offload.fbo(runtime->frameExport.active() ? 1000 : runtime->offloadStaleMs);
             if (runtime->offload.connected() && !runtime->control.photoHeld()) {
                 // Diagnostics: frames drawn from the worker vs. stale (local stand-in), by front age.
                 auto age = runtime->offload.frontAgeMs();

@@ -27,6 +27,10 @@ inline Json graphicsDefaults() {
             {"exposure", 1.},
             {"bloom_strength", .15},
             {"reduced_motion", false},
+            // IPC 0.29 feel settings (null: the preset's value). frame_pacing: "even" shows a
+            // rate-capped renderer's new frames on a steady refresh divisor at a constant
+            // latency; "max_rate" sends as many as the cap allows, unevenly spaced.
+            {"frame_pacing", nullptr},
             // IPC 0.23: characters' motion (null: Lua npc.motion, default auto).
             {"npc_motion", nullptr}};
 }
@@ -41,7 +45,8 @@ inline Json graphicsPresets() {
               {"specular", false},
               {"ambient_occlusion", true},
               {"alpha_haze", false},
-              {"anisotropy", 1}}},
+              {"anisotropy", 1},
+              {"frame_pacing", "even"}}},
             {"medium",
              {{"outline_quality", "fast"}, {"outline", true}, {"upscaler", "fsr1"}, {"msaa", 1},
               {"bloom", "low"},
@@ -52,7 +57,8 @@ inline Json graphicsPresets() {
               {"specular", true},
               {"ambient_occlusion", true},
               {"alpha_haze", true},
-              {"anisotropy", 2}}},
+              {"anisotropy", 2},
+              {"frame_pacing", "even"}}},
             {"high",
              {{"outline_quality", "smooth"}, {"outline", true}, {"upscaler", "fsr1"}, {"msaa", 2},
               {"bloom", "high"},
@@ -63,7 +69,8 @@ inline Json graphicsPresets() {
               {"specular", true},
               {"ambient_occlusion", true},
               {"alpha_haze", true},
-              {"anisotropy", 8}}},
+              {"anisotropy", 8},
+              {"frame_pacing", "even"}}},
             {"ultra",
              {{"outline_quality", "smooth"}, {"outline", true}, {"upscaler", "fsr1"}, {"msaa", 4},
               {"bloom", "high"},
@@ -74,7 +81,8 @@ inline Json graphicsPresets() {
               {"specular", true},
               {"ambient_occlusion", true},
               {"alpha_haze", true},
-              {"anisotropy", 16}}}};
+              {"anisotropy", 16},
+              {"frame_pacing", "even"}}}};
 }
 inline Json graphicsOptions() {
     return {{"quality", {"auto", "low", "medium", "high", "ultra"}},
@@ -91,7 +99,13 @@ inline Json graphicsOptions() {
             {"ambient_occlusion", {false, true}},
             {"alpha_haze", {false, true}},
             {"anisotropy", {1, 2, 4, 8, 16}},
-            {"dynamic_resolution", {false, true}}};
+            {"dynamic_resolution", {false, true}},
+            {"frame_pacing", {"even", "max_rate"}}};
+}
+// Graphics settings added with IPC 0.29 (the feel settings): older peers never see them.
+inline const std::vector<std::string> &feelGraphicsKeys() {
+    static const std::vector<std::string> keys{"frame_pacing"};
+    return keys;
 }
 // User presentation overrides are independent of the current world's defaults.
 inline Json effectiveOutline(const Json &profile, const Json &graphics) {

@@ -457,6 +457,9 @@ def run(args):
         text=pathlib.Path(config).read_text().replace('1920x1080@60','3840x2160@60').replace('scale = 1','scale = '+os.environ.get('HYPRUNE_NESTED_4K_SCALE','1'));config=str(STATE/'4k-hyprland.lua');pathlib.Path(config).write_text(text)
     if os.environ.get('HYPRUNE_NESTED_SMALL')=='1':
         text=pathlib.Path(config).read_text().replace('1920x1080@60','640x480@60');config=str(STATE/'small-hyprland.lua');pathlib.Path(config).write_text(text)
+    if os.environ.get('HYPRUNE_NESTED_REFRESH'):  # the headless output's refresh (Hz), e.g. 98 like a laptop's external panel
+        rate=str(float(os.environ['HYPRUNE_NESTED_REFRESH'])).rstrip('0').rstrip('.')
+        text=pathlib.Path(config).read_text().replace('@60"','@'+rate+'"');config=str(STATE/'refresh-hyprland.lua');pathlib.Path(config).write_text(text)
     prepare_lock.close()
     log=open(STATE/'hyprland.log','w')
     if args.live: environment.pop('HYPRUNE_LAUNCH_FD',None)
