@@ -349,7 +349,16 @@ class Config(unittest.TestCase):
             {"id": "a", "kind": "command", "argv": ["true"], "fields": [{"name": "x", "pointer": "/x", "type": "date"}]},
             {"id": "a", "kind": "http", "url": "http://example.com/x"},
             {"id": "a", "kind": "http", "url": "file:///etc/passwd"},
-            {"id": "a", "kind": "http", "url": "https://example.com/x", "method": "PUT"},
+            {"id": "a", "kind": "http", "url": "https://example.com/x", "method": "DELETE"},
+            {"id": "a", "kind": "http", "url": "https://example.com/x", "body": {"q": 1}},
+            {"id": "a", "kind": "http", "url": "https://example.com/x", "headers": {"K": "{secret:bad name}"}, "map": {"label": "x"}},
+            {"id": "a", "kind": "http", "url": "https://example.com/x", "map": {"value": {"path": "cpu"}}},
+            {"id": "a", "kind": "http", "url": "https://example.com/x", "map": {"value": {"path": "$.a", "min": 5, "max": 5}}},
+            {"id": "a", "kind": "http", "url": "https://example.com/x", "map": {"level": {"warn": 70}}},
+            {"id": "a", "kind": "http", "url": "https://example.com/x", "map": {"display": "{value:q}"}},
+            {"id": "a", "kind": "http", "url": "https://example.com/x", "map": {"colour": "red"}},
+            {"id": "a", "kind": "http", "url": "https://example.com/x", "map": {"value": {"field": "nope"}}},
+            {"id": "a", "kind": "timer", "timer": "pulse", "map": {"label": "x"}},
             {"id": "a", "kind": "timer", "timer": "schedule"},
         ]
         for source in bad:
@@ -393,7 +402,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    do_GET = do_POST = _reply
+    do_GET = do_POST = do_PUT = do_PATCH = _reply
 
 
 class Http(unittest.TestCase):
@@ -474,6 +483,201 @@ class Http(unittest.TestCase):
         self.assertEqual(helper.http_values(spec)[0], {"t": 21.5})
         with self.assertRaisesRegex(helper.PollError, "another origin"):
             helper.http_values(self.spec("/away"))
+
+
+class Paths(unittest.TestCase):
+    """JSONPath-like selectors (data sources phase 2)."""
+    DOC = {"jobs": [{"id": 1, "status": "queued", "ms": 40}, {"id": 2, "status": "running", "ms": 80},
+                    {"id": 3, "status": "queued", "ms": 120}],
+           "cpu": {"percent": 37.5, "cores": 8}, "host": {"name": "rack-1", "tags": ["a", "b"]},
+           "deep": {"x": {"name": "inner"}}, "flag": True, "weird key": 4}
+
+    def path(self, expr, reduce=None):
+        return helper.select_path(self.DOC, expr, reduce)
+
+    def test_members_indexes_slices(self):
+        self.assertEqual(self.path("$.cpu.percent"), 37.5)
+        self.assertEqual(self.path("$['weird key']"), 4)
+        self.assertEqual(self.path("$.jobs[1].status"), "running")
+        self.assertEqual(self.path("$.jobs[-1].id"), 3)
+        self.assertEqual(helper.json_path(self.DOC, "$.jobs[0:2].id"), [1, 2])
+        self.assertEqual(helper.json_path(self.DOC, "$.host.tags[*]"), ["a", "b"])
+        self.assertEqual(helper.json_path(self.DOC, "$.cpu.*"), [37.5, 8])
+        self.assertEqual(helper.json_path(self.DOC, "$..name"), ["rack-1", "inner"])
+
+    def test_filters_and_reductions(self):
+        self.assertEqual(self.path("$.jobs[?(@.status == 'queued')]", "count"), 2)
+        self.assertEqual(self.path("$.jobs[?(@.status != \"queued\")].id"), 2)
+        self.assertEqual(self.path("$.jobs[?(@.ms > 50)].ms", "sum"), 200)
+        self.assertEqual(self.path("$.jobs[*].ms", "avg"), 80)
+        self.assertEqual((self.path("$.jobs[*].ms", "min"), self.path("$.jobs[*].ms", "max")), (40, 120))
+        self.assertEqual((self.path("$.jobs[*].id", "first"), self.path("$.jobs[*].id", "last")), (1, 3))
+        self.assertEqual(self.path("$.jobs[?(@.missing)]", "count"), 0)
+        self.assertEqual(self.path("$.jobs[?(@.id)]", "count"), 3)
+        self.assertEqual(self.path("$.jobs[?(@.nothing == 1)].ms", "sum"), 0)
+
+    def test_errors(self):
+        for expr, reduce, message in [("$.nope", None, "no match"), ("$.cpu", None, "not a value"),
+                                      ("$.host.tags[*]", "sum", "needs numbers"), ("$.jobs[*].x", "avg", "no match")]:
+            with self.assertRaisesRegex(helper.FieldError, message, msg=expr):
+                self.path(expr, reduce)
+        for expr in ["cpu", "$.", "$[", "$.jobs[?(@.a ~ 1)]", "$.a[?(@.b == bare)]", "$.a[x]"]:
+            with self.assertRaises(helper.FieldError, msg=expr):
+                helper.parse_path(expr) if "bare" not in expr else self.path(expr)
+
+    def test_true_is_not_one(self):
+        doc = {"a": [{"v": True}, {"v": 1}]}
+        self.assertEqual(helper.select_path(doc, "$.a[?(@.v == 1)]", "count"), 1)
+        self.assertEqual(helper.select_path(doc, "$.a[?(@.v == true)]", "count"), 1)
+
+
+class Mapping(unittest.TestCase):
+    """The gauge mapping: value 0-100, level, display, label (command and HTTP sources)."""
+    DOC = {"used": 12.4, "total": 16, "state": "Degraded", "host": "rack-1"}
+
+    def apply(self, mapping, values=None):
+        helper.check_map(mapping, "t")
+        return helper.apply_map(self.DOC, values or {}, mapping)
+
+    def test_scale_level_display_label(self):
+        values, errors = self.apply({"value": {"path": "$.used", "min": 0, "max": 16},
+                                     "level": {"warn": 70, "error": 90},
+                                     "display": "{raw:.1f} of {$.total} GB", "label": "RAM"})
+        self.assertEqual((values, errors), ({"value": 77.5, "level": "warn", "display": "12.4 of 16 GB", "label": "RAM"}, []))
+
+    def test_clamped_below_raw_and_match(self):
+        self.assertEqual(self.apply({"value": {"path": "$.used", "min": 20, "max": 40}})[0], {"value": 0})
+        self.assertEqual(self.apply({"value": {"path": "$.used", "max": 10}})[0], {"value": 100})
+        low = {"value": {"path": "$.used", "max": 100}, "level": {"warn": 20, "error": 10, "below": True}}
+        self.assertEqual(self.apply(low)[0]["level"], "warn")
+        raw = {"value": {"path": "$.used", "max": 100}, "level": {"of": "raw", "warn": 10, "error": 12}}
+        self.assertEqual(self.apply(raw)[0]["level"], "error")
+        match = {"level": {"path": "$.state", "match": {"healthy": "ok", "degraded": "warn"}, "otherwise": "error"}}
+        self.assertEqual(self.apply(match)[0], {"level": "warn"})
+        self.assertEqual(self.apply({"label": {"path": "$.host"}, "display": "{label}: {used:d}"}, {"used": 12.4})[0],
+                         {"label": "rack-1", "display": "rack-1: 12"})
+
+    def test_failures_are_field_errors(self):
+        values, errors = self.apply({"value": {"path": "$.state"}, "display": "{nothing}", "label": "L"})
+        self.assertEqual(values, {"label": "L"})
+        self.assertTrue(errors[0].startswith("value:") and errors[1].startswith("display:"), errors)
+
+    def test_command_number_output_with_map(self):
+        spec = spec_for({"id": "c", "kind": "command", "argv": ["true"], "output": "number",
+                         "map": {"value": {"field": "value", "max": 200}, "display": "{raw:.0f} rpm"}})
+        values, errors, _ = helper.interpret_command(spec, 0, b"150\n", "")
+        self.assertEqual((values, errors), ({"value": 75, "display": "150 rpm"}, []))
+
+    def test_command_json_with_map_and_no_object(self):
+        spec = spec_for({"id": "c", "kind": "command", "argv": ["true"],
+                         "map": {"value": {"path": "$[0].v"}, "label": "first"}})
+        values, errors, _ = helper.interpret_command(spec, 0, b'{"v": 41}\n', "")
+        self.assertEqual(errors[0][:6], "value:")  # an object has no [0]
+        with self.assertRaisesRegex(helper.PollError, "not a JSON object"):
+            helper.interpret_command(spec_for({"id": "c", "kind": "command", "argv": ["true"]}), 0, b"[1, 2]", "")
+
+
+class SecretStore(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.path = pathlib.Path(self.dir.name) / "secrets.json"
+        self.saved = helper.SECRETS
+        helper.SECRETS = helper.Secrets(self.path, keyring=False)
+
+    def tearDown(self):
+        helper.SECRETS = self.saved
+        self.dir.cleanup()
+
+    def write(self, data, mode=0o600):
+        self.path.write_text(json.dumps(data))
+        os.chmod(self.path, mode)
+
+    def test_file_env_and_permissions(self):
+        self.write({"ci-token": "from-file"})
+        self.assertEqual(helper.SECRETS.lookup("ci-token"), ("from-file", "file"))
+        with unittest.mock.patch.dict(os.environ, {"HYPRUNE_SOURCES_SECRET_CI_TOKEN": "from-env"}):
+            self.assertEqual(helper.SECRETS.lookup("ci-token"), ("from-env", "env"))
+        self.write({"ci-token": "from-file"}, 0o644)
+        self.assertEqual(helper.SECRETS.lookup("ci-token"), (None, None))
+        self.assertIn("0600", helper.SECRETS.file()[1])
+        self.assertEqual(helper.SECRETS.lookup("absent"), (None, None))
+
+    def test_keyring(self):
+        helper.SECRETS = helper.Secrets(self.path, keyring=True)
+        done = subprocess.CompletedProcess([], 0, b"from-keyring\n", b"")
+        with unittest.mock.patch.object(helper.shutil, "which", return_value="/usr/bin/secret-tool"), \
+                unittest.mock.patch.object(helper.subprocess, "run", return_value=done) as run:
+            self.assertEqual(helper.SECRETS.lookup("api"), ("from-keyring", "keyring"))
+        self.assertEqual(run.call_args[0][0], ["secret-tool", "lookup", "application", "hyprune", "secret", "api"])
+        with unittest.mock.patch.object(helper.shutil, "which", return_value=None):
+            self.assertEqual(helper.SECRETS.lookup("api"), (None, None))
+
+    def test_placeholders(self):
+        self.write({"key": "s3cr3t-value"})
+        used = []
+        self.assertEqual(helper.resolve_secrets({"a": ["x {secret:key} y"], "n": 1}, used), {"a": ["x s3cr3t-value y"], "n": 1})
+        self.assertEqual(used, ["s3cr3t-value"])
+        with self.assertRaisesRegex(helper.PollError, "'gone' is not set"):
+            helper.resolve_secrets("{secret:gone}", [])
+        self.assertEqual(sorted(helper.secret_names({"url": "https://h/?k={secret:a}", "headers": {"A": {"secret": "b"}},
+                                                     "body": {"t": "{secret:c}"}})), ["a", "b", "c"])
+
+
+class HttpPhase2(Http):
+    """HTTP sources, phase 2: PUT/PATCH and text bodies, secrets in the URL and body, non-JSON
+    outputs and the map; the control test's raw response."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        _Handler.routes.update({
+            "/num": (200, {"Content-Type": "text/plain"}, b"73.5\n"),
+            "/api": (200, {"Content-Type": "application/json"},
+                     json.dumps({"items": [{"state": "ok", "lag": 3}, {"state": "late", "lag": 40}], "name": "ingest"}).encode()),
+            "/denied": (401, {"Content-Type": "application/json"}, b'{"error": "bad token"}'),
+        })
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        path = pathlib.Path(self.dir.name) / "secrets.json"
+        path.write_text(json.dumps({"api-key": "k-123456", "token": "t-abcdef"}))
+        os.chmod(path, 0o600)
+        self.saved = helper.SECRETS
+        helper.SECRETS = helper.Secrets(path, keyring=False)
+
+    def tearDown(self):
+        helper.SECRETS = self.saved
+        self.dir.cleanup()
+
+    def test_put_and_patch_with_secrets_in_url_and_body(self):
+        spec = self.spec("/api?key={secret:api-key}", method="PUT", body={"auth": "{secret:token}", "n": 2},
+                         map={"value": {"path": "$.items[*].lag", "reduce": "max", "max": 60}, "label": {"path": "$.name"}})
+        values, errors, meta = helper.http_values(spec)
+        self.assertEqual((values["value"], values["label"], errors, meta), (66.67, "ingest", [], {"_httpStatus": 200}))
+        method, path, headers, body = _Handler.seen[-1]
+        self.assertEqual((method, path, json.loads(body)), ("PUT", "/api?key=k-123456", {"auth": "t-abcdef", "n": 2}))
+        spec = self.spec("/api", method="PATCH", body="plain {secret:token}")
+        helper.http_values(spec)
+        method, _, headers, body = _Handler.seen[-1]
+        self.assertEqual((method, body, headers["Content-Type"]), ("PATCH", b"plain t-abcdef", "text/plain; charset=utf-8"))
+
+    def test_number_output_and_level_match(self):
+        spec = self.spec("/num", output="number", map={"value": {"field": "value"}, "level": {"warn": 70}})
+        self.assertEqual(helper.http_values(spec)[0], {"value": 73.5, "level": "warn"})
+        spec = self.spec("/api", map={"level": {"path": "$.items[?(@.lag > 30)].state", "match": {"late": "error"}}})
+        self.assertEqual(helper.http_values(spec)[0], {"name": "ingest", "level": "error"})
+
+    def test_control_test_shows_the_raw_response(self):
+        runner = helper.Runner([], helper.DryRunPublisher(stream=open(os.devnull, "w")))
+        reply = runner.test({"kind": "http", "url": self.base + "/api?key={secret:api-key}",
+                             "map": {"value": {"path": "$.items[0].lag", "max": 10}, "display": "{raw} s"}}, self.dir.name + "/sources.json")
+        self.assertEqual((reply["httpStatus"], reply["values"], reply["error"]), (200, {"name": "ingest", "value": 30, "display": "3 s"}, None))
+        self.assertIn('"ingest"', reply["raw"])
+        self.assertEqual((reply["contentType"], reply["secrets"]), ("application/json", {"api-key": "file"}))
+        denied = runner.test({"kind": "http", "url": self.base + "/denied"}, self.dir.name + "/sources.json")
+        self.assertEqual((denied["httpStatus"], denied["raw"], denied["error"]), (401, '{"error": "bad token"}', "HTTP 401 Unauthorized"))
+        missing = runner.test({"kind": "http", "url": self.base + "/api", "headers": {"K": {"secret": "nope"}}}, self.dir.name + "/sources.json")
+        self.assertEqual((missing["error"], missing["secrets"]), ("secret 'nope' is not set", {"nope": None}))
 
 
 # --- simulators ----------------------------------------------------------------------
@@ -1348,7 +1552,8 @@ class HelperControl(unittest.TestCase):
 
         count = len(self.core.methods("data.publish"))
         reply = control(sock, {"op": "test", "source": {"kind": "command", "argv": [PY, "-c", SCRIPT_JSON]}})
-        self.assertEqual(set(reply), {"ok", "values", "stdout", "stderr", "error", "exitCode", "durationMs"})
+        self.assertEqual(set(reply), {"ok", "values", "stdout", "stderr", "error", "exitCode", "durationMs", "raw", "rawBytes",
+                                      "httpStatus", "contentType", "secrets"})
         self.assertEqual((reply["ok"], reply["values"], reply["error"], reply["exitCode"]),
                          (True, {"a": 1, "b": "x"}, None, 0))
         self.assertEqual((reply["stdout"], reply["stderr"]), ('{"a": 1, "b": "x", "obj": {}}\n', "note\n"))

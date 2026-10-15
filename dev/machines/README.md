@@ -189,6 +189,12 @@ which wakes at once, and answered when applied (fetches already running are not 
    "stderr": "", "error": null, "exitCode": 0, "durationMs": 31}
 ```
 
+`raw` is the first 4 KiB of what the source read (a command's stdout, an HTTP body, also of
+an error response; secret values echoed back show `***`), `rawBytes` its full size,
+`httpStatus` and `contentType` the HTTP status and type (`null` for commands), `secrets` where
+each secret it names was found (`env`, `file`, `keyring`, or `null`: missing). `values` are the
+mapped values as they would publish.
+
 Runs a source definition once with the same rules as a configured source (no shell, a new
 process group, `timeoutS`, the 64 KiB stdout cap, `output`/`key`/`fields`/`env`/`cwd`;
 relative paths resolve against the config file's directory) and publishes nothing. The
@@ -199,6 +205,17 @@ output, field errors) and `values` empty (or the fields that resolved). `stdout`
 first 4 KiB, `stderr` the last 4 KiB (also on a timeout). `exitCode` is negative when the
 command was killed (a timeout: `-9`). `kind: "http"` is also accepted (`exitCode` and
 `stdout` stay empty). One or two tests run at a time; more get `another test is running`.
+
+### `{"op": "secrets"}`
+
+```json
+→ {"ok": true, "file": "/home/u/.config/hyprune/secrets.json", "fileProblem": null, "keyring": true,
+   "names": {"ci-token": "file", "weather-key": null}}
+```
+
+Every secret name the configuration refers to (enabled and disabled sources) and where it is
+found, never a value. `fileProblem` is why the secrets file is not read (its mode, owner or
+JSON), else `null`; `keyring` is whether `secret-tool` can be asked.
 
 ### `{"op": "restart", "id": "<id>", "resetAverage": false}`
 
@@ -255,15 +272,16 @@ Each source publishes source ID `<client id>.<id>` (`id` is a slug, `[a-z][a-z0-
 | `intervalS` | all | Seconds between fetches, at most 86400. Command: ≥ 5, default 60. HTTP: ≥ 10 (≥ 2 for a loopback host), default 60, ±10% jitter. Timer: ≥ 1, default 1. |
 | `timeoutS` | command, http | Command 1–60, HTTP 1–30; default 10 (or the interval if shorter). |
 | `ttlMs` | all | `data.publish` TTL, 100–60000; default 10 × the interval, at most 60000. |
-| `fields` | command (`json`), http | Picked values (below). Without `fields`, every top-level scalar is published. |
+| `fields` | command (`json`), http (`json`) | Picked values (below). Without `fields`, every top-level scalar is published. |
+| `map` | command, http | The gauge keys `value`, `level`, `display`, `label` from the output ([Map](#map)). |
 | `argv` | command | Argument vector, run without a shell (use `["sh", "-c", "..."]` explicitly if needed). A relative program path with a `/` resolves against `cwd`. |
 | `cwd` | command | Working directory, relative to the config file's directory (default: that directory). |
 | `env` | command | Extra environment variables (strings). |
-| `output` | command | `json` (default), `number` (first line), `text` (first line), `lines` (count of non-empty lines). |
-| `key` | command (non-`json`), timer | Value name for single-value outputs (default `value`; timers `pulse`/`remaining`). |
+| `output` | command, http | `json` (default), `number` (first line), `text` (first line), `lines` (count of non-empty lines). |
+| `key` | command, http (non-`json`), timer | Value name for single-value outputs (default `value`; timers `pulse`/`remaining`). |
 | `url` | http | `https://`, or `http://` for a loopback host or a source marked `"local": true`. |
 | `local` | http | Allows plain HTTP and private addresses. A public host name that resolves to a loopback or private address is refused otherwise. |
-| `method`, `body` | http | `GET` (default) or `POST` with a fixed JSON `body`. |
+| `method`, `body` | http | `GET` (default), `POST`, `PUT` or `PATCH`; a `body` (not with `GET`, at most 64 KiB) is any JSON value, sent as JSON, or a string, sent as text (unless a `Content-Type` header says otherwise). |
 | `headers` | http | Strings, or `{"secret": "name", "prefix": "Bearer "}`. |
 | `timer` | timer | `pulse`: a counter that grows every `everyS` seconds (counted from `fromS`, default the Unix epoch). `countdown`: whole seconds left until `untilS` (Unix seconds) / `until` (ISO 8601), or of a `durationS` started when the helper starts. |
 
@@ -271,9 +289,25 @@ Each source publishes source ID `<client id>.<id>` (`id` is a slug, `[a-z][a-z0-
 HTTP interval floors to 1 s so the simulators can drive smooth demos. Never use it for real
 endpoints or expensive commands; the shipped helper has no such switch.
 
-Secrets in this prototype come from environment variables:
-`{"secret": "ci-token"}` reads `HYPRUNE_SOURCES_SECRET_CI_TOKEN`. They are sent only in the
-request header and are removed from error messages.
+### Secrets
+
+A secret is named in a header (`{"secret": "ci-token", "prefix": "Bearer "}`) or as a
+placeholder `{secret:ci-token}` in the `url`, a header string or a `body` string (names:
+letters, digits, `._-`, at most 64). The helper looks a name up, in order, in:
+
+1. the environment, `HYPRUNE_SOURCES_SECRET_<NAME>` (`ci-token` → `HYPRUNE_SOURCES_SECRET_CI_TOKEN`;
+   for development);
+2. the secrets file, `--secrets PATH` or `HYPRUNE_SOURCES_SECRETS`, default
+   `$XDG_CONFIG_HOME/hyprune/secrets.json`: a JSON object of names to strings, a regular
+   file of this user's **with no group or other permission bits** (mode `0600`); any other
+   mode and the file is not read (the control channel's `secrets` op says why);
+3. the desktop keyring through `secret-tool lookup application hyprune secret <name>` (when
+   `secret-tool` is installed; `--no-keyring` skips it). Store one with
+   `secret-tool store --label "Hyprune: ci-token" application hyprune secret ci-token`.
+
+Values are only sent in the request; they never appear in `sources.json`, logs, published
+values or errors (a test's raw response that echoes one shows `***`). A missing secret is a
+fetch error naming it.
 
 ### Fields
 
@@ -288,6 +322,7 @@ selection:
 | Selection | Value |
 | --- | --- |
 | `"pointer": "/a/0/b"` | The value at an [RFC 6901](https://www.rfc-editor.org/rfc/rfc6901) JSON Pointer (`~1` = `/`, `~0` = `~`; `""` is the whole document). It must be a scalar. |
+| `"path": "$.jobs[?(@.status == 'queued')]", "reduce": "count"` | A JSONPath-like selector ([below](#paths)): its first match (a scalar), or with `reduce` all matches: `count`, `sum`, `avg`, `min`, `max`, `first`, `last`. |
 | `"length": "/jobs"` | Length of the array at the pointer. |
 | `"countWhere": {"array", "pointer", "equals"}` | Number of array elements whose sub-pointer equals the value. |
 | `"first": {"array", "pointer"?, "equals"?, "select"?}` | The first element passing the test (or the first element), then the `select` sub-pointer. |
@@ -303,6 +338,39 @@ selection:
 
 A field that fails (missing pointer, non-scalar target, type mismatch) keeps its last good
 value; the source reports `_status: "error"` with the field errors in `_error`.
+
+### Paths
+
+`$` is the document; `.name` and `['name']` a member; `[2]`, `[-1]` an index (from the end
+when negative); `[1:3]` a slice; `*` and `[*]` every member; `..name` every member called
+`name` at any depth; `[?(@.a.b == 'x')]` the elements whose `a.b` compares (`==`, `!=`, `<`,
+`<=`, `>`, `>=` with a string, number, `true`, `false` or `null`; `true` never equals `1`), and
+`[?(@.a)]` those where `a` is present and not `false` or `null`. At most 256 characters.
+
+### Map
+
+`map` turns a source's output into the keys a gauge reads, for command and HTTP sources
+(any `output`; with `json` the document, otherwise `{"<key>": value}`):
+
+```json
+"map": {
+  "value": {"path": "$.memory.used", "min": 0, "max": 16},
+  "level": {"warn": 70, "error": 90},
+  "display": "{raw:.1f} of {$.memory.total} GB",
+  "label": "RAM"
+}
+```
+
+| Key | Publishes |
+| --- | --- |
+| `value` | A selection (`path` [+ `reduce`], `pointer`, or `field`: a `fields` name or `key`) scaled from `min`..`max` (default 0..100) to 0-100 and clamped. |
+| `level` | `ok`, `warn` or `error`: thresholds `warn`/`error` on the value (`"of": "raw"`: on the unscaled number; `"below": true`: low is bad), or a selection with `match` (lower-case text to a level) and `otherwise` (default `ok`). |
+| `display` | A template, at most 256 characters: `{raw}` (the unscaled number), `{value}`, `{level}`, `{label}`, a field name or `{$.path}`, each with an optional format (`{raw:.1f}`, `{value:d}`, `{label:>8}`). |
+| `label` | Text (at most 64 characters), or a selection. |
+
+Map keys join the `fields` (and override them on a name clash). A key that fails (no match,
+not a number) is left out and reported like a field error (`_status: error`); the others
+still publish.
 
 ## Script contract (command sources)
 

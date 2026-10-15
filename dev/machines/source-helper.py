@@ -20,6 +20,7 @@ import random
 import re
 import select
 import selectors
+import shutil
 import signal
 import socket
 import stat
@@ -51,6 +52,8 @@ COMMAND_TIMEOUT_RANGE_S, COMMAND_DEFAULT_TIMEOUT_S = (1.0, 60.0), 10.0
 HTTP_MIN_INTERVAL_S, HTTP_LOOPBACK_MIN_INTERVAL_S, HTTP_DEFAULT_INTERVAL_S = 10.0, 2.0, 60.0
 HTTP_TIMEOUT_RANGE_S, HTTP_DEFAULT_TIMEOUT_S = (1.0, 30.0), 10.0
 HTTP_JITTER = 0.10
+HTTP_METHODS = ("GET", "POST", "PUT", "PATCH")
+HTTP_REQUEST_BODY_CAP = 64 * 1024
 DEV_MIN_INTERVAL_S = 1.0  # devFastIntervals / --dev: prototype simulators only
 TIMER_MIN_INTERVAL_S, TIMER_DEFAULT_INTERVAL_S = 1.0, 1.0
 MAX_INTERVAL_S = 86400.0
@@ -185,9 +188,12 @@ def _matches(element, test):
 
 
 def select_field(document, field):
-    """The raw value a field selects (pointer, or a length/countWhere/first aggregate)."""
+    """The raw value a field selects (pointer, a JSONPath-like path with an optional reduce, or a
+    length/countWhere/first aggregate)."""
     if "pointer" in field:
         return json_pointer(document, field["pointer"])
+    if "path" in field:
+        return select_path(document, field["path"], field.get("reduce"))
     if "length" in field:
         return len(_array(document, field["length"]))
     if "countWhere" in field:
@@ -260,6 +266,325 @@ def extract_fields(document, fields):
         except FieldError as error:
             errors.append(str(error) if str(error).startswith(name) else f"{name}: {error}")
     return values, errors
+
+
+# --- JSONPath-like selectors and the gauge mapping (data sources phase 2) ---------------
+
+PATH_IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*")
+PATH_FILTER = re.compile(r"""\?\(@((?:\.[A-Za-z_][A-Za-z0-9_-]*|\[\d+\])*)\s*(?:(==|!=|<=|>=|<|>)\s*(.+?))?\s*\)""")
+REDUCERS = {"count", "sum", "avg", "min", "max", "first", "last"}
+MAX_PATH = 256
+
+
+def _literal(text):
+    text = text.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "'\"":
+        return text[1:-1]
+    if text in ("true", "false"):
+        return text == "true"
+    if text == "null":
+        return None
+    try:
+        return float(text) if any(c in text for c in ".eE") else int(text)
+    except ValueError:
+        raise FieldError(f"filter value {text!r} is not a string, number, true, false or null") from None
+
+
+def _compare(left, op, right):
+    if op is None:
+        return left is not _MISSING and left is not None and left is not False
+    if left is _MISSING:
+        return False
+    if op in ("==", "!="):
+        if isinstance(left, bool) or isinstance(right, bool):  # true is not 1
+            same = isinstance(left, bool) and isinstance(right, bool) and left == right
+        else:
+            same = left == right
+        return same if op == "==" else not same
+    numbers = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (left, right))
+    strings = isinstance(left, str) and isinstance(right, str)
+    if not (numbers or strings):
+        return False
+    return {"<": left < right, "<=": left <= right, ">": left > right, ">=": left >= right}[op]
+
+
+def _member(node, steps):
+    for kind, key in steps:
+        if kind == "name" and isinstance(node, dict) and key in node:
+            node = node[key]
+        elif kind == "index" and isinstance(node, list) and -len(node) <= key < len(node):
+            node = node[key]
+        else:
+            return _MISSING
+    return node
+
+
+def parse_path(expr):
+    """A JSONPath-like selector as a list of steps. Supported: $ (root), .name and ['name'],
+    [n] (negative from the end), [a:b] slices, * and [*] (every member), ..name (recursive),
+    and filters [?(@.a.b == 'x')] (==, !=, <, <=, >, >=; strings, numbers, true, false, null;
+    [?(@.a)] tests that a member is present and true-ish). Raises FieldError."""
+    if not isinstance(expr, str) or not expr.startswith("$") or len(expr) > MAX_PATH:
+        raise FieldError(f"invalid path {expr!r} (it starts with $)")
+    steps, i = [], 1
+    while i < len(expr):
+        c = expr[i]
+        if expr.startswith("..", i):
+            m = PATH_IDENT.match(expr, i + 2)
+            if not m:
+                raise FieldError(f"{expr}: .. needs a member name")
+            steps.append(("descend", m.group(0))); i = m.end()
+        elif c == ".":
+            if expr.startswith(".*", i):
+                steps.append(("all", None)); i += 2; continue
+            m = PATH_IDENT.match(expr, i + 1)
+            if not m:
+                raise FieldError(f"{expr}: a member name after . at {i}")
+            steps.append(("name", m.group(0))); i = m.end()
+        elif c == "[":
+            end = expr.find("]", i)
+            if expr.startswith("[?(", i):
+                end = expr.find(")]", i) + 1
+            if end <= i:
+                raise FieldError(f"{expr}: unclosed [")
+            inner = expr[i + 1:end].strip()
+            if inner == "*":
+                steps.append(("all", None))
+            elif inner[:1] in "'\"" and inner[-1:] == inner[:1] and len(inner) >= 2:
+                steps.append(("name", inner[1:-1]))
+            elif re.fullmatch(r"-?\d+", inner):
+                steps.append(("index", int(inner)))
+            elif re.fullmatch(r"-?\d*:-?\d*", inner):
+                a, b = inner.split(":")
+                steps.append(("slice", (int(a) if a else None, int(b) if b else None)))
+            elif inner.startswith("?("):
+                m = PATH_FILTER.fullmatch(inner)
+                if not m:
+                    raise FieldError(f"{expr}: filter {inner!r} is not [?(@.member op value)]")
+                sub = [("name", n) if not n.startswith("[") else ("index", int(n[1:-1]))
+                       for n in re.findall(r"\.[A-Za-z_][A-Za-z0-9_-]*|\[\d+\]", m.group(1))]
+                sub = [(k, v[1:] if k == "name" else v) for k, v in sub]
+                steps.append(("filter", (sub, m.group(2), _literal(m.group(3)) if m.group(2) else None)))
+            else:
+                raise FieldError(f"{expr}: unsupported selector [{inner}]")
+            i = end + 1
+        else:
+            raise FieldError(f"{expr}: unexpected {c!r} at {i}")
+    return steps
+
+
+def json_path(document, expr):
+    """Every value a JSONPath-like selector matches, in document order (parse_path)."""
+    nodes = [document]
+    for kind, arg in parse_path(expr):
+        out = []
+        for node in nodes:
+            if kind == "name":
+                if isinstance(node, dict) and arg in node:
+                    out.append(node[arg])
+            elif kind == "index":
+                if isinstance(node, list) and -len(node) <= arg < len(node):
+                    out.append(node[arg])
+            elif kind == "slice":
+                if isinstance(node, list):
+                    out.extend(node[arg[0]:arg[1]])
+            elif kind == "all":
+                out.extend(node.values() if isinstance(node, dict) else node if isinstance(node, list) else [])
+            elif kind == "descend":
+                stack = [node]
+                while stack:
+                    cur = stack.pop()
+                    if isinstance(cur, dict):
+                        if arg in cur:
+                            out.append(cur[arg])
+                        stack.extend(reversed(list(cur.values())))
+                    elif isinstance(cur, list):
+                        stack.extend(reversed(cur))
+            elif kind == "filter":
+                sub, op, value = arg
+                items = node.values() if isinstance(node, dict) else node if isinstance(node, list) else []
+                out.extend(e for e in items if _compare(_member(e, sub), op, value))
+        nodes = out
+    return nodes
+
+
+def select_path(document, expr, reduce=None):
+    """A selector's value: its first match (a scalar), or a reduction of all its matches:
+    count, sum, avg, min, max (numbers), first, last. Raises FieldError."""
+    matches = json_path(document, expr)
+    if reduce == "count":
+        return len(matches)
+    if reduce in ("sum", "avg", "min", "max"):
+        numbers = []
+        for m in matches:
+            try:
+                numbers.append(coerce(m, "number", expr))
+            except FieldError:
+                raise FieldError(f"{expr}: {reduce} needs numbers, found {json.dumps(m)[:40]}") from None
+        if not numbers:
+            if reduce == "sum":
+                return 0
+            raise FieldError(f"{expr}: no match to {reduce}")
+        return {"sum": sum(numbers), "avg": sum(numbers) / len(numbers), "min": min(numbers), "max": max(numbers)}[reduce]
+    if not matches:
+        raise FieldError(f"{expr}: no match")
+    value = matches[-1] if reduce == "last" else matches[0]
+    if not is_scalar(value) and value is not None:
+        raise FieldError(f"{expr}: matches a {'list' if isinstance(value, list) else 'object'}, not a value (add a reduce)")
+    return value
+
+
+LEVELS = ("ok", "warn", "error")
+TEMPLATE_RE = re.compile(r"\{([^{}:]+)(?::([^{}]*))?\}")
+FORMAT_SPEC_RE = re.compile(r"[<>^]?[+-]?\d{0,3}[,_]?(\.\d{1,6})?[fdeg%]?")
+MAP_KEYS = {"value", "level", "display", "label"}
+
+
+def _check_select(spec, label, allow_const=False):
+    """A mapping selection: {"path"[, "reduce"]}, {"pointer"}, {"field"} (a name from fields)."""
+    if allow_const and isinstance(spec, (str, int, float)) and not isinstance(spec, bool):
+        return
+    if not isinstance(spec, dict):
+        raise ConfigError(f"{label} must be an object")
+    picks = [k for k in ("path", "pointer", "field") if k in spec]
+    if len(picks) != 1:
+        raise ConfigError(f"{label} needs exactly one of path, pointer, field")
+    if "path" in spec:
+        try:
+            parse_path(spec["path"])
+        except FieldError as error:
+            raise ConfigError(f"{label}: {error}") from None
+    if spec.get("reduce") is not None and (spec["reduce"] not in REDUCERS or "path" not in spec):
+        raise ConfigError(f"{label}: reduce is one of {sorted(REDUCERS)} with a path")
+
+
+def check_map(mapping, label):
+    """The gauge mapping: value (0-100, scaled from min/max), level (thresholds on the value or a
+    text mapping), display (a template) and label (text or a selection). Raises ConfigError."""
+    if not isinstance(mapping, dict) or not mapping or set(mapping) - MAP_KEYS:
+        raise ConfigError(f"{label}: map takes value, level, display and label")
+    if "value" in mapping:
+        v = mapping["value"]
+        _check_select(v, f"{label}: map.value")
+        for key in ("min", "max"):
+            if key in v and (isinstance(v[key], bool) or not isinstance(v[key], (int, float)) or not math.isfinite(v[key])):
+                raise ConfigError(f"{label}: map.value.{key} must be a number")
+        if v.get("min", 0) == v.get("max", 100):
+            raise ConfigError(f"{label}: map.value min and max must differ")
+    if "level" in mapping:
+        lv = mapping["level"]
+        if not isinstance(lv, dict):
+            raise ConfigError(f"{label}: map.level must be an object")
+        if "warn" in lv or "error" in lv:
+            for key in ("warn", "error"):
+                if key in lv and (isinstance(lv[key], bool) or not isinstance(lv[key], (int, float))):
+                    raise ConfigError(f"{label}: map.level.{key} must be a number")
+            if lv.get("of", "value") not in ("value", "raw") or not isinstance(lv.get("below", False), bool):
+                raise ConfigError(f"{label}: map.level of is value or raw; below is true or false")
+            if lv.get("of", "value") == "value" and "value" not in mapping:
+                raise ConfigError(f"{label}: map.level thresholds need map.value")
+        elif "match" in lv:
+            _check_select({k: x for k, x in lv.items() if k not in ("match", "otherwise")}, f"{label}: map.level")
+            if not isinstance(lv["match"], dict) or not all(x in LEVELS for x in lv["match"].values()) or lv.get("otherwise", "ok") not in LEVELS:
+                raise ConfigError(f"{label}: map.level.match maps texts to ok, warn or error")
+        else:
+            raise ConfigError(f"{label}: map.level needs warn/error thresholds or a match")
+    if "display" in mapping:
+        if not isinstance(mapping["display"], str) or len(mapping["display"]) > 256:
+            raise ConfigError(f"{label}: map.display must be a template of at most 256 characters")
+        for name, spec in TEMPLATE_RE.findall(mapping["display"]):
+            if spec and not FORMAT_SPEC_RE.fullmatch(spec):
+                raise ConfigError(f"{label}: map.display format {{{name}:{spec}}} is not a number or text format")
+            if name.startswith("$"):
+                try:
+                    parse_path(name)
+                except FieldError as error:
+                    raise ConfigError(f"{label}: map.display: {error}") from None
+    if "label" in mapping:
+        lab = mapping["label"]
+        if isinstance(lab, str):
+            if len(lab) > 64:
+                raise ConfigError(f"{label}: map.label at most 64 characters")
+        else:
+            _check_select(lab, f"{label}: map.label")
+
+
+def _pick(document, values, spec):
+    if not isinstance(spec, dict):
+        return spec
+    if "field" in spec:
+        if spec["field"] not in values:
+            raise FieldError(f"field {spec['field']!r} has no value")
+        return values[spec["field"]]
+    if "pointer" in spec:
+        return json_pointer(document, spec["pointer"])
+    return select_path(document, spec["path"], spec.get("reduce"))
+
+
+def _format(value, spec):
+    if not spec:
+        if isinstance(value, float):
+            return f"{value:g}" if abs(value) < 1e15 else str(value)
+        return "true" if value is True else "false" if value is False else str(value)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if spec[-1:] in "fdeg%":
+            raise FieldError(f"display: {value!r} is not a number for :{spec}")
+        return format(str(value), spec)
+    if spec.endswith("d"):
+        value = int(round(value))
+    return format(value, spec)
+
+
+def apply_map(document, values, mapping):
+    """The mapped keys (value, level, display, label) of a document and the fields already
+    picked: (values, errors). A failing key keeps out; the others still map."""
+    out, errors, raw = {}, [], None
+    if "value" in mapping:
+        v = mapping["value"]
+        try:
+            raw = coerce(_pick(document, values, v), "number", "value")
+            lo, hi = v.get("min", 0), v.get("max", 100)
+            scaled = (raw - lo) / (hi - lo) * 100
+            out["value"] = round(min(100.0, max(0.0, scaled)), 2)
+            if out["value"].is_integer():
+                out["value"] = int(out["value"])
+        except FieldError as error:
+            errors.append(f"value: {error}")
+    if "label" in mapping:
+        try:
+            out["label"] = truncate_utf8(str(_pick(document, values, mapping["label"])), 64)
+        except FieldError as error:
+            errors.append(f"label: {error}")
+    if "level" in mapping:
+        lv = mapping["level"]
+        try:
+            if "match" in lv:
+                text = _pick(document, values, {k: x for k, x in lv.items() if k not in ("match", "otherwise")})
+                out["level"] = lv["match"].get(str(text).lower() if isinstance(text, str) else json.dumps(text), lv.get("otherwise", "ok"))
+            else:
+                x = out.get("value") if lv.get("of", "value") == "value" else raw
+                if x is None:
+                    raise FieldError("no value to compare")
+                worse = (lambda a, b: a <= b) if lv.get("below") else (lambda a, b: a >= b)
+                out["level"] = "error" if "error" in lv and worse(x, lv["error"]) else "warn" if "warn" in lv and worse(x, lv["warn"]) else "ok"
+        except FieldError as error:
+            errors.append(f"level: {error}")
+    if "display" in mapping:
+        names = {**values, **out, "raw": raw}
+        def fill(match):
+            name, spec = match.group(1).strip(), match.group(2)
+            if name.startswith("$"):
+                value = select_path(document, name)
+            elif name in names and names[name] is not None:
+                value = names[name]
+            else:
+                raise FieldError(f"display: {{{name}}} has no value")
+            return _format(value, spec)
+        try:
+            out["display"] = truncate_utf8(TEMPLATE_RE.sub(fill, mapping["display"]), MAX_STRING_BYTES)
+        except (FieldError, ValueError) as error:
+            errors.append(str(error) if str(error).startswith("display") else f"display: {error}")
+    return out, errors
 
 
 def parse_json_output(text):
@@ -360,9 +685,16 @@ def _check_fields(fields, label):
         if not name or name.startswith("_") or len(name.encode()) > MAX_KEY_BYTES or name in names:
             raise ConfigError(f"{label}: invalid or duplicate field name {name!r}")
         names.add(name)
-        selections = [k for k in ("pointer", "length", "countWhere", "first") if k in field]
+        selections = [k for k in ("pointer", "path", "length", "countWhere", "first") if k in field]
         if len(selections) != 1:
-            raise ConfigError(f"{label}: field {name!r} needs exactly one of pointer, length, countWhere, first")
+            raise ConfigError(f"{label}: field {name!r} needs exactly one of pointer, path, length, countWhere, first")
+        if "path" in field:
+            try:
+                parse_path(field["path"])
+            except FieldError as error:
+                raise ConfigError(f"{label}: field {name!r}: {error}") from None
+        if field.get("reduce") is not None and (field["reduce"] not in REDUCERS or "path" not in field):
+            raise ConfigError(f"{label}: field {name!r} reduce is one of {sorted(REDUCERS)} with a path")
         if field.get("type") is not None and field["type"] not in FIELD_TYPES:
             raise ConfigError(f"{label}: field {name!r} type must be one of {sorted(FIELD_TYPES)}")
         for key in ("countWhere", "first"):
@@ -436,7 +768,24 @@ class SourceSpec:
         self.fields = spec.get("fields")
         if self.fields is not None:
             _check_fields(self.fields, label)
+        self.map = spec.get("map")
+        if self.map is not None:
+            check_map(self.map, label)
+            if self.kind == "timer":
+                raise ConfigError(f"{label}: map applies to command and http sources")
+            for key in ("field",):
+                for sel in (self.map.get("value"), self.map.get("label"), self.map.get("level")):
+                    if isinstance(sel, dict) and key in sel and sel[key] not in {f["name"] for f in self.fields or []} | {spec.get("key", "value")}:
+                        raise ConfigError(f"{label}: map refers to field {sel[key]!r}, which isn't one")
         self.secrets = []
+        self.secret_names = sorted(set(secret_names({k: spec.get(k) for k in ("url", "headers", "body")})))
+        written = json.dumps({k: spec.get(k) for k in ("url", "headers", "body")})
+        for loose in re.findall(r"\{secret:[^}]*\}", written):
+            if not SECRET_PLACEHOLDER_RE.fullmatch(loose):
+                raise ConfigError(f"{label}: {loose[:40]} is not a secret placeholder ({{secret:name}}, name letters, digits, ._-)")
+        for name in self.secret_names:
+            if not SECRET_NAME_RE.fullmatch(name):
+                raise ConfigError(f"{label}: secret name {name!r} must be letters, digits, ._- (at most 64)")
         if self.kind == "command":
             argv = spec.get("argv")
             if not isinstance(argv, list) or not argv or not all(isinstance(a, str) and a for a in argv):
@@ -471,11 +820,19 @@ class SourceSpec:
             if parsed.scheme == "http" and not (self.loopback or self.local):
                 raise ConfigError(f"{label}: plain http needs a loopback host or \"local\": true")
             self.method = spec.get("method", "GET")
-            if self.method not in ("GET", "POST"):
-                raise ConfigError(f"{label}: method must be GET or POST")
-            if "body" in spec and self.method != "POST":
-                raise ConfigError(f"{label}: body needs method POST")
+            if self.method not in HTTP_METHODS:
+                raise ConfigError(f"{label}: method must be one of {', '.join(HTTP_METHODS)}")
+            if "body" in spec and self.method == "GET":
+                raise ConfigError(f"{label}: a body needs method POST, PUT or PATCH")
             self.body = spec.get("body")
+            if self.body is not None and len(json.dumps(self.body)) > HTTP_REQUEST_BODY_CAP:
+                raise ConfigError(f"{label}: body over {HTTP_REQUEST_BODY_CAP // 1024} KiB")
+            self.output = spec.get("output", "json")
+            if self.output not in OUTPUTS:
+                raise ConfigError(f"{label}: output must be one of {sorted(OUTPUTS)}")
+            if self.output != "json" and self.fields is not None:
+                raise ConfigError(f"{label}: fields apply to json output only (use key)")
+            self.key = spec.get("key", "value")
             self.headers = spec.get("headers", {})
             if not isinstance(self.headers, dict):
                 raise ConfigError(f"{label}: headers must be an object")
@@ -514,9 +871,9 @@ class SourceSpec:
             self.timeout, lo, hi = 0.0, 0.0, 0.0
         else:
             raise ConfigError(f"{label}: kind must be command, http or timer")
-        if self.kind != "command" and self.kind != "timer" and "key" in spec:
-            raise ConfigError(f"{label}: key applies to command and timer sources")
-        if self.kind in ("command", "timer") and (not isinstance(self.key, str) or not self.key
+        if self.kind == "http" and "key" in spec and self.output == "json":
+            raise ConfigError(f"{label}: key applies to non-json output")
+        if self.kind in ("command", "timer", "http") and (not isinstance(self.key, str) or not self.key
                                                    or self.key.startswith("_")):
             raise ConfigError(f"{label}: key must be a non-empty name not starting with _")
         if self.interval < floor:
@@ -677,24 +1034,42 @@ def interpret_command(spec, code, out, err):
     if code != 0:
         tail = err.strip().splitlines()[-1] if err.strip() else ""
         raise PollError(f"exit code {code}" + (f": {tail}" if tail else ""), meta)
-    text = out.decode("utf-8", "replace")
+    return interpret_text(spec, out.decode("utf-8", "replace"), meta)
+
+
+def interpret_text(spec, text, meta, document=_MISSING):
+    """Output text (a command's stdout, an HTTP body) as (values, field errors, metadata) by
+    the source's output, fields and map. Raises PollError."""
     if spec.output == "json":
-        document = parse_json_output(text)
+        if document is _MISSING:
+            document = parse_json_output(text)
         if spec.fields is not None:
             values, errors = extract_fields(document, spec.fields)
-            return values, errors, meta
-        return scalars_of(document, spec.label), [], meta
-    lines = [line for line in text.splitlines() if line.strip()]
-    if spec.output == "lines":
-        return {spec.key: len(lines)}, [], meta
-    if not lines:
-        raise PollError("empty output", meta)
-    if spec.output == "text":
-        return {spec.key: truncate_utf8(lines[0].strip(), MAX_STRING_BYTES)}, [], meta
-    try:
-        return {spec.key: coerce(lines[0].strip(), "number", spec.key)}, [], meta
-    except FieldError:
-        raise PollError("output is not a number", meta) from None
+        elif isinstance(document, dict):
+            values, errors = scalars_of(document, spec.label), []
+        elif spec.map is not None:
+            values, errors = {}, []
+        else:
+            raise PollError("output is not a JSON object (configure fields or a map)", meta)
+    else:
+        lines = [line for line in text.splitlines() if line.strip()]
+        if spec.output == "lines":
+            values = {spec.key: len(lines)}
+        elif not lines:
+            raise PollError("empty output", meta)
+        elif spec.output == "text":
+            values = {spec.key: truncate_utf8(lines[0].strip(), MAX_STRING_BYTES)}
+        else:
+            try:
+                values = {spec.key: coerce(lines[0].strip(), "number", spec.key)}
+            except FieldError:
+                raise PollError("output is not a number", meta) from None
+        document, errors = values, []
+    if spec.map is not None:
+        mapped, map_errors = apply_map(document, values, spec.map)
+        values = {**values, **mapped}
+        errors = errors + map_errors
+    return values, errors, meta
 
 
 class SameOrigin(urllib.request.HTTPRedirectHandler):
@@ -719,8 +1094,104 @@ def _retry_after(headers):
     return max(0.0, moment.timestamp() - time.time())
 
 
+SECRET_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
+SECRET_PLACEHOLDER_RE = re.compile(r"\{secret:([A-Za-z0-9][A-Za-z0-9_.-]{0,63})\}")
+KEYRING_TIMEOUT_S = 5.0
+
+
+class Secrets:
+    """Secrets by name, never logged or published: the environment (HYPRUNE_SOURCES_SECRET_<NAME>,
+    for development), then the secrets file (a JSON object of names to strings; a regular file of
+    this user's with no group or other permission bits, mode 0600), then the desktop keyring
+    (`secret-tool lookup application hyprune secret <name>`, when secret-tool is installed)."""
+
+    def __init__(self, path=None, keyring=True):
+        self.path = pathlib.Path(path) if path else default_secrets_path()
+        self.keyring = keyring
+
+    def file(self):
+        """(names to values, problem): the secrets file, {} when it doesn't exist."""
+        try:
+            st = os.stat(self.path, follow_symlinks=False)
+        except FileNotFoundError:
+            return {}, None
+        except OSError as error:
+            return {}, f"secrets file: {error.strerror}"
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid():
+            return {}, "secrets file must be a regular file of this user"
+        if st.st_mode & 0o077:
+            return {}, f"secrets file must be mode 0600 (is {stat.S_IMODE(st.st_mode):04o})"
+        try:
+            data = json.loads(self.path.read_text() or "{}")
+        except (OSError, ValueError) as error:
+            return {}, f"secrets file is not JSON: {error}"
+        if not isinstance(data, dict) or not all(isinstance(v, str) for v in data.values()):
+            return {}, "secrets file must map names to strings"
+        return data, None
+
+    def keyring_available(self):
+        return self.keyring and shutil.which("secret-tool") is not None
+
+    def lookup(self, name):
+        """(value, origin): origin env, file or keyring; (None, None) when it is not set anywhere."""
+        value = os.environ.get("HYPRUNE_SOURCES_SECRET_" + re.sub(r"[^A-Za-z0-9]", "_", name).upper())
+        if value is not None:
+            return value, "env"
+        data, _ = self.file()
+        if name in data:
+            return data[name], "file"
+        if self.keyring_available():
+            try:
+                done = subprocess.run(["secret-tool", "lookup", "application", "hyprune", "secret", name],
+                                      capture_output=True, timeout=KEYRING_TIMEOUT_S, stdin=subprocess.DEVNULL)
+            except (OSError, subprocess.TimeoutExpired):
+                return None, None
+            if done.returncode == 0 and done.stdout:
+                return done.stdout.decode("utf-8", "replace").rstrip("\n"), "keyring"
+        return None, None
+
+
+def default_secrets_path():
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return pathlib.Path(base) / "hyprune" / "secrets.json"
+
+
+SECRETS = Secrets()
+
+
 def _secret(name):
-    return os.environ.get("HYPRUNE_SOURCES_SECRET_" + re.sub(r"[^A-Za-z0-9]", "_", name).upper())
+    return SECRETS.lookup(name)[0]
+
+
+def resolve_secrets(value, used):
+    """A string with {secret:name} placeholders filled in (the values appended to `used`), or a
+    JSON value with every string so filled. Raises PollError naming a missing secret."""
+    if isinstance(value, str):
+        def fill(match):
+            secret = _secret(match.group(1))
+            if secret is None:
+                raise PollError(f"secret {match.group(1)!r} is not set")
+            used.append(secret)
+            return secret
+        return SECRET_PLACEHOLDER_RE.sub(fill, value)
+    if isinstance(value, list):
+        return [resolve_secrets(v, used) for v in value]
+    if isinstance(value, dict):
+        return {k: resolve_secrets(v, used) for k, v in value.items()}
+    return value
+
+
+def secret_names(value):
+    """The secret names a JSON value refers to ({secret:name} placeholders, {"secret": name} headers)."""
+    if isinstance(value, str):
+        return SECRET_PLACEHOLDER_RE.findall(value)
+    if isinstance(value, list):
+        return [n for v in value for n in secret_names(v)]
+    if isinstance(value, dict):
+        if set(value) <= {"secret", "prefix"} and isinstance(value.get("secret"), str):
+            return [value["secret"]]
+        return [n for v in value.values() for n in secret_names(v)]
+    return []
 
 
 def _check_resolution(spec, host):
@@ -742,8 +1213,10 @@ def _check_resolution(spec, host):
             raise PollError("host resolves to a local address; mark the source local")
 
 
-def http_values(spec):
-    headers, secrets = {"Accept": "application/json", "User-Agent": "hyprune-source-helper/0"}, list(spec.secrets)
+def http_fetch(spec):
+    """One request: (status, content type, body bytes, secret values used). Raises PollError."""
+    secrets = list(spec.secrets)
+    headers = {"Accept": "application/json" if spec.output == "json" else "*/*", "User-Agent": "hyprune-source-helper/0"}
     for name, value in spec.headers.items():
         if isinstance(value, dict):
             secret = _secret(value["secret"])
@@ -751,41 +1224,67 @@ def http_values(spec):
                 raise PollError(f"secret {value['secret']!r} is not set")
             secrets.append(secret)
             value = value.get("prefix", "") + secret
+        else:
+            value = resolve_secrets(value, secrets)
         headers[name] = value
+    url = resolve_secrets(spec.url, secrets)
     data = None
-    if spec.method == "POST":
-        data = json.dumps(spec.body if spec.body is not None else {}).encode()
-        headers["Content-Type"] = "application/json"
-    _check_resolution(spec, urllib.parse.urlsplit(spec.url).hostname)
-    request = urllib.request.Request(spec.url, data=data, headers=headers, method=spec.method)
+    if spec.method != "GET":
+        body = resolve_secrets(spec.body if spec.body is not None else {}, secrets)
+        if isinstance(body, str):
+            data = body.encode()
+            headers.setdefault("Content-Type", "text/plain; charset=utf-8")
+        else:
+            data = json.dumps(body).encode()
+            headers.setdefault("Content-Type", "application/json")
+    _check_resolution(spec, urllib.parse.urlsplit(url).hostname)
+    request = urllib.request.Request(url, data=data, headers=headers, method=spec.method)
     opener = urllib.request.build_opener(SameOrigin)
     try:
         with opener.open(request, timeout=spec.timeout) as response:
             status = response.status
+            kind = response.headers.get("Content-Type", "")
             body = response.read(HTTP_BODY_CAP + 1)
     except urllib.error.HTTPError as error:
         retry = _retry_after(error.headers) if error.code in (429, 503) else None
+        try:
+            head = error.read(CONTROL_OUTPUT_CAP)
+        except OSError:
+            head = b""
         error.close()
-        raise PollError(f"HTTP {error.code} {error.reason}", {"_httpStatus": error.code}, retry) from None
+        failure = PollError(f"HTTP {error.code} {error.reason}", {"_httpStatus": error.code}, retry)
+        failure.stdout = head
+        raise failure from None
     except PollError:
         raise
     except urllib.error.URLError as error:
         raise PollError(sanitize_error(f"request failed: {error.reason}", secrets)) from None
     except (OSError, ValueError) as error:
         raise PollError(sanitize_error(f"request failed: {error}", secrets)) from None
+    return status, kind, body, secrets
+
+
+def interpret_http(spec, status, body):
+    """A response body as (values, field errors, metadata). Raises PollError."""
     meta = {"_httpStatus": status}
     if len(body) > HTTP_BODY_CAP:
         raise PollError("response body over 1 MiB", meta)
     try:
-        document = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError):
+        text = body.decode("utf-8")
+    except UnicodeDecodeError:
+        raise PollError("response is not UTF-8 text", meta) from None
+    if spec.output != "json":
+        return interpret_text(spec, text, meta)
+    try:
+        document = json.loads(text)
+    except ValueError:
         raise PollError("response is not JSON", meta) from None
-    if spec.fields is None:
-        if not isinstance(document, dict):
-            raise PollError("response is not a JSON object (configure fields)", meta)
-        return scalars_of(document, spec.label), [], meta
-    values, errors = extract_fields(document, spec.fields)
-    return values, errors, meta
+    return interpret_text(spec, text, meta, document)
+
+
+def http_values(spec):
+    status, _, body, _ = http_fetch(spec)
+    return interpret_http(spec, status, body)
 
 
 def timer_values(spec, now=None):
@@ -1612,26 +2111,49 @@ class Runner:
         if not self.tests.acquire(blocking=False):
             return _failure("another test is running")
         stdout, stderr, code, values, error = b"", "", None, {}, None
+        status, content_type, raw, used = None, None, b"", list(spec.secrets)
         start = time.monotonic()
         try:
             if kind == "command":
                 code, stdout, stderr = run_command(spec.argv, spec.cwd, spec.env, spec.timeout)
+                raw = stdout
                 values, errors, _ = interpret_command(spec, code, stdout, stderr)
             else:
-                values, errors, _ = http_values(spec)
+                status, content_type, raw, used = http_fetch(spec)
+                values, errors, _ = interpret_http(spec, status, raw)
             values = clean_values(values, MAX_KEYS - META_KEYS, "test")
             if errors:
-                error = sanitize_error("; ".join(errors), spec.secrets)
+                error = sanitize_error("; ".join(errors), used)
         except PollError as failure:
-            error = sanitize_error(str(failure), spec.secrets)
+            error = sanitize_error(str(failure), used)
             code = failure.meta.get("_exitCode", code)
+            status = failure.meta.get("_httpStatus", status)
             stdout, stderr = stdout or failure.stdout, stderr or failure.stderr
+            raw = raw or failure.stdout
         finally:
             self.tests.release()
+        text = truncate_utf8(raw.decode("utf-8", "replace"), CONTROL_OUTPUT_CAP)
+        for secret in used:  # a response that echoes a secret back shows it masked
+            if secret and len(secret) >= 4:
+                text = text.replace(secret, "***")
         return {"ok": True, "values": values,
                 "stdout": truncate_utf8(stdout.decode("utf-8", "replace"), CONTROL_OUTPUT_CAP),
                 "stderr": tail_utf8(stderr, CONTROL_OUTPUT_CAP), "error": error, "exitCode": code,
+                "raw": text, "rawBytes": len(raw), "httpStatus": status, "contentType": content_type,
+                "secrets": {name: SECRETS.lookup(name)[1] for name in spec.secret_names},
                 "durationMs": int(round((time.monotonic() - start) * 1000))}
+
+    def secrets(self):
+        """Where each secret the config and the sources name is found (env, file, keyring or
+        null), never the values; the secrets file and whether the keyring can be read."""
+        names = set()
+        for source in list(self.sources):
+            names.update(source.spec.secret_names)
+        for raw in self.disabled:
+            names.update(n for n in secret_names({k: raw.get(k) for k in ("url", "headers", "body")}) if SECRET_NAME_RE.fullmatch(n))
+        _, problem = SECRETS.file()
+        return {"ok": True, "file": str(SECRETS.path), "fileProblem": problem, "keyring": SECRETS.keyring_available(),
+                "names": {name: SECRETS.lookup(name)[1] for name in sorted(names)}}
 
 
 class ControlServer:
@@ -1761,6 +2283,8 @@ class ControlServer:
                 return self.runner.status(self.config_path)
             if op == "test":
                 return self.runner.test(request.get("source"), self.config_path)
+            if op == "secrets":
+                return self.runner.secrets()
             if op in ("restart", "restart-all", "reload"):
                 return self.runner.submit(request)
         except Exception as error:
@@ -1834,7 +2358,12 @@ def main(argv=None):
     parser.add_argument("--once", action="store_true", help="fetch every source once, print, exit")
     parser.add_argument("--dry-run", action="store_true", help="run the loop but print publications")
     parser.add_argument("-v", "--verbose", action="store_true", help="log one line per publication")
+    parser.add_argument("--secrets", default=os.environ.get("HYPRUNE_SOURCES_SECRETS"),
+                        help="secrets file (default $XDG_CONFIG_HOME/hyprune/secrets.json; mode 0600)")
+    parser.add_argument("--no-keyring", action="store_true", help="never ask the desktop keyring (secret-tool)")
     args = parser.parse_args(argv)
+    global SECRETS
+    SECRETS = Secrets(args.secrets, keyring=not args.no_keyring)
     if args.token_refresh and args.token_fd is None:
         parser.error("--token-refresh needs --token-fd")
     args.config = args.config or default_config_path()
