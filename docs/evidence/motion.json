@@ -1,0 +1,245 @@
+{
+ "checks": [
+  {
+   "name": "IPC 0.28 hello",
+   "ok": true,
+   "evidence": "0.28"
+  },
+  {
+   "name": "catalog motion before a spawn: the Muse gains the Desert-only stroll and her dances; Ash the confident walk",
+   "ok": true,
+   "evidence": {
+    "libraries": [
+     "com.hyprune.starter@0.3.0",
+     "com.hyprune.companions@0.1.0",
+     "io.github.rick-the-alien.drunk-ash@0.1.0"
+    ],
+    "muse": {
+     "dances": [
+      "bass",
+      "boom",
+      "breakdance",
+      "silly",
+      "silly-2",
+      "silly-3",
+      "hip-hop",
+      "hip-hop-2",
+      "hip-hop-3",
+      "hip-hop-4",
+      "hip-hop-5",
+      "shimmy",
+      "step",
+      "letters"
+     ],
+     "packs": [
+      "companion-moves",
+      "starter-motion"
+     ],
+     "skeleton": "mixamo-v1",
+     "styles": {
+      "idle": [
+       "fidget",
+       "calm",
+       "calm-2",
+       "calm-3",
+       "preen",
+       "sway",
+       "sway-2",
+       "sway-3"
+      ],
+      "run": [
+       "steady",
+       "fast",
+       "loose"
+      ],
+      "walk": [
+       "stroll",
+       "confident",
+       "groovy",
+       "stumble",
+       "stylish",
+       "swing",
+       "stagger"
+      ]
+     }
+    },
+    "ash": {
+     "skeleton": "mixamo-v1",
+     "styles": {
+      "idle": [
+       "alt1",
+       "alt2",
+       "fidget",
+       "calm",
+       "calm-2",
+       "calm-3",
+       "preen",
+       "sway",
+       "sway-2",
+       "sway-3"
+      ],
+      "run": [
+       "steady",
+       "fast",
+       "loose"
+      ],
+      "walk": [
+       "back",
+       "stroll",
+       "confident",
+       "groovy",
+       "stumble",
+       "stylish",
+       "swing",
+       "stagger"
+      ]
+     },
+     "packs": [
+      "companion-moves",
+      "starter-motion"
+     ]
+    }
+   }
+  },
+  {
+   "name": "non-characters have no motion",
+   "ok": true,
+   "evidence": null
+  },
+  {
+   "name": "the Muse walks playing walk_stroll (a Desert-only clip, retargeted)",
+   "ok": true,
+   "evidence": {
+    "clip": "run",
+    "played": "run",
+    "previous": "walk_stroll",
+    "fade": 3.4359466098976554e-06,
+    "speed": 0.75227290391922,
+    "style": {
+     "walk": "stroll"
+    }
+   }
+  },
+  {
+   "name": "a rebind with style null plays the plain walk again",
+   "ok": true,
+   "evidence": "walk"
+  },
+  {
+   "name": "Ash follows with walk_confident",
+   "ok": true,
+   "evidence": {
+    "played": [
+     "idle",
+     "run",
+     "walk_confident"
+    ],
+    "style": {
+     "walk": "confident"
+    }
+   }
+  },
+  {
+   "name": "the style is kept across Stay and Follow",
+   "ok": true,
+   "evidence": {
+    "walk": "confident"
+   }
+  },
+  {
+   "name": "on a route Ash keeps the confident walk",
+   "ok": true,
+   "evidence": "walk_confident"
+  },
+  {
+   "name": "aimed, the Muse offers Dance with her dances as options",
+   "ok": true,
+   "evidence": {
+    "interactions": [
+     {
+      "id": "talk",
+      "type": "say"
+     },
+     {
+      "id": "stay",
+      "type": "companion"
+     },
+     {
+      "id": "run",
+      "type": "companion"
+     },
+     {
+      "id": "dance",
+      "type": "dance"
+     }
+    ],
+    "options": 14
+   }
+  },
+  {
+   "name": "Dance shimmy: activity dancing, playing dance_shimmy",
+   "ok": true,
+   "evidence": {
+    "state": {
+     "activity": "dancing",
+     "carried": false,
+     "dance": "shimmy",
+     "mode": "follow",
+     "name": "Muse",
+     "pace": "walk",
+     "path": null,
+     "position": [
+      6.520280361175537,
+      0.3699999451637268,
+      7.597747325897217
+     ],
+     "reason": null,
+     "ref": "library/com.hyprune.companions@0.1.0/neon-cyber-muse",
+     "state": "active",
+     "style": null
+    },
+    "played": "dance_shimmy"
+   }
+  },
+  {
+   "name": "a 0.27 peer sees no style or dance and a dancing companion as idle",
+   "ok": true,
+   "evidence": {
+    "activity": "idle",
+    "carried": false,
+    "mode": "follow",
+    "name": "Muse",
+    "pace": "walk",
+    "path": null,
+    "position": [
+     6.520280361175537,
+     0.3699999451637268,
+     7.597747325897217
+    ],
+    "reason": null,
+    "ref": "library/com.hyprune.companions@0.1.0/neon-cyber-muse",
+    "state": "active"
+   }
+  },
+  {
+   "name": "an unknown dance is refused (-32602)",
+   "ok": true,
+   "evidence": "{'code': -32602, 'message': 'unknown dance polka'}"
+  },
+  {
+   "name": "Dance without an option dances one of hers",
+   "ok": true,
+   "evidence": "boom"
+  },
+  {
+   "name": "walking off ends the dance",
+   "ok": true,
+   "evidence": "following"
+  }
+ ],
+ "libraries": [
+  "com.hyprune.starter@0.3.0",
+  "com.hyprune.companions@0.1.0",
+  "io.github.rick-the-alien.drunk-ash@0.1.0"
+ ]
+}
