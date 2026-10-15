@@ -328,7 +328,7 @@ def report(results, out):
     rows = [('renderer', lambda r: r['renderer']), ('graphics', lambda r: r['graphics']),
             ('monitor', lambda r: r['monitor'] and f"{r['monitor']['width']:.0f}x{r['monitor']['height']:.0f} @ {r['monitor']['refreshHz']:.2f} Hz{' VRR' if r['monitor'].get('vrr') else ''}"),
             ('GPU', lambda r: r['gpu']), ('seconds / frames', lambda r: f"{r['seconds']} s / {r['frames']}"),
-            ('present interval ms', lambda r: r['presents']['intervalMs']), ('refreshes per present', lambda r: r['presents']['refreshes']),
+            ('present interval ms', lambda r: r['presents']['intervalMs']), ('refreshes per present (count)', lambda r: ', '.join(f'{k}×: {v}' for k, v in r['presents']['refreshes'].items())),
             ('missed refreshes', lambda r: r['presents']['missedRefreshes']),
             ('shown frames / s', lambda r: r['shown']['perSecond']), ('shown interval ms', lambda r: r['shown']['intervalMs']),
             ('latency content→display ms', lambda r: r['shown']['latencyMs']),
