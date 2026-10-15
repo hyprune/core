@@ -265,6 +265,13 @@ their frozen state projections and enums. Unknown or unadvertised methods return
     may reach 432001. New required state key `recording`. `recording.label {label, meta?}`
     renames the last finished recording with a slug of the label and writes a sidecar.
     Format 1 recordings still replay on fixed steps.
+  - Player settings (`player.get`/`set`) gain `look_inertia` (0-0.1 s), `move_inertia`
+    (0-0.3 s), `view_bob_roll` (0-2 degrees), `carry_turn` (0-0.4 s) and `carry_follow`
+    (0-0.3 s); older sessions never see them. A carried window's facing turn and grab point
+    follow as critically damped springs; the walking bob adds a head tilt.
+  - No wire change, unconditional: ticks that follow a presentation move by the interval
+    between presentation timestamps (whole refreshes; the measured interval under VRR),
+    and worker frames now include the view bob.
 
 ### Changes without a protocol bump
 
