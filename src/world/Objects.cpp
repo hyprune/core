@@ -9,6 +9,7 @@
 #include "Mounts.hpp"
 #include <map>
 #include <set>
+#include <sstream>
 namespace hyprune::world {
 namespace {
 void require(bool good, const std::string &why) {
@@ -215,7 +216,22 @@ std::shared_ptr<const std::vector<std::shared_ptr<MotionPack>>> scanMotionPacks(
         for (auto &e : std::filesystem::directory_iterator(libraries, ec))
             if (e.is_directory(ec))
                 dirs.push_back(e.path());
-        std::sort(dirs.rbegin(), dirs.rend());
+        // <id>@<version>: by id, the newest version first (numeric parts: 0.10.0 after 0.9.0).
+        auto key = [](const std::filesystem::path &d) {
+            auto name = d.filename().string();
+            auto at = name.rfind('@');
+            std::vector<long> version;
+            if (at != std::string::npos) {
+                std::stringstream parts(name.substr(at + 1));
+                for (std::string part; std::getline(parts, part, '.');)
+                    version.push_back(std::strtol(part.c_str(), nullptr, 10));
+            }
+            return std::pair{name.substr(0, at), version};
+        };
+        std::sort(dirs.begin(), dirs.end(), [&](auto &a, auto &b) {
+            auto ka = key(a), kb = key(b);
+            return ka.first != kb.first ? ka.first < kb.first : ka.second > kb.second;
+        });
         for (auto &d : dirs)
             roots.push_back({d, "library/" + d.filename().string()});
     }
