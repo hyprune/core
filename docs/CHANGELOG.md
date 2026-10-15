@@ -248,6 +248,23 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   character's skeleton, its styles per role, its dances and the motion packs that give them.
   Older sessions keep the 0.27 shapes (no `style`, `dance`, `motion` or `option`; `dancing`
   reads `idle`).
+- **0.29** (draft) Motion feel (RFC-0008 and RFC-0009 amendments). New method
+  `recording.label`; no new event or grant.
+  - Input version 3: world mode binds `sprint` to `Control_L`, `down` to `Shift_L` and
+    `record.toggle` to `Ctrl+r`. A version 2 `input.json` is upgraded once, each binding only
+    where it still has its old default and the new key is free. `input.get`, `input.preview`
+    and the keymap state report version 2 to older sessions, whose `input.set` sends version 2.
+    Snapping follows the sprint key (Ctrl); tools 3 and 4 hold back Shift like Ctrl for chords.
+  - `graphics.frame_pacing` (`even`, `max_rate`, null = preset; every preset `even`): even
+    pacing of a rate-capped offload worker on a refresh divisor at a constant latency.
+    Independently of the setting, the worker's frame budget now counts refresh intervals, not
+    presents, and the compositor no longer re-paces worker frames on `target_fps`.
+  - Debug recording format 2 (Ctrl+R): live dt and timing per frame, no fixed steps or forced
+    frames while recording; per-draw views; a header with monitor, GPU, profile and versions;
+    stats every 5 s. `recordingStatus` gains required `elapsedMs`, `stats` and `last`; `frame`
+    may reach 432001. New required state key `recording`. `recording.label {label, meta?}`
+    renames the last finished recording with a slug of the label and writes a sidecar.
+    Format 1 recordings still replay on fixed steps.
 
 ### Changes without a protocol bump
 

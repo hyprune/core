@@ -1,12 +1,22 @@
 # Input and camera recording / replay
 
-Start and stop with **record.toggle**, unbound by default. Bind it in input.json
-(or Settings on an IPC 0.12 shell), for example `"record.toggle": ["F8"]` in the
-world mode. All four modes have the action. Start from idle world control with
-no held movement/gesture; subsequent mode/tool transitions are recorded. Stop
-before changing worlds. World exit, a size limit or an I/O error stops capture.
-A notice gives the private file path under `$XDG_STATE_HOME/hyprune/recordings/`
-(default `~/.local/state/hyprune/recordings/`). F12 remains emergency world exit outside native free-cursor mode.
+Start and stop with **record.toggle**: **Ctrl+R** in world mode (input version 3; in an
+application Ctrl+R stays the application's). Rebind it in input.json or Settings; all four
+modes have the action. A recording may start while keys are held (they are recorded as
+presses in its first frame), not during a gesture, carry, climb or scope; subsequent
+mode/tool transitions are recorded. Stop before changing worlds. World exit, a size or
+duration limit or an I/O error stops capture. A notice gives the private file path under
+`$XDG_STATE_HOME/hyprune/recordings/` (default `~/.local/state/hyprune/recordings/`),
+named `rec-<local time>.jsonl`. The reference shell shows a red REC dot with the elapsed
+time while it runs and asks for a label on stop (`recording.label`, IPC 0.29): the file
+becomes `rec-<time>-<slug>.jsonl` with a sidecar `.json` holding the label; Enter on an
+empty label or Esc keeps the time name. A notice reminds after 5 minutes, then every 10.
+F12 remains emergency world exit outside native free-cursor mode.
+
+**Recording does not change the feel** (format 2): motion keeps the live per-frame dt,
+the input clock stays live and nothing forces frames, so live motion is identical with
+recording on or off. Replay feeds the recorded dt sequence back. Format 1 files (fixed
+1/60 s steps) still replay as before. Analysis: `dev/feel/analyze.py` (below).
 
 ## Privacy and scope
 
@@ -85,6 +95,31 @@ Example assertion file:
 can assert camera position/yaw/pitch/fov, mode, tool, subtype, scope, noclip or
 movement, with a per-mark tolerance override. Missing marks and unknown fields
 are errors. Differences produce bounded failure messages and a nonzero CLI exit.
+
+## Version 2 JSONL format (IPC 0.29 core)
+
+As version 1 below, with these differences:
+
+- `header`: `version: 2`, `timing: "live"` (no `timestepNs`), and `system`: `monitor`
+  (name, width, height, refreshHz, vrr, scale), `gpu` (GL vendor, renderer, version),
+  `profile` (effective graphics, renderer, offload policy, worker capabilities) and
+  `versions` (core, protocol, world id and version).
+- `frame`: one per tick, with `tickNs` (tick start since recording start), `dt` (seconds the
+  tick moved by: the live dt) and `timing`: `sections` (CPU ms per tick section), `tickMs`,
+  `presents` (backend presentation times since the previous frame, ns since start),
+  `refreshMs`, `vrr`, `renderedFrames`, `gpuMs` (last measured GPU time, null if none) and,
+  with the offload renderer, `offload` (front sequence, frontAgeMs, readyP90Ms,
+  latencyRefreshes, divisor, shown, draw counts).
+- `view`: per completed 3D draw, `camera` (the pose shown), `drawNs`, `drawMs` (CPU), `worker`,
+  `front` and `ageMs` (from the camera sample to the draw).
+- `input`: as before; `ns` is the compositor's receive time. Presses synthesized for keys
+  held at the start carry `held: true`.
+- `stats`: every ~5 s and on stop (`final: true`): `t`, `windowS`, `presents`, `presentHz`,
+  `fps` (new frames per second), `frameMs` (present interval p50/p95/p99/max), `dtMs`
+  (mean/std/max), `refreshMs`, `missedVblanks`, `hitches` ([{t, ms}], intervals over 2.5x the
+  median and over two refreshes).
+
+Bounds: 64 MiB, 30 minutes (432,000 frames).
 
 ## Version 1 JSONL format
 
