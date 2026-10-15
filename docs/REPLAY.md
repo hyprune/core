@@ -139,3 +139,35 @@ and verifies masking at a real terminal's typing boundary. Evidence and a benign
 scripted recording live in `docs/evidence/replay/`. The CLI reruns the recording
 in a fresh nested compositor. Shader warmup is checked in the same nested run:
 effect/preset toggles load or compile no new programs.
+
+## Demo videos
+
+`dev/nested/session_demo.py` turns a recording into a demo video, nested only:
+
+```
+dev/nested/run.sh session_demo.py --recording REC.jsonl --package WORLD_PKG --output DIR \
+    [--mode input|camera] [--smooth-look MS] [--hud on|off] [--trim START:END] \
+    [--speed START:END=FACTOR ...] [--name demo] [--encode-only]
+```
+
+The recording's world (the same package: replay checks its digest) loads with
+the real shell, and core replays it at frame-exact pacing, one recorded tick per
+presented frame, while the cinema export (`cinema.recording`) hands every
+presented frame to the encoder. Input mode runs every recorded input again, so
+the HUD, tool switches and the Director appear as they did; camera mode replays
+the view only (`--smooth-ms` smooths it). A hand-held mouse delivers look motion
+unevenly per tick; `--smooth-look MS` spreads it over an MS window first (the
+total turn and every other input are kept). Times are seconds from the first
+frame or `recording.mark` names. `--trim` keeps a part; `--speed` plays a part
+faster (frames dropped evenly) or slower (frames repeated). Output:
+`DIR/<name>-1080p60.mp4`, `DIR/gate.json` (the cinema smoothness gate) and
+`DIR/cut.json` (the frame-to-video mapping); `--encode-only` cuts the kept
+`DIR/replay.mkv` again.
+
+`dev/nested/human.py` is a synthetic driver for scripted demos that should look
+operated by a person rather than a spline: camera looks with a minimum-jerk
+profile, a small overshoot and a correction; walks with gentle starts and stops,
+speed variation, path wobble, head bob and glances; idle drift; Fitts-law pointer
+moves on curved paths with overshoot and micro-corrections; natural clicks and
+typing rhythm. Every take is seeded, so it repeats exactly. `tests/human-driver.py`
+(CTest `human-driver`) checks determinism and the motion properties.

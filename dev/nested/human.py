@@ -28,8 +28,8 @@ seconds, pixels. Yaw/pitch follow the cinema camera: yaw = atan2(dx, -dz), pitch
   track.idle(1.0); track.look_at([4, 1, -6]); track.walk([[2, 1.7, 0], [0, 1.7, -4]], speed=1.3)
   cam.path(track.keys()); cam.wait()
 
-  pointer = human.Pointer(send=lambda dx, dy: device_move(dx, dy), press=device_button, seed=3)
-  pointer.move((x0, y0), (x1, y1), width=40); pointer.click()
+  pointer = human.Pointer(send=lambda dx, dy: device_move(dx, dy), press=device_button, at=(x0, y0), seed=3)
+  pointer.move((x1, y1), width=40); pointer.click()
 """
 import math, random, time
 
