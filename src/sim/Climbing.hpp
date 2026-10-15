@@ -30,7 +30,8 @@ class Climbing {
     bool use(Camera &, std::span<const Climbable>, ClimbMode);
     void step(Camera &, Intent, float, std::span<const Climbable>, ClimbMode, bool reducedMotion,
               std::span<const Triangle>, const TriangleIndex * = nullptr);
-    std::string prompt(ClimbMode) const;
+    // down: the key that slides (the "down" binding; Shift by default).
+    std::string prompt(ClimbMode, const std::string &down = "Shift") const;
 
   private:
     float cooldown = 0, velocity = 0, lateral = 0, phase = 0, autoDirection = 0;

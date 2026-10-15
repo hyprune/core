@@ -118,14 +118,14 @@ bool Climbing::use(Camera &c, std::span<const Climbable> ladders, ClimbMode requ
     autoDirection = dot(feet(c) - l->bottom, l->axis()) < l->extent() / 2 ? 1 : -1;
     return true;
 }
-std::string Climbing::prompt(ClimbMode m) const {
+std::string Climbing::prompt(ClimbMode m, const std::string &down) const {
     if (!active() && cooldown > 0) return "Step back; climb grip resetting";
     if (!active())
         return m == ClimbMode::Auto ? "E traverse ladder" : "Move into ladder to climb";
     if (m == ClimbMode::Auto)
         return autoDirection ? "Traversing / Space let go" : "E traverse / Space let go";
-    return m == ClimbMode::Look ? "Look up/down + W/S climb / Ctrl slide / Space let go"
-                                : "W/S climb / Ctrl slide / Space let go";
+    return m == ClimbMode::Look ? "Look up/down + W/S climb / " + down + " slide / Space let go"
+                                : "W/S climb / " + down + " slide / Space let go";
 }
 void Climbing::step(Camera &c, Intent input, float dt, std::span<const Climbable> ladders, ClimbMode requested,
                     bool reduced, std::span<const Triangle> mesh, const TriangleIndex *index) {

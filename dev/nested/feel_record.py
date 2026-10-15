@@ -13,8 +13,11 @@ OUTDIR/runs.json lists them with their configuration. HYPRUNE_NESTED_REFRESH set
 output's refresh (98 like the owner's external panel). HYPRUNE_FEEL_RECORD_BASELINE=1 also
 runs each configuration once without recording and keeps the renderer's presentation log
 (OUTDIR/<n>-unrecorded.json), so recording on and off can be compared.
+HYPRUNE_FEEL_RECORD_CARRY=1 first places a terminal ahead (tool 5) and records a carry:
+Super+LMB on it, a steady 1 s turn, a hold, release (OUTDIR/carry-*.jsonl; analyze.py reports
+the carried window's eased turn against its target).
 """
-import argparse, json, os, pathlib, shutil, subprocess, time
+import argparse, json, math, os, pathlib, shutil, subprocess, time
 import session as s
 import npcs
 from m2 import keys, wait
@@ -41,6 +44,12 @@ def acceptance(client, children, args, shell_token, socketpath):
         device.stdin.write(' '.join(map(str, a)) + '\n'); device.stdin.flush(); assert device.stdout.readline().strip() == 'ok'
     s.ctl('eval', 'hl.config({misc={disable_watchdog_warning=true},cursor={inactive_timeout=1}})')
     s.ctl('eval', 'hl.dispatch(hl.dsp.focus({ monitor = "HEADLESS-1" }))')
+    carry = os.environ.get('HYPRUNE_FEEL_RECORD_CARRY') == '1'
+    if carry:  # a terminal on the world workspace before entry: it waits in the placement queue
+        s.ctl('eval', 'hl.dispatch(hl.dsp.focus({workspace="20"}))')
+        children.append(s.envrun('kitty', '--class', 'feel-carry', '--title', 'Feel-Carry', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        wait(lambda: any(w['title'] == 'Feel-Carry' for w in json.loads(s.ctl('clients', '-j'))), timeout=20); time.sleep(.5)
+        s.ctl('eval', 'hl.dispatch(hl.dsp.focus({workspace="91"}))')
     client.call('world.load', {'worldId': WORLD})
     s.ctl('eval', 'hl.plugin.hyprune.toggle("HEADLESS-1")'); wait(lambda: s.camera()['active'], timeout=90); time.sleep(2)
     client.call('movement.set', {'modeId': 'com.hyprune.walk'})
@@ -59,6 +68,32 @@ def acceptance(client, children, args, shell_token, socketpath):
         sprint.wait(timeout=10); time.sleep(.6)
 
     runs = []
+    if carry:
+        sub = client.call('state.subscribe', {'topics': ['state']})['subscriptionId']
+        state = lambda: client.call('state.snapshot', {'subscriptionId': sub})['snapshot']['state']
+        wait(lambda: state()['editor']['unplaced']['count'] == 1, timeout=30)
+        start_pose(); pointer('button', 272); time.sleep(.8)  # tool 5: place it ahead
+        sid = next(c['id'] for c in s.camera()['captures'] if c['title'] == 'Feel-Carry')
+        v = next(c for c in s.camera()['captures'] if c['id'] == sid)
+        x, y, z, w = v['rotation']; n = [2 * (x * z + y * w), 2 * (y * z - x * w), 1 - 2 * (x * x + y * y)]
+        eye = [v['position'][k] + 2.5 * n[k] for k in range(3)]
+        s.ctl('eval', f'hl.plugin.hyprune.camera({eye[0]},{eye[1]},{eye[2]},{math.atan2(-n[0], n[2])},{math.asin(-n[1])})'); time.sleep(.8)
+        keys('-k', '1'); time.sleep(.3)
+        keys('-M', 'ctrl', '-P', 'Control_L', '-k', 'r', '-p', 'Control_L', '-m', 'ctrl')
+        wait(lambda: client.call('recording.status', {})['recording'], timeout=10)
+        hold = s.envrun('wtype', '-M', 'logo', '-P', 'Super_L', '-s', '4200', '-p', 'Super_L', '-m', 'logo'); children.append(hold)
+        wait(lambda: s.camera()['superHeld']); pointer('button', 272, 1); wait(lambda: s.camera()['gesture'] == 1)
+        time.sleep(.4)
+        pointer('stream', 4, 0, 500, 1000)  # a steady 1 s turn while carrying
+        time.sleep(.9)
+        pointer('stream', -6, 0, 500, 600)  # and back, faster
+        time.sleep(.9)
+        pointer('button', 272, 0); hold.wait(timeout=10); time.sleep(.3)
+        keys('-M', 'ctrl', '-P', 'Control_L', '-k', 'r', '-p', 'Control_L', '-m', 'ctrl')
+        wait(lambda: not client.call('recording.status', {})['recording'], timeout=10)
+        last = client.call('recording.label', {'label': 'nested carry', 'meta': {'harness': 'feel_record.py'}})['last']['path']
+        shutil.copyfile(last, out / ('carry-' + pathlib.Path(last).name))
+        print('RECORDED carry', pathlib.Path(last).name, flush=True)
     for i, patch in enumerate(configs):
         name = '-'.join(f'{v}' for v in patch.values())
         client.call('graphics.set', {'patch': {'quality': 'medium', 'dynamic_resolution': True, 'render_scale': 'auto',

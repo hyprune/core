@@ -105,7 +105,7 @@ void Runtime::recordTick(const Json &sections, std::chrono::steady_clock::time_p
         ++recordingReminders;
         ipc->notify("runtime.notice", {{"level", "info"}, {"code", "recording.reminder"},
                                        {"message", "Still recording (" + std::to_string(elapsed / 60000000000ull) +
-                                                       " min) · Ctrl+R stops it"}});
+                                                       " min) · " + keyLabel("record.toggle", "Ctrl+R") + " stops it"}});
     }
     recordMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - recordStarted).count();
     if (session.frame >= replay::Session::FrameLimitV2 || elapsed >= replay::Session::DurationLimitNs ||

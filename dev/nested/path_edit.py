@@ -110,12 +110,12 @@ def acceptance(client, children, args, shell_token, socketpath):
     look([1.0, FLOOR, 3.0]); keys('-k', 'Escape'); time.sleep(.4); pointer('button', 272, 0); time.sleep(.3)
     check('Escape cancels a drag', near(pts()[1]['position'], goal), pts()[1])
 
-    # Shift snaps the dragged point to the 0.1 m grid.
+    # Ctrl (the sprint key) snaps the dragged point to the 0.1 m grid.
     look(goal); wait(lambda: diag()['hover'] and diag()['hover']['point'] == 1, timeout=4)
     pointer('button', 272, 1); wait(lambda: diag()['dragging'], timeout=4)
-    held(shift, lambda: (look([0.537, FLOOR, 4.163]), time.sleep(.3), pointer('button', 272, 0), time.sleep(.3)))
+    held(ctrl, lambda: (look([0.537, FLOOR, 4.163]), time.sleep(.3), pointer('button', 272, 0), time.sleep(.3)))
     snapped = pts()[1]['position']
-    check('Shift snaps the drag to 0.1 m', all(abs(v * 10 - round(v * 10)) < 1e-3 for v in (snapped[0], snapped[2])), snapped)
+    check('Ctrl snaps the drag to 0.1 m', all(abs(v * 10 - round(v * 10)) < 1e-3 for v in (snapped[0], snapped[2])), snapped)
 
     # A click on a segment inserts a point there.
     a, b = pts()[1]['position'], pts()[2]['position']

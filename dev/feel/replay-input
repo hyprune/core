@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""Play a debug recording's raw input back through a virtual input device (uinput).
+
+    dev/feel/replay-input REC.jsonl [--speed 1] [--countdown 3] [--abort-key F12] [--from S] [--to S]
+    dev/feel/replay-input REC.jsonl --dry-run          # print what would be sent, inject nothing
+    dev/feel/replay-input REC.jsonl --readback OUT.json  # also read the device back (testing)
+
+For comparing feel: play the identical movement into Hyprune and into another compositor
+setup while screen-capturing both (dev/feel/video.py compares the captures). Only world
+input is sent: pointer motion, mouse buttons, the wheel and world-mode keys, at their
+recorded times (`--speed` scales time); application keys, redacted entries and anything
+outside world mode are skipped. A 3 s countdown comes first, so the target window can get
+focus. Press the abort key (default F12, which in Hyprune also leaves the world) on a real
+keyboard to stop at once; Ctrl+C in the terminal works too. Every key and button still
+pressed is released on exit.
+
+IT INJECTS INTO WHATEVER HAS FOCUS. Run it only on a machine where that is what you want.
+
+The device is "hyprune-replay-input". Pointer deltas are the compositor's (after its
+acceleration); a compositor applies its acceleration again unless the device is set to a
+flat profile (Hyprland: a `device` section for hyprune-replay-input with
+accel_profile = flat), which both setups under comparison should share. Key names are the
+recording's base-level keysyms, mapped to evdev codes for a US-like layout. Needs write
+access to /dev/uinput (the input group) and, for the abort key, read access to
+/dev/input/event*.
+"""
+import argparse, fcntl, json, os, select, signal, struct, sys, threading, time
+from pathlib import Path
+
+EV_SYN, EV_KEY, EV_REL = 0, 1, 2
+SYN_REPORT, REL_X, REL_Y, REL_WHEEL, REL_HWHEEL = 0, 0, 1, 8, 6
+UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_RELBIT = 0x40045564, 0x40045565, 0x40045566
+UI_DEV_SETUP, UI_DEV_CREATE, UI_DEV_DESTROY = 0x405C5503, 0x5501, 0x5502
+EVENT = struct.Struct('llHHi')  # struct input_event on 64-bit Linux
+NAME = 'hyprune-replay-input'
+
+BUTTONS = {'LMB': 0x110, 'RMB': 0x111, 'MMB': 0x112, 'Back': 0x113, 'Forward': 0x114}
+KEYS = {'Escape': 1, 'minus': 12, 'equal': 13, 'BackSpace': 14, 'Tab': 15, 'bracketleft': 26, 'bracketright': 27,
+        'Return': 28, 'Control_L': 29, 'semicolon': 39, 'apostrophe': 40, 'grave': 41, 'Shift_L': 42, 'backslash': 43,
+        'comma': 51, 'period': 52, 'slash': 53, 'Shift_R': 54, 'Alt_L': 56, 'space': 57, 'Caps_Lock': 58,
+        'Control_R': 97, 'Alt_R': 100, 'Home': 102, 'Up': 103, 'Prior': 104, 'Left': 105, 'Right': 106, 'End': 107,
+        'Down': 108, 'Next': 109, 'Insert': 110, 'Delete': 111, 'Pause': 119, 'Super_L': 125, 'Super_R': 126,
+        'F11': 87, 'F12': 88, 'KP_Enter': 96}
+KEYS.update({f'F{i}': 58 + i for i in range(1, 11)})
+KEYS.update({c: code for c, code in zip('1234567890', range(2, 12))})
+for row, start in (('qwertyuiop', 16), ('asdfghjkl', 30), ('zxcvbnm', 44)):
+    KEYS.update({c: start + i for i, c in enumerate(row)})
+
+
+def events(path, start, end):
+    """(seconds, kind, payload) for the world input of a format 2 recording."""
+    out, t0 = [], None
+    with open(path) as f:
+        for line in f:
+            j = json.loads(line)
+            if j['kind'] == 'header' and j.get('version') != 2:
+                raise SystemExit('not a format 2 recording')
+            if j['kind'] != 'input':
+                continue
+            e = j['event']
+            if e.get('redacted') or e.get('mode') != 'world':
+                continue
+            t = j['ns'] / 1e9
+            if t < start or (end is not None and t > end):
+                continue
+            t0 = t if t0 is None else t0
+            if e['type'] == 'motion':
+                out.append((t, 'motion', (e['dx'], e['dy'])))
+            elif e['type'] == 'button' and e['key'] in BUTTONS:
+                out.append((t, 'key', (BUTTONS[e['key']], e['down'])))
+            elif e['type'] == 'axis':
+                out.append((t, 'wheel', (e['key'], e['value'])))
+            elif e['type'] == 'key' and e['key'] in KEYS:
+                out.append((t, 'key', (KEYS[e['key']], e['down'])))
+    return [(t - out[0][0], k, p) for t, k, p in out] if out else []
+
+
+class Device:
+    def __init__(self):
+        self.fd = os.open('/dev/uinput', os.O_WRONLY | os.O_NONBLOCK)
+        for ev in (EV_KEY, EV_REL, EV_SYN):
+            fcntl.ioctl(self.fd, UI_SET_EVBIT, ev)
+        for code in set(KEYS.values()) | set(BUTTONS.values()):
+            fcntl.ioctl(self.fd, UI_SET_KEYBIT, code)
+        for code in (REL_X, REL_Y, REL_WHEEL, REL_HWHEEL):
+            fcntl.ioctl(self.fd, UI_SET_RELBIT, code)
+        setup = struct.pack('HHHH80sI', 0x06, 0x1d6b, 0x4659, 1, NAME.encode(), 0)  # BUS_USB
+        fcntl.ioctl(self.fd, UI_DEV_SETUP, setup)
+        fcntl.ioctl(self.fd, UI_DEV_CREATE)
+        self.pressed = set()
+        self.remainder = [0.0, 0.0]
+        time.sleep(.5)  # let the compositor pick the device up
+
+    def emit(self, *pairs):
+        data = b''.join(EVENT.pack(0, 0, t, c, v) for t, c, v in pairs) + EVENT.pack(0, 0, EV_SYN, SYN_REPORT, 0)
+        os.write(self.fd, data)
+
+    def motion(self, dx, dy):
+        # Relative motion is integral on the wire: carry the fractions to the next event.
+        self.remainder[0] += dx; self.remainder[1] += dy
+        ix, iy = int(self.remainder[0]), int(self.remainder[1])
+        self.remainder[0] -= ix; self.remainder[1] -= iy
+        pairs = [(EV_REL, REL_X, ix)] if ix else []
+        pairs += [(EV_REL, REL_Y, iy)] if iy else []
+        if pairs:
+            self.emit(*pairs)
+
+    def key(self, code, down):
+        if down:
+            self.pressed.add(code)
+        else:
+            self.pressed.discard(code)
+        self.emit((EV_KEY, code, 1 if down else 0))
+
+    def wheel(self, key, value):
+        self.emit((EV_REL, REL_HWHEEL if 'Horizontal' in key else REL_WHEEL, -1 if value > 0 else 1))
+
+    def close(self):
+        for code in list(self.pressed):
+            self.key(code, False)
+        time.sleep(.05)
+        fcntl.ioctl(self.fd, UI_DEV_DESTROY)
+        os.close(self.fd)
+
+
+def event_nodes(exclude=NAME):
+    for d in sorted(Path('/sys/class/input').glob('event*')):
+        try:
+            name = (d / 'device/name').read_text().strip()
+        except OSError:
+            continue
+        yield d.name, name, name == exclude
+
+
+def watch_abort(code, stop):
+    """Stop when a real keyboard presses the abort key (not our own device)."""
+    fds = []
+    for node, name, ours in event_nodes():
+        if ours:
+            continue
+        try:
+            fds.append(os.open(f'/dev/input/{node}', os.O_RDONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+    if not fds:
+        print('replay-input: no readable keyboards: the abort key is off (Ctrl+C still stops)', file=sys.stderr)
+        return
+    while not stop.is_set():
+        ready, _, _ = select.select(fds, [], [], .05)
+        for fd in ready:
+            try:
+                data = os.read(fd, EVENT.size * 64)
+            except OSError:
+                continue
+            for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
+                _, _, t, c, v = EVENT.unpack_from(data, i)
+                if t == EV_KEY and c == code and v == 1:
+                    print('replay-input: abort key', file=sys.stderr)
+                    stop.set()
+    for fd in fds:
+        os.close(fd)
+
+
+def readback(stop, out):
+    """Testing: record what our own device emits (time, type, code, value)."""
+    node = None
+    for _ in range(50):
+        node = next((n for n, name, ours in event_nodes() if ours), None)
+        if node:
+            break
+        time.sleep(.05)
+    fd = os.open(f'/dev/input/{node}', os.O_RDONLY | os.O_NONBLOCK)
+    got = []
+    while not stop.is_set() or select.select([fd], [], [], .2)[0]:
+        if select.select([fd], [], [], .05)[0]:
+            data = os.read(fd, EVENT.size * 256)
+            for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
+                sec, usec, t, c, v = EVENT.unpack_from(data, i)
+                if t != EV_SYN:
+                    got.append([sec + usec / 1e6, t, c, v])
+    os.close(fd)
+    Path(out).write_text(json.dumps(got))
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('recording')
+    ap.add_argument('--speed', type=float, default=1.0)
+    ap.add_argument('--countdown', type=float, default=3.0)
+    ap.add_argument('--abort-key', default='F12')
+    ap.add_argument('--from', dest='start', type=float, default=0.0, help='start at this many seconds into the recording')
+    ap.add_argument('--to', dest='end', type=float, default=None)
+    ap.add_argument('--dry-run', action='store_true')
+    ap.add_argument('--readback', help='(testing) write the device\'s own events to this JSON file')
+    a = ap.parse_args()
+    plan = events(a.recording, a.start, a.end)
+    kinds = {k: sum(1 for _, kk, _ in plan if kk == k) for k in ('motion', 'key', 'wheel')}
+    print(f'replay-input: {len(plan)} events over {plan[-1][0] / a.speed if plan else 0:.1f} s {kinds}', file=sys.stderr)
+    if a.dry_run:
+        for t, k, p in plan[:40]:
+            print(f'{t / a.speed:8.4f} {k} {p}')
+        return
+    if a.abort_key not in KEYS:
+        raise SystemExit('unknown abort key')
+    stop = threading.Event()
+    signal.signal(signal.SIGINT, lambda *_: stop.set())
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    device = Device()
+    threads = [threading.Thread(target=watch_abort, args=(KEYS[a.abort_key], stop), daemon=True)]
+    finished = threading.Event()
+    if a.readback:
+        threads.append(threading.Thread(target=readback, args=(finished, a.readback)))
+    for t in threads:
+        t.start()
+    try:
+        for n in range(int(a.countdown), 0, -1):
+            if stop.is_set():
+                break
+            print(f'replay-input: {n}...', file=sys.stderr)
+            time.sleep(1)
+        start = time.monotonic()
+        sent = 0
+        for t, kind, p in plan:
+            if stop.is_set():
+                break
+            delay = start + t / a.speed - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            getattr(device, kind)(*p)
+            sent += 1
+        print(f'replay-input: sent {sent} of {len(plan)}' + (' (aborted)' if stop.is_set() else ''), file=sys.stderr)
+    finally:
+        device.close()
+        finished.set()
+        stop.set()
+        for t in threads[1:]:
+            t.join(timeout=5)
+
+
+if __name__ == '__main__':
+    main()

@@ -236,6 +236,25 @@ def analyse(path, label):
         out['offload'] = {'frontAgeMs': summary([o['frontAgeMs'] for o in off if o.get('frontAgeMs', -1) >= 0]),
                           'latencyRefreshes': pct([o['latencyRefreshes'] for o in off], .5), 'divisor': pct([o['divisor'] for o in off], .5),
                           'readyP90Ms': pct([o['readyP90Ms'] for o in off], .5)}
+    # A carried window (format 2 timing.carry): the eased facing turn against its target.
+    carry = [(f['tickNs'] / 1e9, f['timing']['carry']) for f in frames if f['timing'].get('carry')]
+    if len(carry) > 10:
+        err = [abs(math.remainder(c['turnTarget'] - c['turn'], 2 * math.pi)) for _, c in carry]
+        tt = [t for t, _ in carry]
+        tgt = [c['turnTarget'] for _, c in carry]
+        got = [c['turn'] for _, c in carry]
+        best = None
+        for lag_ms in range(0, 400, 5):  # the delay that best aligns the turn with its target
+            e, n = 0.0, 0
+            for i, ti in enumerate(tt):
+                k = bisect.bisect_left(tt, ti - lag_ms / 1000)
+                if 0 < k < len(tt):
+                    e += (got[i] - tgt[k]) ** 2; n += 1
+            if n and (best is None or e / n < best[1]):
+                best = (lag_ms, e / n)
+        out['carry'] = {'frames': len(carry), 'turnErrorRad': summary(err, 4), 'turnLagMs': best[0] if best else None,
+                        'maxErrorDeg': round(max(err) * 57.2958, 2)}
+        series['carry'] = {'t': tt, 'target': tgt, 'turn': got}
     out['stats'] = stats
     out['marks'] = [{'name': m['name'], 'frame': m['frame']} for m in marks]
     return out, {'intervals': intervals, 'dts': dts, 'lat': lat, 'shown': shown, 'series': series}
@@ -320,6 +339,7 @@ def report(results, out):
             ('walk: within ±25% / stalled / backward / overshoot', lambda r: r.get('walk', {}).get('stepRelative') and ' / '.join(fmt(r['walk']['stepRelative'][k]) for k in ('within25pct', 'stalled', 'backward', 'overshoot'))),
             ('walk: residual rms m', lambda r: r.get('walk', {}).get('residualRms')),
             ('look lag ms (input→camera)', lambda r: r.get('input', {}).get('lookLagMs')),
+            ('carry: turn lag ms / largest error °', lambda r: r.get('carry') and f"{r['carry']['turnLagMs']} / {r['carry']['maxErrorDeg']}"),
             ('GPU ms', lambda r: r['gpuMs']), ('hitches', lambda r: r['hitchCount'])]
     table = '<table><tr><th></th>' + ''.join(f'<th>{html.escape(r[0]["label"])}</th>' for r in results) + '</tr>'
     for name, f in rows:
@@ -339,6 +359,11 @@ def report(results, out):
         if s:
             parts.append(f'<h2>{html.escape(r[0]["label"])}: yaw asked by the mouse vs shown (rad)</h2>' +
                          svg_series([s['t'], s['t']], [s['asked'], s['shown']], label='asked (blue) vs shown (orange)', colors=['#2a7fff', '#e8590c']))
+    for r, c in zip(results, COLORS):
+        s = r[1]['series'].get('carry')
+        if s:
+            parts.append(f'<h2>{html.escape(r[0]["label"])}: carried window, facing turn (rad)</h2>' +
+                         svg_series([s['t'], s['t']], [s['target'], s['turn']], label='target (blue) vs eased turn (orange)', colors=['#2a7fff', '#e8590c']))
     hit = ''.join(f'<h3>{html.escape(r[0]["label"])}: {r[0]["hitchCount"]} hitches</h3><ul>' +
                   ''.join(f'<li>{h["t"]} s: {h["ms"]} ms ({fmt(h["sections"])})</li>' for h in r[0]['hitches'][:30]) + '</ul>' for r in results)
     secs = ''.join(f'<h3>{html.escape(r[0]["label"])}</h3><table><tr><th>section</th><th>mean ms/tick</th><th>p95 ms</th></tr>' +

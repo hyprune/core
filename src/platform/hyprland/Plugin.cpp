@@ -938,6 +938,18 @@ struct Runtime {
     double exportAnimation = 0;
     bool exportPinnedAnimation = false;
     double refreshInterval();
+    // A world action's first binding as people say it (Control_L reads Ctrl, Ctrl+r Ctrl+R).
+    std::string keyLabel(const std::string &action, const std::string &fallback) const {
+        auto &w = input.config["modes"]["world"];
+        if (!w.contains(action) || w[action].empty())
+            return fallback;
+        auto t = interaction::parseBinding(w[action][0].get<std::string>());
+        std::string key = t.key.starts_with("Control_") ? "Ctrl" : t.key.starts_with("Shift_") ? "Shift"
+                          : t.key.starts_with("Alt_") ? "Alt" : t.key.starts_with("Super_") ? "Super"
+                          : t.key.size() == 1 ? std::string(1, char(std::toupper(t.key[0]))) : t.key;
+        t.key = key;
+        return interaction::bindingName(t);
+    }
     // VRR really in use on the world's output (the monitor's flag can be set without it).
     bool vrrActive() const {
         auto m = monitor.lock();
@@ -2097,7 +2109,7 @@ void Runtime::publish() {
           {"ladderId", climbing.active() ? Json(climbing.ladderId) : Json(nullptr)},
           {"prompt",
            world && !noclip && movement == &walk && (climbing.active() || climbing.nearby(camera, world->climbables))
-               ? climbing.prompt(sim::climbMode(config["movement"]["climb_mode"].get<std::string>()))
+               ? climbing.prompt(sim::climbMode(config["movement"]["climb_mode"].get<std::string>()), keyLabel("down", "Shift"))
                : ""},
           {"orientation", camera.orientation()}}},
         {"shell", {{"leases", control.leases}}},
@@ -5892,7 +5904,7 @@ std::vector<surfaces::Surface> Runtime::frameSurfaces() {
         (climbing.active() || climbing.nearby(camera, world->climbables)))
         prompt(camera.position + camera.forward() * 2,
                climbing.prompt(
-                   sim::climbMode(config["movement"]["climb_mode"].get<std::string>())));
+                   sim::climbMode(config["movement"]["climb_mode"].get<std::string>()), keyLabel("down", "Shift")));
     if (world && (!renderer.toolPrompt.is_object() || npcInteraction))
         npcPrompts();
     renderer.renderScale = control.photoHeld() ? control.photoScale :
