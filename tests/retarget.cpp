@@ -4,12 +4,14 @@
 // (and a thigh renamed through an alias) take it. Checks the bone mapping, the rest-pose transfer
 // (world bone directions match the source's), the hips scaling and the foot-slip metric: a
 // planted foot moves backwards at the clip's (scaled) speed, so it stays put on the ground.
+#include "world/Motion.hpp"
 #include "world/Retarget.hpp"
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
 using namespace hyprune;
 using world::Character;
+using world::Json;
 namespace {
 void check(bool ok, const std::string &why) {
     if (!ok)
@@ -200,7 +202,20 @@ int main() {
         coated.clips.back().retargeted = true;
         auto packed = coated.measureSeat();
         check(std::abs(packed.seatHeight - .8f * L) < 1e-3f, "retargeted sit seat " + std::to_string(packed.seatHeight));
-        std::cout << "retarget: mapping, aliases, rest-pose transfer, hip scaling, foot slip, seat fit\n";
+        // Catalog motion before a character loads: its own clips and the packs' on its skeleton.
+        auto pack = std::make_shared<world::MotionPack>();
+        pack->id = "moves", pack->skeleton = "test";
+        pack->clips = {{"walk-proud", "walk", "proud"}, {"walk", "walk", ""}, {"dance-spin", "dance", "spin"}, {"run-x", "run", "x"}};
+        auto other = std::make_shared<world::MotionPack>(*pack);
+        other->id = "elsewhere", other->skeleton = "other", other->clips = {{"idle-calm", "idle", "calm"}};
+        auto rigOnly = rig(1, false, "");
+        rigOnly.clips = {clip};
+        auto motion = world::characterMotionPreview(rigOnly, {{"skeleton", {{"id", "test"}}}}, {pack, other});
+        check(motion["skeleton"] == "test" && motion["styles"]["walk"] == Json::array({"proud"}) && motion["styles"]["run"] == Json::array({"x"}) &&
+                  motion["styles"]["idle"].empty() && motion["dances"] == Json::array({"spin"}) && motion["packs"] == Json::array({"moves"}),
+              "catalog motion preview " + motion.dump());
+        check(world::characterMotionPreview(rigOnly, Json::object(), {pack})["packs"].empty(), "no skeleton, no packs");
+        std::cout << "retarget: mapping, aliases, rest-pose transfer, hip scaling, foot slip, seat fit, motion preview\n";
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';
         return 1;

@@ -148,6 +148,24 @@ Json characterMotion(const Character &c, const Json &binding) {
     Json skeleton = binding.is_object() ? binding.value("skeleton", Json(nullptr)) : Json(nullptr);
     return {{"skeleton", skeleton}, {"styles", styles}, {"dances", dances}, {"packs", packs}};
 }
+Json characterMotionPreview(const Character &rig, const Json &trait, const std::vector<std::shared_ptr<MotionPack>> &packs) {
+    Character names;
+    std::set<std::string> have;
+    for (auto &clip : rig.clips)
+        if (have.insert(clip.name).second)
+            names.clips.push_back({clip.name});
+    auto skeleton = characterSkeleton(rig, trait);
+    Json binding = {{"skeleton", skeleton.empty() ? Json(nullptr) : Json(skeleton)}, {"clips", Json::array()}};
+    if (!skeleton.empty())
+        for (auto &pack : packs)
+            if (pack->skeleton == skeleton)
+                for (auto &clip : pack->clips)
+                    if (auto name = motionClipName(clip.role, clip.style); have.insert(name).second) {
+                        names.clips.push_back({name});
+                        binding["clips"].push_back({{"name", name}, {"pack", pack->id}});
+                    }
+    return characterMotion(names, binding);
+}
 MotionBinding bindMotion(Character &c, const Json &trait, const std::vector<std::shared_ptr<MotionPack>> &packs) {
     MotionBinding binding;
     binding.skeleton = characterSkeleton(c, trait);

@@ -1569,8 +1569,21 @@ Json Runtime::catalogMotion(const std::string &ref) {
             if (assetRef == ref && a.character)
                 return world::characterMotion(*a.character, a.motion);
         }
+    // Not in this world yet: its skeleton and clips (a clips-only load, cached by content
+    // digest) against the world's packs, as binding would give them.
+    auto trait = e->manifest["traits"]["character"];
+    if (world && world->motionPacks && e->manifest.contains("scene")) {
+        try {
+            auto &rig = motionRigs[e->digest];
+            if (!rig)
+                rig = std::make_shared<world::Character>(
+                    world::loadCharacter(world::safePath(e->directory, e->manifest["scene"].get<std::string>()), 0, true));
+            return world::characterMotionPreview(*rig, trait, *world->motionPacks);
+        } catch (const std::exception &) {
+        }
+    }
     world::Character listed;
-    for (auto &[name, _] : e->manifest["traits"]["character"].value("clips", Json::object()).items())
+    for (auto &[name, _] : trait.value("clips", Json::object()).items())
         listed.clips.push_back({name});
     return world::characterMotion(listed, nullptr);
 }

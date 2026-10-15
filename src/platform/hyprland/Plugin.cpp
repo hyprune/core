@@ -792,6 +792,7 @@ struct Runtime {
     // IPC 0.28 (shared clip library): its walk/run/idle styles (companion.json) and dances.
     Json companionStyle() const;
     Json catalogMotion(const std::string &ref);
+    std::map<std::string, std::shared_ptr<world::Character>> motionRigs; // catalogMotion: clips-only loads by content digest
     void companionSetStyle(const Json &style);
     void companionDance(const std::string &option);
     std::string companionPace() const;
