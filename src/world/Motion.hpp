@@ -49,7 +49,8 @@ struct MotionBinding {
     std::vector<Bound> clips; // added from packs, in pack order
 };
 // Adds the packs' clips the character lacks (by motionClipName), retargeted; embedded clips
-// win, an earlier pack wins over a later one. traits: the object's traits.character.
+// win, an earlier pack wins over a later one. traits: the object's traits.character. A sit's
+// or stand's travel stays the source's (seat anchors are placed for a world distance).
 MotionBinding bindMotion(Character &, const Json &characterTrait, const std::vector<std::shared_ptr<MotionPack>> &packs);
 // A character style (IPC 0.28 characterStyle): {walk?, run?, idle?}, at least one, each a slug
 // of at most 32 characters.
