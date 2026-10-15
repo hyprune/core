@@ -578,7 +578,7 @@ CatalogEntry scanObject(const fs::path &dir, const std::string &ref, const std::
                 validateObjectDocument(record, "primitive", "0.11");
                 auto &m = record["material"];
                 e.primitive = {{"shape", record["shape"]}, {"size", record["size"]},
-                               {"material", {{"key", m["key"]}, {"name", m["name"]}, {"colour", m["colour"]}, {"textured", m["textured"]}}}};
+                               {"material", {{"key", m["key"]}, {"name", m["name"]}, {"colour", m["colour"]}, {"textured", m["textured"]}, {"glow", m["emissive"]}}}};
             } catch (const std::exception &x) {
                 if (e.warnings.size() < 8)
                     e.warnings.push_back(std::string("primitive.json: ") + x.what());

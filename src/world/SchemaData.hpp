@@ -19715,6 +19715,33 @@ inline constexpr const char *primitiveSchema011 = R"schema({
         "digest": {
           "type": "string",
           "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "emissive": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "colour": {
+                  "type": "string",
+                  "pattern": "^#[0-9a-f]{6}$"
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 16
+                }
+              },
+              "required": [
+                "colour",
+                "strength"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "The material's glow, or null."
         }
       },
       "required": [
@@ -19722,7 +19749,8 @@ inline constexpr const char *primitiveSchema011 = R"schema({
         "name",
         "colour",
         "textured",
-        "digest"
+        "digest",
+        "emissive"
       ],
       "additionalProperties": false
     },
