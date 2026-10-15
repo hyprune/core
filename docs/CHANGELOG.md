@@ -272,6 +272,23 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   - No wire change, unconditional: ticks that follow a presentation move by the interval
     between presentation timestamps (whole refreshes; the measured interval under VRR),
     and worker frames now include the view bob.
+- **0.30** (draft) Settings presets (RFC-0008 amendment). New methods `settings.get`
+  (`state.read`) and `settings.set` (`input.control`); no new event, grant or state key.
+  - One global preset over every graphics and player setting: `auto`, `low`, `medium`,
+    `high`, `ultra` (each sets `graphics.quality`) and `usb-c` (quality medium, offload on,
+    frame pacing even). Saved in `settings.json` (`$HYPRUNE_SETTINGS_FILE`).
+  - Overrides are the explicit values already in `graphics.json` (non-null keys) and
+    `player.json` (any key); they survive preset switches. A setting resolves as preset,
+    then the Lua config for keys it sets, then the override.
+  - `settings.get` returns the preset, the presets with every setting's default under each
+    on this GPU, `settings` (`graphics.<key>`/`player.<key>` to `{value, default, source}`,
+    source `user`, `lua` or `preset`), the override count and the default keymap.
+    `settings.set {preset?, set?, reset?, resetAll?}` applies reset all (every graphics and
+    player override and the keymap), then the preset, resets and new values (null refused),
+    validates the whole request, saves, applies and returns the new snapshot.
+  - Once, with no preset saved, core picks one from `graphics.json` (`quality`, `intel` as
+    `low`, else `auto`) and drops graphics and player values equal to its defaults.
+    `graphics.set` and `player.set` keep working at every version.
 
 ### Changes without a protocol bump
 
