@@ -308,6 +308,14 @@ These are wire-compatible behavior changes that integrators may notice:
   - Catalog entries carry `primitive` (from `primitive.json`, else null). A `world/<id>`
     directory generated after a folder loaded is found on its first use.
   - A world folder holds 512 placements of 256 distinct assets (other worlds 128 and 32).
+  - Data-driven behaviours: `objects.configure` patch `behaviours` (at most 8 per user
+    placement; scale per axis about a face, move, rotate, colour, glow, visible threshold,
+    texture offset or scroll), each reading one published value (default key `value` of
+    `com.hyprune.sources.<id>`, 0..100) with easing and smoothing; instances report
+    `behaviours` `[{key, property, condition, value, t, behaviour}]`. Display only: collision
+    and placement rules keep the rest pose. Both renderers draw them (the offload worker gets
+    the display transform, paint and texture offset with the object draw state). Error data
+    may carry `hint`, `field`, `id` and `key`.
 - **0.32** (draft) Content, sources and registry over IPC (RFC-0015 amendment). New grant
   `content.control`.
   - Methods `content.install`, `.confirm`, `.cancel`, `.update`, `.rollback`, `.pin` and
