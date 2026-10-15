@@ -27,11 +27,13 @@ Checks:
     made in the editor and changed rebuilds its box and swaps the placement (same id and key);
     the Placed panel resizes a shape and renames its key; removing a missing key succeeds;
     Save prunes the unplaced shapes and keeps the keys.
-10. No QML runtime errors.
+10. Behaviours: a textured cube grows with CPU use (command source, behaviour added from Placed),
+    a glowing bar follows a JSON API (HTTP source with a map); the bar's height on screen follows.
+11. No QML runtime errors.
 Stills: builder-*.png in the state dir (builder-wizard-*.png the wizard's steps, builder-sky.png looks
 towards the sunset); evidence docs/evidence/builder-shell.json.
 """
-import builtins, json, os, pathlib, secrets, shutil, subprocess, tempfile, time
+import builtins, http.server, json, os, pathlib, secrets, shutil, signal, socket, subprocess, sys, tempfile, threading, time
 import session as s
 from ctl import verified
 from m2 import wait, keys
@@ -39,6 +41,7 @@ from screens import screens_dir
 
 LUMEN = 'com.hyprune.lumen-reach'
 SHELL_TOKEN = secrets.token_hex(32)
+HELPER_TOKEN = secrets.token_hex(32)
 OUTPUT = 'HEADLESS-1'
 SDK = pathlib.Path(os.environ.get('HYPRUNE_SDK_DIR', str(s.ROOT.parent / 'sdk')))
 CLI = os.environ.get('HYPRUNE_CLI', f'node {SDK}/dist/src/cli.js')
@@ -51,7 +54,19 @@ SLUG = 'harbour-test'
 def grants():
     return [{'token': SHELL_TOKEN, 'client': 'com.hyprune.shell',
              'capabilities': ['state.read', 'world.control', 'surface.control', 'movement.control', 'shell.control',
-                              'runtime.control', 'input.control', 'quest.control', 'objects.control']}]
+                              'runtime.control', 'input.control', 'quest.control', 'objects.control']},
+            {'token': HELPER_TOKEN, 'client': 'com.hyprune.sources', 'capabilities': ['data.publish']}]
+
+
+def helper(socketpath):
+    """The source helper on STATE/sources.json (empty until step 10), with its own launch grant."""
+    (s.STATE / 'sources.json').write_text(json.dumps({'devFastIntervals': True, 'sources': []}, indent=1) + '\n')
+    token = s.STATE / 'helper.token'
+    token.write_text(HELPER_TOKEN + '\n'); token.chmod(0o600)
+    log = open(s.STATE / 'source-helper.log', 'w')
+    return s.helper_connected(subprocess.Popen([sys.executable, str(s.ROOT / 'dev/machines/source-helper.py'), '--config', str(s.STATE / 'sources.json'),
+                             '--socket', str(socketpath), '--token-file', str(token), '-v'],
+                            stdout=log, stderr=subprocess.STDOUT, start_new_session=True), s.STATE / 'source-helper.log')
 
 
 def prepare(installed):
@@ -75,6 +90,8 @@ def prepare(installed):
 
 
 def acceptance(client, children, args, shell_token, socketpath):
+    # Launch tokens are one-use and expire soon after core starts: the helper connects first.
+    children.append(helper(socketpath))
     out = s.STATE
     checks = []
     folder = pathlib.Path(os.environ['XDG_DATA_HOME']) / 'hyprune/projects' / SLUG
@@ -471,7 +488,89 @@ def acceptance(client, children, args, shell_token, socketpath):
           any(a['path'].startswith('materials/brick/') for a in world['attribution']),
           {"keys": placed_keys, "shapes": left, 'warnings': (j.get('result') or {}).get('warnings')})
     close_director()
+
+    # 10. Behaviours: a textured cube grows with CPU use (a command source), a glowing bar follows
+    # a JSON API (an HTTP source with a map); the cube's behaviour is added from Placed.
+    def generated(*args):
+        r = subprocess.run([*CLI.split(), 'builder', 'primitive', SLUG, *args, '--json'], capture_output=True, text=True,
+                           env={**os.environ, 'HYPRUNE_PROJECTS_DIR': str(folder.parent)})
+        return json.loads(r.stdout.strip().split('\n')[-1])['result']['ref']
+    cube_ref = generated('--shape', 'cube', '--size', '1', '--material', 'brick')
+    bar_ref = generated('--shape', 'box', '--size', '0.5,2.5,0.5', '--colour', '#101820')
+    cube = placing({'ref': cube_ref, 'pose': {'position': [-1.5, 0, -16], 'rotation': up}, 'key': 'cpu-cube'})['id']
+    bar = placing({'ref': bar_ref, 'pose': {'position': [1.5, 0, -16], 'rotation': up}, 'key': 'queue-bar'})['id']
+    bad = refused('objects.configure', {'id': bar, 'patch': {'behaviours': [{'key': 'x', 'property': 'scale', 'from': [1, 0, 1], 'to': [1, 1, 1]}]}, 'dryRun': True})
+    # The cube from the Placed panel: + Grow, B's height 3 (A keeps 0.05), Save.
+    director()
+    ui('tabNamed', 'objects')
+    ui('objectsView', 'placed')
+    ui('selectObject', cube)
+    time.sleep(.8)
+    assert press('behaviour-add:scale')
+    assert ui('fieldText', 'behaviour-to:1', '3') == 'true'
+    time.sleep(.3)
+    shot('builder-behaviour-editor.png')
+    assert press('behaviour-save')
+    wait(lambda: (by_key('cpu-cube') or {}).get('behaviours'), 15)
+    # The bar over IPC: its height and glow follow the queue depth (0..50 jobs as 0..100).
+    client.call('objects.configure', {'key': 'queue-bar', 'patch': {'behaviours': [
+        {'key': 'depth', 'property': 'scale', 'from': [1, .05, 1], 'to': [1, 1, 1], 'smoothing': .2},
+        {'key': 'glow', 'property': 'glow', 'from': 1, 'to': 6, 'colour': '#30e0ff', 'smoothing': .2}]}})
+    queue = {'queue': {'depth': 37}}
+
+    class Api(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = json.dumps(queue).encode()
+            self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(body))); self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+    api = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Api)
+    threading.Thread(target=api.serve_forever, daemon=True).start()
+    gauges = str(s.ROOT / 'dev/machines/scripts/system-gauges.py')
+    (s.STATE / 'sources.json').write_text(json.dumps({'devFastIntervals': True, 'sources': [
+        {'id': cube, 'kind': 'command', 'argv': [gauges, 'cpu'], 'intervalS': 1, 'timeoutS': 5},
+        {'id': bar, 'kind': 'http', 'url': f'http://127.0.0.1:{api.server_address[1]}/queue.json', 'intervalS': 1,
+         'map': {'value': {'path': '$.queue.depth', 'min': 0, 'max': 50}, 'display': '{raw:.0f} queued'}}]}, indent=1) + '\n')
+    states = lambda key: {b['key']: b for b in (by_key(key) or {}).get('behaviours') or []}
+    wait(lambda: states('cpu-cube').get('grow', {}).get('condition') == 'fresh' and states('queue-bar').get('depth', {}).get('condition') == 'fresh', 30)
+    grow, depth = states('cpu-cube')['grow'], states('queue-bar')['depth']
+    check('a behaviour added from Placed and one over IPC read their data sources (command and HTTP with a map); a bad one is refused',
+          grow['behaviour']['to'] == [1, 3, 1] and abs(grow['t'] - min(1, max(0, float(grow['value']) / 100))) <= .011 and
+          depth['value'] == 74 and depth['t'] == .74 and (bad or {}).get('code') == -32602,
+          {'cube': grow, 'bar': depth, 'refused': (bad or {}).get('message')})
+    close_director()
+    keys('-k', '1')
+
+    def bar_rows(path):
+        # Rows of the bar's glow (cyan) in the middle column band of a still looking at it.
+        from PIL import Image
+        im = Image.open(path).convert('RGB')
+        w, h = im.size
+        px = im.load()
+        rows = 0
+        for y in range(h):
+            if any(px[x, y][2] > 170 and px[x, y][1] > 150 and px[x, y][0] < 120 for x in range(w // 2 - 40, w // 2 + 40, 4)):
+                rows += 1
+        return rows
+    s.ctl('eval', 'hl.plugin.hyprune.camera(1.5,1.4,-11.5,0,0)')
+    time.sleep(1.2)
+    shot('builder-bar-high.png')
+    queue['queue']['depth'] = 8
+    wait(lambda: states('queue-bar')['depth']['t'] == .16, 15)
+    time.sleep(1.5)
+    shot('builder-bar-low.png')
+    high, low = bar_rows(out / 'builder-bar-high.png'), bar_rows(out / 'builder-bar-low.png')
+    check('the bar grows and shrinks with the API value on screen (display only: its collision stays at rest)',
+          high > low * 2 and low > 0 and by_key('queue-bar')['pose']['position'] == [1.5, 0.0, -16.0],
+          {'rowsAt74': high, 'rowsAt16': low})
+    s.ctl('eval', 'hl.plugin.hyprune.camera(0,1.6,-10.5,0,-.05)')
+    time.sleep(1)
+    shot('builder-behaviours.png')
+    api.shutdown()
     log = shell_log.read_text()
+
     bad = [x for x in ['ReferenceError', 'TypeError', 'Binding loop', 'Unable to assign', 'is not defined', 'does not match the negotiated protocol'] if x in log]
     check('no QML runtime errors in the shell log', not bad, bad)
     evidence = s.ROOT / 'docs/evidence'

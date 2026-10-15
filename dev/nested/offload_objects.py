@@ -14,7 +14,8 @@ OFFLOAD_OBJECTS_STAGE:
                     offload off (compositor GPU) and on (the other GPU) compared per
                     pixel: the authored armillary, a placed catalog rack and armillary,
                     the rack moved with the tool 4 gizmo while offload runs, a hidden
-                    authored object, and edited scene-node transforms (the M3B
+                    authored object, the rack's data-driven behaviours (scale, colour,
+                    texture offset), and edited scene-node transforms (the M3B
                     fixture's cube). Writes parity.json, the stills and diff images.
   midsession        a library installed while offload already draws (its root existed, so
                     the worker keeps running): a rack placed and a resident spawned from it
@@ -324,6 +325,30 @@ def acceptance(client, children, args, shell_token, socketpath):
     check('the gizmo-moved rack and a hidden authored object match', m1['differingFraction'] <= .001 and
           m2['differingFraction'] <= .001 and gone['differingPixels'] > 500, results['gizmo'])
 
+    # 2b. Data-driven behaviours (IPC 0.31): the rack grows from its base, takes a colour and
+    # slides its texture from a published value; the worker draws the display transform, paint
+    # and texture offset exactly as the compositor's renderer does. Collision stays at rest.
+    look(*views['rack'])
+    offload('off')
+    plain_local = still('local-rack-plain.png')
+    client.call('data.publish', {'sourceId': 'org.hyprune.nested.behaviours', 'sequence': 1, 'values': {'value': 70}, 'ttlMs': 600000})
+    demo = {'source': 'org.hyprune.nested.behaviours'}
+    client.call('objects.configure', {'id': rack_id, 'patch': {'behaviours': [
+        {'key': 'grow', 'property': 'scale', 'input': demo, 'from': [1, .5, 1], 'to': [1, 1.6, 1], 'anchor': 'bottom', 'smoothing': 0},
+        {'key': 'tint', 'property': 'colour', 'input': demo, 'from': '#2040ff', 'to': '#ff8020', 'smoothing': 0},
+        {'key': 'slide', 'property': 'texture', 'input': demo, 'from': [0, 0], 'to': [.5, .25], 'smoothing': 0}]}})
+    wait(lambda: all(b['condition'] == 'fresh' for b in (instance(rack_id).get('behaviours') or [{'condition': ''}])), 10)
+    shaped_local = still('local-rack-behaviours.png', 1.0)
+    offload('on')
+    shaped_remote = still('offload-rack-behaviours.png', 1.0)
+    offload('off')
+    m4 = compare(shaped_local, shaped_remote, out / 'diff-rack-behaviours.png')
+    effect = compare(plain_local, shaped_local, out / 'diff-rack-behaviours-effect.png')
+    results['behaviours'] = {'compare': m4, 'effect': effect, 'states': instance(rack_id).get('behaviours')}
+    check('behaviours (scale about the base, colour, texture offset) draw alike in the offload worker',
+          m4['differingFraction'] <= .001 and effect['differingPixels'] > 500, results['behaviours'])
+    client.call('objects.configure', {'id': rack_id, 'patch': {'behaviours': []}})
+
     # 3. Edited scene-node transforms (lifted restriction): tool 4 drags the independently
     # editable cube of the M3B fixture while offload draws; then offload on and off match.
     clock(None)
@@ -537,4 +562,4 @@ if __name__ == '__main__':
     catalog.prepare = prepare
     s.run(argparse.Namespace(catalog=True, m3b=False, m3a=False, m2=False, m1=False, integration=False, live=False, serve=False,
                              record=False, visible=False, output=str(pathlib.Path(a.output).resolve()),
-                             protocol='0.23'))  # npc_motion and npcs.spawn
+                             protocol='0.31'))  # npc_motion, npcs.spawn and behaviours (0.31)
