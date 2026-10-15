@@ -331,7 +331,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     look(*views['rack'])
     offload('off')
     plain_local = still('local-rack-plain.png')
-    client.call('data.publish', {'sourceId': 'org.hyprune.nested.behaviours', 'sequence': 1, 'values': {'value': 70}, 'ttlMs': 600000})
+    client.call('data.publish', {'sourceId': 'org.hyprune.nested.behaviours', 'sequence': 1, 'values': {'value': 70}, 'ttlMs': 60000})
     demo = {'source': 'org.hyprune.nested.behaviours'}
     client.call('objects.configure', {'id': rack_id, 'patch': {'behaviours': [
         {'key': 'grow', 'property': 'scale', 'input': demo, 'from': [1, .5, 1], 'to': [1, 1.6, 1], 'anchor': 'bottom', 'smoothing': 0},

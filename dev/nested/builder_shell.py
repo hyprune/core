@@ -544,14 +544,14 @@ def acceptance(client, children, args, shell_token, socketpath):
     keys('-k', '1')
 
     def bar_rows(path):
-        # Rows of the bar's glow (cyan) in the middle column band of a still looking at it.
+        # Rows of the bar's glow (cyan: blue and green high, red well below) in the middle column band.
         from PIL import Image
         im = Image.open(path).convert('RGB')
         w, h = im.size
         px = im.load()
         rows = 0
         for y in range(h):
-            if any(px[x, y][2] > 170 and px[x, y][1] > 150 and px[x, y][0] < 120 for x in range(w // 2 - 40, w // 2 + 40, 4)):
+            if any(px[x, y][2] > 200 and px[x, y][1] > 200 and px[x, y][0] < px[x, y][2] - 60 for x in range(w // 2 - 40, w // 2 + 40, 4)):
                 rows += 1
         return rows
     s.ctl('eval', 'hl.plugin.hyprune.camera(1.5,1.4,-11.5,0,0)')
