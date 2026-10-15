@@ -508,7 +508,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     time.sleep(.8)
     assert press('behaviour-add:scale')
     assert ui('fieldText', 'behaviour-to:1', '3') == 'true'
-    time.sleep(.3)
+    time.sleep(.6)
     shot('builder-behaviour-editor.png')
     assert press('behaviour-save')
     wait(lambda: (by_key('cpu-cube') or {}).get('behaviours'), 15)
@@ -568,6 +568,16 @@ def acceptance(client, children, args, shell_token, socketpath):
     s.ctl('eval', 'hl.plugin.hyprune.camera(0,1.6,-16.5,0,-.05)')
     time.sleep(1)
     shot('builder-behaviours.png')
+    # The bar's panel with its two behaviours and their live values.
+    director()
+    ui('tabNamed', 'objects')
+    ui('objectsView', 'placed')
+    ui('selectObject', bar)
+    time.sleep(.8)
+    assert press('behaviour-add:visible') and press('behaviour-cancel')  # opens, scrolls down, closes: the list stays in view
+    time.sleep(.5)
+    shot('builder-behaviours-panel.png')
+    close_director()
     if os.environ.get('HYPRUNE_BEHAVIOURS_CLIP') == '1':
         # The gallery clip: the camera slides past while the API value swings and a CPU burst
         # (busy processes for 4 s) makes the cube grow; core exports every presented frame.
