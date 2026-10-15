@@ -366,6 +366,17 @@ def acceptance(client, children, args, shell_token, socketpath):
             return e.args[0]
         return None
 
+    def placing(params):
+        # A just-made shape decodes on its first use: objects.place says retryable.
+        for _ in range(60):
+            try:
+                return client.call('objects.place', params)
+            except RuntimeError as e:
+                if not (e.args[0].get('data') or {}).get('retryable'):
+                    raise
+                time.sleep(.2)
+        raise AssertionError(f"{params['ref']} never loaded")
+
     def by_key(key):
         return builtins.next((i for i in state()['objects']['instances'] if i.get('key') == key), None)
     up = [0, 0, 0, 1]
@@ -381,9 +392,9 @@ def acceptance(client, children, args, shell_token, socketpath):
     j = shape_job('make', 'shape-make')
     beacon_ref = (j.get('result') or {}).get('ref')
     wait(lambda: any(o.get('ref') == beacon_ref for o in (state()['editor'].get('unplaced') or {}).get('objects', [])), 20)
-    dry = client.call('objects.place', {'ref': beacon_ref, 'pose': {'position': [0, 0, -11], 'rotation': up}, 'key': 'beacon', 'dryRun': True})
+    dry = placing({'ref': beacon_ref, 'pose': {'position': [0, 0, -11], 'rotation': up}, 'key': 'beacon', 'dryRun': True})
     count = len(state()['objects']['instances'])
-    beacon = client.call('objects.place', {'ref': beacon_ref, 'pose': {'position': [0, 0, -11], 'rotation': up}, 'key': 'beacon'})['id']
+    beacon = placing({'ref': beacon_ref, 'pose': {'position': [0, 0, -11], 'rotation': up}, 'key': 'beacon'})['id']
     taken = refused('objects.place', {'ref': beacon_ref, 'pose': {'position': [1, 0, -11], 'rotation': up}, 'key': 'beacon'})
     moved = client.call('objects.place', {'ref': beacon_ref, 'pose': {'position': [0.5, 0, -11], 'rotation': up}, 'key': 'beacon', 'ifExists': 'update'})
     check('a shape made in Objects > Shapes is pocketed; placing with a key: dry run, taken key refused with its id, ifExists update moves it',
@@ -393,7 +404,7 @@ def acceptance(client, children, args, shell_token, socketpath):
           {'job': j.get('result'), 'dry': dry, 'taken': taken, 'moved': moved})
     stairs = json.loads(subprocess.run([*CLI.split(), 'builder', 'primitive', SLUG, '--shape', 'stairs', '--size', '1.2,1.8,3', '--material', 'paving', '--json'],
                                        capture_output=True, text=True, env={**os.environ, 'HYPRUNE_PROJECTS_DIR': str(folder.parent)}).stdout.strip().split('\n')[-1])['result']
-    steps = client.call('objects.place', {'ref': stairs['ref'], 'pose': {'position': [-3, 0, -12], 'rotation': up}, 'key': 'steps'})['id']
+    steps = placing({'ref': stairs['ref'], 'pose': {'position': [-3, 0, -12], 'rotation': up}, 'key': 'steps'})['id']
     blocked = refused('objects.place', {'ref': stairs['ref'], 'pose': {'position': [0.5, 0, -11], 'rotation': up}})
     check('stairs from the CLI place on the floor; a shape inside the box is refused by its collision',
           bool(steps) and by_key('steps')['state'] == 'active' and blocked is not None, {'stairs': stairs.get('name'), 'blocked': blocked})
@@ -405,7 +416,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     j = shape_job('material', 'material-save')
     assert ui('shapeForm', json.dumps({'shape': 'box', 'size': ['3', '1.2', '0.3'], 'steps': None, 'material': {'kind': 'key', 'key': 'brick', 'colour': '#d08060', 'glow': None}})) == 'true'
     wall_ref = shape_job('make', 'shape-make')['result']['ref']
-    wall = client.call('objects.place', {'ref': wall_ref, 'pose': {'position': [3, 0, -12], 'rotation': up}, 'key': 'wall'})['id']
+    wall = placing({'ref': wall_ref, 'pose': {'position': [3, 0, -12], 'rotation': up}, 'key': 'wall'})['id']
     wait(lambda: 'brick' in (shapes().get('materials') or []), 20)
     assert ui('materialForm', json.dumps({'key': 'brick', 'name': 'Brick', 'colour': '#806040', 'texture': {'kind': 'keep'}, 'tile': '', 'glow': None,
                                           'roughness': '', 'metallic': '', 'fresh': False, 'textured': True})) == 'true'
