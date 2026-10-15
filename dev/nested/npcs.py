@@ -59,6 +59,12 @@ LONG_LINE = ('The loop takes about a minute. Mind the step by the signal box, an
 # from about -6 to 0): the walking resident there is occluded on every ray.
 HIDE_EYE = [-8, 1.7, 4]             # drawn with tool 3
 BENCH = {'position': [3.6, 0, 3], 'rotation': [0, -.7071068, 0, .7071068]}
+BENCH_HEIGHT = .45
+
+
+def lifted(agent):
+    """Seated with the root lifted by the seat fit: bench height minus the measured seat."""
+    return abs(agent['seatOffset'] - (BENCH_HEIGHT - agent['seatFit']['seatHeight'])) < .02
 
 
 def prepare(installed):
@@ -70,16 +76,12 @@ def prepare(installed):
     target = installed / WORLD
     shutil.rmtree(target, ignore_errors=True)
     shutil.copytree(source, target)
-    # The bench: the fixture's generated seat asset (a 0.3 m seat for the residents' low sit).
+    # The bench: the fixture's generated 0.45 m seat asset. Both resident generations fit it: the
+    # starter kit's own low sit (0.2.0 and earlier, a seat fit near -0.06 m) and the shared
+    # starter-motion sit (0.3.0 on, about 0.36 m).
     subprocess.run([sys.executable, str(s.ROOT / 'tests/fixtures/npcs.py')], check=True, stdout=subprocess.DEVNULL)
     (target / 'objects').mkdir(exist_ok=True)
-    bench = json.loads((s.ROOT / 'tests/fixtures/npcs/objects/bench.gltf').read_text())
-    accessors = bench['accessors']
-    for a in accessors:  # scale the 0.45 m bench to 0.3 m
-        if 'min' in a:
-            a['min'][1] *= 2 / 3; a['max'][1] *= 2 / 3
-    bench['nodes'] = [dict(n, scale=[1, 2 / 3, 1]) for n in bench['nodes']]
-    (target / 'objects/bench.gltf').write_text(json.dumps(bench))
+    shutil.copy2(s.ROOT / 'tests/fixtures/npcs/objects/bench.gltf', target / 'objects/bench.gltf')
     shutil.copy2(s.ROOT / 'tests/fixtures/npcs/objects/bench.bin', target / 'objects/bench.bin')
     lumen = pathlib.Path(os.environ.get('HYPRUNE_LUMEN_PACKAGE', str(s.ROOT.parent / 'worlds/dist' / LUMEN)))
     if (lumen / 'world.json').is_file():
@@ -94,8 +96,8 @@ def prepare(installed):
         'objectAssets': [{'id': 'blue', 'library': LIBRARY, 'object': 'resident-blue'},
                          {'id': 'crimson', 'library': LIBRARY, 'object': 'resident-crimson'},
                          {'id': 'bench', 'scene': 'objects/bench.gltf', 'collision': {'node': 'proxy'},
-                          'traits': {'seat': {'anchors': [{'id': 'left', 'position': [-.4, 0, .6], 'yaw': 0, 'height': .3},
-                                                          {'id': 'right', 'position': [.4, 0, .6], 'yaw': 0, 'height': .3}]}}}],
+                          'traits': {'seat': {'anchors': [{'id': 'left', 'position': [-.4, 0, .6], 'yaw': 0, 'height': BENCH_HEIGHT},
+                                                          {'id': 'right', 'position': [.4, 0, .6], 'yaw': 0, 'height': BENCH_HEIGHT}]}}}],
         'paths': [{'id': 'yard-loop', 'name': 'Yard loop', 'use': 'route', 'closed': True, 'points': [pt(p) for p in LOOP],
                    'stops': [{'point': 2, 'seconds': 6, 'seat': 'bench-1/left'}, {'point': 0, 'seconds': 2, 'clip': 'wave'}]},
                   {'id': 'north-walk', 'use': 'route', 'points': [pt(p) for p in NORTH]},
@@ -336,7 +338,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     # Align (0.25 s), then the sit clip plays through (2.3 s for the starter residents).
     seated = wait(lambda: (lambda b: b if b and b['clip'] == 'sit_idle' else None)(agent('blue-walker')), timeout=6)
     check('sits on the bench seat (root lifted by the seat fit)', seated['seat'] == 'bench-1/left' and seated['clip'] == 'sit_idle' and
-          seated['seatOffset'] > .2 and instance('blue-walker')['seat'] == 'bench-1/left', seated)
+          lifted(seated) and instance('blue-walker')['seat'] == 'bench-1/left', seated)
     look([1.2, 1.4, 1.2], [3.2, .6, 2.7]); shot('npcs-4-seated.png')
     # 8b. Guide from the seat: stand up (the stand clip), step off to the seat's approach point,
     # join the guide path. The player walking 30 m off cancels it: back to the seat, seated again.
@@ -354,7 +356,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     camera([-40, 1.7, 40], 0)  # the player walks off: a guide ends 30 m away
     back = wait(lambda: (lambda b: b if b and b['activity'] == 'sitting' and b['clip'] == 'sit_idle' else None)(agent('blue-walker')), timeout=60)
     check('cancelled, it walks back and sits on its seat again',
-          back['seat'] == 'bench-1/left' and back['seatOffset'] > .2 and math.dist(back['position'][::2], seat_at[::2]) < .1, back)
+          back['seat'] == 'bench-1/left' and lifted(back) and math.dist(back['position'][::2], seat_at[::2]) < .1, back)
     look([0, 6, 9], [3, 0, 3])
     up = wait(lambda: (lambda b: b if b and b['activity'] == 'walking' and 'bench-1/left' not in diag()['seatsTaken'] else None)(agent('blue-walker')),
               timeout=40)
