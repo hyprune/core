@@ -676,7 +676,8 @@ struct Runtime {
     };
     std::vector<NpcRun> npcs;
     std::string npcState = "none", npcReason;
-    std::array<uint64_t, 4> npcSynced{}; // instanceRevision, pathRevision, builtObjects, companionRevision agents were built from
+    std::array<uint64_t, 5> npcSynced{}; // instanceRevision, pathRevision, builtObjects, companionRevision, npcConfigRevision agents were built from
+    uint64_t npcConfigRevision = 0;      // a user character's settings changed (npcs.bind speed, accent, phase, style) without a move
     uint64_t npcRevision = 0, pathRevision = 0, npcProtected = 0;
     std::set<std::string> seatTaken;     // occupied seat anchors (refs)
     std::map<const world::Character *, world::Character::SeatFit> seatFits;
