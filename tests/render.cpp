@@ -160,6 +160,7 @@ int main(int argc, char **argv) {
         EGLint size[] = {EGL_WIDTH, 320, EGL_HEIGHT, 180, EGL_NONE};
         auto pbuffer = eglCreatePbufferSurface(display, config, size);
         check(eglMakeCurrent(display, pbuffer, pbuffer, context), "EGL context");
+        std::cerr << "render tests: " << glGetString(GL_VENDOR) << " / " << glGetString(GL_RENDERER) << '\n';
         if (auto forbid = getenv("HYPRUNE_TEST_FORBID_RENDERER"))
             check(!std::strstr(reinterpret_cast<const char *>(glGetString(GL_RENDERER)), forbid) &&
                       !std::strstr(reinterpret_cast<const char *>(glGetString(GL_VENDOR)), forbid),
@@ -174,6 +175,11 @@ int main(int argc, char **argv) {
         check(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "test framebuffer");
         checkSurfaceSampler(fbo);
         render::Renderer renderer;
+        // Every draw renders. With live pacing, two unsignalled frame fences made draw() repeat
+        // the previous frame, and the check reading it back failed at random: llvmpipe's fences
+        // lag under CPU load (the Mesa-only CTest on an NVIDIA-only host), a GPU's when another
+        // process keeps it busy (a nested session on the same GPU).
+        renderer.pacing = false;
         auto loaded = world::load(argv[1]);
         renderer.prepare(loaded);
         renderer.beginPrepare(loaded);

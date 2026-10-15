@@ -45,6 +45,10 @@ class Renderer {
     GLuint externalWorldFbo = 0;
     bool worldOnly = false;
     bool warmShaders = true; // Offline benchmark can disable; runtime always warms.
+    // Live presentation: repeat the last frame when the GPU is two frames behind or the cadence
+    // skips one. Offline owners (tests, benchmarks) turn it off: every draw renders, whatever
+    // else loads the GPU.
+    bool pacing = true;
     world::Json offloadState = {{"activeRenderer", "in-process"}, {"powerW", nullptr}};
     bool debug = false, captureRequested = false;
     // Render on demand: the owner sets this when every frame input is unchanged
