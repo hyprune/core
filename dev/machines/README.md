@@ -355,7 +355,7 @@ when negative); `[1:3]` a slice; `*` and `[*]` every member; `..name` every memb
 ```json
 "map": {
   "value": {"path": "$.memory.used", "min": 0, "max": 16},
-  "level": {"warn": 70, "error": 90},
+  "level": {"warn": 70, "fail": 90},
   "display": "{raw:.1f} of {$.memory.total} GB",
   "label": "RAM"
 }
@@ -364,7 +364,7 @@ when negative); `[1:3]` a slice; `*` and `[*]` every member; `..name` every memb
 | Key | Publishes |
 | --- | --- |
 | `value` | A selection (`path` [+ `reduce`], `pointer`, or `field`: a `fields` name or `key`) scaled from `min`..`max` (default 0..100) to 0-100 and clamped. |
-| `level` | `ok`, `warn` or `error`: thresholds `warn`/`error` on the value (`"of": "raw"`: on the unscaled number; `"below": true`: low is bad), or a selection with `match` (lower-case text to a level) and `otherwise` (default `ok`). |
+| `level` | `ok`, `warn` or `fail` (the gauges' levels): thresholds `warn`/`fail` on the value (`"of": "raw"`: on the unscaled number; `"below": true`: low is bad), or a selection with `match` (lower-case text to a level) and `otherwise` (default `ok`). |
 | `display` | A template, at most 256 characters: `{raw}` (the unscaled number), `{value}`, `{level}`, `{label}`, a field name or `{$.path}`, each with an optional format (`{raw:.1f}`, `{value:d}`, `{label:>8}`). |
 | `label` | Text (at most 64 characters), or a selection. |
 

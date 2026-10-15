@@ -541,18 +541,18 @@ class Mapping(unittest.TestCase):
 
     def test_scale_level_display_label(self):
         values, errors = self.apply({"value": {"path": "$.used", "min": 0, "max": 16},
-                                     "level": {"warn": 70, "error": 90},
+                                     "level": {"warn": 70, "fail": 90},
                                      "display": "{raw:.1f} of {$.total} GB", "label": "RAM"})
         self.assertEqual((values, errors), ({"value": 77.5, "level": "warn", "display": "12.4 of 16 GB", "label": "RAM"}, []))
 
     def test_clamped_below_raw_and_match(self):
         self.assertEqual(self.apply({"value": {"path": "$.used", "min": 20, "max": 40}})[0], {"value": 0})
         self.assertEqual(self.apply({"value": {"path": "$.used", "max": 10}})[0], {"value": 100})
-        low = {"value": {"path": "$.used", "max": 100}, "level": {"warn": 20, "error": 10, "below": True}}
+        low = {"value": {"path": "$.used", "max": 100}, "level": {"warn": 20, "fail": 10, "below": True}}
         self.assertEqual(self.apply(low)[0]["level"], "warn")
-        raw = {"value": {"path": "$.used", "max": 100}, "level": {"of": "raw", "warn": 10, "error": 12}}
-        self.assertEqual(self.apply(raw)[0]["level"], "error")
-        match = {"level": {"path": "$.state", "match": {"healthy": "ok", "degraded": "warn"}, "otherwise": "error"}}
+        raw = {"value": {"path": "$.used", "max": 100}, "level": {"of": "raw", "warn": 10, "fail": 12}}
+        self.assertEqual(self.apply(raw)[0]["level"], "fail")
+        match = {"level": {"path": "$.state", "match": {"healthy": "ok", "degraded": "warn"}, "otherwise": "fail"}}
         self.assertEqual(self.apply(match)[0], {"level": "warn"})
         self.assertEqual(self.apply({"label": {"path": "$.host"}, "display": "{label}: {used:d}"}, {"used": 12.4})[0],
                          {"label": "rack-1", "display": "rack-1: 12"})
@@ -664,8 +664,8 @@ class HttpPhase2(Http):
     def test_number_output_and_level_match(self):
         spec = self.spec("/num", output="number", map={"value": {"field": "value"}, "level": {"warn": 70}})
         self.assertEqual(helper.http_values(spec)[0], {"value": 73.5, "level": "warn"})
-        spec = self.spec("/api", map={"level": {"path": "$.items[?(@.lag > 30)].state", "match": {"late": "error"}}})
-        self.assertEqual(helper.http_values(spec)[0], {"name": "ingest", "level": "error"})
+        spec = self.spec("/api", map={"level": {"path": "$.items[?(@.lag > 30)].state", "match": {"late": "fail"}}})
+        self.assertEqual(helper.http_values(spec)[0], {"name": "ingest", "level": "fail"})
 
     def test_control_test_shows_the_raw_response(self):
         runner = helper.Runner([], helper.DryRunPublisher(stream=open(os.devnull, "w")))

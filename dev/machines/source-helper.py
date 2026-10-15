@@ -434,7 +434,7 @@ def select_path(document, expr, reduce=None):
     return value
 
 
-LEVELS = ("ok", "warn", "error")
+LEVELS = ("ok", "warn", "fail")  # the gauges' level input
 TEMPLATE_RE = re.compile(r"\{([^{}:]+)(?::([^{}]*))?\}")
 FORMAT_SPEC_RE = re.compile(r"[<>^]?[+-]?\d{0,3}[,_]?(\.\d{1,6})?[fdeg%]?")
 MAP_KEYS = {"value", "level", "display", "label"}
@@ -459,8 +459,9 @@ def _check_select(spec, label, allow_const=False):
 
 
 def check_map(mapping, label):
-    """The gauge mapping: value (0-100, scaled from min/max), level (thresholds on the value or a
-    text mapping), display (a template) and label (text or a selection). Raises ConfigError."""
+    """The gauge mapping: value (0-100, scaled from min/max), level (ok, warn or fail: thresholds on
+    the value or a text mapping), display (a template) and label (text or a selection). Raises
+    ConfigError."""
     if not isinstance(mapping, dict) or not mapping or set(mapping) - MAP_KEYS:
         raise ConfigError(f"{label}: map takes value, level, display and label")
     if "value" in mapping:
@@ -475,8 +476,8 @@ def check_map(mapping, label):
         lv = mapping["level"]
         if not isinstance(lv, dict):
             raise ConfigError(f"{label}: map.level must be an object")
-        if "warn" in lv or "error" in lv:
-            for key in ("warn", "error"):
+        if "warn" in lv or "fail" in lv:
+            for key in ("warn", "fail"):
                 if key in lv and (isinstance(lv[key], bool) or not isinstance(lv[key], (int, float))):
                     raise ConfigError(f"{label}: map.level.{key} must be a number")
             if lv.get("of", "value") not in ("value", "raw") or not isinstance(lv.get("below", False), bool):
@@ -486,9 +487,9 @@ def check_map(mapping, label):
         elif "match" in lv:
             _check_select({k: x for k, x in lv.items() if k not in ("match", "otherwise")}, f"{label}: map.level")
             if not isinstance(lv["match"], dict) or not all(x in LEVELS for x in lv["match"].values()) or lv.get("otherwise", "ok") not in LEVELS:
-                raise ConfigError(f"{label}: map.level.match maps texts to ok, warn or error")
+                raise ConfigError(f"{label}: map.level.match maps texts to ok, warn or fail")
         else:
-            raise ConfigError(f"{label}: map.level needs warn/error thresholds or a match")
+            raise ConfigError(f"{label}: map.level needs warn/fail thresholds or a match")
     if "display" in mapping:
         if not isinstance(mapping["display"], str) or len(mapping["display"]) > 256:
             raise ConfigError(f"{label}: map.display must be a template of at most 256 characters")
@@ -566,7 +567,7 @@ def apply_map(document, values, mapping):
                 if x is None:
                     raise FieldError("no value to compare")
                 worse = (lambda a, b: a <= b) if lv.get("below") else (lambda a, b: a >= b)
-                out["level"] = "error" if "error" in lv and worse(x, lv["error"]) else "warn" if "warn" in lv and worse(x, lv["warn"]) else "ok"
+                out["level"] = "fail" if "fail" in lv and worse(x, lv["fail"]) else "warn" if "warn" in lv and worse(x, lv["warn"]) else "ok"
         except FieldError as error:
             errors.append(f"level: {error}")
     if "display" in mapping:
