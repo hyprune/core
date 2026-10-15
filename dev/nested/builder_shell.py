@@ -495,10 +495,10 @@ def acceptance(client, children, args, shell_token, socketpath):
         r = subprocess.run([*CLI.split(), 'builder', 'primitive', SLUG, *args, '--json'], capture_output=True, text=True,
                            env={**os.environ, 'HYPRUNE_PROJECTS_DIR': str(folder.parent)})
         return json.loads(r.stdout.strip().split('\n')[-1])['result']['ref']
-    cube_ref = generated('--shape', 'cube', '--size', '1', '--material', 'brick')
+    cube_ref = generated('--shape', 'cube', '--size', '1', '--material', 'paving')
     bar_ref = generated('--shape', 'box', '--size', '0.5,2.5,0.5', '--colour', '#101820')
-    cube = placing({'ref': cube_ref, 'pose': {'position': [-1.5, 0, -16], 'rotation': up}, 'key': 'cpu-cube'})['id']
-    bar = placing({'ref': bar_ref, 'pose': {'position': [1.5, 0, -16], 'rotation': up}, 'key': 'queue-bar'})['id']
+    cube = placing({'ref': cube_ref, 'pose': {'position': [-1.2, 0, -22], 'rotation': up}, 'key': 'cpu-cube'})['id']
+    bar = placing({'ref': bar_ref, 'pose': {'position': [1.2, 0, -22], 'rotation': up}, 'key': 'queue-bar'})['id']
     bad = refused('objects.configure', {'id': bar, 'patch': {'behaviours': [{'key': 'x', 'property': 'scale', 'from': [1, 0, 1], 'to': [1, 1, 1]}]}, 'dryRun': True})
     # The cube from the Placed panel: + Grow, B's height 3 (A keeps 0.05), Save.
     director()
@@ -554,7 +554,7 @@ def acceptance(client, children, args, shell_token, socketpath):
             if any(px[x, y][2] > 200 and px[x, y][1] > 200 and px[x, y][0] < px[x, y][2] - 60 for x in range(w // 2 - 40, w // 2 + 40, 4)):
                 rows += 1
         return rows
-    s.ctl('eval', 'hl.plugin.hyprune.camera(1.5,1.4,-11.5,0,0)')
+    s.ctl('eval', 'hl.plugin.hyprune.camera(1.2,1.4,-17.5,0,0)')
     time.sleep(1.2)
     shot('builder-bar-high.png')
     queue['queue']['depth'] = 8
@@ -563,9 +563,9 @@ def acceptance(client, children, args, shell_token, socketpath):
     shot('builder-bar-low.png')
     high, low = bar_rows(out / 'builder-bar-high.png'), bar_rows(out / 'builder-bar-low.png')
     check('the bar grows and shrinks with the API value on screen (display only: its collision stays at rest)',
-          high > low * 2 and low > 0 and by_key('queue-bar')['pose']['position'] == [1.5, 0.0, -16.0],
+          high > low * 2 and low > 0 and by_key('queue-bar')['pose']['position'] == [1.2, 0.0, -22.0],
           {'rowsAt74': high, 'rowsAt16': low})
-    s.ctl('eval', 'hl.plugin.hyprune.camera(0,1.6,-10.5,0,-.05)')
+    s.ctl('eval', 'hl.plugin.hyprune.camera(0,1.6,-16.5,0,-.05)')
     time.sleep(1)
     shot('builder-behaviours.png')
     if os.environ.get('HYPRUNE_BEHAVIOURS_CLIP') == '1':
@@ -573,11 +573,11 @@ def acceptance(client, children, args, shell_token, socketpath):
         # (busy processes for 4 s) makes the cube grow; core exports every presented frame.
         import cinema, math as m
         cam = cinema.Cinema(s)
-        cam.hold([-3.5, 1.7, -10.5], target=[0, 1, -16])
+        cam.hold([-3.5, 1.7, -16.5], target=[0, 1, -22])
         time.sleep(1)
         raw = out / 'behaviours-clip.mkv'
         with cam.recording(raw):
-            cam.path([{'t': 0, 'eye': [-3.5, 1.7, -10.5], 'target': [0, 1, -16]}, {'t': 14, 'eye': [3.5, 1.9, -10.0], 'target': [0, 1, -16]}])
+            cam.path([{'t': 0, 'eye': [-3.5, 1.7, -16.5], 'target': [0, 1, -22]}, {'t': 14, 'eye': [3.5, 1.9, -16.0], 'target': [0, 1, -22]}])
             burners = []
             for i in range(28):
                 queue['queue']['depth'] = round(26 + 22 * m.sin(i / 3.5))
