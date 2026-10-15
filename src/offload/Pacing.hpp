@@ -6,12 +6,13 @@
 namespace hyprune::offload {
 // Even pacing (graphics.frame_pacing "even"): a rate-capped worker gets a new pose every
 // n-th compositor frame, n the smallest refresh divisor whose rate stays within the cap
-// (10% slack): 45 FPS on 98 Hz runs at 49 (every second refresh), on 60 Hz at 30. An
-// uneven 45 on 60 Hz shows frames for 1, 1, 1 and 2 refreshes while each carries the
-// motion of its own send interval: judder at any rate.
+// (the worker enforces it too: above it, it delays frames off the grid): 45 FPS on 98 Hz
+// runs at 32.7 (every third refresh), 60 on 98 Hz at 49, 45 on 60 Hz at 30. An uneven 45 on
+// 60 Hz shows frames for 1, 1, 1 and 2 refreshes while each carries the motion of its own
+// send interval: judder at any rate.
 inline int evenDivisor(double refreshHz, double fps) {
     int n = 1;
-    while (n < 8 && refreshHz / n > fps * 1.1)
+    while (n < 8 && refreshHz / n > fps * 1.02)
         ++n;
     return n;
 }

@@ -78,7 +78,7 @@ def cv(xs):
 def even_divisor(refresh, fps):
     """Core's even pacing (offload/Pacing.hpp evenDivisor)."""
     n = 1
-    while n < 8 and refresh / n > fps * 1.1:
+    while n < 8 and refresh / n > fps * 1.02:
         n += 1
     return n
 
