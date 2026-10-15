@@ -140,6 +140,9 @@ Json Server::snapshot() const {
 }
 Json Server::visibleState(const Peer &p) const {
     Json state = state_;
+    // IPC 0.29: input version 3 (Ctrl sprints, Shift goes down); older peers see version 2.
+    if (!protocol::atLeast(p.protocol, "0.29") && state.is_object() && state.contains("keymap"))
+        state["keymap"] = interaction::beforeInputVersion3(std::move(state["keymap"]));
     // Tool 9, the debug tool, stays core's own until a protocol names it: peers see the normal
     // tool (its slots still say what the buttons do) and no tool9 action in the keymap.
     // From IPC 0.26 it is named: editor.debugTool and the slot-9 definition. Older peers also
