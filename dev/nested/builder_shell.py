@@ -449,8 +449,14 @@ def acceptance(client, children, args, shell_token, socketpath):
           ((prim or {}).get('material') or {}).get('glow') == {'colour': '#30e0ff', 'strength': 4},
           {'tower': {k: tower[k] for k in ('id', 'ref', 'key')}, 'primitive': prim, 'missing': missing})
     close_director()
-    s.ctl('eval', 'hl.plugin.hyprune.camera(0,1.7,-5,0,-.08)')
+    keys('-k', '1')  # tool 1: no placement ghost for the made shapes still in the pocket
+    time.sleep(.5)
+    # From behind the shapes (beyond them the screen and the barrel): the glowing tower, the brick
+    # wall and the stairs rising away from the camera's side.
+    s.ctl('eval', 'hl.plugin.hyprune.camera(0.5,2.2,-18.5,3.14,-.1)')
     shot('builder-shapes-world.png')
+    s.ctl('eval', 'hl.plugin.hyprune.camera(-6.5,1.9,-10.5,-2.0,-.12)')
+    shot('builder-shapes-stairs.png')
     director()
     ui('tabNamed', 'builder')
     ui('fieldText', 'builderMessage', 'Shapes: a beacon, stairs and a brick wall')
