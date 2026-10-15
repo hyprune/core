@@ -22,6 +22,19 @@ int main() {
     auto oldInput = inputDefaults(); oldInput["modes"]["world"].erase("exit");
     assert(validateInput(oldInput)["modes"]["world"]["exit"] == inputDefaults()["modes"]["world"]["exit"]);
     assert(!withoutRecordingAction(inputDefaults())["modes"]["world"].contains("exit"));
+    // graphics.frame_pacing (IPC 0.29): null inherits the preset ("even" in every preset).
+    {
+        auto c = defaultConfig();
+        assert(c["graphics"].contains("frame_pacing") && c["graphics"]["frame_pacing"].is_null());
+        auto n = configPatch(c, {{"graphics", {{"frame_pacing", nullptr}, {"offload", "off"}}}});
+        assert(n["graphics"].contains("frame_pacing"));
+        assert(render::effectiveGraphics(n["graphics"], "x")["frame_pacing"] == "even");
+        n = configPatch(c, {{"graphics", {{"frame_pacing", "max_rate"}}}});
+        assert(render::effectiveGraphics(n["graphics"], "x")["frame_pacing"] == "max_rate");
+        bool refused = false;
+        try { configPatch(c, {{"graphics", {{"frame_pacing", "fast"}}}}); } catch (...) { refused = true; }
+        assert(refused);
+    }
     // Input version 3 (IPC 0.29): Ctrl sprints, Shift goes down, Ctrl+R records. A version 2 file
     // changes only bindings still at the old defaults whose new key is free.
     {
