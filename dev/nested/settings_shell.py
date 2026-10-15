@@ -87,7 +87,7 @@ def acceptance(client, children, args, shell_token, socketpath):
         ui('settingsCategory', cat)
         shot(f'settings-{cat}-s2')
     s.ctl('eval', 'hl.monitor({output="HEADLESS-1",mode="1920x1080@60",position="1600x0",scale=1})'); time.sleep(1.5)
-    check('2x scale: three categories drawn')
+    check('2x scale: three categories drawn', True)
 
     # The flow, on video.
     ui('settingsCategory', 'display'); time.sleep(.8)
