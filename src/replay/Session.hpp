@@ -4,6 +4,7 @@
 #include "world/World.hpp"
 #include <chrono>
 #include <condition_variable>
+#include <ctime>
 #include <deque>
 #include <fcntl.h>
 #include <fstream>
@@ -138,6 +139,56 @@ inline void validateAssertions(const Json &checks) {
             throw std::runtime_error("unknown assertion: " + key);
     }
 }
+// A label slug for file names: lowercase letters and digits, '-' between words, at most 40.
+inline std::string labelSlug(const std::string &label) {
+    std::string slug;
+    for (unsigned char c : label) {
+        if (std::isalnum(c))
+            slug += char(std::tolower(c));
+        else if (!slug.empty() && slug.back() != '-')
+            slug += '-';
+        if (slug.size() >= 40)
+            break;
+    }
+    while (!slug.empty() && slug.back() == '-')
+        slug.pop_back();
+    return slug;
+}
+// Labels a finished recording: rec-<time>.jsonl becomes rec-<time>-<slug>.jsonl, with a 0600
+// sidecar rec-<time>-<slug>.json holding the label and `extra` (what the labelling client
+// adds, e.g. its version). Returns the new path.
+inline std::string labelRecording(const std::string &path, const std::string &label, const Json &extra) {
+    std::filesystem::path file(path);
+    if (file.extension() != ".jsonl" || !std::filesystem::is_regular_file(file))
+        throw std::runtime_error("no finished recording to label");
+    auto stem = file.stem().string();
+    auto slug = labelSlug(label);
+    auto target = file;
+    if (!slug.empty() && !stem.ends_with("-" + slug)) {
+        target = file.parent_path() / (stem + "-" + slug + ".jsonl");
+        if (std::filesystem::exists(target))
+            throw std::runtime_error("a recording with that label exists");
+        std::filesystem::rename(file, target);
+        auto oldSide = file;
+        oldSide.replace_extension(".json");
+        if (std::filesystem::exists(oldSide))
+            std::filesystem::remove(oldSide);
+    }
+    auto side = target;
+    side.replace_extension(".json");
+    Json meta = extra.is_object() ? extra : Json::object();
+    meta["label"] = label;
+    meta["recording"] = target.filename().string();
+    int fd = open(side.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, 0600);
+    if (fd < 0)
+        throw std::runtime_error("cannot write recording label");
+    auto bytes = meta.dump(1) + "\n";
+    bool ok = write(fd, bytes.data(), bytes.size()) == ssize_t(bytes.size());
+    close(fd);
+    if (!ok)
+        throw std::runtime_error("cannot write recording label");
+    return target.string();
+}
 class Session {
     std::mutex mutex_;
     std::condition_variable changed_;
@@ -148,7 +199,8 @@ class Session {
     std::string writeError_;
     uint64_t began_ = 0;
     void emit(Json j) {
-        j["ns"] = clockNs() - began_;
+        if (!j.contains("ns"))
+            j["ns"] = clockNs() - began_;
         auto bytes = j.dump() + "\n";
         std::lock_guard lock(mutex_);
         if (!writeError_.empty())
@@ -165,8 +217,15 @@ class Session {
 
   public:
     static constexpr double Step = 1. / 60.;
+    // Version 2 (IPC 0.29) records live: each frame keeps the dt the tick really used and its
+    // timing, and replay feeds that dt sequence back. Version 1 files ran (and replay) on fixed
+    // 1/60 s steps. Bounds: 64 MiB, 30 minutes of live frames (v1: 36,000 frames).
+    static constexpr uint64_t FrameLimitV1 = 36000, FrameLimitV2 = 432000;
+    static constexpr uint64_t DurationLimitNs = 30ull * 60 * 1000000000;
     bool recording = false, playing = false, includeAppKeys = false;
+    int version = 2;
     uint64_t frame = 0;
+    std::vector<double> dts, tickNs; // version 2 playback: each frame's dt (s) and tick time (ns)
     std::string path, mode = "input";
     Json header, frames = Json::array(), views = Json::array(), failures = Json::array(), marks = Json::array(),
                  assertions = Json::object();
@@ -177,7 +236,25 @@ class Session {
         std::lock_guard lock(mutex_);
         return writeError_;
     }
-    uint64_t logicalMillis() const { return began_ / 1000000 + frame * 1000 / 60; }
+    // Playback's input clock: v1 the fixed step count, v2 the recorded tick time.
+    uint64_t logicalMillis() const {
+        if (version >= 2 && !tickNs.empty())
+            return began_ / 1000000 + uint64_t(tickNs.at(std::min<size_t>(frame, tickNs.size() - 1)) / 1e6);
+        return began_ / 1000000 + frame * 1000 / 60;
+    }
+    // A playback frame's dt: the recorded one (v2) or the fixed step (v1).
+    double frameDt() const {
+        if (version >= 2 && !dts.empty())
+            return dts.at(std::min<size_t>(frame, dts.size() - 1));
+        return Step;
+    }
+    // ns since the recording started for a steady clock time (0 before it).
+    uint64_t since(std::chrono::steady_clock::time_point t) const {
+        auto ns = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(t.time_since_epoch()).count());
+        return ns > began_ ? ns - began_ : 0;
+    }
+    uint64_t elapsedNs() const { return recording ? clockNs() - began_ : 0; }
+    uint64_t startedNs() const { return began_; }
     Json status() {
         Json bounded = Json::array();
         for (auto &failure : failures)
@@ -202,11 +279,25 @@ class Session {
         auto root = (xdg && *xdg ? std::filesystem::path(xdg) : std::filesystem::path(home) / ".local/state") /
                     "hyprune/recordings";
         std::filesystem::create_directories(root);
-        path = (root / "session-XXXXXX.jsonl").string();
-        int fd = mkostemps(path.data(), 6, O_CLOEXEC);
+        // rec-<local time>.jsonl; a label given on stop renames it (rec-<time>-<slug>.jsonl).
+        auto now = std::time(nullptr);
+        std::tm local{};
+        localtime_r(&now, &local);
+        char stamp[32];
+        std::strftime(stamp, sizeof stamp, "%Y%m%d-%H%M%S", &local);
+        int fd = -1;
+        for (int n = 1; n < 100 && fd < 0; ++n) {
+            path = (root / (std::string("rec-") + stamp + (n > 1 ? "-" + std::to_string(n) : "") + ".jsonl")).string();
+            fd = open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
+            if (fd < 0 && errno != EEXIST)
+                break;
+        }
         if (fd < 0)
             throw std::runtime_error("cannot create recording");
         frame = 0;
+        version = 2;
+        dts.clear();
+        tickNs.clear();
         mode = "input"; events.clear(); frames = views = marks = Json::array();
         began_ = clockNs();
         queued_ = total_ = 0;
@@ -217,8 +308,8 @@ class Session {
         header = std::move(initial);
         header.update({{"kind", "header"},
                        {"format", "hyprune.session"},
-                       {"version", 1},
-                       {"timestepNs", 16666667},
+                       {"version", 2},
+                       {"timing", "live"},
                        {"includeAppKeys", appKeys}});
         writer_ = std::thread([this, fd] {
             for (;;) {
@@ -275,18 +366,31 @@ class Session {
             data = {{"type", "key"}, {"redacted", true}};
         emit({{"kind", "input"}, {"frame", frame}, {"event", data}});
     }
-    void recordFrame(const Json &state) {
+    // Tests and tools: a frame on the fixed 1/60 s grid.
+    void recordFrame(const Json &state) { recordFrame(state, Step, frame * 16666667ull, Json::object()); }
+    // A live frame (one tick): its tick time, the dt it moved by, its state and timing.
+    void recordFrame(const Json &state, double dt, uint64_t tickStartNs, const Json &timing) {
         if (recording) {
-            emit({{"kind", "frame"}, {"frame", frame}, {"state", state}});
+            emit({{"kind", "frame"}, {"frame", frame}, {"tickNs", tickStartNs}, {"dt", dt}, {"state", state}, {"timing", timing}});
             ++frame;
         }
     }
-    void view(const Json &state, uint64_t renderedFrame) {
-        if (recording)
-            emit({{"kind", "view"},
-                  {"frame", frame ? frame - 1 : 0},
-                  {"renderedFrame", renderedFrame},
-                  {"state", state}});
+    // A completed 3D draw: the camera it showed and its timing (draw: CPU ms, ageMs: from the
+    // camera sample to the draw; worker frames name the offload front they showed).
+    void view(const Json &camera, uint64_t renderedFrame, const Json &timing) {
+        if (recording) {
+            Json j{{"kind", "view"}, {"frame", frame ? frame - 1 : 0}, {"renderedFrame", renderedFrame}, {"camera", camera}};
+            j.update(timing);
+            emit(std::move(j));
+        }
+    }
+    // Periodic statistics (every ~5 s): written into the recording and kept for status.
+    void stats(const Json &s) {
+        if (recording) {
+            Json j = s;
+            j["kind"] = "stats";
+            emit(std::move(j));
+        }
     }
     void mark(const std::string &name, const Json &state) {
         if (!recording || frame == 0 || name.empty() || name.size() > 64)
@@ -324,6 +428,9 @@ class Session {
         close(fd);
         header = nullptr;
         frames = Json::array();
+        dts.clear();
+        tickNs.clear();
+        version = 1;
         views = Json::array();
         marks = Json::array();
         events.clear();
@@ -344,10 +451,12 @@ class Session {
             previousNs = ns;
             std::string type = j.at("kind");
             if (header.is_null()) {
-                if (type != "header" || j.at("format") != "hyprune.session" || j.at("version") != 1 ||
-                    j.at("timestepNs") != 16666667)
+                if (type != "header" || j.at("format") != "hyprune.session" ||
+                    !((j.at("version") == 1 && j.at("timestepNs") == 16666667) ||
+                      (j.at("version") == 2 && j.at("timing") == "live")))
                     throw std::runtime_error("unsupported recording header");
                 header = j;
+                version = j.at("version");
                 continue;
             }
             if (ended)
@@ -358,14 +467,23 @@ class Session {
                     throw std::runtime_error("frame count mismatch");
                 continue;
             }
+            if (type == "stats")
+                continue; // statistics: read by the analysis tools, not by playback
             auto index = j.at("frame").get<uint64_t>();
-            if (index > 36000)
+            if (index > (version >= 2 ? FrameLimitV2 : FrameLimitV1))
                 throw std::runtime_error("recording duration limit");
             if (type == "frame") {
                 if (index != frames.size())
                     throw std::runtime_error("unordered frames");
                 validateState(j.at("state"));
                 frames.push_back(j.at("state"));
+                if (version >= 2) {
+                    double dt = j.at("dt");
+                    if (!(dt >= 0 && dt <= 1))
+                        throw std::runtime_error("recorded dt out of range");
+                    dts.push_back(dt);
+                    tickNs.push_back(j.at("tickNs").get<double>());
+                }
             } else if (type == "input") {
                 auto e = j.at("event");
                 auto t = e.at("type").get<std::string>();
@@ -387,7 +505,7 @@ class Session {
                     throw std::runtime_error("events per frame limit");
                 events[index].push_back(std::move(e));
             } else if (type == "view") {
-                camera(j.at("state").at("camera"));
+                camera(version >= 2 ? j.at("camera") : j.at("state").at("camera"));
                 views.push_back(j);
             } else if (type == "mark") {
                 if (j.at("name").get<std::string>().size() > 64 || marks.size() > 1024)

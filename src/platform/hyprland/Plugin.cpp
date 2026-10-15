@@ -147,6 +147,25 @@ struct Runtime {
     void stopReplay();
     void replayBeforeTick();
     void replayAfterTick();
+    // The debug recording (Replay.inc, format 2): each tick's live dt (tickDtSet once the tick
+    // got that far), the presents since the last frame record (ns since the recording
+    // started), a 5 s statistics window, reminders and the last finished recording's label.
+    float tickDt = 0;
+    bool tickDtSet = false;
+    std::vector<double> recordPresents;
+    struct RecordWindow {
+        uint64_t startNs = 0, frames0 = 0;
+        double lastPresentNs = -1;
+        int missed = 0;
+        std::vector<double> presentMs, dtMs, presentAt; // presentAt: s since start, per interval
+    } recordWindow;
+    Json recordingStats = nullptr;
+    int recordingReminders = 0;
+    std::string lastRecording, lastRecordingLabel;
+    void recordTick(const Json &sections, std::chrono::steady_clock::time_point started);
+    void recordStats(bool final);
+    Json recordingHeader();
+    Json recordingState() const;
     interaction::InputFile inputFile;
     interaction::Tools editor;
     std::filesystem::path editorFile;
@@ -331,11 +350,16 @@ struct Runtime {
         std::string name;
         double start;
         ~Timed() {
-            if (log && log->file)
+            if (log)
                 log->sections[name] += FrameLog::now() - start;
         }
     };
-    Timed timed(std::string name) { return {frameLog.file ? &frameLog : nullptr, std::move(name), frameLog.file ? FrameLog::now() : 0}; }
+    // Section times for the frame log and the debug recording (each tick's timing).
+    bool timing() const;
+    Timed timed(std::string name) {
+        bool on = timing();
+        return {on ? &frameLog : nullptr, std::move(name), on ? FrameLog::now() : 0};
+    }
     // RFC-0011 P1 objects (Objects.inc): the catalog (world package, libraries, user
     // folder), user placements and authored overrides as world object instances, pocket
     // items for tool 5 and the IPC 0.22 methods.
@@ -902,6 +926,7 @@ struct Runtime {
     // holds frames on purpose: the limit covers its latency, so a stand-in (the current
     // camera, ahead of the worker's) never alternates with held frames and steps back.
     double offloadStaleMs = 50;
+    int offloadDivisor = 1; // even pacing: the refresh divisor of the last frame tick
     double offloadClock = 0;      // the animation clock last given to the worker
     bool offloadClockSent = false;
     std::chrono::steady_clock::time_point offloadFrameTick{};
@@ -1714,7 +1739,7 @@ void Runtime::offloadPump(int stage) {
             if (frames && offloadPresentedAt == std::chrono::steady_clock::time_point{})
                 intervals = double(std::min<uint64_t>(frames, 8));
             bool even = renderer.graphics.value("frame_pacing", Json("even")) == "even";
-            int divisor = offload::evenDivisor(1 / refresh, fps);
+            int divisor = offloadDivisor = offload::evenDivisor(1 / refresh, fps);
             share = frames ? (even ? intervals / divisor : intervals * fps * refresh)
                            : std::chrono::duration<double>(now - offloadFrameTick).count() * fps; // idle: timer ticks
             // Even pacing: each frame is shown a whole number of refreshes after its pose (half a
@@ -1984,6 +2009,7 @@ void Runtime::publish() {
           {"taggedSurfaceId", tagged.empty() ? Json(nullptr) : Json(tagged)},
           // "use" (a refused E beyond the use distance) is not an IPC 0.19 action: "" on the wire.
           {"reticle", {{"state", reticle.state}, {"action", reticle.action == "use" ? "" : reticle.action}}}}},
+        {"recording", recordingState()}, // IPC 0.29
         {"keymap",
          {{"config", input.config},
           {"path", ipc::boundedText(inputFile.path.string(), ipc::PathLimit)},
@@ -3571,7 +3597,14 @@ void Runtime::debugCapture() {
 void Runtime::action(interaction::Action a) {
     if (control.photoHeld() && a.name != "capture" && a.name != "debug" && a.name != "record.toggle" && a.name != "world.toggle") return;
     if (a.name == "record.toggle") {
-        if (a.pressed && a.edge && !session.playing) sessionMethod(session.recording ? "recording.stop" : "recording.start", Json::object());
+        if (a.pressed && a.edge && !session.playing) {
+            try {
+                sessionMethod(session.recording ? "recording.stop" : "recording.start", Json::object());
+            } catch (const std::exception &e) {
+                ipc->notify("runtime.notice", {{"level", "warning"}, {"code", "recording.refused"},
+                                               {"message", std::string("Recording: ") + e.what()}});
+            }
+        }
         return;
     }
     if (a.name == "primary" || a.name == "secondary" || a.name == "alternate" || a.name == "cycle") {
@@ -5347,22 +5380,28 @@ void Runtime::tick() {
     struct TickLog {
         Runtime *r;
         double start = FrameLog::now();
+        std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
         ~TickLog() {
-            if (!r->frameLog.file)
+            if (!r->timing())
                 return;
             Json sections = Json::object();
             for (auto &[name, ms] : r->frameLog.sections)
                 if (ms >= .05)
                     sections[name] = std::round(ms * 100) / 100;
-            Json j{{"kind", "tick"}, {"t", start}, {"ms", FrameLog::now() - start}, {"sections", sections}};
-            if (!r->frameLog.marks.empty())
-                j["marks"] = r->frameLog.marks;
-            r->frameLog.line(j);
+            if (r->frameLog.file) {
+                Json j{{"kind", "tick"}, {"t", start}, {"ms", FrameLog::now() - start}, {"sections", sections}};
+                if (!r->frameLog.marks.empty())
+                    j["marks"] = r->frameLog.marks;
+                r->frameLog.line(j);
+                r->frameLog.flush();
+            }
+            if (r->session.recording)
+                safe([&] { r->recordTick(sections, started); });
             r->frameLog.sections.clear();
             r->frameLog.marks.clear();
-            r->frameLog.flush();
         }
     } tickLog{this};
+    tickDtSet = false;
     // Input that arrived since the last tick takes effect in this frame: its idle callback can
     // come after this tick, a frame late, where a replay applies it on time.
     runInput(inputQueue.last());
@@ -5460,7 +5499,12 @@ void Runtime::tick() {
             renderer.animationClock = exportAnimation += dt;
     }
     presentsTicked = presents;
-    if (session.recording || session.playing) dt = session.playing && session.mode == "camera" ? 0.f : replay::Session::Step;
+    // Playback moves by the recorded frame's dt (version 1: the fixed step); recording changes
+    // nothing: it keeps the live dt.
+    if (session.playing)
+        dt = session.mode == "camera" ? 0.f : float(session.frameDt());
+    tickDt = dt;
+    tickDtSet = true;
     for (auto it = bindings.begin(); it != bindings.end();) {
         bool live = false;
         if (processIdentity(it->second.pid).second == it->second.start &&
@@ -5567,10 +5611,10 @@ void Runtime::tick() {
         if (climbing.active() && (typing || !ownsInput() || control.uiVisible() || control.driving() ||
                                   handover.phase || fullscreen.phase || movement != &walk || noclip))
             climbing.reset(camera);
-        // Recording and replay keep exact fixed steps; live motion moves by the frame's dt
-        // (the walker and flight sub-step at 2 ms themselves).
+        // Live motion (and recording, and version 2 replay) moves by the frame's dt (the walker
+        // and flight sub-step at 2 ms themselves); version 1 replays keep exact fixed steps.
         auto movementSection = timed("movement");
-        const bool fixedSteps = session.recording || session.playing;
+        const bool fixedSteps = session.playing && session.version < 2;
         accumulator = fixedSteps ? std::min(accumulator + double(dt), 4.0 / 60.0) : std::min(double(dt), 4.0 / 60.0);
         while (fixedSteps ? accumulator >= 1.0 / 60.0 : accumulator > 1e-6) {
             const float h = fixedSteps ? 1.f / 60.f : float(std::min(accumulator, .05));
@@ -5846,6 +5890,8 @@ void Runtime::framePresented(std::chrono::steady_clock::time_point when) {
         probePresents.push_back(std::chrono::duration<double, std::milli>(when.time_since_epoch()).count());
     if (frameLog.file)
         frameLog.line({{"kind", "present"}, {"t", FrameLog::now()}});
+    if (session.recording && recordPresents.size() < 4096)
+        recordPresents.push_back(double(session.since(when)));
     if (!tickDeferred)
         tickDeferred = g_pEventLoopManager->doLater([] {
             if (!runtime)
@@ -5859,7 +5905,7 @@ bool Runtime::frameForced() {
     // switch keeps GPU clocks steady for fixed-scale profiling (dev/nested/perf.py).
     static const bool continuous = getenv("HYPRUNE_CONTINUOUS_RENDER");
     return continuous || debug || animationFrames || loading || handover.phase || fullscreen.phase || capturePending || renderer.captureRequested ||
-           offload.connected() || session.recording || session.playing || control.driving() || cinema.moving() ||
+           offload.connected() || session.playing || control.driving() || cinema.moving() ||
            frameExport.active() || !renderer.frames;
 }
 uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
@@ -6005,7 +6051,9 @@ class Pass final : public IPassElement {
             }
             auto view = r.externalWorldFbo ? runtime->offload.camera() : runtime->camera;
             auto frames = r.frames;
-            double drawStart = runtime->frameLog.file ? Runtime::FrameLog::now() : 0;
+            bool timedDraw = runtime->frameLog.file || runtime->session.recording;
+            double drawStart = timedDraw ? Runtime::FrameLog::now() : 0;
+            auto drawStarted = std::chrono::steady_clock::now();
             r.draw(fb->getFBID(), data.currentFB->m_size.x, data.currentFB->m_size.y, view,
                    surfaces, runtime->typing && !runtime->layerCursor);
             if (runtime->frameLog.file) // buffered only; written by the next tick
@@ -6013,7 +6061,16 @@ class Pass final : public IPassElement {
                                         {"new", r.frames != frames}});
             if (r.frames != frames) {
                 runtime->renderedKey = key;
-                if (runtime->session.recording) { auto state=runtime->sessionState(); state["camera"]=replay::pose(view); runtime->session.view(state,r.frames); }
+                if (runtime->session.recording) {
+                    bool worker = r.externalWorldFbo != 0;
+                    runtime->session.view(replay::pose(view), r.frames,
+                        {{"drawNs", runtime->session.since(drawStarted)},
+                         {"drawMs", std::round((Runtime::FrameLog::now() - drawStart) * 1000) / 1000},
+                         {"worker", worker},
+                         {"front", worker ? Json(runtime->offload.frontSequence()) : Json(nullptr)},
+                         {"ageMs", worker ? runtime->offload.frontAgeMs()
+                                          : std::chrono::duration<double, std::milli>(drawStarted - runtime->lastTick).count()}});
+                }
                 runtime->displayedCamera = view;
                 runtime->renderedOffload = r.externalWorldFbo != 0;
             }
@@ -6500,6 +6557,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     {"graphics.set", "world.control"},
                     {"recording.start", "input.control"}, {"recording.stop", "input.control"},
                     {"recording.mark", "input.control"}, {"recording.status", "input.control"},
+                    {"recording.label", "input.control"},
                     {"replay.start", "input.control"}, {"replay.stop", "input.control"}, {"replay.status", "input.control"},
                     {"input.get", "state.read"},
                     {"player.get", "state.read"},

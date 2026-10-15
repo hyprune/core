@@ -3328,6 +3328,14 @@ void Renderer::debugGeometry(const sim::Camera &camera, std::span<const surfaces
         }
     }
 }
+double Renderer::gpuFrameMs() const {
+    double sum = 0;
+    bool any = false;
+    for (auto &timer : gpu_)
+        if (timer.available)
+            sum += timer.milliseconds, any = true;
+    return any ? sum : -1;
+}
 world::Json Renderer::timings() const {
     world::Json cpu = world::Json::array(), gpu = world::Json::array();
     for (auto &v : cpu_)

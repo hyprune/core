@@ -73,6 +73,8 @@ class Renderer {
     bool completed();  // Nonblocking GPU fence test; current owner GL context.
     Pixels snapshot(); // Owner event loop after the frame; never a compositor snapshot.
     world::Json timings() const;
+    // The last measured GPU time over the renderer's passes (ms), -1 before any timer has a result.
+    double gpuFrameMs() const;
     std::string device;
     struct Label {
         float x, y;

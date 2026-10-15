@@ -281,6 +281,9 @@
               "$ref": "#/$defs/builderState"
             }
           ]
+        },
+        "recording": {
+          "$ref": "#/$defs/recordingState"
         }
       },
       "required": [
@@ -306,7 +309,8 @@
         "npcs",
         "live",
         "companion",
-        "builder"
+        "builder",
+        "recording"
       ],
       "additionalProperties": false
     },
@@ -487,6 +491,7 @@
               "recording.stop",
               "recording.mark",
               "recording.status",
+              "recording.label",
               "replay.start",
               "replay.stop",
               "replay.status",
@@ -1771,6 +1776,9 @@
                       "$ref": "#/$defs/builderState"
                     }
                   ]
+                },
+                "recording": {
+                  "$ref": "#/$defs/recordingState"
                 }
               },
               "required": [],
@@ -2114,6 +2122,9 @@
           "$ref": "#/$defs/recording.status.request"
         },
         {
+          "$ref": "#/$defs/recording.label.request"
+        },
+        {
           "$ref": "#/$defs/replay.start.request"
         },
         {
@@ -2434,6 +2445,9 @@
         },
         {
           "$ref": "#/$defs/recording.status.response"
+        },
+        {
+          "$ref": "#/$defs/recording.label.response"
         },
         {
           "$ref": "#/$defs/replay.start.response"
@@ -10193,7 +10207,7 @@
         "frame": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 36001
+          "maximum": 432001
         },
         "mode": {
           "enum": [
@@ -10215,6 +10229,52 @@
             "null"
           ],
           "maxLength": 256
+        },
+        "elapsedMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "stats": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/recordingStats"
+            }
+          ]
+        },
+        "last": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 120
+                }
+              },
+              "required": [
+                "path",
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "The last finished recording this session and its label (null until labelled)."
         }
       },
       "required": [
@@ -10224,7 +10284,10 @@
         "frame",
         "mode",
         "failures",
-        "error"
+        "error",
+        "elapsedMs",
+        "stats",
+        "last"
       ],
       "additionalProperties": false
     },
@@ -20800,6 +20863,277 @@
       "required": [
         "id",
         "label"
+      ],
+      "additionalProperties": false
+    },
+    "recordingStats": {
+      "type": "object",
+      "description": "Statistics of a debug recording window (about 5 s): presents and new frames per second, present intervals (frameMs), the dt ticks moved by, missed refreshes and hitches (present intervals over 2.5x the median and over two refreshes, seconds since the recording started).",
+      "properties": {
+        "t": {
+          "type": "number",
+          "minimum": 0
+        },
+        "windowS": {
+          "type": "number",
+          "minimum": 0
+        },
+        "final": {
+          "type": "boolean"
+        },
+        "presents": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "presentHz": {
+          "type": "number",
+          "minimum": 0
+        },
+        "fps": {
+          "type": "number",
+          "minimum": 0
+        },
+        "frameMs": {
+          "type": "object",
+          "properties": {
+            "p50": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "p95": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "p99": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "max": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "p50",
+            "p95",
+            "p99",
+            "max"
+          ],
+          "additionalProperties": false
+        },
+        "dtMs": {
+          "type": "object",
+          "properties": {
+            "mean": {
+              "type": "number"
+            },
+            "std": {
+              "type": "number"
+            },
+            "max": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "mean",
+            "std",
+            "max"
+          ],
+          "additionalProperties": false
+        },
+        "refreshMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "missedVblanks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hitches": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "properties": {
+              "t": {
+                "type": "number",
+                "minimum": 0
+              },
+              "ms": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "t",
+              "ms"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "t",
+        "windowS",
+        "final",
+        "presents",
+        "presentHz",
+        "fps",
+        "frameMs",
+        "dtMs",
+        "refreshMs",
+        "missedVblanks",
+        "hitches"
+      ],
+      "additionalProperties": false
+    },
+    "recordingState": {
+      "type": "object",
+      "description": "The debug recording (Ctrl+R): whether one runs, since when (core steady clock, ms), its path and latest statistics, and the last finished one.",
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "startedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 4096
+        },
+        "stats": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/recordingStats"
+            }
+          ]
+        },
+        "last": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 120
+                }
+              },
+              "required": [
+                "path",
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "The last finished recording this session and its label (null until labelled)."
+        }
+      },
+      "required": [
+        "active",
+        "startedAt",
+        "path",
+        "stats",
+        "last"
+      ],
+      "additionalProperties": false
+    },
+    "recording.label.params": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "meta": {
+          "type": "object",
+          "description": "What the labelling client adds to the sidecar (e.g. its version); under 4 KiB."
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "recording.label.result": {
+      "$ref": "#/$defs/recordingStatus"
+    },
+    "recording.label.request": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "const": "recording.label"
+        },
+        "params": {
+          "$ref": "#/$defs/recording.label.params"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "recording.label.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/recording.label.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
       ],
       "additionalProperties": false
     }

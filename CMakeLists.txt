@@ -52,7 +52,7 @@ add_executable(hyprune-renderer src/offload/VulkanWorker.cpp src/render/Renderer
 target_link_libraries(hyprune-renderer PRIVATE hyprune_runtime PkgConfig::OFFLOAD GLESv2 EGL)
 target_compile_definitions(hypruned PRIVATE HYPRUNE_RENDERER_PATH="${CMAKE_CURRENT_BINARY_DIR}/hyprune-renderer")
 set(HYPRUNE_DAEMON_EXECUTABLE "${CMAKE_CURRENT_BINARY_DIR}/hypruned" CACHE FILEPATH "Private bridge helper executable")
-target_compile_definitions(hyprune-core PRIVATE HYPRUNE_DAEMON_PATH="${HYPRUNE_DAEMON_EXECUTABLE}")
+target_compile_definitions(hyprune-core PRIVATE HYPRUNE_DAEMON_PATH="${HYPRUNE_DAEMON_EXECUTABLE}" HYPRUNE_CORE_VERSION="${PROJECT_VERSION}")
 option(HYPRUNE_LIVE_BUILD "Enable the supervised live launcher bootstrap" OFF)
 if(HYPRUNE_LIVE_BUILD)
   target_compile_definitions(hyprune-core PRIVATE HYPRUNE_LIVE_BUILD=1)

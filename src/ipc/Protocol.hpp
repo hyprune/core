@@ -68,6 +68,8 @@ inline bool methodAvailable(std::string_view version, std::string_view method) {
         return atLeast(version, "0.17");
     if (method == "camera.photo" || method == "camera.release")
         return atLeast(version, "0.13");
+    if (method == "recording.label")
+        return atLeast(version, "0.29");
     if (method.starts_with("recording.") || method.starts_with("replay."))
         return atLeast(version, "0.12");
     if (method.starts_with("hud."))
