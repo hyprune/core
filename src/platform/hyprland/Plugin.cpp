@@ -740,16 +740,18 @@ struct Runtime {
     std::optional<Json> npcsMethod(const std::string &method, const Json &params);
     // The companion (Companion.inc, RFC-0010 companions amendment, IPC 0.25). The chosen ref
     // is user state (companion.json, HYPRUNE_COMPANION_FILE); modes are per world (editor).
-    // {ref?, pace?}: pace "run" when chosen in its E menu or companion.mode ("walk", the default,
-    // is not written). The pace outlives companion.clear, so {pace} alone is valid.
+    // {ref?, pace?, style?}: pace "run" when chosen in its E menu or companion.mode ("walk", the
+    // default, is not written); style (IPC 0.28) its walk/run/idle styles. Pace and style outlive
+    // companion.clear, so either alone is valid.
     interaction::InputFile companionFile{"companion", Json::object(), [](const Json &j) {
                                              bool ok = j.is_object();
                                              if (ok)
                                                  for (auto &[k, v] : j.items())
                                                      ok = ok && ((k == "ref" && v.is_string() && v.get<std::string>().size() <= 256) ||
-                                                                 (k == "pace" && (v == "walk" || v == "run")));
+                                                                 (k == "pace" && (v == "walk" || v == "run")) ||
+                                                                 (k == "style" && world::validCharacterStyle(v)));
                                              if (!ok)
-                                                 throw std::runtime_error("companion.json must be {ref?, pace?}");
+                                                 throw std::runtime_error("companion.json must be {ref?, pace?, style?}");
                                              return j;
                                          }};
     sim::Companion companionBrain;
