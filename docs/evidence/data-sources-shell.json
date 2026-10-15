@@ -1,0 +1,99 @@
+{
+ "nestedOnly": true,
+ "checks": [
+  {
+   "name": "the page lists no sources yet",
+   "ok": true,
+   "evidence": {
+    "visible": true,
+    "selected": "",
+    "fresh": "",
+    "dirty": false,
+    "busy": "",
+    "rows": [],
+    "names": [],
+    "secrets": {},
+    "feedback": null,
+    "test": null
+   }
+  },
+  {
+   "name": "New HTTP opens an editor for a new source",
+   "ok": true,
+   "evidence": {
+    "selected": "http-1",
+    "fresh": "http"
+   }
+  },
+  {
+   "name": "the editor names the secret it needs",
+   "ok": true,
+   "evidence": [
+    "ingest-token"
+   ]
+  },
+  {
+   "name": "Test before the secret is stored: the error names it",
+   "ok": true,
+   "evidence": {
+    "error": "secret 'ingest-token' is not set"
+   }
+  },
+  {
+   "name": "the secret goes to the secrets file (0600); no page state or answer holds it",
+   "ok": true,
+   "evidence": {
+    "feedback": "Stored secret ingest-token in the secrets file"
+   }
+  },
+  {
+   "name": "Test answers HTTP 200: the raw body beside the mapped value, level, display, label and the gauge preview",
+   "ok": true,
+   "evidence": {
+    "line": "HTTP 200 \u00b7 application/json \u00b7 86 B \u00b7 17 ms",
+    "rows": {
+     "value": "66.67",
+     "level": "warn",
+     "label": "ingest",
+     "display": "40 s behind",
+     "name": "ingest"
+    }
+   }
+  },
+  {
+   "name": "Save writes the entry (the secret by name only) and the helper runs it",
+   "ok": true,
+   "evidence": {
+    "entry": {
+     "id": "ingest",
+     "kind": "http",
+     "headers": {
+      "Authorization": {
+       "secret": "ingest-token",
+       "prefix": "Bearer "
+      }
+     },
+     "map": {
+      "value": {
+       "path": "$.items[1].lag",
+       "max": 60
+      },
+      "level": {
+       "warn": 50,
+       "fail": 90
+      },
+      "display": "{raw:d} s behind",
+      "label": {
+       "path": "$.name"
+      }
+     }
+    }
+   }
+  },
+  {
+   "name": "no QML runtime errors",
+   "ok": true,
+   "evidence": []
+  }
+ ]
+}

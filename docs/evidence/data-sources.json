@@ -16,8 +16,8 @@
           "type": "number"
         },
         "live": {
-          "id": "u-2e4582",
-          "source": "com.hyprune.sources.u-2e4582",
+          "id": "u-248a3c",
+          "source": "com.hyprune.sources.u-248a3c",
           "status": null
         }
       }
@@ -49,12 +49,12 @@
           "2"
         ],
         "values": {
-          "value": 52.0,
-          "display": "52%",
+          "value": 54.1,
+          "display": "54%",
           "label": "CPU",
           "level": "ok"
         },
-        "durationMs": 58
+        "durationMs": 61
       }
     },
     {
@@ -62,7 +62,7 @@
       "evidence": {
         "sources": [
           {
-            "id": "u-2e4582",
+            "id": "u-248a3c",
             "kind": "command",
             "argv": [
               "gauge-sim.py",
@@ -81,10 +81,10 @@
       "evidence": {
         "live": {
           "average": 0.0,
-          "display": "59%",
+          "display": "27%",
           "label": "CPU",
           "level": "ok",
-          "value": 59.4
+          "value": 27.4
         },
         "worldLoads": 1
       }
@@ -93,22 +93,22 @@
       "name": "editing the interval changes the run cadence (1 s -> 4 s), no restart",
       "evidence": {
         "meanGapS": {
-          "1": 1.07,
-          "4": 4.07
+          "1": 1.06,
+          "4": 4.06
         }
       }
     },
     {
       "name": "Restart re-runs the command at once; Reset average restarts the running average",
       "evidence": {
-        "runAfterMs": 68,
+        "runAfterMs": 62,
         "resets": 1,
         "ring": {
-          "level": 0.33299999999999996,
-          "target": 0.33299999999999996,
+          "level": 0.643,
+          "target": 0.643,
           "tilt": 0.0
         },
-        "value": 33.3
+        "value": 64.3
       }
     },
     {
@@ -119,9 +119,82 @@
           "key": "value",
           "publishedAt": null,
           "raw": null,
-          "source": "com.hyprune.sources.u-2e4582",
+          "source": "com.hyprune.sources.u-248a3c",
           "value": 0
         }
+      }
+    },
+    {
+      "name": "Test with a secret not stored: the error names it, the page sees it missing, nothing publishes",
+      "evidence": {
+        "values": {},
+        "stdout": "",
+        "stderr": "",
+        "error": "secret 'ingest-token' is not set",
+        "exitCode": null,
+        "durationMs": 0,
+        "raw": "",
+        "rawBytes": 0,
+        "httpStatus": null,
+        "contentType": null,
+        "secrets": {
+          "ingest-token": null
+        }
+      }
+    },
+    {
+      "name": "the secret goes to the secrets file (0600), never into an answer; Test answers HTTP 200, raw body and mapped values",
+      "evidence": {
+        "httpStatus": 200,
+        "contentType": "application/json",
+        "values": {
+          "name": "ingest",
+          "value": 66.67,
+          "label": "ingest",
+          "level": "warn",
+          "display": "40 s behind"
+        },
+        "secrets": {
+          "ingest-token": "file"
+        },
+        "durationMs": 14
+      }
+    },
+    {
+      "name": "Save writes the whole entry (the secret by name only) and the gauge shows the mapped values",
+      "evidence": {
+        "live": {
+          "average": 0.0,
+          "display": "40 s behind",
+          "label": "ingest",
+          "level": "warn",
+          "value": 66.67
+        }
+      }
+    },
+    {
+      "name": "the API changes: the level moves to fail (58 s of 60 = 96.67 >= 90)",
+      "evidence": {
+        "live": {
+          "average": 0.0,
+          "display": "58 s behind",
+          "label": "ingest",
+          "level": "fail",
+          "value": 96.67
+        }
+      }
+    },
+    {
+      "name": "a command source with number output and a map feeds the gauge too (the entry replaced in place)",
+      "evidence": {
+        "live": {
+          "average": 0.0,
+          "display": "1500 rpm",
+          "label": "Fan",
+          "level": "warn",
+          "value": 50.0
+        },
+        "sim": "gauge-sim.py"
       }
     },
     {

@@ -14,9 +14,17 @@ sibling shell checkout):
 4. Editing the interval changes the run cadence.
 5. Restart re-runs the command at once; Reset average restarts the running average.
 6. Remove deletes the entry; the source is withdrawn.
+Phase 2 (Director > Objects > Data sources; an HTTP API on a local test server):
+7. Test of an HTTP source whose bearer token is a secret not stored yet: the error names it
+   and the page sees it as missing; nothing is published.
+8. Storing the secret (the secrets file, 0600; never the keyring here): Test answers HTTP 200
+   with the raw body and the mapped value, level, display and label.
+9. Save (a whole entry: method, headers with the secret, map) on the gauge's source: the
+   gauge shows the mapped values; the API's change moves its level to fail.
+10. A command source with number output and a map feeds the gauge the same way.
 Evidence: docs/evidence/data-sources.json.
 """
-import asyncio, hashlib, importlib.util, json, math, os, pathlib, secrets, shutil, signal, subprocess, sys, time
+import asyncio, hashlib, http.server, importlib.util, json, math, os, pathlib, secrets, shutil, signal, subprocess, sys, threading, time
 import session as s
 from m2 import wait
 
@@ -43,7 +51,7 @@ def prepare(installed):
     shutil.rmtree(s.STATE / 'datahome', ignore_errors=True)
     (s.STATE / 'datahome').mkdir()
     os.environ['XDG_DATA_HOME'] = str(s.STATE / 'datahome')
-    for name in ['editor.json', 'layout.json', 'input.json', 'machines.json', 'sources.json']:
+    for name in ['editor.json', 'layout.json', 'input.json', 'machines.json', 'sources.json', 'secrets.json']:
         (s.STATE / name).unlink(missing_ok=True)
     shutil.copy2(ARCHIVE, s.STATE / ARCHIVE.name)
 
@@ -55,7 +63,8 @@ def helper(socketpath):
     token.write_text(HELPER_TOKEN + '\n'); token.chmod(0o600)
     log = open(s.STATE / 'source-helper.log', 'w')
     return s.helper_connected(subprocess.Popen([sys.executable, str(s.ROOT / 'dev/machines/source-helper.py'), '--config', str(s.STATE / 'sources.json'),
-                             '--socket', str(socketpath), '--token-file', str(token), '--dev', '-v'],
+                             '--socket', str(socketpath), '--token-file', str(token), '--dev', '-v',
+                             '--secrets', str(s.STATE / 'secrets.json'), '--no-keyring'],
                             stdout=log, stderr=subprocess.STDOUT, start_new_session=True), s.STATE / 'source-helper.log')
 
 
@@ -202,8 +211,84 @@ def checks(client, children, source, socketpath):
     check('Remove deletes the entry and the source is withdrawn (the gauge falls back to its defaults)',
           removed['ok'] and removed['removed'] and json.loads((s.STATE / 'sources.json').read_text()) == {'sources': []} and
           gone['status'] is None and placed not in ask('sources.status')['status']['sources'], {'live': gone['inputs']['value']})
+    phase2(ask, check, live, inst, placed)
     check('no world reload anywhere', world_loads() == loads, {'worldLoads': world_loads()})
     loop.close()
     (s.ROOT / 'docs/evidence/data-sources.json').write_text(json.dumps({'nestedOnly': True, 'world': WORLD, 'library': f'{LIBRARY}@{version}',
                                                                         'checks': results}, indent=2) + '\n')
     print('PASS data sources:', len(results), 'checks', flush=True)
+
+
+TOKEN = 'nested-' + secrets.token_hex(8)
+
+
+class Api(http.server.BaseHTTPRequestHandler):
+    """A local ingest API: GET /lag with Authorization: Bearer TOKEN answers the queues' lag."""
+    lag = [3, 40]
+
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        if self.headers.get('Authorization') != 'Bearer ' + TOKEN:
+            body, status = b'{"error": "bad token"}', 401
+        else:
+            body = json.dumps({'name': 'ingest', 'items': [{'state': 'ok' if l < 30 else 'late', 'lag': l} for l in Api.lag]}).encode()
+            status = 200
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def phase2(ask, check, live, inst, placed):
+    """Data sources phase 2 through the bridge, as Director > Objects > Data sources sends it."""
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Api)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        url = f'http://127.0.0.1:{server.server_port}/lag'
+        entry = {'id': placed, 'kind': 'http', 'url': url, 'headers': {'Authorization': {'secret': 'ingest-token', 'prefix': 'Bearer '}},
+                 'intervalS': 1, 'map': {'value': {'path': '$.items[*].lag', 'reduce': 'max', 'max': 60},
+                                         'level': {'warn': 50, 'fail': 90}, 'display': '{raw:d} s behind', 'label': {'path': '$.name'}}}
+        definition = {k: v for k, v in entry.items() if k != 'id'}
+        missing = ask('sources.testSource', source=definition)
+        check('Test with a secret not stored: the error names it, the page sees it missing, nothing publishes',
+              missing['ok'] and missing['result']['error'] == "secret 'ingest-token' is not set" and
+              missing['result']['secrets'] == {'ingest-token': None} and live(placed)['status'] is None, missing['result'])
+        stored = ask('sources.secretSet', name='ingest-token', value=TOKEN, store='file')
+        path = s.STATE / 'secrets.json'
+        test = ask('sources.testSource', source=definition)
+        r = test['result']
+        check('the secret goes to the secrets file (0600), never into an answer; Test answers HTTP 200, raw body and mapped values',
+              stored['ok'] and TOKEN not in json.dumps(stored) and oct(path.stat().st_mode & 0o777) == '0o600' and
+              json.loads(path.read_text()) == {'ingest-token': TOKEN} and r['httpStatus'] == 200 and '"ingest"' in r['raw'] and
+              r['values'] == {'name': 'ingest', 'value': 66.67, 'level': 'warn', 'display': '40 s behind', 'label': 'ingest'} and
+              r['secrets'] == {'ingest-token': 'file'} and TOKEN not in json.dumps(r),
+              {k: r[k] for k in ('httpStatus', 'contentType', 'values', 'secrets', 'durationMs')})
+        saved = ask('sources.put', entry=entry)
+        written = json.loads((s.STATE / 'sources.json').read_text())
+        arrived = wait(lambda: (lambda l: l if l['status'] == 'ok' and l['inputs']['level']['value'] == 'warn' else None)(live(placed)), 10)
+        check('Save writes the whole entry (the secret by name only) and the gauge shows the mapped values',
+              saved['ok'] and saved['reload']['ok'] and written['sources'] == [entry] and TOKEN not in json.dumps(written) and
+              arrived['inputs']['value']['value'] == 66.67 and arrived['inputs']['display']['value'] == '40 s behind' and
+              arrived['inputs']['label']['value'] == 'ingest' and inst(placed)['labels']['label'] == 'ingest',
+              {'live': {k: v['value'] for k, v in arrived['inputs'].items()}})
+        Api.lag = [3, 58]
+        failing = wait(lambda: (lambda l: l if l['inputs']['level']['value'] == 'fail' else None)(live(placed)), 10)
+        check('the API changes: the level moves to fail (58 s of 60 = 96.67 >= 90)',
+              failing['inputs']['value']['value'] == 96.67 and failing['inputs']['display']['value'] == '58 s behind',
+              {'live': {k: v['value'] for k, v in failing['inputs'].items()}})
+        sim = str(s.ROOT / 'dev/machines/scripts/gauge-sim.py')
+        command = {'id': placed, 'kind': 'command', 'argv': ['sh', '-c', 'echo 1500'], 'output': 'number', 'intervalS': 1,
+                   'url': None, 'headers': None,
+                   'map': {'value': {'field': 'value', 'max': 3000}, 'level': {'warn': 40}, 'display': '{raw:d} rpm', 'label': 'Fan'}}
+        put = ask('sources.put', entry=command, previous=placed)
+        fan = wait(lambda: (lambda l: l if l['inputs']['display']['value'] == '1500 rpm' else None)(live(placed)), 10)
+        check('a command source with number output and a map feeds the gauge too (the entry replaced in place)',
+              put['ok'] and fan['inputs']['value']['value'] == 50 and fan['inputs']['level']['value'] == 'warn' and
+              fan['inputs']['label']['value'] == 'Fan' and
+              json.loads((s.STATE / 'sources.json').read_text())['sources'] == [{k: v for k, v in command.items() if v is not None}],
+              {'live': {k: v['value'] for k, v in fan['inputs'].items()}, 'sim': pathlib.Path(sim).name})
+    finally:
+        server.shutdown()
