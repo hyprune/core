@@ -166,6 +166,10 @@ MotionBinding bindMotion(Character &c, const Json &trait, const std::vector<std:
                 continue; // embedded (or an earlier pack's) clip wins
             auto moved = retargetClip(c, *pack->rigs[clip.rig], *clip.source, aliases);
             moved.name = name;
+            // A sit's travel (back from the seat anchor onto the seat) is a distance in the
+            // world, which seat anchors are placed for: kept, not scaled with the legs.
+            if (clip.role == "sit-down" || clip.role == "stand-up")
+                moved.speed = clip.source->speed;
             c.clips.push_back(std::move(moved));
             binding.clips.push_back({name, clip.role, clip.style, pack->id});
         }
