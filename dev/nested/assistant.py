@@ -230,7 +230,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     def director():
         wait(lambda: s.camera()['active'], 30)
         # Back to world mode first (a reload or the cinema camera can leave the HUD elsewhere).
-        wait(lambda: not status().get('warp') and status().get('phase') in ('arrived', None), 30)
+        wait(lambda: not status().get('warp'), 30)
         if status().get('mode') not in (None, 'world'):
             keys('-P', 'Super_L', '-k', 'Tab', '-p', 'Super_L')
             time.sleep(1)
