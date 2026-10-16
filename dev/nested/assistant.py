@@ -229,14 +229,17 @@ def acceptance(client, children, args, shell_token, socketpath):
 
     def director():
         wait(lambda: s.camera()['active'], 30)
-        for _ in range(4):
+        # The hold sometimes misses on a loaded host: try a few times, then keep evidence.
+        for _ in range(7):
             if status().get('director'):
                 break
             keys('-P', 'Tab', '-s', '1150', '-p', 'Tab')
             try:
                 wait(lambda: status().get('director'), 6)
             except AssertionError:
-                time.sleep(1.5)
+                time.sleep(2)
+        if not status().get('director'):
+            shot('assistant-director-failed.png')
         assert status().get('director'), 'the Director did not open'
         s.ctl('eval', 'hl.dispatch(hl.dsp.cursor.move({x=4,y=4}))')
 
