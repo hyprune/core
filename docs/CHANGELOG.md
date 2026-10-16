@@ -360,6 +360,11 @@ These are wire-compatible behavior changes that integrators may notice:
     notes?}`, shown on the live connection for the shell's Release form. The source helper never
     runs a `sources.json` entry with `"confirm": "pending"` (an assistant's command proposal; the
     shell's Allow removes the key), lists it with `pending: true` and refuses it in `test`.
+- **Placements stay after a world folder reloads.** The recheck of user placements at load no
+  longer treats the folder's own workspace screens' approaches and spawns as keep-clear space,
+  and an approach zone starts above the checked object's own top, so a roof, a screen or an
+  object standing in front of a screen is no longer refused (`approach`, `keep-clear`,
+  `support`) once the world is made and loaded again. No wire change.
 - **World keys back: Shift sprints, Ctrl goes down.** The input version 3 defaults of IPC 0.29
   swapped them; that is undone (still version 3, no wire change). Ctrl+R still toggles a debug
   recording in world mode, and a Ctrl chord never leaves the camera lower: Ctrl goes down at
