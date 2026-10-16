@@ -373,6 +373,17 @@ class Config(unittest.TestCase):
         config = self.load([{"id": "a", "kind": "http", "url": "http://example.com/x", "enabled": False}])
         self.assertEqual(config["sources"], [])
 
+    def test_proposed_commands_wait_for_allow(self):
+        # RFC-0016: an assistant's command proposal ("confirm": "pending") never runs; the test op refuses it.
+        config = self.load([{"id": "cpu", "kind": "command", "argv": ["hyprune-system-gauges", "cpu"], "confirm": "pending"}])
+        self.assertEqual((config["sources"], [d["id"] for d in config["disabled"]]), ([], ["cpu"]))
+        with self.assertRaisesRegex(helper.ConfigError, "confirm"):
+            self.load([{"id": "cpu", "kind": "command", "argv": ["true"], "confirm": "yes"}])
+        runner = helper.Runner([], helper.DryRunPublisher(stream=open(os.devnull, "w")))
+        reply = runner.test({"kind": "command", "argv": ["true"], "confirm": "pending"}, "/tmp/sources.json")
+        self.assertFalse(reply["ok"])
+        self.assertIn("allow it", reply["error"])
+
     def test_timers(self):
         pulse = self.load([{"id": "p", "kind": "timer", "timer": "pulse", "everyS": 10}])["sources"][0]
         self.assertEqual(helper.timer_values(pulse, 1005.0)[0], {"pulse": 100})

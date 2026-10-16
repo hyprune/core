@@ -832,9 +832,12 @@ struct Runtime {
                                                  for (auto &[k, v] : j.items())
                                                      ok = ok && ((k == "ref" && v.is_string() && v.get<std::string>().size() <= 256) ||
                                                                  (k == "pace" && (v == "walk" || v == "run")) ||
-                                                                 (k == "style" && world::validCharacterStyle(v)));
+                                                                 (k == "style" && world::validCharacterStyle(v)) ||
+                                                                 // IPC 0.33 (RFC-0016): the name the user (or an assistant) gave it
+                                                                 (k == "name" && v.is_string() && !v.get<std::string>().empty() &&
+                                                                  ipc::boundedText(v.get<std::string>(), 32) == v.get<std::string>()));
                                              if (!ok)
-                                                 throw std::runtime_error("companion.json must be {ref?, pace?, style?}");
+                                                 throw std::runtime_error("companion.json must be {ref?, name?, pace?, style?}");
                                              return j;
                                          }};
     sim::Companion companionBrain;

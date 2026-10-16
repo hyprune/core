@@ -748,7 +748,11 @@ def load_config(path, dev=False):
         if slug in seen:
             raise ConfigError(f"{label}: duplicate id")
         seen.add(slug)
-        if spec.get("enabled", True) is False:
+        # RFC-0016: a command an assistant proposed waits for the user's Allow ("confirm":
+        # "pending", removed by the Director); the helper never runs it.
+        if "confirm" in spec and spec["confirm"] != "pending":
+            raise ConfigError(f"{label}: confirm is \"pending\" or absent")
+        if spec.get("enabled", True) is False or spec.get("confirm") == "pending":
             disabled.append(spec)
             continue
         sources.append(SourceSpec(spec, client_id, base, dev))
@@ -2086,6 +2090,8 @@ class Runner:
                     entry[key] = raw[key]
             entry.update({"intervalS": raw.get("intervalS", _plain(DEFAULT_INTERVALS.get(kind, 0)) or None),
                           "enabled": False, "running": False, "lastRun": None, "nextRunAt": None, "resets": 0})
+            if raw.get("confirm") == "pending":
+                entry["pending"] = True
             entries[raw["id"]] = entry
         return {"ok": True, "config": config_path, "connected": self.publisher.connected(),
                 "configError": self.watcher.error if self.watcher else None,
@@ -2102,6 +2108,8 @@ class Runner:
             argv = source.get("argv")
             if not isinstance(argv, list) or not argv or not all(isinstance(a, str) and a for a in argv):
                 return _failure("argv must be a non-empty list of strings")
+        if source.get("confirm") == "pending":
+            return _failure("a proposed command runs only after you allow it in Hyprune")
         definition = {key: value for key, value in source.items() if key not in ("id", "enabled")}
         client = self.watcher.client["id"] if self.watcher else DEFAULT_CLIENT_ID
         try:

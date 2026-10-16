@@ -90,6 +90,8 @@ void Runtime::companionInject(std::vector<ObjectInfo> &infos) {
     }
     auto verdict = companionCapability(*e);
     companionName = verdict.is_object() ? verdict["name"].get<std::string>() : e->name;
+    if (companionFile.current.contains("name")) // IPC 0.33: a name given with companion.set
+        companionName = companionFile.current["name"].get<std::string>();
     if (!verdict.is_object() || !verdict["capable"].get<bool>()) {
         companionStatus = "unavailable";
         companionReason = verdict.is_object() ? verdict["reason"].get<std::string>() : "not a character";
@@ -670,9 +672,20 @@ std::optional<Json> Runtime::companionMethod(const std::string &method, const Js
         return Json{{"revision", ipc->revision()}};
     };
     if (method == "companion.set") {
-        only({"ref"});
+        // IPC 0.33 (RFC-0016): an optional name (1 to 32 characters; null: the character's own).
+        bool named = params.is_object() && params.contains("name") && ipc::protocol::atLeast(methodProtocol, "0.33");
+        if (named)
+            only({"ref", "name"});
+        else
+            only({"ref"});
         if (!params["ref"].is_string())
             throw ipc::Error(-32602, "ref must be a string");
+        if (named && !params["name"].is_null() &&
+            (!params["name"].is_string() || params["name"].get<std::string>().empty() ||
+             ipc::boundedText(params["name"].get<std::string>(), 32) != params["name"].get<std::string>() ||
+             std::any_of(params["name"].get_ref<const std::string &>().begin(), params["name"].get_ref<const std::string &>().end(),
+                         [](unsigned char c) { return c < 0x20 || c == 0x7f; })))
+            throw ipc::Error(-32602, "name is 1 to 32 characters", Json{{"retryable", false}, {"rule", "companion.name"}});
         std::string ref = params["ref"];
         auto *e = catalogEntry(ref);
         if (!e)
@@ -686,14 +699,28 @@ std::optional<Json> Runtime::companionMethod(const std::string &method, const Js
             Json next = {{"ref", ref}};
             if (companionPace() == "run")
                 next["pace"] = "run"; // the pace stays with the next companion
+            if (named && params["name"].is_string())
+                next["name"] = params["name"];
             companionFile.save(next);
             companionFile.current = next;
             companionBrain = {};
             companionBrain.rejoin(true);
             ++companionRevision;
             objectsDirty = true;
+        } else if (named && companionFile.current.value("name", Json(nullptr)) != params["name"]) {
+            Json next = companionFile.current;
+            if (params["name"].is_null())
+                next.erase("name");
+            else
+                next["name"] = params["name"];
+            companionFile.save(next);
+            companionFile.current = next;
+            ++companionRevision;
+            objectsDirty = true;
         }
-        objectNotice("companion.set", verdict["name"].get<std::string>() + " is your companion");
+        if (named)
+            companionName = params["name"].is_string() ? params["name"].get<std::string>() : verdict["name"].get<std::string>();
+        objectNotice("companion.set", (named && params["name"].is_string() ? params["name"].get<std::string>() : verdict["name"].get<std::string>()) + " is your companion");
         return revision();
     }
     if (method == "companion.clear") {
