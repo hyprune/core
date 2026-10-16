@@ -19309,7 +19309,7 @@ inline constexpr const char *commonSchema011 = R"schema({
 inline constexpr const char *projectSchema011 = R"schema({
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.11/project.schema.json",
-  "title": "Hyprune builder project (builder/project.json, RFC-0014): projectVersion 0.1, or 0.2 (draft), published with world format 0.11",
+  "title": "Hyprune builder project (builder/project.json, RFC-0014): projectVersion 0.1 or 0.2, published with world format 0.11",
   "type": "object",
   "properties": {
     "projectVersion": {
@@ -20213,7 +20213,7 @@ inline constexpr const char *projectSchema011 = R"schema({
       ]
     }
   },
-  "description": "The builder's source of truth: core writes placements in editor mode; the hyprune CLI writes the rest and makes world.json from builder/base.json and these placements on Save. projectVersion 0.2 (draft) adds the Open Plain starter, sky presets, the floor and 512 placements."
+  "description": "The builder's source of truth: core writes placements in editor mode; the hyprune CLI writes the rest and makes world.json from builder/base.json and these placements on Save. projectVersion 0.2 adds the Open Plain starter, sky presets, the floor and 512 placements."
 })schema";
 inline constexpr const char *primitiveSchema011 = R"schema({
   "$schema": "https://json-schema.org/draft/2020-12/schema",
