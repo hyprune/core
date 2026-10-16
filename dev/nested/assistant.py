@@ -444,7 +444,14 @@ def acceptance(client, children, args, shell_token, socketpath):
     ui('selectObject', lamp['id'])
     time.sleep(.8)
     assert press('behaviour-source')
-    wait(lambda: (status().get('dataSources') or {}).get('selected') == lamp['id'], 20)
+    try:
+        wait(lambda: (status().get('dataSources') or {}).get('selected') == lamp['id'], 20)
+    except AssertionError:
+        st = status()
+        (out / 'assistant-sources-status.json').write_text(json.dumps({'lamp': lamp, 'dataSources': st.get('dataSources'), 'tab': st.get('tabName'),
+                                                                       'objects': {k: (st.get('objects') or {}).get(k) for k in ('view', 'selected')}}, indent=1, default=str))
+        shot('assistant-sources-failed.png')
+        raise
     time.sleep(.5)
     shot('assistant-proposal.png')
     assert press('source-allow')
