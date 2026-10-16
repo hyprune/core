@@ -421,6 +421,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     def spawn_item():
         return builtins.next((i for i in checklist().get('items') or [] if i['id'] == 'spawn.floor'), None)
     moved = spawn_at('0,3,0')
+    wait(lambda: ((builder().get('status') or {}).get('pending') or {}).get('total', 0) > 0, 20)  # the page polls the folder
     ui('fieldText', 'builderMessage', 'A spawn in the air')
     saved = job_again('builder-save')
     wait(lambda: spawn_item() is not None and not spawn_item()['done'], 30)
@@ -436,6 +437,7 @@ def acceptance(client, children, args, shell_token, socketpath):
           (refused.get('error') or {}).get('code') == 'release.check' and anyway['phase'] == 'done' and 'v0.1.1' in git('tag', '-l').split('\n'),
           {'item': opened, 'refused': refused.get('error'), 'anyway': {k: (anyway.get('result') or {}).get(k) for k in ('tag', 'warnings', 'publishing')}})
     spawn_at('0,0,0')
+    wait(lambda: ((builder().get('status') or {}).get('pending') or {}).get('total', 0) > 0, 20)
     ui('fieldText', 'builderMessage', 'The spawn back on the ground')
     job_again('builder-save')
     wait(lambda: spawn_item() is not None and spawn_item()['done'] and checklist().get('ready'), 30)
