@@ -42,6 +42,7 @@ COMPANIONS = pathlib.Path(os.environ.get('HYPRUNE_COMPANION_LIBRARY', ''))
 def prepare(installed):
     b.prepare(installed)
     os.environ['HYPRUNE_APPROVALS'] = str(s.STATE / 'approvals.json')
+    os.environ['HYPRUNE_WIRE_AUDIT_TRACE'] = str(s.STATE / 'wire-trace.log')
     (s.STATE / 'approvals.json').unlink(missing_ok=True)
     if COMPANIONS.is_file():  # E2's companion step (the remote runner supplies the library)
         import shutil

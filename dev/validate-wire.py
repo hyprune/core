@@ -34,9 +34,12 @@ def validate(item):
         missing=[k for k in error.validator_value if isinstance(error.instance,dict) and k not in error.instance] if error.validator=='required' else []
         raise AssertionError(f'protocol {version} {frame.get("method",method) or "error"} at {where}: {error.validator}'+(f' {missing}' if missing else ''))
 if __name__=='__main__':
-    import time
+    import os,time
+    trace=open(os.environ['HYPRUNE_WIRE_AUDIT_TRACE'],'a',buffering=1) if os.environ.get('HYPRUNE_WIRE_AUDIT_TRACE') else None
     for line in sys.stdin.buffer:
         started=time.monotonic()
+        if trace:  # method and size only (never payloads), written before validating: the last line names a frame that hangs
+            head=json.loads(line);trace.write(f'{head["protocol"]} {head["frame"].get("method",head["method"]) or "error"} {len(line)}\n')
         try:validate(json.loads(line))
         except Exception as error:
             print('IPC SCHEMA ASSERTION: '+str(error),file=sys.stderr,flush=True)
