@@ -449,6 +449,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     ui('selectObject', ids['barrel'])
     wait(lambda: ((builder().get('edit') or {}).get('fit') or {}).get('ref') == 'world/barrel', 60)
     fit = builder()['edit']['fit']
+    ui('scrollPage', 1)
     time.sleep(.5)
     shot('builder-model-section.png')
     assert press('segment:90')
