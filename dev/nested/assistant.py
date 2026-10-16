@@ -231,8 +231,8 @@ def acceptance(client, children, args, shell_token, socketpath):
         wait(lambda: s.camera()['active'], 30)
         # Back to world mode first (a reload or the cinema camera can leave the HUD elsewhere).
         wait(lambda: not status().get('warp'), 30)
-        if status().get('mode') not in (None, 'world'):
-            keys('-P', 'Super_L', '-k', 'Tab', '-p', 'Super_L')
+        if (state().get('editor') or {}).get('mode') == 'menu':
+            keys('-k', 'Escape')
             time.sleep(1)
         # The hold sometimes misses on a loaded host: try a few times, then keep evidence.
         for _ in range(7):
