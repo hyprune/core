@@ -355,6 +355,11 @@ These are wire-compatible behavior changes that integrators may notice:
     placements in its own process (headless GL, never the compositor's render pass); windows are
     not drawn. PNGs stay in `$XDG_RUNTIME_DIR/hyprune/previews/` for 60 s.
   - From 0.33 no state key is required (a profile-limited peer receives some only).
+  - E2: `companion.set` takes an optional `name` (1 to 32 characters; null for the character's
+    own), kept in `companion.json`; `assistant.report` takes `releaseDraft {projectId, version?,
+    notes?}`, shown on the live connection for the shell's Release form. The source helper never
+    runs a `sources.json` entry with `"confirm": "pending"` (an assistant's command proposal; the
+    shell's Allow removes the key), lists it with `pending: true` and refuses it in `test`.
 - **World keys back: Shift sprints, Ctrl goes down.** The input version 3 defaults of IPC 0.29
   swapped them; that is undone (still version 3, no wire change). Ctrl+R still toggles a debug
   recording in world mode, and a Ctrl chord never leaves the camera lower: Ctrl goes down at
