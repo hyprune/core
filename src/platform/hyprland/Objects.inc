@@ -484,7 +484,7 @@ void Runtime::objectsSync() {
         auto verified = objectVerified.find(info.id);
         if (verified == objectVerified.end() || verified->second.substr(0, key.size()) != key) {
             interaction::Transform t{info.position, {info.scale, info.scale, info.scale}, info.rotation};
-            auto v = objectVerdict(asset, t, info.support, size_t(info.index), {}, false);
+            auto v = objectVerdict(asset, t, info.support, size_t(info.index), {}, false, false);
             objectVerified[info.id] = key + "\n" + (v.ok ? "" : v.rule);
             if (!v.ok)
                 objectNotice("object.blocked", info.name + " breaks a placement rule here (" + v.rule + "): move or remove it",
@@ -634,7 +634,7 @@ void Runtime::objectsTick() {
 // collision proxy at that pose; self excludes an instance's own committed proxy.
 interaction::PlacementVerdict Runtime::objectVerdict(int asset, const interaction::Transform &t, const std::string &support,
                                                      std::optional<size_t> self, const std::set<std::string> &waived,
-                                                     bool player) {
+                                                     bool player, bool userHomes) {
     if (!world || asset < 0 || size_t(asset) >= world->objectAssets.size())
         return {false, "walls", "Not loaded", false};
     auto scene = placementScene();
@@ -650,6 +650,31 @@ interaction::PlacementVerdict Runtime::objectVerdict(int asset, const interactio
         for (auto &[id, zone] : interaction::namedApproachZones(*world))
             if (id != own)
                 scene.approaches.push_back(zone);
+    }
+    if (!userHomes) {
+        // The load-time recheck: the homes of the user's own screens (IPC 0.27) are derived
+        // from placements whose collision isn't rebuilt yet (their floors and arrival spots
+        // can sit inside the slab they stand on), so their approaches and arrival capsules
+        // don't count here; they were checked when each placement was made.
+        auto user = [](const std::string &id) { return id.starts_with("screen-u-"); };
+        scene.approaches.clear();
+        for (auto &[id, zone] : interaction::namedApproachZones(*world))
+            if (!user(id))
+                scene.approaches.push_back(zone);
+        scene.keepClear.clear();
+        for (auto &sp : world->spawns)
+            if (!user(sp.id))
+                scene.keepClear.push_back(interaction::aabbBox(sp.position - Vec3{.5f, 0, .5f}, sp.position + Vec3{.5f, 2.f, .5f}));
+        for (auto &c : world->climbables) {
+            Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
+            for (auto p : {c.bottom, c.top, c.bottomExit, c.topExit})
+                lo = {std::min(lo.x, p.x), std::min(lo.y, p.y), std::min(lo.z, p.z)}, hi = {std::max(hi.x, p.x), std::max(hi.y, p.y), std::max(hi.z, p.z)};
+            scene.keepClear.push_back(interaction::aabbBox(lo - Vec3{.4f, 0, .4f}, hi + Vec3{.4f, 1.9f, .4f}));
+        }
+        for (auto &k : world->keepClear)
+            scene.keepClear.push_back(interaction::aabbBox(vec3(k["min"]), vec3(k["max"])));
+        for (auto &k : gizmoKeepClear)
+            scene.keepClear.push_back(k);
     }
     scene.support = support;
     scene.player = player;

@@ -503,7 +503,7 @@ struct Runtime {
     int assetFor(const world::CatalogEntry &);
     interaction::PlacementVerdict objectVerdict(int asset, const interaction::Transform &, const std::string &support,
                                                 std::optional<size_t> self, const std::set<std::string> &waived = {},
-                                                bool player = true);
+                                                bool player = true, bool userHomes = true);
     std::optional<std::string> budgetRefusal(const world::CatalogEntry &, const std::string &exceptId = "");
     std::set<std::string> objectWaived(int asset, const interaction::Transform &start, std::optional<size_t> self);
     std::optional<interaction::Transform> placeAhead(const world::CatalogEntry &, int asset, bool surface, float *distance,
