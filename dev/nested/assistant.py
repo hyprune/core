@@ -43,6 +43,7 @@ def prepare(installed):
     b.prepare(installed)
     os.environ['HYPRUNE_APPROVALS'] = str(s.STATE / 'approvals.json')
     os.environ['HYPRUNE_WIRE_AUDIT_TRACE'] = str(s.STATE / 'wire-trace.log')
+    os.environ['HYPRUNE_WIRE_AUDIT_LAST'] = str(s.STATE / 'wire-last.json')
     (s.STATE / 'approvals.json').unlink(missing_ok=True)
     if COMPANIONS.is_file():  # E2's companion step (the remote runner supplies the library)
         import shutil

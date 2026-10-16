@@ -40,6 +40,8 @@ if __name__=='__main__':
         started=time.monotonic()
         if trace:  # method and size only (never payloads), written before validating: the last line names a frame that hangs
             head=json.loads(line);trace.write(f'{head["protocol"]} {head["frame"].get("method",head["method"]) or "error"} {len(line)}\n')
+            if os.environ.get('HYPRUNE_WIRE_AUDIT_LAST'):  # opt-in, nested tests only: the frame itself, overwritten each time
+                with open(os.environ['HYPRUNE_WIRE_AUDIT_LAST'],'wb') as last:last.write(line)
         try:validate(json.loads(line))
         except Exception as error:
             print('IPC SCHEMA ASSERTION: '+str(error),file=sys.stderr,flush=True)
