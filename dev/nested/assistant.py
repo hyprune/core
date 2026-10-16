@@ -18,6 +18,10 @@ helper, a local JSON API for the tower's data. Checks:
  5. A paired connection is refused surface.focus, input.set, camera.set and data.publish
     (-32002, profile.assistant); Deny refuses a pairing (pair.denied).
  6. Revoke forgets the approval; Disconnect ends the assistant's in-world access.
+ E2. The assistant chooses and names a companion (with HYPRUNE_COMPANION_LIBRARY) and sets it to
+    follow; make_world makes the homes; release_prepare fills the Builder page's Release form and
+    only the user's press releases; a proposed command never runs (its test is refused) until the
+    user allows it on the Data sources page.
  7. No QML runtime errors.
 Stills and the clip (assistant-*.png, assistant-build.mp4) in the state dir; evidence
 docs/evidence/assistant.json.
@@ -32,10 +36,16 @@ NAME, SLUG = 'Rooftop Garden', 'rooftop-garden'
 grants = b.grants
 
 
+COMPANIONS = pathlib.Path(os.environ.get('HYPRUNE_COMPANION_LIBRARY', ''))
+
+
 def prepare(installed):
     b.prepare(installed)
     os.environ['HYPRUNE_APPROVALS'] = str(s.STATE / 'approvals.json')
     (s.STATE / 'approvals.json').unlink(missing_ok=True)
+    if COMPANIONS.is_file():  # E2's companion step (the remote runner supplies the library)
+        import shutil
+        shutil.copyfile(COMPANIONS, s.STATE / COMPANIONS.name)
 
 
 class McpError(Exception):
@@ -236,6 +246,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     def press(name):
         return ui('press', name) == 'true'
 
+
     def director():
         wait(lambda: s.camera()['active'], 30)
         wait(lambda: not status().get('warp'), 30)
@@ -389,6 +400,72 @@ def acceptance(client, children, args, shell_token, socketpath):
           git('log', '-1', '--format=%s') == 'Assistant: ' + 'Rooftop garden: blockout, screens and the CPU tower' and dirty != '' and
           len(undone['undone']) == 5 and git('status', '--porcelain') == '',
           {'commit': saved['commit'][:12], 'undone': undone['undone'], 'dirty': dirty.split('\n')[:8]})
+
+    # E2. The companion (named by the assistant), a prepared release the user presses, a command
+    # proposal that never runs until the user allows it on the Data sources page.
+    if (s.STATE / COMPANIONS.name).is_file() and COMPANIONS.name:
+        import hashlib
+        archive = s.STATE / COMPANIONS.name
+        client.call('libraries.install', {'archive': str(archive), 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()})
+        listed = {}
+        wait(lambda: listed.update(mcp.data('companion_list')) or listed.get('characters'), 30)
+        mcp.data('companion_choose', ref=listed['characters'][0]['ref'], name='Ember')
+        mcp.data('companion_mode', mode='follow', pace='walk')
+        wait(lambda: (state().get('companion') or {}).get('name') == 'Ember', 20)
+        companion = state()['companion']
+        check('E2: the assistant chooses a companion, names it Ember and sets it to follow at a walk',
+              companion['name'] == 'Ember' and companion['mode'] == 'follow' and companion['pace'] == 'walk',
+              {k: companion.get(k) for k in ('ref', 'name', 'state', 'mode', 'pace')})
+    else:
+        print('SKIP assistant: E2 companion step (no HYPRUNE_COMPANION_LIBRARY)', flush=True)
+    made = mcp.data('make_world')
+    prepared = mcp.data('release_prepare', version='0.1.0', notes='A cosy rooftop garden at sunset')
+    director()
+    ui('tabNamed', 'builder')
+    wait(lambda: ((assistants().get('live') or [{}])[0].get('releaseDraft') or {}).get('version') == '0.1.0', 20)
+    time.sleep(.6)
+    shot('assistant-release-prepared.png')
+    assert press('builder-release-draft')
+    released = None
+    for _ in range(3):
+        if git('status', '--porcelain') == '':
+            break
+        mcp.data('save', message='Made for the release')
+    before_tags = git('tag', '-l')
+    assert press('builder-release')
+    wait(lambda: ((status().get('builder') or {}).get('job') or {}).get('kind') == 'release' and ((status().get('builder') or {}).get('job') or {}).get('phase') in ('done', 'failed'), 90)
+    released = (status().get('builder') or {}).get('job')
+    check('E2: make_world makes three homes; release_prepare fills the Release form; only the user\'s press releases (v0.1.0)',
+          [h['workspace'] for h in made['homes']] == [21, 22, 23] and before_tags == '' and released['phase'] == 'done' and git('tag', '-l') == 'v0.1.0',
+          {'prepared': prepared.get('prepared'), 'job': {k: released.get(k) for k in ('phase', 'error')}, 'ready': made.get('ready')})
+    close_director()
+    gauges = str(s.ROOT / 'dev/machines/scripts/system-gauges.py')
+    lamp = mcp.data('place', key='gauge-lamp', shape='sphere', size=[.6], position=[-3.6, .3, -7.2], material='lamp-warm', ifExists='update')
+    proposal = mcp.data('source_propose_command', **{'for': 'gauge-lamp', 'argv': [gauges, 'cpu'], 'intervalS': 1})
+    mcp.data('behaviour_set', placement='gauge-lamp', behaviour={'key': 'cpu', 'property': 'glow', 'from': .2, 'to': 8, 'colour': '#ffb050'})
+    try:
+        mcp.data('source_test', **{'for': 'gauge-lamp'})
+        tested = None
+    except McpError as e:
+        tested = e.args[0]
+    time.sleep(4)
+    lamp_state = builtins.next(i for i in instances() if i.get('key') == 'gauge-lamp')
+    never_ran = (lamp_state.get('behaviours') or [{}])[0].get('condition') != 'fresh'
+    director()
+    ui('tabNamed', 'objects')
+    ui('objectsView', 'placed')
+    ui('selectObject', lamp['id'])
+    time.sleep(.8)
+    assert press('behaviour-source')
+    wait(lambda: (status().get('dataSources') or {}).get('selected') == lamp['id'], 20)
+    time.sleep(.5)
+    shot('assistant-proposal.png')
+    assert press('source-allow')
+    wait(lambda: any(i.get('key') == 'gauge-lamp' and (i.get('behaviours') or [{}])[0].get('condition') == 'fresh' for i in instances()), 40)
+    check('E2: a proposed command never runs (its test refused) until the user presses Allow on the Data sources page; then the lamp follows it',
+          proposal['pending'] and never_ran and tested and 'allow' in tested['message'],
+          {'entry': proposal['entry'], 'tested': tested, 'before': lamp_state.get('behaviours')})
+    close_director()
 
     # 5. A paired connection is refused outside the profile; Deny refuses a pairing.
     director()
