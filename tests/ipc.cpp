@@ -3,6 +3,7 @@
 #include "ipc/Protocol.hpp"
 #include "ipc/Server.hpp"
 #include "ipc/GrantIssuer.hpp"
+#include "ipc/Bridge.hpp"
 #include "quests/Engine.hpp"
 #include "world/Catalog.hpp"
 #include <arpa/inet.h>
@@ -448,6 +449,34 @@ void inheritance(const std::string &runtime) {
 // IPC 0.33 (RFC-0016): session.pair before hello waits for the user's answer (once, always,
 // deny); the token binds the assistant profile (a fixed allowlist, a filtered state, limits,
 // pause); always-approvals are remembered without a token and revoked; disconnect closes.
+void replyRevisions() {
+    // The plugin's state revision 7 is the server's 12 (it also counted state of its own).
+    auto overlay = Bridge::serverResult({{"result", {{"revision", 7}}}, {"stateRevision", 7}}, 12);
+    check(overlay["revision"] == 12, "a reply's state revision is the server's");
+    auto catalog = Bridge::serverResult({{"result", {{"revision", 3}, {"entries", Json::array()}}}, {"stateRevision", 7}}, 12);
+    check(catalog["revision"] == 3, "a catalog revision is not a state revision");
+    check(Bridge::serverResult({{"result", {{"revision", 7}}}}, 12)["revision"] == 7, "an older plugin's reply is kept");
+}
+void closedConnections(const std::string &runtime) {
+    // A refused _connection.closed (a busy plugin) is retried: the closed connection's leases end.
+    auto token = randomId();
+    int refused = 1, closed = 0;
+    Server server(runtime, "closed", {{token, "org.hyprune.test", {"state.read"}}}, [&](auto &method, auto &) {
+        if (method == "_connection.closed" && refused-- > 0)
+            throw Error(-32006, "plugin command deadline");
+        closed += method == "_connection.closed";
+        return Json::object();
+    });
+    server.contextual(true);
+    {
+        Client c(server.path());
+        c.sendJson(hello(token));
+        for (int i = 0; i < 3; ++i) server.poll();
+        check(c.receive().contains("result"), "closed fixture hello");
+    }
+    for (int i = 0; i < 4; ++i) server.poll();
+    check(closed == 1, "a refused _connection.closed is retried");
+}
 void assistantPairing(const std::string &runtime) {
     std::string approvals = runtime + "/approvals.json";
     setenv("HYPRUNE_APPROVALS", approvals.c_str(), 1);
@@ -559,6 +588,8 @@ int main() {
         hudStreams(dir);
         renewals(dir);
         assistantPairing(dir);
+        replyRevisions();
+        closedConnections(dir);
         auto token = randomId(), token02 = randomId(), token03 = randomId(), token04 = randomId(), token05 = randomId();
         auto token06 = randomId(), token07 = randomId(), token08 = randomId();
         std::atomic<int> disconnected = 0;
