@@ -333,6 +333,28 @@ These are wire-compatible behavior changes that integrators may notice:
     `content.failed`, `source.added`, `source.failed`.
   - Content sources live in `$XDG_CONFIG_HOME/hyprune/content-sources.json` (the SDK moves them
     out of the data-source helper's `sources.json`).
+- **0.33** (draft) AI-assisted creation (RFC-0016 phase E1). No new grant.
+  - `session.pair {protocols, client, agent {name, version?}, profile: "assistant"}` is allowed
+    before `session.hello`; hypruned answers when the user decides (Allow once, Always allow,
+    Deny; no answer in 120 s denies) with `{token, profile, remembered}` or `-32002` rule
+    `pair.denied`. `session.hello` with that token binds the **assistant profile**: hello's
+    result has `profile: "assistant"` and lists only the profile's methods.
+  - The profile: a fixed method allowlist (objects, paths, libraries.list, world.load,
+    companion, quests, `preview.render`, `assistant.report`; anything else `-32002` rule
+    `profile.assistant`), a state with only `builder`, `objects`, `live` (strings cut at 64
+    characters), `quests`, `companion`, `content`, `world`, `location` and `movement`, no events
+    but `state.delta`, at most 20 changes a second and 5,000 a session (`-32008` rule
+    `assistant.limit`), one preview a second, and Pause (`assistant.paused`, retryable).
+  - Shell methods (`shell.control`): `connections.answer {requestId, decision}`,
+    `connections.revoke {clientId, agent}`, `connections.disconnect {actor}`,
+    `connections.pause {actor, paused}`; state key `connections {pending, live, approvals}` for
+    shell.control peers only. Remembered approvals `{clientId, agent, profile, approvedAt}`
+    (never a token) live in `$XDG_STATE_HOME/hyprune/approvals.json` (`$HYPRUNE_APPROVALS`).
+  - `preview.render {pose {position, yaw?, pitch?}, fov?, size?}` -> `{path, width, height, pose,
+    fov, renderMs}` (`objects.control`): `hyprune-preview` renders the loaded world and the user's
+    placements in its own process (headless GL, never the compositor's render pass); windows are
+    not drawn. PNGs stay in `$XDG_RUNTIME_DIR/hyprune/previews/` for 60 s.
+  - From 0.33 no state key is required (a profile-limited peer receives some only).
 - **World keys back: Shift sprints, Ctrl goes down.** The input version 3 defaults of IPC 0.29
   swapped them; that is undone (still version 3, no wire change). Ctrl+R still toggles a debug
   recording in world mode, and a Ctrl chord never leaves the camera lower: Ctrl goes down at
