@@ -466,6 +466,19 @@ These are wire-compatible behavior changes that integrators may notice:
 
 ## Unreleased (no wire change)
 
+- **Reply revisions match state revisions.** The `revision` in a `shell.claim`,
+  `shell.release`, `shell.overlay`, `shell.bind`, `ui.open`/`ui.close` (and other lease and
+  location method) reply is again the state revision that shows the change, comparable with
+  `state.delta` and event revisions. Since 0.21 the daemon also counts state it adds itself
+  (quests, focus, content jobs, connections), so these replies could carry a smaller number
+  than a delta from before the change; a shell comparing the two dropped its Director while
+  core kept the keyboard. Other revisions in results (a catalog's, a builder project's) are
+  unchanged.
+- **Diagnostics.** Every `ui.closed` names its cause in the compositor log, and every
+  connection core ends (send queue over 4 MiB, a stalled frame, no hello, invalid JSON, a send
+  error) its reason in the daemon's log. A closed connection's leases always end, also when
+  the plugin was busy as it closed.
+
 - **Builder project 0.2 (draft).** `builder/project.json` may be `projectVersion` 0.2: the Open
   Plain starter (`open-plain@0.2`), `sky.preset`, an optional `floor` and up to 512 placements
   (RFC-0014 amendment: the world wizard). Core reads 0.1 and 0.2 and writes back only the
