@@ -252,10 +252,15 @@ def acceptance(client, children, args, shell_token, socketpath):
     def director():
         wait(lambda: s.camera()['active'], 30)
         wait(lambda: not status().get('warp'), 30)
-        # The hold sometimes misses on a loaded host: try a few times, then keep evidence.
-        for _ in range(7):
+        # The hold sometimes misses on a loaded host: try a few times (toggling the world view off
+        # and on after three misses, which gives the world the keyboard again), then keep evidence.
+        for attempt in range(8):
             if status().get('director'):
                 break
+            if attempt in (3, 6):
+                s.ctl('eval', f'hl.dispatch(hl.dsp.focus({{ monitor = "{b.OUTPUT}" }}))')
+                s.ctl('eval', f'hl.plugin.hyprune.toggle("{b.OUTPUT}")'); time.sleep(1.5)
+                s.ctl('eval', f'hl.plugin.hyprune.toggle("{b.OUTPUT}")'); wait(lambda: s.camera()['active'], 30); time.sleep(1.5)
             keys('-P', 'Tab', '-s', '1150', '-p', 'Tab')
             try:
                 wait(lambda: status().get('director'), 6)
