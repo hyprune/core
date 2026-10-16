@@ -121,7 +121,7 @@ class Raw:
 PAIR = {'protocols': ['0.33'], 'client': {'id': 'com.hyprune.mcp', 'name': 'Nested pairing test'}, 'profile': 'assistant'}
 MATERIALS = [('roof-concrete', {'colour': '#8d8a86', 'roughness': .9}), ('parapet-stone', {'colour': '#b8b0a4'}), ('deck-wood', {'colour': '#8b5a3c', 'roughness': .7}),
              ('planter-clay', {'colour': '#a5532e'}), ('foliage', {'colour': '#3e7b38', 'roughness': .95}),
-             ('lamp-warm', {'colour': '#ffb050', 'glow': {'colour': '#ffb050', 'strength': 3}})]
+             ('lamp-warm', {'colour': '#ffb050', 'glow': {'colour': '#ffb050', 'strength': 3}}), ('rug', {'colour': '#7a3b52', 'roughness': 1})]
 
 
 def blockout():
@@ -139,6 +139,15 @@ def blockout():
     for i, (x, z) in enumerate([(5.5, -14.6), (-1.0, -1.2), (5.0, -1.2)]):
         plan.append(box(f'planter-{i + 1}', [2.6, .6, .8], [x, .3, z], 'planter-clay'))
         plan.append(('place', dict(key=f'shrub-{i + 1}', shape='sphere', size=[1.1], on={'key': f'planter-{i + 1}', 'face': 'top'}, material='foliage', ifExists='update')))
+    # Props: a pergola over the deck with string lights, a rug, a second bench by the tower.
+    for i, (x, z) in enumerate([(-8.6, -14.6), (-3.4, -14.6), (-8.6, -9.4), (-3.4, -9.4)]):
+        plan.append(box(f'pergola-post-{i + 1}', [.16, 2.4, .16], [x, .6, z], 'deck-wood'))
+    for i, z in enumerate([-14.6, -12.0, -9.4]):
+        plan.append(box(f'pergola-beam-{i + 1}', [5.6, .14, .16], [-6, 3.0, z], 'deck-wood'))
+    for i, x in enumerate([-8.0, -7.0, -6.0, -5.0, -4.0]):
+        plan.append(('place', dict(key=f'string-light-{i + 1}', shape='sphere', size=[.14], position=[x, 2.78, -12.0 + (.25 if i % 2 else -.25)], material='lamp-warm', ifExists='update')))
+    plan.append(box('rug', [3.6, .02, 2.4], [0, .3, -3.5], 'rug'))
+    plan.append(box('bench-tower', [1.8, .45, .5], [2.2, .3, -11.6], 'deck-wood'))
     for i, (x, z) in enumerate([(-9.2, -15.2), (9.2, -15.2), (-9.2, -.8), (9.2, -.8)]):
         plan.append(('place', dict(key=f'lamp-post-{i + 1}', shape='cylinder', size=[.18, 2.4, .18], position=[x, .3, z], material='parapet-stone', ifExists='update')))
         plan.append(('place', dict(key=f'lamp-{i + 1}', shape='sphere', size=[.42], on={'key': f'lamp-post-{i + 1}', 'face': 'top'}, material='lamp-warm', ifExists='update')))
@@ -229,11 +238,7 @@ def acceptance(client, children, args, shell_token, socketpath):
 
     def director():
         wait(lambda: s.camera()['active'], 30)
-        # Back to world mode first (a reload or the cinema camera can leave the HUD elsewhere).
         wait(lambda: not status().get('warp'), 30)
-        if (state().get('editor') or {}).get('mode') == 'menu':
-            keys('-k', 'Escape')
-            time.sleep(1)
         # The hold sometimes misses on a loaded host: try a few times, then keep evidence.
         for _ in range(7):
             if status().get('director'):
@@ -320,7 +325,7 @@ def acceptance(client, children, args, shell_token, socketpath):
     homes = sorted((i.get('screen') or {}).get('workspace') or 0 for i in placed if i.get('screen'))
     tower = builtins.next(i for i in placed if i.get('key') == 'cpu-tower')
     check('the rooftop garden built from MCP tools: unique keys, three screens home workspaces 21 to 23, the tower follows the API',
-          len(keys_) == len(set(keys_)) and len(placed) == 8 + 6 + 8 + 3 + 1 and homes == [21, 22, 23] and
+          len(keys_) == len(set(keys_)) and len(placed) == len(blockout()) + 3 + 1 and homes == [21, 22, 23] and
           [b_['value'] for b_ in tower['behaviours']] == [80, 80],
           {'placements': len(placed), 'homes': homes, 'tower': tower['behaviours'], 'seconds': build_s, 'world': created.get('projectId')})
     looks = {}
