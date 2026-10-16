@@ -56,7 +56,7 @@ class Server {
                                               lastDelta = accepted;
         // IPC 0.33 (RFC-0016): a pairing request waiting for the user, the assistant profile.
         std::string pairRequest, profile, action;
-        Json agent;
+        Json agent, releaseDraft; // releaseDraft: a release the assistant prepared (null: none)
         bool paused = false, remembered = false;
         uint64_t changes = 0, mutationsTotal = 0;
         std::deque<std::chrono::steady_clock::time_point> mutations;

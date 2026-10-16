@@ -742,11 +742,27 @@ void Server::frame(Peer &p, const std::string &bytes) {
             check(protocol::atLeast(p.protocol, "0.33"), -32601, "method not advertised for protocol");
             if (method == "assistant.report") {
                 check(p.profile == "assistant", -32601, "method not advertised");
-                exact(params, {"changes"}, {"action"});
+                exact(params, {"changes"}, {"action", "releaseDraft"});
                 check(params["changes"].is_number_unsigned() && params["changes"].get<uint64_t>() <= 1000000, -32602, "invalid changes");
                 if (params.contains("action")) {
                     check(params["action"].is_string() && !params["action"].get_ref<const std::string &>().empty(), -32602, "invalid action");
                     p.action = boundedText(params["action"].get<std::string>(), 128);
+                }
+                if (params.contains("releaseDraft")) {
+                    // RFC-0016 release_prepare: the Builder page's Release form, filled in for the user to press.
+                    const auto &d = params["releaseDraft"];
+                    if (!d.is_null()) {
+                        check(d.is_object(), -32602, "invalid releaseDraft");
+                        exact(d, {"projectId"}, {"version", "notes"});
+                        check(d["projectId"].is_string() && std::regex_match(d["projectId"].get<std::string>(), std::regex("[a-z][a-z0-9-]{0,63}")), -32602, "invalid releaseDraft.projectId");
+                        check(!d.contains("version") || (d["version"].is_string() && std::regex_match(d["version"].get<std::string>(),
+                                  std::regex("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?")) && d["version"].get<std::string>().size() <= 64),
+                              -32602, "invalid releaseDraft.version");
+                        check(!d.contains("notes") || (d["notes"].is_string() && !d["notes"].get_ref<const std::string &>().empty() &&
+                                                       boundedText(d["notes"].get<std::string>(), 2000) == d["notes"].get<std::string>()),
+                              -32602, "invalid releaseDraft.notes");
+                    }
+                    p.releaseDraft = d;
                 }
                 p.changes = std::max(p.changes, params["changes"].get<uint64_t>());
                 ++revision_;
@@ -1137,7 +1153,8 @@ Json Server::connectionsState() const {
         if (p.hello && !p.closing && p.profile == "assistant" && live.size() < 32)
             live.push_back({{"actor", p.actor}, {"clientId", p.client}, {"agent", p.agent.is_object() ? p.agent : Json{{"name", "unknown"}}},
                             {"profile", "assistant"}, {"connectedMs", ms(now - p.connected)}, {"changes", p.changes},
-                            {"action", p.action.empty() ? Json(nullptr) : Json(p.action)}, {"paused", p.paused}, {"remembered", p.remembered}});
+                            {"action", p.action.empty() ? Json(nullptr) : Json(p.action)}, {"paused", p.paused}, {"remembered", p.remembered},
+                            {"releaseDraft", p.releaseDraft.is_object() ? p.releaseDraft : Json(nullptr)}});
     return {{"pending", pending}, {"live", live}, {"approvals", approvals_["approvals"]}};
 }
 Json Server::assistantState(const Json &state) const {

@@ -509,6 +509,9 @@ void assistantPairing(const std::string &runtime) {
     check(refused >= 5, "20 changes a second");
     auto report = call(a, req("r", "assistant.report", {{"changes", 40}, {"action", "placed the bench"}}))["result"];
     check(report["changes"] == 40 && report["paused"] == false && connections()["live"][0]["action"] == "placed the bench", "report");
+    call(a, req("draft", "assistant.report", {{"changes", 41}, {"releaseDraft", {{"projectId", "rooftop-garden"}, {"version", "0.2.0"}, {"notes", "The garden"}}}}));
+    check(connections()["live"][0]["releaseDraft"]["version"] == "0.2.0", "release draft on the live connection");
+    check(call(a, req("bad-draft", "assistant.report", {{"changes", 41}, {"releaseDraft", {{"projectId", "Bad Name"}}}})).contains("error"), "release draft checked");
     // Deny.
     Client b(server.path());
     b.sendJson(req("pair", "session.pair", pairing)); pump();
