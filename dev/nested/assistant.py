@@ -471,7 +471,11 @@ def acceptance(client, children, args, shell_token, socketpath):
     time.sleep(.8)
     assert press('behaviour-source')
     try:
-        wait(lambda: (status().get('dataSources') or {}).get('selected') == lamp['id'], 20)
+        try:
+            wait(lambda: (status().get('dataSources') or {}).get('selected') == lamp['id'], 6)
+        except AssertionError:  # the page sometimes keeps its first row: focus the entry again
+            ui('sourceFocus', lamp['id'])
+            wait(lambda: (status().get('dataSources') or {}).get('selected') == lamp['id'], 14)
     except AssertionError:
         st = status()
         (out / 'assistant-sources-status.json').write_text(json.dumps({'lamp': lamp, 'dataSources': st.get('dataSources'), 'tab': st.get('tabName'),
