@@ -4914,6 +4914,22 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
     params.erase("_pid");
     params.erase("_protocol");
     if (method == "replay.start" && control.photoHeld()) throw ipc::Error(-32005,"release photo camera before replay");
+    // RFC-0016 preview.render: the daemon's internal read of what is loaded (never advertised).
+    // No GL here: hyprune-preview renders it in its own process.
+    if (method == "preview.scene") {
+        if (!world)
+            throw ipc::Error(-32005, "no world loaded", Json{{"retryable", true}, {"rule", "world.none"}});
+        Json objects = Json::array(), roots = Json::array({catalogRoots.userLibraries.string()});
+        for (auto &root : catalogRoots.systemLibraries)
+            roots.push_back(root.string());
+        for (auto &i : objectInfos)
+            if (i.source == "user" && i.entry && i.index >= 0 && i.state == "active" && !i.character && objects.size() < 512)
+                objects.push_back({{"id", i.id}, {"dir", i.entry->directory.string()}, {"manifest", i.entry->manifest},
+                                   {"position", {i.position.x, i.position.y, i.position.z}}, {"rotation", i.rotation}, {"scale", i.scale}});
+        bool folder = builder.has_value();
+        return Json{{"root", worldRoot.string()}, {"manifest", folder ? "builder/base.json" : "world.json"}, {"libraryRoots", roots},
+                    {"objects", objects}, {"worldId", world->id}};
+    }
     if (method == "capture.annotate") {
         if (params.size() != 2 || !params.contains("captureId") || !params.contains("note") ||
             !params["captureId"].is_string())

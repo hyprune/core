@@ -11,8 +11,17 @@
 #include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <cmath>
+#include <fcntl.h>
+#include <filesystem>
+#include <fstream>
+#include <sys/wait.h>
 namespace {
 using namespace hyprune::ipc;
+void check(bool ok, const Error &error) {
+    if (!ok)
+        throw error;
+}
 volatile sig_atomic_t running = 1;
 void stop(int) {
     running = 0;
@@ -132,11 +141,87 @@ int main() {
                 auto methods = j.at("methods").get<std::map<std::string, std::string>>();
                 methods.merge(hyprune::quests::Engine::methods());
                 methods.merge(hyprune::content::Engine::methods());
+                methods.insert({"preview.render", "objects.control"}); // RFC-0016, rendered by hyprune-preview
                 server->advertise(std::move(methods));
                 advertised = true;
             }
         };
         std::function<void()> questOutput = [] {};
+        std::function<Json(const std::string &, const Json &)> forward;
+        // RFC-0016 preview.render: the plugin describes what is loaded (preview.scene), and
+        // hyprune-preview renders it in its own process; this loop keeps the bridge alive.
+        uint64_t previews = 0;
+        auto preview = [&](const Json &params) -> Json {
+            auto bad = [](const char *message) { return Error(-32602, message); };
+            for (auto &[key, value] : params.items())
+                if (!key.starts_with("_") && key != "pose" && key != "fov" && key != "size")
+                    throw bad("unknown parameter");
+            check(params.contains("pose") && params["pose"].is_object(), bad("pose required"));
+            auto &pose = params["pose"];
+            check(pose.contains("position") && pose["position"].is_array() && pose["position"].size() == 3, bad("pose.position is [x, y, z]"));
+            for (auto &v : pose["position"])
+                check(v.is_number() && std::isfinite(v.get<double>()) && std::abs(v.get<double>()) <= 100000, bad("pose.position out of bounds"));
+            double yaw = pose.value("yaw", 0.), pitch = pose.value("pitch", 0.), fov = params.value("fov", 70.);
+            check(std::isfinite(yaw) && std::abs(yaw) <= 360 && std::isfinite(pitch) && std::abs(pitch) <= 89 && fov >= 20 && fov <= 120, bad("yaw, pitch or fov out of range"));
+            int w = 1024, h = 576;
+            if (params.contains("size")) {
+                auto &sz = params["size"];
+                check(sz.is_array() && sz.size() == 2 && sz[0].is_number_integer() && sz[1].is_number_integer(), bad("size is [width, height]"));
+                w = sz[0], h = sz[1];
+                check(w >= 64 && w <= 1024 && h >= 64 && h <= 1024, bad("size: 64 to 1024 px"));
+            }
+            auto scene = forward("preview.scene", Json::object());
+            scene["camera"] = {{"position", pose["position"]}, {"yaw", yaw}, {"pitch", pitch}, {"fov", fov}};
+            scene["width"] = w, scene["height"] = h;
+            std::filesystem::path dir = std::filesystem::path(getenv("XDG_RUNTIME_DIR")) / "hyprune" / "previews";
+            std::error_code ec;
+            std::filesystem::create_directories(dir, ec);
+            std::filesystem::permissions(dir, std::filesystem::perms::owner_all, ec);
+            // Previews live 60 s.
+            for (auto &f : std::filesystem::directory_iterator(dir, ec))
+                if (std::filesystem::last_write_time(f, ec) < std::filesystem::file_time_type::clock::now() - std::chrono::seconds(60))
+                    std::filesystem::remove(f, ec);
+            auto stem = "preview-" + std::to_string(getpid()) + "-" + std::to_string(++previews);
+            auto scenePath = dir / (stem + ".json"), png = dir / (stem + ".png"), out = dir / (stem + ".out");
+            {
+                std::ofstream f(scenePath);
+                f << scene.dump();
+            }
+            const char *tool = getenv("HYPRUNE_PREVIEW");
+            std::string exe = tool && tool[0] == '/' ? tool : HYPRUNE_PREVIEW_PATH;
+            pid_t child = fork();
+            if (child == 0) {
+                int fd = ::open(out.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+                if (fd >= 0) dup2(fd, 1);
+                execl(exe.c_str(), exe.c_str(), scenePath.c_str(), png.c_str(), (char *)nullptr);
+                _exit(127);
+            }
+            check(child > 0, Error(-32603, "preview renderer did not start"));
+            auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(25);
+            int status = 0;
+            bool done = false;
+            while (!done && std::chrono::steady_clock::now() < deadline) {
+                pollfd p{fd, POLLIN, 0};
+                ::poll(&p, 1, 20);
+                renderer.tick();
+                send({{"type", "heartbeat"}});
+                if (auto j = receive(); !j.is_null())
+                    apply(j);
+                done = waitpid(child, &status, WNOHANG) == child;
+            }
+            if (!done) {
+                kill(child, SIGKILL);
+                waitpid(child, &status, 0);
+            }
+            std::filesystem::remove(scenePath, ec);
+            Json info = nullptr;
+            try { info = Json::parse(std::ifstream(out)); } catch (...) {}
+            std::filesystem::remove(out, ec);
+            if (!done || !WIFEXITED(status) || WEXITSTATUS(status) != 0 || !info.is_object())
+                throw Error(-32603, done ? "the preview could not be rendered" : "the preview took longer than 25 s", Json{{"retryable", true}, {"rule", "preview.failed"}});
+            return Json{{"path", png.string()}, {"width", w}, {"height", h},
+                        {"pose", {{"position", pose["position"]}, {"yaw", yaw}, {"pitch", pitch}}}, {"fov", fov}, {"renderMs", info.value("renderMs", 0.)}};
+        };
         auto handler = [&](const std::string &method, const Json &params) -> Json {
             if (hyprune::quests::Engine::handles(method)) {
                 auto result = quests.call(method, params, steadyMs(), std::time(nullptr));
@@ -153,6 +238,11 @@ int main() {
                     result["revision"] = server->revision();
                 return result;
             }
+            if (method == "preview.render")
+                return preview(params);
+            return forward(method, params);
+        };
+        forward = [&](const std::string &method, const Json &params) -> Json {
             auto id = std::to_string(++command);
             auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(29);
             send({{"type", "command"},
