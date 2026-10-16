@@ -119,14 +119,19 @@ def acceptance(client, children, args, shell_token, socketpath):
     ui('tabNamed', 'objects'); wait(lambda: status().get('tabName') == 'objects')
     assert press('object-import')
     wait(lambda: job().get('phase') == 'browse', 10)
-    assert ui('importBrowse', str(s.STATE / 'models/barrel')) == 'true'
-    time.sleep(1)
-    shot('import-browse.png')
-    keys('-k', 'Down', '-k', 'Return')  # barrel.bin, then barrel.gltf (bin can't be picked)
-    try:
-        wait(lambda: job().get('phase') in ('inspecting', 'review'), 5)
-    except AssertionError:
-        keys('-k', 'Return')
+    # The folder lists asynchronously ("Loading…" first, longer under load): keys sent before
+    # it lists go nowhere. Open it again and repeat until the pick leaves the browser.
+    for attempt in range(6):
+        assert ui('importBrowse', str(s.STATE / 'models/barrel')) == 'true'
+        time.sleep(1 + attempt)
+        if attempt == 0:
+            shot('import-browse.png')
+        keys('-k', 'Down', '-k', 'Return')  # barrel.bin, then barrel.gltf (bin can't be picked)
+        try:
+            wait(lambda: job().get('phase') in ('inspecting', 'review', 'failed'), 5)
+            break
+        except AssertionError:
+            pass
     # A failed inspection (e.g. an SDK CLI without `object import --inspect`) ends the wait with its error.
     wait(lambda: job().get('phase') in ('review', 'failed'), 30)
     assert job().get('phase') == 'review', ('the inspection failed', CLI, job().get('error'))
