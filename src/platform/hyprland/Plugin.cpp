@@ -2604,9 +2604,9 @@ void Runtime::exit() {
     cursorReturn = {};
     cursor();
     layout.desktop = nullptr;
-    control.stop();
+    control.stop("world mode ended");
     for (auto &[actor, b] : bindings)
-        control.associate(actor, false);
+        control.associate(actor, false, "world mode ended");
     bindings.clear();
     typing = false;
     focused.clear();
@@ -2646,7 +2646,7 @@ void Runtime::focus(const std::string &id, bool keyboard, bool enterUse) {
         auto result = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(frame->workspaceId));
         if (!result.success)
             throw ipc::Error(-32004, "workspace focus failed");
-        control.stop();
+        control.stop("a desktop workspace took focus");
         layout.desktop = frame->workspaceId;
         typing = false;
         keys.clear();
@@ -2696,7 +2696,7 @@ void Runtime::focus(const std::string &id, bool keyboard, bool enterUse) {
             resolvedLocation = previous;
             throw ipc::Error(-32004, "tool workspace activation failed");
         }
-        control.stop();
+        control.stop("a window took focus");
     }
     if (keyboard) {
         Desktop::focusState()->fullWindowFocus(w, Desktop::FOCUS_REASON_CLICK);
@@ -2777,7 +2777,7 @@ void Runtime::focusWall(const std::string &id) {
     if (!wall || handover.phase)
         return;
     cancelGrab();
-    control.stop();
+    control.stop("a wall took focus");
     typing = false;
     keys.clear();
     handover.animated = true;
@@ -3697,7 +3697,7 @@ void Runtime::leaveInteraction() {
     objectCarry = false;
     cancelGizmo();
     if (control.uiVisible()) {
-        control.stop();
+        control.stop("leave interaction (Escape/back)");
         cursor();
         publish();
         return;
@@ -5604,7 +5604,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             climbing.reset(camera);
         if (method == "shell.release") {
             bindings.erase(actor);
-            control.associate(actor, false);
+            control.associate(actor, false, "shell.release");
         }
         if (control.uiVisible() || control.driving()) {
             keys.clear();
@@ -5823,7 +5823,7 @@ void Runtime::tick() {
             it->second.seen = now;
         if (processIdentity(it->second.pid).second != it->second.start ||
             (!live && now - it->second.seen > std::chrono::milliseconds(500))) {
-            control.associate(it->first, false);
+            control.associate(it->first, false, live ? "the bound shell process changed" : "the bound HUD layer was gone for 500 ms");
             it = bindings.erase(it);
         } else
             ++it;

@@ -4,6 +4,7 @@
 #include "WireAudit.hpp"
 #include "interaction/Input.hpp"
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <fstream>
@@ -503,12 +504,30 @@ void Server::publish(Json state) {
     state_ = std::move(state);
     ++revision_;
 }
+static void closing(const char *what, int pid, const std::string &client, const char *reason) {
+    std::fprintf(stderr, "hypruned: %s connection (pid %d, %s): %s\n", what, pid, client.empty() ? "before hello" : client.c_str(),
+                 reason);
+}
+void Server::drop(Peer &p, const char *reason) {
+    if (!p.closing)
+        closing("closing", p.pid, p.client, reason);
+    p.closing = true;
+    p.output.clear();
+    p.written = 0;
+}
+void Server::closeAfter(Peer &p, const char *reason) {
+    if (!p.closing)
+        closing("closing", p.pid, p.client, reason);
+    p.closing = true;
+}
 void Server::queue(Peer &p, const Json &value, const std::string &method) {
     audit_->check(p.protocol, value, method);
     auto s = value.dump(-1, ' ', false, Json::error_handler_t::replace);
     if (s.size() > MaxFrame || p.output.size() + s.size() + 4 > MaxQueue) {
-        p.closing = true;
-        p.output.clear();
+        char reason[160];
+        std::snprintf(reason, sizeof reason, "%s %s (%zu bytes, %zu queued unread)", s.size() > MaxFrame ? "frame over 1 MiB" : "send queue over 4 MiB",
+                      method.empty() ? "reply" : method.c_str(), s.size(), p.output.size());
+        drop(p, reason);
         return;
     }
     uint32_t size = s.size();
@@ -535,7 +554,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
         request = Json::parse(bytes, callback);
     } catch (...) {
         queue(p, {{"jsonrpc", "2.0"}, {"id", nullptr}, {"error", {{"code", -32700}, {"message", "invalid JSON"}}}});
-        p.closing = true;
+        closeAfter(p, "invalid JSON frame");
         return;
     }
     try {
@@ -788,7 +807,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
                     auto peer = std::find_if(peers_.begin(), peers_.end(), [&](const Peer &q) { return params["actor"] == q.actor && q.profile == "assistant" && !q.closing; });
                     if (method == "connections.disconnect") {
                         if (peer != peers_.end())
-                            peer->closing = true, ++revision_;
+                            closeAfter(*peer, "connections.disconnect by the user"), ++revision_;
                         result = {{"disconnected", peer != peers_.end()}};
                     } else {
                         check(params["paused"].is_boolean(), -32602, "invalid paused");
@@ -855,7 +874,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
             error["data"] = e.data;
         queue(p, {{"jsonrpc", "2.0"}, {"id", id}, {"error", std::move(error)}});
         if (!p.hello)
-            p.closing = true;
+            closeAfter(p, "refused before hello");
     } catch (const Json::exception &) {
         queue(p,
               {{"jsonrpc", "2.0"}, {"id", id}, {"error", {{"code", -32602}, {"message", "invalid parameter type"}}}});
@@ -889,15 +908,29 @@ void Server::flush() {
                     p.written = 0;
                 }
             } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                p.closing = true;
-                p.output.clear();
-                p.written = 0;
+                drop(p, std::strerror(errno));
             }
         }
+}
+void Server::connectionClosed(const std::string &actor, const std::string &client) {
+    try {
+        handler_("_connection.closed", {{"_actor", actor}, {"_client", client}});
+        std::erase_if(unclosed_, [&](const auto &u) { return u.first == actor; });
+    } catch (const std::exception &e) {
+        if (std::none_of(unclosed_.begin(), unclosed_.end(), [&](const auto &u) { return u.first == actor; })) {
+            std::fprintf(stderr, "hypruned: %s's closed connection keeps its leases for now (%s); retrying\n", client.c_str(), e.what());
+            unclosed_.emplace_back(actor, client);
+        }
+    } catch (...) {
+        if (std::none_of(unclosed_.begin(), unclosed_.end(), [&](const auto &u) { return u.first == actor; }))
+            unclosed_.emplace_back(actor, client);
+    }
 }
 void Server::poll() {
     if (!pairs_.empty())
         expirePairs();
+    for (auto pending = unclosed_; auto &[actor, client] : pending)
+        connectionClosed(actor, client);
     for (int i = 0; i < 8; i++) {
         int fd = accept4(fd_, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
         if (fd < 0)
@@ -916,11 +949,10 @@ void Server::poll() {
     }
     auto now = Clock::now();
     for (auto &p : peers_) {
-        if ((!p.hello && p.pairRequest.empty() && now - p.accepted > std::chrono::seconds(5)) ||
-            (!p.input.empty() && now - p.frameStart > std::chrono::seconds(10))) {
-            p.closing = true;
-            p.output.clear();
-        }
+        if (!p.hello && p.pairRequest.empty() && now - p.accepted > std::chrono::seconds(5))
+            drop(p, "no session.hello within 5 s");
+        else if (!p.input.empty() && now - p.frameStart > std::chrono::seconds(10))
+            drop(p, "a partial frame stalled for 10 s");
         if (!p.closing) {
             char buffer[16384];
             ssize_t count = recv(p.fd, buffer, sizeof buffer, 0);
@@ -928,17 +960,20 @@ void Server::poll() {
                 if (p.input.empty())
                     p.frameStart = now;
                 p.input.append(buffer, count);
-            } else if (count == 0 || (count < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
+            } else if (count == 0) {
+                if (p.hello)
+                    closing("peer closed its", p.pid, p.client, "end of stream");
                 p.closing = true;
                 p.output.clear();
-            }
+                p.written = 0;
+            } else if (count < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+                drop(p, std::strerror(errno));
             for (int frames = 0; frames < 16 && p.input.size() >= 4 && !p.closing; frames++) {
                 uint32_t length = 0;
                 for (int i = 0; i < 4; i++)
                     length = (length << 8) | (unsigned char)p.input[i];
                 if (!length || length > MaxFrame) {
-                    p.closing = true;
-                    p.output.clear();
+                    drop(p, length ? "incoming frame over 1 MiB" : "empty incoming frame");
                     break;
                 }
                 if (p.input.size() < length + 4)
@@ -972,19 +1007,14 @@ void Server::poll() {
                     p.written = 0;
                 }
             } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                p.closing = true;
-                p.output.clear();
+                drop(p, std::strerror(errno));
             }
         }
     }
     std::erase_if(peers_, [&](Peer &p) {
         if (p.closing && p.output.empty()) {
-            if (contextual_ && p.hello) {
-                try {
-                    handler_("_connection.closed", {{"_actor", p.actor}, {"_client", p.client}});
-                } catch (...) {
-                }
-            }
+            if (contextual_ && p.hello)
+                connectionClosed(p.actor, p.client);
             close(p.fd);
             return true;
         }
@@ -1108,7 +1138,7 @@ Json Server::answer(const Json &params) {
         peer->pairRequest.clear();
         queue(*peer, {{"jsonrpc", "2.0"}, {"id", request.rpcId},
                       {"error", {{"code", -32002}, {"message", "The user denied the pairing"}, {"data", {{"retryable", false}, {"rule", "pair.denied"}}}}}});
-        peer->closing = true;
+        closeAfter(*peer, "the user denied the pairing");
         return {{"ok", true}};
     }
     if (decision == "always") {
@@ -1135,7 +1165,7 @@ void Server::expirePairs() {
         peer->pairRequest.clear();
         queue(*peer, {{"jsonrpc", "2.0"}, {"id", request.rpcId},
                       {"error", {{"code", -32002}, {"message", "No answer to the pairing request in 120 s"}, {"data", {{"retryable", true}, {"rule", "pair.denied"}}}}}});
-        peer->closing = true;
+        closeAfter(*peer, "no answer to the pairing request in 120 s");
         return changed = true;
     });
     if (changed)

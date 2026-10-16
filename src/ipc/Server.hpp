@@ -88,12 +88,21 @@ class Server {
     std::map<std::string, std::string> methods_;
     Handler handler_;
     bool contextual_ = false;
+    // Closed connections whose _connection.closed the handler refused (busy plugin): retried
+    // every poll, so a closed connection's leases always end (a reconnecting shell found its
+    // output still leased by its dead connection).
+    std::vector<std::pair<std::string, std::string>> unclosed_;
+    void connectionClosed(const std::string &actor, const std::string &client);
     Json snapshot(const Peer &) const;
     Json visibleState(const Peer &) const;
     Json state_;
     uint64_t revision_ = 0, subscriptions_ = 0;
     void frame(Peer &, const std::string &);
     void queue(Peer &, const Json &, const std::string &method = "");
+    // Every connection core ends says why on stderr (hypruned.log). drop() discards what is
+    // queued; closeAfter() sends it first (an error reply).
+    void drop(Peer &, const char *reason);
+    void closeAfter(Peer &, const char *reason);
 };
 std::string randomId();
 } // namespace hyprune::ipc

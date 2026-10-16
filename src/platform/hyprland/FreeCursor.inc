@@ -77,7 +77,7 @@ void Runtime::toggleFreeCursor() {
             if (handover.animated) cursorReturn.camera = handover.before;
         } else if (typing) cursorReturn.window = focused;
         auto keyboard = g_pSeatManager->m_state.keyboardFocus;
-        control.stop();
+        control.stop("the free cursor began");
         leaveInteraction();
         // Complete focus exit before freezing. All compositor mutations remain after the frame.
         if (handover.phase == 1) {

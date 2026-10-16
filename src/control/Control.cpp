@@ -1,6 +1,7 @@
 #include "Control.hpp"
 #include "interaction/Hands.hpp"
 #include "world/Spatial.hpp"
+#include <cstdio>
 #include <regex>
 namespace hyprune::control {
 namespace {
@@ -94,7 +95,7 @@ void Control::transition(const std::string &phase, float progress) {
     events.emplace_back("location.transition", location["transition"]);
 }
 void Control::beginLoad(const Json &to, const Json &output) {
-    stop();
+    stop("a world load began");
     location["transition"] = {
         {"id", "transition-" + std::to_string(++transitions)},
         {"outputId", output},
@@ -108,7 +109,14 @@ void Control::beginLoad(const Json &to, const Json &output) {
 void Control::endLoad(bool success, bool cancelled) {
     transition(success ? "arrived" : cancelled ? "cancelled" : "failed", success ? 1.f : 0.f);
 }
-void Control::stop() {
+// Every ui.closed core sends names its cause on stderr (the compositor log): a Director that
+// closes right after opening is otherwise silent.
+void Control::closed(const Json &lease, const Json &output, const char *reason) {
+    events.emplace_back("ui.closed", Json{{"leaseId", lease}, {"outputId", output}});
+    std::fprintf(stderr, "[hyprune] ui.closed %s on %s: %s\n", lease.get<std::string>().c_str(),
+                 output.get<std::string>().c_str(), reason);
+}
+void Control::stop(const char *reason) {
     holding = false;
     held = 0;
     opened = false;
@@ -119,21 +127,21 @@ void Control::stop() {
     for (auto &l : leases)
         for (auto &o : l["overlays"]) {
             if (o["visible"] == true)
-                events.emplace_back("ui.closed", Json{{"leaseId", l["id"]}, {"outputId", o["outputId"]}});
+                closed(l["id"], o["outputId"], reason);
             o["visible"] = false;
             o["exclusiveInput"] = false;
         }
 }
 void Control::reset(const world::World *w) {
     photoOwner.clear();
-    stop();
+    stop("the world was reset");
     location = {{"zones", w ? w->manifest.value("zones", Json::array()) : Json::array()},
                 {"waypoint", nullptr},
                 {"route", Json::array()},
                 {"autodrive", false},
                 {"transition", nullptr}};
 }
-void Control::associate(const std::string &actor, bool verified) {
+void Control::associate(const std::string &actor, bool verified, const char *reason) {
     if (verified)
         associations.insert(actor);
     else {
@@ -142,7 +150,7 @@ void Control::associate(const std::string &actor, bool verified) {
             if (owners.at(l.at("id").get<std::string>()) == actor)
                 for (auto &o : l["overlays"]) {
                     if (o["visible"] == true)
-                        events.emplace_back("ui.closed", Json{{"leaseId", l["id"]}, {"outputId", o["outputId"]}});
+                        closed(l["id"], o["outputId"], reason);
                     o["visible"] = false;
                     o["exclusiveInput"] = false;
                 }
@@ -250,7 +258,7 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
         }
         proposed.climbBob = proposed.verticalSpeed = 0;
         if (!photoHeld()) photoBefore = camera;
-        stop(); photoOwner=actor; photoPose=camera=proposed; photoScale=scale;
+        stop("camera.photo"); photoOwner=actor; photoPose=camera=proposed; photoScale=scale;
         return Json::object();
     }
     require(!photoHeld() || (m != "camera.set" && m != "travel.start" && m != "autodrive.start"),
@@ -347,7 +355,7 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
         int ms = p.value("durationMs", 600);
         require(ms >= 0 && ms <= 10000, -32602, "duration out of bounds");
         require(!driving(), -32004, "movement already in progress");
-        stop(); // Departing closes Director overlays before passive warp presentation.
+        stop("travel began"); // Departing closes Director overlays before passive warp presentation.
         travelFrom = camera.position;
         travelTo = to;
         elapsed = 0;
@@ -374,7 +382,7 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
         require(!driving(), -32004, "movement already in progress");
         speed = p.value("speed", 3.5f);
         require(std::isfinite(speed) && speed >= .1f && speed <= 10, -32602, "speed out of bounds");
-        stop();
+        stop("autodrive began");
         routeIndex = 0;
         stalled = 0;
         location["autodrive"] = true;
@@ -404,7 +412,7 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
                 return false;
             for (auto &o : l["overlays"])
                 if (o["visible"] == true)
-                    events.emplace_back("ui.closed", Json{{"leaseId", lease}, {"outputId", o["outputId"]}});
+                    closed(lease, o["outputId"], "the holder claimed the output again");
             owners.erase(lease);
             return true;
         });
@@ -450,8 +458,10 @@ Control::Json Control::execute(const std::string &m, const Json &p, const std::s
                         o["exclusiveInput"] = m == "shell.overlay" && p["exclusiveInput"] == true;
                     }
         require(found, -32003, "output not leased");
-        if (m == "ui.open" || m == "ui.close")
-            events.emplace_back(m == "ui.open" ? "ui.opened" : "ui.closed", p);
+        if (m == "ui.open")
+            events.emplace_back("ui.opened", p);
+        else if (m == "ui.close")
+            closed(p["leaseId"], p["outputId"], "ui.close from the lease holder");
     } else if (m == "data.publish" || m == "data.remove") {
         if (m == "data.remove")
             fields(p, {"sourceId"});

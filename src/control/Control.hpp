@@ -23,9 +23,10 @@ class Control {
     void beginLoad(const Json &to, const Json &output);
     void endLoad(bool success, bool cancelled = false);
     Json outputId = nullptr;
-    void stop();
+    // Ends holds, travel and every visible overlay; `reason` goes to stderr with each ui.closed.
+    void stop(const char *reason = "stop");
     void disconnect(const std::string &, sim::Camera &);
-    void associate(const std::string &actor, bool verified);
+    void associate(const std::string &actor, bool verified, const char *reason = "association lost");
     bool ownsLease(const std::string &actor, const std::string &lease) const;
     bool exclusive() const;
     void retainOutputs(const Json &);
@@ -54,5 +55,6 @@ class Control {
     uint64_t transitions = 0;
     Vec3 target(const Json &, const world::World *) const;
     void transition(const std::string &, float);
+    void closed(const Json &lease, const Json &output, const char *reason);
 };
 } // namespace hyprune::control
