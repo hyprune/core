@@ -1,9 +1,11 @@
 #include "LayoutStore.hpp"
 #include "offload/Supervisor.hpp"
 #include "ipc/Server.hpp"
+#include "ipc/Bridge.hpp"
 #include "ipc/GrantIssuer.hpp"
 #include "quests/Engine.hpp"
 #include "content/Engine.hpp"
+#include "control/Control.hpp"
 #include <algorithm>
 #include <csignal>
 #include <cstdlib>
@@ -267,6 +269,13 @@ int main() {
                     if (j.at("type") == "reply" && j.at("id") == id) {
                         if (j.contains("error"))
                             throw Error(j["error"]["code"], j["error"]["message"], j["error"].value("data", Json()));
+                        // A lease or overlay reply's revision is the state revision that shows it.
+                        // The plugin counts its own; this server also counts the state it adds
+                        // (quests, content jobs, connections), so its deltas ran ahead and a shell
+                        // comparing the two closed the Director it had just opened. The plugin's
+                        // state preceded this reply on the bridge: the server's revision has it.
+                        if (hyprune::control::Control::methods().contains(method) || method == "shell.bind")
+                            return hyprune::ipc::Bridge::serverResult(j, server->revision());
                         return j.at("result");
                     }
                     apply(j);

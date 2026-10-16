@@ -33,6 +33,10 @@ class Bridge {
     void complete(Json result);
     void fail(int code, const std::string &message, const Json &data = nullptr);
     uint64_t revision() const { return revision_; }
+    // A plugin reply's result as the server forwards it: a state revision in it (equal to the
+    // reply's stateRevision, this side's count) becomes the server's, which already counts that
+    // state and also the state the server adds itself. Other revisions (a catalog's) stay.
+    static Json serverResult(const Json &reply, uint64_t serverRevision);
     bool healthy() const;
 
   private:

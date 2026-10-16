@@ -94,10 +94,18 @@ void Bridge::publish(Json state, Json derived) {
     derived_ = std::move(derived);
     send({{"type", "state"}, {"state", state_}, {"derivedBindings", derived_}});
 }
+Json Bridge::serverResult(const Json &reply, uint64_t serverRevision) {
+    auto result = reply.at("result");
+    if (result.is_object() && result.contains("revision") && reply.contains("stateRevision") &&
+        result["revision"] == reply["stateRevision"])
+        result["revision"] = serverRevision;
+    return result;
+}
 void Bridge::complete(Json result) {
     if (pending_.empty())
         return;
-    send({{"type", "reply"}, {"id", pending_}, {"result", std::move(result)}});
+    // stateRevision: this side's state revision, which hypruned translates into its own.
+    send({{"type", "reply"}, {"id", pending_}, {"result", std::move(result)}, {"stateRevision", revision_}});
     pending_.clear();
 }
 void Bridge::fail(int code, const std::string &message, const Json &data) {
