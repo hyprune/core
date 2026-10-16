@@ -249,6 +249,9 @@ def acceptance(client, children, args, shell_token, socketpath):
             except AssertionError:
                 time.sleep(2)
         if not status().get('director'):
+            st, core = status(), state()
+            (out / 'assistant-director-status.json').write_text(json.dumps({'shell': {k: st.get(k) for k in st if k not in ('objects', 'npcs', 'quests', 'builder')},
+                                                                            'core': {k: core.get(k) for k in ('shell', 'interaction', 'location', 'editor')}}, indent=1, default=str))
             shot('assistant-director-failed.png')
         assert status().get('director'), 'the Director did not open'
         s.ctl('eval', 'hl.dispatch(hl.dsp.cursor.move({x=4,y=4}))')
