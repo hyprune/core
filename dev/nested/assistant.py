@@ -409,64 +409,6 @@ def acceptance(client, children, args, shell_token, socketpath):
           len(undone['undone']) == 5 and git('status', '--porcelain') == '',
           {'commit': saved['commit'][:12], 'undone': undone['undone'], 'dirty': dirty.split('\n')[:8]})
 
-    # E2. The companion (named by the assistant), a prepared release the user presses, a command
-    # proposal that never runs until the user allows it on the Data sources page.
-    made = mcp.data('make_world')
-    prepared = mcp.data('release_prepare', version='0.1.0', notes='A cosy rooftop garden at sunset')
-    director()
-    ui('tabNamed', 'builder')
-    wait(lambda: ((assistants().get('live') or [{}])[0].get('releaseDraft') or {}).get('version') == '0.1.0', 20)
-    time.sleep(.6)
-    shot('assistant-release-prepared.png')
-    assert press('builder-release-draft')
-    released = None
-    for _ in range(3):
-        if git('status', '--porcelain') == '':
-            break
-        mcp.data('save', message='Made for the release')
-    before_tags = git('tag', '-l')
-    assert press('builder-release')
-    wait(lambda: ((status().get('builder') or {}).get('job') or {}).get('kind') == 'release' and ((status().get('builder') or {}).get('job') or {}).get('phase') in ('done', 'failed'), 90)
-    released = (status().get('builder') or {}).get('job')
-    check('E2: make_world makes three homes; release_prepare fills the Release form; only the user\'s press releases (v0.1.0)',
-          [h['workspace'] for h in made['homes']] == [21, 22, 23] and before_tags == '' and released['phase'] == 'done' and git('tag', '-l') == 'v0.1.0',
-          {'prepared': prepared.get('prepared'), 'job': {k: released.get(k) for k in ('phase', 'error')}, 'ready': made.get('ready')})
-    close_director()
-    gauges = str(s.ROOT / 'dev/machines/scripts/system-gauges.py')
-    lamp = mcp.data('place', key='gauge-lamp', shape='sphere', size=[.6], position=[-3.6, .3, -7.2], material='lamp-warm', ifExists='update')
-    proposal = mcp.data('source_propose_command', **{'for': 'gauge-lamp', 'argv': [gauges, 'cpu'], 'intervalS': 1})
-    mcp.data('behaviour_set', placement='gauge-lamp', behaviour={'key': 'cpu', 'property': 'glow', 'from': .2, 'to': 8, 'colour': '#ffb050'})
-    try:
-        mcp.data('source_test', **{'for': 'gauge-lamp'})
-        tested = None
-    except McpError as e:
-        tested = e.args[0]
-    time.sleep(4)
-    lamp_state = builtins.next(i for i in instances() if i.get('key') == 'gauge-lamp')
-    never_ran = (lamp_state.get('behaviours') or [{}])[0].get('condition') != 'fresh'
-    director()
-    ui('tabNamed', 'objects')
-    ui('objectsView', 'placed')
-    ui('selectObject', lamp['id'])
-    time.sleep(.8)
-    assert press('behaviour-source')
-    try:
-        wait(lambda: (status().get('dataSources') or {}).get('selected') == lamp['id'], 20)
-    except AssertionError:
-        st = status()
-        (out / 'assistant-sources-status.json').write_text(json.dumps({'lamp': lamp, 'dataSources': st.get('dataSources'), 'tab': st.get('tabName'),
-                                                                       'objects': {k: (st.get('objects') or {}).get(k) for k in ('view', 'selected')}}, indent=1, default=str))
-        shot('assistant-sources-failed.png')
-        raise
-    time.sleep(.5)
-    shot('assistant-proposal.png')
-    assert press('source-allow')
-    wait(lambda: any(i.get('key') == 'gauge-lamp' and (i.get('behaviours') or [{}])[0].get('condition') == 'fresh' for i in instances()), 40)
-    check('E2: a proposed command never runs (its test refused) until the user presses Allow on the Data sources page; then the lamp follows it',
-          proposal['pending'] and never_ran and tested and 'allow' in tested['message'],
-          {'entry': proposal['entry'], 'tested': tested, 'before': lamp_state.get('behaviours')})
-    close_director()
-
     # 5. A paired connection is refused outside the profile; Deny refuses a pairing.
     director()
     ui('tabNamed', 'builder')
@@ -489,6 +431,61 @@ def acceptance(client, children, args, shell_token, socketpath):
           {'refusals': refusals, 'deny': deny.get('error'), 'methods': len(hello.get('methods', []))})
     raw.sock.close()
 
+    # E2, while the Director is open (holds after heavy activity flake on the work host): a
+    # prepared release the user presses, a command proposal that never runs until the user
+    # allows it on the Data sources page, then the companion (named by the assistant).
+    made = mcp.data('make_world')
+    prepared = mcp.data('release_prepare', version='0.1.0', notes='A cosy rooftop garden at sunset')
+    ui('tabNamed', 'builder')
+    wait(lambda: any((l.get('releaseDraft') or {}).get('version') == '0.1.0' for l in assistants().get('live') or []), 20)
+    time.sleep(.6)
+    shot('assistant-release-prepared.png')
+    assert press('builder-release-draft')
+    released = None
+    for _ in range(3):
+        if git('status', '--porcelain') == '':
+            break
+        mcp.data('save', message='Made for the release')
+    before_tags = git('tag', '-l')
+    assert press('builder-release')
+    wait(lambda: ((status().get('builder') or {}).get('job') or {}).get('kind') == 'release' and ((status().get('builder') or {}).get('job') or {}).get('phase') in ('done', 'failed'), 90)
+    released = (status().get('builder') or {}).get('job')
+    check('E2: make_world makes three homes; release_prepare fills the Release form; only the user\'s press releases (v0.1.0)',
+          [h['workspace'] for h in made['homes']] == [21, 22, 23] and before_tags == '' and released['phase'] == 'done' and git('tag', '-l') == 'v0.1.0',
+          {'prepared': prepared.get('prepared'), 'job': {k: released.get(k) for k in ('phase', 'error')}, 'ready': made.get('ready')})
+    gauges = str(s.ROOT / 'dev/machines/scripts/system-gauges.py')
+    lamp = mcp.data('place', key='gauge-lamp', shape='sphere', size=[.6], position=[-3.6, .3, -7.2], material='lamp-warm', ifExists='update')
+    proposal = mcp.data('source_propose_command', **{'for': 'gauge-lamp', 'argv': [gauges, 'cpu'], 'intervalS': 1})
+    mcp.data('behaviour_set', placement='gauge-lamp', behaviour={'key': 'cpu', 'property': 'glow', 'from': .2, 'to': 8, 'colour': '#ffb050'})
+    try:
+        mcp.data('source_test', **{'for': 'gauge-lamp'})
+        tested = None
+    except McpError as e:
+        tested = e.args[0]
+    time.sleep(4)
+    lamp_state = builtins.next(i for i in instances() if i.get('key') == 'gauge-lamp')
+    never_ran = (lamp_state.get('behaviours') or [{}])[0].get('condition') != 'fresh'
+    ui('tabNamed', 'objects')
+    ui('objectsView', 'placed')
+    ui('selectObject', lamp['id'])
+    time.sleep(.8)
+    assert press('behaviour-source')
+    try:
+        wait(lambda: (status().get('dataSources') or {}).get('selected') == lamp['id'], 20)
+    except AssertionError:
+        st = status()
+        (out / 'assistant-sources-status.json').write_text(json.dumps({'lamp': lamp, 'dataSources': st.get('dataSources'), 'tab': st.get('tabName'),
+                                                                       'objects': {k: (st.get('objects') or {}).get(k) for k in ('view', 'selected')}}, indent=1, default=str))
+        shot('assistant-sources-failed.png')
+        raise
+    time.sleep(.5)
+    shot('assistant-proposal.png')
+    assert press('source-allow')
+    wait(lambda: any(i.get('key') == 'gauge-lamp' and (i.get('behaviours') or [{}])[0].get('condition') == 'fresh' for i in instances()), 40)
+    check('E2: a proposed command never runs (its test refused) until the user presses Allow on the Data sources page; then the lamp follows it',
+          proposal['pending'] and never_ran and tested and 'allow' in tested['message'],
+          {'entry': proposal['entry'], 'tested': tested, 'before': lamp_state.get('behaviours')})
+
     if (s.STATE / COMPANIONS.name).is_file() and COMPANIONS.name:
         import hashlib
         archive = s.STATE / COMPANIONS.name
@@ -510,6 +507,8 @@ def acceptance(client, children, args, shell_token, socketpath):
         print('SKIP assistant: E2 companion step (no HYPRUNE_COMPANION_LIBRARY)', flush=True)
     # 6. Revoke and Disconnect from Connected assistants.
     wait(lambda: len(assistants().get('live') or []) == 1, 10)
+    ui('tabNamed', 'builder')
+    time.sleep(.5)
     ui('scrollPage', 1)
     time.sleep(.6)
     shot('assistant-connected.png')
