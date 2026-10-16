@@ -299,7 +299,7 @@ def acceptance(client, children, args, shell_token, socketpath):
         for tool, args_ in screens(ref):
             mcp.data(tool, **args_)
         mcp.data('place', key='cpu-tower', shape='box', size=[.8, 3, .8], position=[4, .3, -9], material='lamp-warm', ifExists='update')
-        mcp.data('source_set_http', **{'for': 'cpu-tower', 'url': url, 'map': {'value': '$.cpu', 'display': '$.cpu'}, 'intervalS': 1})
+        mcp.data('source_set_http', **{'for': 'cpu-tower', 'url': url, 'map': {'value': {'path': '$.cpu', 'min': 0, 'max': 100}, 'display': '{raw:.0f} %'}, 'intervalS': 1})
         mcp.data('behaviour_set', placement='cpu-tower', behaviour={'key': 'load', 'property': 'scale', 'from': [1, .1, 1], 'to': [1, 1, 1], 'anchor': 'bottom', 'smoothing': .4})
         mcp.data('behaviour_set', placement='cpu-tower', behaviour={'key': 'heat', 'property': 'glow', 'from': .5, 'to': 6, 'colour': '#ffb050'})
         for value in [20, 55, 90, 60, 35]:
