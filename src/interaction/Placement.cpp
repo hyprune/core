@@ -249,10 +249,49 @@ PlacementVerdict checkPlacement(const PlacementScene &s, const Box &shape, std::
     for (auto &w : s.windows)
         if (!waived.contains("window") && boxBox(inner, w))
             return fail("window", "Covers a window");
-    // 5. Screen approaches and window zones stay free.
-    for (auto &a : s.approaches)
-        if (!waived.contains("approach") && boxBox(inner, a))
-            return fail("approach", "Blocks a screen approach");
+    // 5. Screen approaches and window zones stay free. A zone whose floor is this object (a
+    // slab the screens stand on, checked again at load without its own collision in the scene)
+    // starts 0.1 m above that floor, as it would over committed collision.
+    auto ownTop = [&](const Box &a) -> std::optional<float> {
+        Vec3 from{a.centre.x, a.centre.y + a.half.y, a.centre.z};
+        std::optional<float> best;
+        for (auto &t : own) {
+            auto e1 = t.b - t.a, e2 = t.c - t.a;
+            Vec3 d{0, -1, 0};
+            auto p = cross(d, e2);
+            float det = dot(e1, p);
+            if (std::abs(det) < 1e-9f)
+                continue;
+            auto q = from - t.a;
+            float u = dot(q, p) / det;
+            if (u < 0 || u > 1)
+                continue;
+            auto r = cross(q, e1);
+            float v = dot(d, r) / det;
+            if (v < 0 || u + v > 1)
+                continue;
+            float k = dot(e2, r) / det;
+            if (k > 0 && (!best || from.y - k > *best))
+                best = from.y - k;
+        }
+        return best;
+    };
+    for (auto &a : s.approaches) {
+        if (waived.contains("approach") || !boxBox(inner, a))
+            continue;
+        auto top = ownTop(a);
+        if (top && *top <= a.centre.y) {
+            Box raised = a;
+            float low = std::max(*top + .1f, a.centre.y - a.half.y), high = a.centre.y + a.half.y;
+            if (high <= low)
+                continue;
+            raised.centre.y = (low + high) * .5f;
+            raised.half.y = (high - low) * .5f;
+            if (!boxBox(inner, raised))
+                continue;
+        }
+        return fail("approach", "Blocks a screen approach");
+    }
     for (auto &z : s.zones)
         if (!waived.contains("zone") && boxBox(inner, z))
             return fail("zone", "Inside a window zone");
