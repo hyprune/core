@@ -21,9 +21,9 @@ Checks:
     poses and screen binding.
  7. The released package (git archive v0.1.0) passes the SDK's validator and hyprune-world-check.
  8. The page's sky and floor tiles (paving, night) apply, reload the world, keep the placements.
-    8b. The checklist (Phase D): the blocking items done; a box in front of the screen opens its
-    approach item; after Save, Release is refused (release.check) and Release anyway tags v0.1.1;
-    removing the box closes the item; Placed > Model turns the imported barrel a quarter.
+    8b. The checklist (Phase D): the blocking items done; a spawn moved into the air (CLI) opens
+    spawn.floor; after Save, Release is refused (release.check) and Release anyway tags v0.1.1;
+    the spawn back closes it; Placed > Model turns the imported barrel a quarter.
  9. Shapes (IPC 0.31): a glowing box made from Objects > Shapes is pocketed, placed with a key
     (dry run first; a taken key is refused with its id; ifExists update moves it); stairs from
     the CLI stand on the floor; a cube inside the box is refused (its proxy collides); a material
@@ -370,9 +370,9 @@ def acceptance(client, children, args, shell_token, socketpath):
     s.ctl('eval', 'hl.plugin.hyprune.camera(1,1.7,0,0,.25)')
     shot('builder-night.png')
 
-    # 8b. The checklist (RFC-0014 Phase D): every blocking item done; a box in front of the screen
-    # opens the screen's approach item naming it; after Save, Release is refused (release.check)
-    # and Release anyway tags v0.1.1; removing the box closes the item. Then the barrel (an import)
+    # 8b. The checklist (RFC-0014 Phase D): every blocking item done; a spawn moved into the air
+    # opens spawn.floor; after Save, Release is refused (release.check) and Release anyway tags
+    # v0.1.1; the spawn back closes the item. Then the barrel (an import)
     # is turned a quarter from Placed > Model (object adjust on world/barrel; the folder reloads).
     up = [0, 0, 0, 1]
 
@@ -411,31 +411,35 @@ def acceptance(client, children, args, shell_token, socketpath):
           all(i['done'] for i in first['items'] if i['id'] in ('spawn.floor', 'walk.area', 'budgets')),
           {'items': [{k: i[k] for k in ('id', 'done', 'blocks')} for i in first['items']]})
     shot('builder-checklist.png')
-    blocker, placed, refusals = generated('--shape', 'box', '--size', '2.4,1.4,0.5', '--colour', '#8a3020'), None, []
-    for position in ([-1.5, 0, -5.4], [-1.5, 0, -4.6], [-0.4, 0, -5.8]):
-        try:
-            placed = placing({'ref': blocker, 'pose': {'position': position, 'rotation': up}, 'key': 'blocker'})['id']
-            break
-        except RuntimeError as e:
-            refusals.append(e.args[0])
-    assert placed, refusals
-    wait(lambda: approach() is not None and not approach()['done'], 30)
-    opened = approach()
-    shot('builder-checklist-blocked.png')
-    ui('fieldText', 'builderMessage', 'A box in front of the screen')
+    # Core refuses objects in a screen's approach (rule approach), so the open item comes from the
+    # CLI: the spawn moved 3 m up (no floor under it), saved from the page.
+    def spawn_at(position):
+        r = subprocess.run([*CLI.split(), 'builder', 'spawn', SLUG, '--at', position, '--json'], capture_output=True, text=True,
+                           env={**os.environ, 'HYPRUNE_PROJECTS_DIR': str(folder.parent)})
+        return json.loads(r.stdout.strip().split('\n')[-1])
+
+    def spawn_item():
+        return builtins.next((i for i in checklist().get('items') or [] if i['id'] == 'spawn.floor'), None)
+    moved = spawn_at('0,3,0')
+    ui('fieldText', 'builderMessage', 'A spawn in the air')
     saved = job_again('builder-save')
-    wait(lambda: checklist().get('ready') is False and any(i['id'] == 'save' and i['done'] for i in checklist()['items']), 30)
+    wait(lambda: spawn_item() is not None and not spawn_item()['done'], 30)
+    opened = spawn_item()
+    time.sleep(.5)
+    shot('builder-checklist-open.png')
     refused = job_again('builder-release')
     time.sleep(.5)
     shot('builder-release-refused.png')
     anyway = job_again('builder-release-anyway')
-    check('a box in front of the screen opens its approach item; Release is refused with release.check, Release anyway tags v0.1.1',
-          'blocker' in opened['message'] and saved['phase'] == 'done' and refused['phase'] == 'failed' and
+    check('a spawn in the air opens spawn.floor; Release is refused with release.check, Release anyway tags v0.1.1',
+          moved['event'] == 'done' and saved['phase'] == 'done' and 'no floor' in opened['message'] and refused['phase'] == 'failed' and
           (refused.get('error') or {}).get('code') == 'release.check' and anyway['phase'] == 'done' and 'v0.1.1' in git('tag', '-l').split('\n'),
-          {'item': opened, 'refusals': refusals, 'refused': refused.get('error'), 'anyway': {k: (anyway.get('result') or {}).get(k) for k in ('tag', 'warnings', 'publishing')}})
-    client.call('objects.remove', {'key': 'blocker'})
-    wait(lambda: approach() is not None and approach()['done'], 30)
-    check('removing the box closes the screen approach item again', approach()['done'] and checklist().get('ready'), {'item': approach()})
+          {'item': opened, 'refused': refused.get('error'), 'anyway': {k: (anyway.get('result') or {}).get(k) for k in ('tag', 'warnings', 'publishing')}})
+    spawn_at('0,0,0')
+    ui('fieldText', 'builderMessage', 'The spawn back on the ground')
+    job_again('builder-save')
+    wait(lambda: spawn_item() is not None and spawn_item()['done'] and checklist().get('ready'), 30)
+    check('the spawn back on the ground closes the item; the checklist is ready again', spawn_item()['done'] and checklist().get('ready'), {'item': spawn_item()})
     # Placed > Model: the barrel's fit, then a quarter turn (object adjust on the folder's copy).
     barrel_before = json.loads((folder / 'objects/barrel/object.json').read_text())['bounds']
     ui('tabNamed', 'objects')
