@@ -21,6 +21,9 @@ Checks:
     poses and screen binding.
  7. The released package (git archive v0.1.0) passes the SDK's validator and hyprune-world-check.
  8. The page's sky and floor tiles (paving, night) apply, reload the world, keep the placements.
+    8b. The checklist (Phase D): the blocking items done; a box in front of the screen opens its
+    approach item; after Save, Release is refused (release.check) and Release anyway tags v0.1.1;
+    removing the box closes the item; Placed > Model turns the imported barrel a quarter.
  9. Shapes (IPC 0.31): a glowing box made from Objects > Shapes is pocketed, placed with a key
     (dry run first; a taken key is refused with its id; ifExists update moves it); stairs from
     the CLI stand on the floor; a cube inside the box is refused (its proxy collides); a material
@@ -366,6 +369,94 @@ def acceptance(client, children, args, shell_token, socketpath):
     wait(lambda: not status().get('warp') and status().get('phase') == 'arrived', 30)
     s.ctl('eval', 'hl.plugin.hyprune.camera(1,1.7,0,0,.25)')
     shot('builder-night.png')
+
+    # 8b. The checklist (RFC-0014 Phase D): every blocking item done; a box in front of the screen
+    # opens the screen's approach item naming it; after Save, Release is refused (release.check)
+    # and Release anyway tags v0.1.1; removing the box closes the item. Then the barrel (an import)
+    # is turned a quarter from Placed > Model (object adjust on world/barrel; the folder reloads).
+    up = [0, 0, 0, 1]
+
+    def checklist():
+        return builder().get('check') or {}
+
+    def approach():
+        return builtins.next((i for i in checklist().get('items') or [] if i['id'] == 'screen.approach'), None)
+
+    def generated(*args):
+        r = subprocess.run([*CLI.split(), 'builder', 'primitive', SLUG, *args, '--json'], capture_output=True, text=True,
+                           env={**os.environ, 'HYPRUNE_PROJECTS_DIR': str(folder.parent)})
+        return json.loads(r.stdout.strip().split('\n')[-1])['result']['ref']
+
+    def placing(params):
+        for _ in range(60):
+            try:
+                return client.call('objects.place', params)
+            except RuntimeError as e:
+                if not (e.args[0].get('data') or {}).get('retryable'):
+                    raise
+                time.sleep(.2)
+        raise AssertionError(f"{params['ref']} never loaded")
+
+    def job_again(button, seconds=90):
+        before = json.dumps(job(), sort_keys=True)
+        assert press(button), button
+        wait(lambda: job().get('phase') in ('done', 'failed') and json.dumps(job(), sort_keys=True) != before, seconds)
+        return job()
+    director()
+    ui('tabNamed', 'builder')
+    wait(lambda: approach() is not None, 60)
+    first = checklist()
+    check('the Builder page lists the checklist; the spawn, the screen approach and the walkable area are done',
+          first.get('ready') and approach()['done'] and approach()['target'] == ids['screen'] and
+          all(i['done'] for i in first['items'] if i['id'] in ('spawn.floor', 'walk.area', 'budgets')),
+          {'items': [{k: i[k] for k in ('id', 'done', 'blocks')} for i in first['items']]})
+    shot('builder-checklist.png')
+    blocker, placed, refusals = generated('--shape', 'box', '--size', '2.4,1.4,0.5', '--colour', '#8a3020'), None, []
+    for position in ([-1.5, 0, -5.4], [-1.5, 0, -4.6], [-0.4, 0, -5.8]):
+        try:
+            placed = placing({'ref': blocker, 'pose': {'position': position, 'rotation': up}, 'key': 'blocker'})['id']
+            break
+        except RuntimeError as e:
+            refusals.append(e.args[0])
+    assert placed, refusals
+    wait(lambda: approach() is not None and not approach()['done'], 30)
+    opened = approach()
+    shot('builder-checklist-blocked.png')
+    ui('fieldText', 'builderMessage', 'A box in front of the screen')
+    saved = job_again('builder-save')
+    wait(lambda: checklist().get('ready') is False and any(i['id'] == 'save' and i['done'] for i in checklist()['items']), 30)
+    refused = job_again('builder-release')
+    time.sleep(.5)
+    shot('builder-release-refused.png')
+    anyway = job_again('builder-release-anyway')
+    check('a box in front of the screen opens its approach item; Release is refused with release.check, Release anyway tags v0.1.1',
+          'blocker' in opened['message'] and saved['phase'] == 'done' and refused['phase'] == 'failed' and
+          (refused.get('error') or {}).get('code') == 'release.check' and anyway['phase'] == 'done' and 'v0.1.1' in git('tag', '-l').split('\n'),
+          {'item': opened, 'refusals': refusals, 'refused': refused.get('error'), 'anyway': {k: (anyway.get('result') or {}).get(k) for k in ('tag', 'warnings', 'publishing')}})
+    client.call('objects.remove', {'key': 'blocker'})
+    wait(lambda: approach() is not None and approach()['done'], 30)
+    check('removing the box closes the screen approach item again', approach()['done'] and checklist().get('ready'), {'item': approach()})
+    # Placed > Model: the barrel's fit, then a quarter turn (object adjust on the folder's copy).
+    barrel_before = json.loads((folder / 'objects/barrel/object.json').read_text())['bounds']
+    ui('tabNamed', 'objects')
+    ui('objectsView', 'placed')
+    ui('selectObject', ids['barrel'])
+    wait(lambda: ((builder().get('edit') or {}).get('fit') or {}).get('ref') == 'world/barrel', 60)
+    fit = builder()['edit']['fit']
+    time.sleep(.5)
+    shot('builder-model-section.png')
+    assert press('segment:90')
+    assert press('object-adjust')
+    wait(lambda: ((builder().get('edit') or {}).get('last') or {}).get('phase') in ('done', 'failed'), 120)
+    last = builder()['edit']['last']
+    wait(lambda: (state().get('builder') or {}).get('projectId') == SLUG and len(instances()) == 3 and all(i['state'] == 'active' for i in instances().values()), 60)
+    barrel_after = json.loads((folder / 'objects/barrel/object.json').read_text())['bounds']
+    record = json.loads((folder / 'objects/barrel/import.json').read_text())
+    check('Placed > Model reads the import\'s fit and turns it a quarter (absolute yaw 90, a backup kept, the folder reloads)',
+          fit['adjustable'] and last['phase'] == 'done' and record['options']['yaw'] == 90 and bool(last['result'].get('backup')) and
+          abs((barrel_after['max'][0] - barrel_after['min'][0]) - (barrel_before['max'][2] - barrel_before['min'][2])) < 2e-3,
+          {'fit': fit['fit'], 'result': {k: last.get('result', {}).get(k) for k in ('steps', 'backup')}, 'before': barrel_before, 'after': barrel_after})
+    close_director()
 
     # 9. Shapes (IPC 0.31): made in the Director, placed with keys, swapped, renamed, pruned.
     def shapes():
