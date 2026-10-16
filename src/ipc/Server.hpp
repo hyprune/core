@@ -1,5 +1,6 @@
 #pragma once
 #include <chrono>
+#include <deque>
 #include <functional>
 #include <json.hpp>
 #include <map>
@@ -19,6 +20,7 @@ struct LaunchGrant {
     std::set<std::string> capabilities;
     int recipientPid = 0; // Zero only for legacy initial one-shot grants.
     std::chrono::steady_clock::time_point expires = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    std::string profile; // IPC 0.33 (RFC-0016): "assistant" for a token from session.pair
 };
 class WireAudit;
 class Server {
@@ -52,7 +54,32 @@ class Server {
         uint64_t baseline = 0;
         std::chrono::steady_clock::time_point accepted = std::chrono::steady_clock::now(), frameStart = accepted,
                                               lastDelta = accepted;
+        // IPC 0.33 (RFC-0016): a pairing request waiting for the user, the assistant profile.
+        std::string pairRequest, profile, action;
+        Json agent;
+        bool paused = false, remembered = false;
+        uint64_t changes = 0, mutationsTotal = 0;
+        std::deque<std::chrono::steady_clock::time_point> mutations;
+        std::chrono::steady_clock::time_point connected{}, lastPreview{};
     };
+    struct Pair {
+        std::string requestId, clientId, clientName;
+        Json agent, rpcId;
+        int fd = -1;
+        std::chrono::steady_clock::time_point expires;
+    };
+    std::vector<Pair> pairs_;
+    std::deque<std::chrono::steady_clock::time_point> pairTimes_;
+    Json approvals_;
+    bool approvalsLoaded_ = false;
+    void pair(Peer &, const Json &params, const Json &id);
+    Json answer(const Json &params);
+    void expirePairs();
+    Json connectionsState() const;
+    Json assistantState(const Json &state) const;
+    void loadApprovals();
+    void saveApprovals() const;
+    void grantPair(Peer &, const Pair &, bool remembered);
     std::unique_ptr<WireAudit> audit_;
     int fd_ = -1;
     std::string path_, session_;

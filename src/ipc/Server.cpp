@@ -5,6 +5,8 @@
 #include "interaction/Input.hpp"
 #include <algorithm>
 #include <cstring>
+#include <ctime>
+#include <fstream>
 #include <fcntl.h>
 #include <filesystem>
 #include <poll.h>
@@ -62,6 +64,42 @@ void directory(const std::string &path) {
     if (lstat(path.c_str(), &s) || !S_ISDIR(s.st_mode) || s.st_uid != getuid() || (s.st_mode & 077) != 0)
         throw std::runtime_error("unsafe IPC directory");
 }
+// IPC 0.33 (RFC-0016): a paired assistant gets a fixed method allowlist (not a combination of
+// grants), a filtered state and limits. Its token carries these grants; the allowlist decides.
+const std::set<std::string> AssistantGrants{"state.read", "objects.control", "world.control", "quest.control"};
+const std::set<std::string> AssistantMethods{
+    "session.ping", "state.subscribe", "state.snapshot", "state.unsubscribe", "objects.catalog", "objects.place",
+    "objects.transform", "objects.configure", "objects.remove", "objects.hide", "paths.list", "paths.set", "paths.remove",
+    "libraries.list", "world.load", "companion.set", "companion.mode", "companion.clear", "quests.list", "quests.get",
+    "quests.create", "quests.update", "quests.delete", "quests.track", "preview.render", "assistant.report"};
+const std::set<std::string> AssistantMutations{
+    "objects.place", "objects.transform", "objects.configure", "objects.remove", "objects.hide", "paths.set", "paths.remove",
+    "companion.set", "companion.mode", "companion.clear", "quests.create", "quests.update", "quests.delete", "quests.track"};
+const std::set<std::string> AssistantStateKeys{"builder", "objects", "live", "quests", "companion", "content", "world", "location", "movement"};
+const std::set<std::string> ConnectionMethods{"connections.answer", "connections.revoke", "connections.disconnect", "connections.pause"};
+constexpr size_t AssistantPerSecond = 20, AssistantPerSession = 5000;
+// Live values reach an assistant without raw strings over 64 characters.
+void boundStrings(Json &v) {
+    if (v.is_string()) {
+        if (v.get_ref<const std::string &>().size() > 64)
+            v = boundedText(v.get<std::string>(), 64);
+    } else if (v.is_structured())
+        for (auto &child : v)
+            boundStrings(child);
+}
+std::string approvalsPath() {
+    if (const char *path = getenv("HYPRUNE_APPROVALS"); path && path[0] == '/')
+        return path;
+    const char *state = getenv("XDG_STATE_HOME");
+    std::string base = state && state[0] == '/' ? state : std::string(getenv("HOME") ? getenv("HOME") : "/nonexistent") + "/.local/state";
+    return base + "/hyprune/approvals.json";
+}
+std::string isoNow() {
+    char buffer[32];
+    auto t = std::time(nullptr);
+    std::strftime(buffer, sizeof buffer, "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&t));
+    return buffer;
+}
 } // namespace
 std::string randomId() {
     unsigned char bytes[32];
@@ -115,6 +153,7 @@ Server::Server(const std::string &runtime, const std::string &instance, std::vec
     }
     session_ = randomId();
     audit_ = std::make_unique<WireAudit>();
+    loadApprovals();
 }
 bool Server::reissue(const LaunchGrant &grant) {
     std::erase_if(tokens_, [](const auto &g) { return g.expires <= Clock::now(); });
@@ -140,6 +179,11 @@ Json Server::snapshot() const {
 }
 Json Server::visibleState(const Peer &p) const {
     Json state = state_;
+    // IPC 0.33 (RFC-0016): an assistant sees a filtered projection; shell peers see connections.
+    if (p.profile == "assistant")
+        return assistantState(state);
+    if (protocol::atLeast(p.protocol, "0.33") && p.grants.contains("shell.control") && state.is_object())
+        state["connections"] = connectionsState();
     // IPC 0.29: input version 3 (Ctrl sprints, Shift goes down), older peers see version 2;
     // the debug recording's state is new.
     if (!protocol::atLeast(p.protocol, "0.29") && state.is_object()) {
@@ -362,7 +406,8 @@ void Server::notify(const std::string &event, Json params, const std::string &ac
     }
     if (event == "capture.taken") {
         // Debug capture IDs are shell business: 0.17 shells only, never older protocols.
-        for (auto &p : peers_)
+        for (auto &p : peers_) if (p.profile != "assistant") // assistants get state deltas only
+           
             if (p.hello && !p.closing && protocol::atLeast(p.protocol, "0.17") && p.grants.contains("shell.control") &&
                 p.grants.contains("state.read") && !p.subscription.empty())
                 queue(p, {{"jsonrpc", "2.0"}, {"method", event}, {"params", params}});
@@ -370,7 +415,8 @@ void Server::notify(const std::string &event, Json params, const std::string &ac
     }
     if (event == "quest.progress" || event == "focus.phase") {
         // RFC-0012 presentation hints: IPC 0.21 state readers with a state subscription.
-        for (auto &p : peers_)
+        for (auto &p : peers_) if (p.profile != "assistant") // assistants get state deltas only
+           
             if (p.hello && !p.closing && protocol::atLeast(p.protocol, "0.21") && p.grants.contains("state.read") &&
                 !p.subscription.empty())
                 queue(p, {{"jsonrpc", "2.0"}, {"method", event}, {"params", params}});
@@ -378,7 +424,8 @@ void Server::notify(const std::string &event, Json params, const std::string &ac
     }
     const bool hud = event.starts_with("hud.") || event.starts_with("zone.") || event == "tool.changed";
     if (hud || event == "ui.hud.cycle") {
-        for (auto &p : peers_) {
+        for (auto &p : peers_) if (p.profile != "assistant") // assistants get state deltas only
+            {
             if (!p.hello || p.closing || !protocol::atLeast(p.protocol, "0.9") || !p.grants.contains("state.read") ||
                 (!actor.empty() && actor != p.actor))
                 continue;
@@ -424,7 +471,8 @@ void Server::notify(const std::string &event, Json params, const std::string &ac
         }
         return;
     }
-    for (auto &p : peers_)
+    for (auto &p : peers_) if (p.profile != "assistant") // assistants get state deltas only
+           
         if (p.hello && !p.closing && protocol::atLeast(p.protocol, "0.2") && !p.subscription.empty() &&
             (protocol::atLeast(p.protocol, "0.4") || (event != "mounts.changed" && event != "presentation.changed"))) {
             auto projected = params;
@@ -504,7 +552,13 @@ void Server::frame(Peer &p, const std::string &bytes) {
         const auto &params = request["params"];
         Json result;
         if (!p.hello) {
+            if (method == "session.pair") { // IPC 0.33 (RFC-0016): answered when the user decides
+                check(p.pairRequest.empty(), -32004, "a pairing request is already pending");
+                pair(p, params, id);
+                return;
+            }
             check(method == "session.hello", -32600, "hello required");
+            check(p.pairRequest.empty(), -32600, "pairing pending: wait for its answer");
             exact(params, {"protocols", "client", "capabilities"}, {"token"});
             check(params["protocols"].is_array() && !params["protocols"].empty(), -32602, "invalid protocols");
             std::set<std::string> protocols;
@@ -553,6 +607,11 @@ void Server::frame(Peer &p, const std::string &bytes) {
                         for (auto &c : params["capabilities"])
                             if (it->capabilities.contains(c.get<std::string>()))
                                 p.grants.insert(c.get<std::string>());
+                        if (!it->profile.empty()) { // a session.pair token: the profile's grants, whatever was asked
+                            p.profile = it->profile;
+                            p.grants = it->capabilities;
+                            p.connected = Clock::now();
+                        }
                         tokens_.erase(it);
                         valid = true;
                         break;
@@ -563,17 +622,25 @@ void Server::frame(Peer &p, const std::string &bytes) {
             p.client = clientId;
             p.actor = randomId();
             Json methods = Json::array({"session.hello", "session.ping"});
+            const bool assistant = p.profile == "assistant";
             if (p.grants.contains("state.read"))
                 for (auto s : {"state.subscribe", "state.snapshot", "state.unsubscribe"})
                     methods.push_back(s);
-            if (p.grants.contains("state.read") && protocol::atLeast(p.protocol, "0.9"))
+            if (p.grants.contains("state.read") && protocol::atLeast(p.protocol, "0.9") && !assistant)
                 for (auto m : {"hud.subscribe", "hud.unsubscribe"})
                     methods.push_back(m);
             for (auto &[m, grant] : methods_)
-                if (p.grants.contains(grant) && protocol::methodAvailable(p.protocol, m))
+                if (p.grants.contains(grant) && protocol::methodAvailable(p.protocol, m) && (!assistant || AssistantMethods.contains(m)))
                     methods.push_back(m);
+            if (protocol::atLeast(p.protocol, "0.33") && p.grants.contains("shell.control") && !assistant)
+                for (auto &m : ConnectionMethods)
+                    methods.push_back(m);
+            if (assistant)
+                methods.push_back("assistant.report");
             Json events = Json::array();
-            if (p.grants.contains("state.read")) {
+            if (assistant)
+                events.push_back("state.delta");
+            else if (p.grants.contains("state.read")) {
                 events.push_back("state.delta");
                 if (protocol::atLeast(p.protocol, "0.9"))
                     for (auto e : {"hud.frame", "hud.pose", "zone.entered", "zone.exited", "tool.changed", "ui.hud.cycle"})
@@ -597,6 +664,8 @@ void Server::frame(Peer &p, const std::string &bytes) {
                       {"capabilities", p.grants},
                       {"methods", methods},
                       {"events", events}};
+            if (assistant)
+                result["profile"] = "assistant";
         } else if (method == "session.hello")
             throw Error(-32600, "hello already completed");
         else if (method == "session.ping") {
@@ -604,7 +673,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
             result = {{"monotonicMs",
                        std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count()}};
         } else if (method == "hud.subscribe" || method == "hud.unsubscribe") {
-            check(protocol::atLeast(p.protocol, "0.9") && p.grants.contains("state.read"), -32601, "method not advertised");
+            check(protocol::atLeast(p.protocol, "0.9") && p.grants.contains("state.read") && p.profile.empty(), -32601, "method not advertised");
             if (method == "hud.subscribe") {
                 exact(params, {"topics"});
                 check(params["topics"].is_array() && !params["topics"].empty() && params["topics"].size() <= 5,
@@ -668,8 +737,76 @@ void Server::frame(Peer &p, const std::string &bytes) {
                     result = {{"snapshot", snapshot(p)}};
                 }
             }
+        } else if (ConnectionMethods.contains(method) || method == "assistant.report") {
+            // IPC 0.33 (RFC-0016): core's own connection methods, never forwarded.
+            check(protocol::atLeast(p.protocol, "0.33"), -32601, "method not advertised for protocol");
+            if (method == "assistant.report") {
+                check(p.profile == "assistant", -32601, "method not advertised");
+                exact(params, {"changes"}, {"action"});
+                check(params["changes"].is_number_unsigned() && params["changes"].get<uint64_t>() <= 1000000, -32602, "invalid changes");
+                if (params.contains("action")) {
+                    check(params["action"].is_string() && !params["action"].get_ref<const std::string &>().empty(), -32602, "invalid action");
+                    p.action = boundedText(params["action"].get<std::string>(), 128);
+                }
+                p.changes = std::max(p.changes, params["changes"].get<uint64_t>());
+                ++revision_;
+                result = {{"paused", p.paused}, {"changes", p.changes}};
+            } else {
+                check(p.grants.contains("shell.control") && p.profile.empty(), -32601, "method not advertised");
+                if (method == "connections.answer")
+                    result = answer(params);
+                else if (method == "connections.revoke") {
+                    exact(params, {"clientId", "agent"});
+                    auto &list = approvals_["approvals"].get_ref<Json::array_t &>();
+                    auto before = list.size();
+                    std::erase_if(list, [&](const Json &a) { return a["clientId"] == params["clientId"] && a["agent"] == params["agent"]; });
+                    bool removed = list.size() != before;
+                    if (removed) {
+                        saveApprovals();
+                        ++revision_;
+                    }
+                    result = {{"removed", removed}};
+                } else {
+                    exact(params, method == "connections.pause" ? std::initializer_list<const char *>{"actor", "paused"} : std::initializer_list<const char *>{"actor"});
+                    check(params["actor"].is_string(), -32602, "invalid actor");
+                    auto peer = std::find_if(peers_.begin(), peers_.end(), [&](const Peer &q) { return q.actor == params["actor"] && q.profile == "assistant" && !q.closing; });
+                    if (method == "connections.disconnect") {
+                        if (peer != peers_.end())
+                            peer->closing = true, ++revision_;
+                        result = {{"disconnected", peer != peers_.end()}};
+                    } else {
+                        check(params["paused"].is_boolean(), -32602, "invalid paused");
+                        check(peer != peers_.end(), -32003, "unknown assistant connection");
+                        peer->paused = params["paused"].get<bool>();
+                        ++revision_;
+                        result = {{"paused", peer->paused}};
+                    }
+                }
+            }
         } else {
             check(protocol::methodAvailable(p.protocol, method), -32601, "method not advertised for protocol");
+            bool mutating = false;
+            if (p.profile == "assistant") {
+                if (!AssistantMethods.contains(method))
+                    throw Error(-32002, "An assistant can't use " + method, Json{{"retryable", false}, {"rule", "profile.assistant"}});
+                auto now = Clock::now();
+                mutating = AssistantMutations.contains(method) && !(params.contains("dryRun") && params["dryRun"] == true);
+                if (mutating) {
+                    if (p.paused)
+                        throw Error(-32008, "The user paused the assistant", Json{{"retryable", true}, {"rule", "assistant.paused"}});
+                    while (!p.mutations.empty() && now - p.mutations.front() > std::chrono::seconds(1))
+                        p.mutations.pop_front();
+                    if (p.mutations.size() >= AssistantPerSecond)
+                        throw Error(-32008, "More than 20 changes a second", Json{{"retryable", true}, {"rule", "assistant.limit"}});
+                    if (p.mutationsTotal >= AssistantPerSession)
+                        throw Error(-32008, "This session made 5,000 changes: connect again to go on", Json{{"retryable", false}, {"rule", "assistant.limit"}});
+                }
+                if (method == "preview.render") {
+                    if (now - p.lastPreview < std::chrono::seconds(1))
+                        throw Error(-32008, "One preview a second", Json{{"retryable", true}, {"rule", "preview.limit"}});
+                    p.lastPreview = now;
+                }
+            }
             auto it = methods_.find(method);
             check(it != methods_.end() && p.grants.contains(it->second), -32601, "method not advertised");
             Json command = params;
@@ -683,6 +820,12 @@ void Server::frame(Peer &p, const std::string &bytes) {
                 command["_protocol"] = p.protocol;
             }
             result = handler_(method, command);
+            if (mutating) {
+                p.mutations.push_back(Clock::now());
+                ++p.mutationsTotal;
+                ++p.changes;
+                ++revision_;
+            }
             if (method.starts_with("input.") && !protocol::atLeast(p.protocol, "0.12"))
                 result = interaction::withoutRecordingAction(std::move(result));
             if (method.starts_with("input.") && !protocol::atLeast(p.protocol, "0.21"))
@@ -737,6 +880,8 @@ void Server::flush() {
         }
 }
 void Server::poll() {
+    if (!pairs_.empty())
+        expirePairs();
     for (int i = 0; i < 8; i++) {
         int fd = accept4(fd_, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
         if (fd < 0)
@@ -755,7 +900,7 @@ void Server::poll() {
     }
     auto now = Clock::now();
     for (auto &p : peers_) {
-        if ((!p.hello && now - p.accepted > std::chrono::seconds(5)) ||
+        if ((!p.hello && p.pairRequest.empty() && now - p.accepted > std::chrono::seconds(5)) ||
             (!p.input.empty() && now - p.frameStart > std::chrono::seconds(10))) {
             p.closing = true;
             p.output.clear();
@@ -829,5 +974,181 @@ void Server::poll() {
         }
         return false;
     });
+}
+// ---- IPC 0.33 (RFC-0016): pairing, the assistant profile and connections ----
+void Server::loadApprovals() {
+    approvals_ = {{"approvals", Json::array()}};
+    try {
+        std::ifstream in(approvalsPath());
+        if (!in)
+            return;
+        auto j = Json::parse(in);
+        for (auto &a : j.value("approvals", Json::array()))
+            if (a.is_object() && a.value("clientId", "").size() && a.value("agent", "").size() && a.value("profile", "") == "assistant" &&
+                approvals_["approvals"].size() < 64)
+                approvals_["approvals"].push_back({{"clientId", a["clientId"]}, {"agent", a["agent"]}, {"profile", "assistant"},
+                                                   {"approvedAt", a.value("approvedAt", "unknown")}});
+    } catch (...) {
+        approvals_ = {{"approvals", Json::array()}}; // an unreadable file approves nothing
+    }
+}
+void Server::saveApprovals() const {
+    // Never a token: {clientId, agent, profile, approvedAt} only, 0600, written atomically.
+    std::filesystem::path path = approvalsPath();
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    auto temp = path.string() + ".tmp";
+    int fd = ::open(temp.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    if (fd < 0)
+        return;
+    auto bytes = approvals_.dump(1) + "\n";
+    bool ok = ::write(fd, bytes.data(), bytes.size()) == ssize_t(bytes.size());
+    ::close(fd);
+    if (ok)
+        std::filesystem::rename(temp, path, ec);
+    else
+        std::filesystem::remove(temp, ec);
+}
+void Server::pair(Peer &p, const Json &params, const Json &id) {
+    exact(params, {"protocols", "client", "agent", "profile"});
+    check(params["protocols"].is_array() && !params["protocols"].empty() && params["protocols"].size() <= 64, -32602, "invalid protocols");
+    std::set<std::string> protocols;
+    for (auto &value : params["protocols"]) {
+        check(value.is_string() && !value.get_ref<const std::string &>().empty() && value.get_ref<const std::string &>().size() <= 256,
+              -32602, "invalid protocol");
+        protocols.insert(value.get<std::string>());
+    }
+    auto selected = protocol::negotiate(protocols);
+    check(selected.has_value() && protocol::atLeast(*selected, "0.33"), -32001, "pairing needs IPC 0.33");
+    p.protocol = *selected;
+    exact(params["client"], {"id", "name"});
+    check(params["client"]["id"].is_string() && params["client"]["name"].is_string(), -32602, "invalid client identity");
+    auto clientId = params["client"]["id"].get<std::string>(), clientName = params["client"]["name"].get<std::string>();
+    check(clientId.size() <= 128 && std::regex_match(clientId, std::regex("[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+")) &&
+              !clientName.empty() && clientName.size() <= 256,
+          -32602, "invalid client identity");
+    const auto &agent = params["agent"];
+    check(agent.is_object(), -32602, "invalid agent");
+    exact(agent, {"name"}, {"version"});
+    auto label = [](const Json &v, size_t max) {
+        if (!v.is_string())
+            return false;
+        auto &t = v.get_ref<const std::string &>();
+        return !t.empty() && t.size() <= max && boundedText(t, max) == t &&
+               std::none_of(t.begin(), t.end(), [](unsigned char c) { return c < 0x20 || c == 0x7f; });
+    };
+    check(label(agent["name"], 64) && (!agent.contains("version") || label(agent["version"], 32)), -32602, "invalid agent label");
+    check(params["profile"] == "assistant", -32602, "unknown profile");
+    check(p.pairRequest.empty(), -32004, "a pairing request is already pending");
+    auto now = Clock::now();
+    p.agent = agent;
+    Pair request{"p-" + randomId().substr(0, 8), clientId, clientName, agent, id, p.fd, now + std::chrono::seconds(120)};
+    for (auto &a : approvals_["approvals"])
+        if (a["clientId"] == clientId && a["agent"] == agent["name"] && a["profile"] == "assistant") {
+            grantPair(p, request, true); // remembered: no prompt, so no limit
+            return;
+        }
+    // At most 3 prompts a minute (all connections of this user) and 8 waiting at once.
+    while (!pairTimes_.empty() && now - pairTimes_.front() > std::chrono::minutes(1))
+        pairTimes_.pop_front();
+    if (pairTimes_.size() >= 3)
+        throw Error(-32008, "too many pairing requests: wait a minute", Json{{"retryable", true}, {"rule", "pair.limit"}});
+    check(pairs_.size() < 8, -32008, "too many pending pairing requests");
+    pairTimes_.push_back(now);
+    p.pairRequest = request.requestId;
+    pairs_.push_back(std::move(request));
+    ++revision_;
+}
+void Server::grantPair(Peer &p, const Pair &request, bool remembered) {
+    LaunchGrant grant;
+    grant.token = randomId();
+    grant.client = request.clientId;
+    grant.capabilities = AssistantGrants;
+    grant.recipientPid = p.pid;
+    grant.profile = "assistant";
+    std::erase_if(tokens_, [](const auto &g) { return g.expires <= Clock::now(); });
+    tokens_.push_back(grant);
+    p.pairRequest.clear();
+    p.remembered = remembered;
+    p.accepted = Clock::now(); // hello follows at once
+    queue(p, {{"jsonrpc", "2.0"}, {"id", request.rpcId}, {"result", {{"token", grant.token}, {"profile", "assistant"}, {"remembered", remembered}}}},
+          "session.pair");
+    ++revision_;
+}
+Json Server::answer(const Json &params) {
+    exact(params, {"requestId", "decision"});
+    check(params["requestId"].is_string() && params["decision"].is_string(), -32602, "invalid answer");
+    auto decision = params["decision"].get<std::string>();
+    check(decision == "once" || decision == "always" || decision == "deny", -32602, "decision is once, always or deny");
+    auto it = std::find_if(pairs_.begin(), pairs_.end(), [&](const Pair &q) { return q.requestId == params["requestId"]; });
+    check(it != pairs_.end(), -32003, "unknown pairing request");
+    Pair request = *it;
+    pairs_.erase(it);
+    ++revision_;
+    auto peer = std::find_if(peers_.begin(), peers_.end(), [&](const Peer &q) { return q.fd == request.fd && q.pairRequest == request.requestId && !q.closing; });
+    if (peer == peers_.end())
+        return {{"ok", true}}; // the assistant went away
+    if (decision == "deny") {
+        peer->pairRequest.clear();
+        queue(*peer, {{"jsonrpc", "2.0"}, {"id", request.rpcId},
+                      {"error", {{"code", -32002}, {"message", "The user denied the pairing"}, {"data", {{"retryable", false}, {"rule", "pair.denied"}}}}}});
+        peer->closing = true;
+        return {{"ok", true}};
+    }
+    if (decision == "always") {
+        auto &list = approvals_["approvals"].get_ref<Json::array_t &>();
+        std::erase_if(list, [&](const Json &a) { return a["clientId"] == request.clientId && a["agent"] == request.agent["name"]; });
+        if (list.size() >= 64)
+            list.erase(list.begin());
+        list.push_back({{"clientId", request.clientId}, {"agent", request.agent["name"]}, {"profile", "assistant"}, {"approvedAt", isoNow()}});
+        saveApprovals();
+    }
+    grantPair(*peer, request, decision == "always");
+    return {{"ok", true}};
+}
+void Server::expirePairs() {
+    auto now = Clock::now();
+    bool changed = false;
+    std::erase_if(pairs_, [&](const Pair &request) {
+        auto peer = std::find_if(peers_.begin(), peers_.end(), [&](const Peer &q) { return q.fd == request.fd && q.pairRequest == request.requestId; });
+        if (peer == peers_.end() || peer->closing)
+            return changed = true;
+        if (now < request.expires)
+            return false;
+        // No answer in 120 s is a denial.
+        peer->pairRequest.clear();
+        queue(*peer, {{"jsonrpc", "2.0"}, {"id", request.rpcId},
+                      {"error", {{"code", -32002}, {"message", "No answer to the pairing request in 120 s"}, {"data", {{"retryable", true}, {"rule", "pair.denied"}}}}}});
+        peer->closing = true;
+        return changed = true;
+    });
+    if (changed)
+        ++revision_;
+}
+Json Server::connectionsState() const {
+    auto now = Clock::now();
+    auto ms = [](auto d) { return std::max<int64_t>(0, std::chrono::duration_cast<std::chrono::milliseconds>(d).count()); };
+    Json pending = Json::array(), live = Json::array();
+    for (auto &q : pairs_)
+        if (pending.size() < 32)
+            pending.push_back({{"requestId", q.requestId}, {"clientId", q.clientId}, {"clientName", q.clientName}, {"agent", q.agent},
+                               {"profile", "assistant"}, {"expiresInMs", ms(q.expires - now)}});
+    for (auto &p : peers_)
+        if (p.hello && !p.closing && p.profile == "assistant" && live.size() < 32)
+            live.push_back({{"actor", p.actor}, {"clientId", p.client}, {"agent", p.agent.is_object() ? p.agent : Json{{"name", "unknown"}}},
+                            {"profile", "assistant"}, {"connectedMs", ms(now - p.connected)}, {"changes", p.changes},
+                            {"action", p.action.empty() ? Json(nullptr) : Json(p.action)}, {"paused", p.paused}, {"remembered", p.remembered}});
+    return {{"pending", pending}, {"live", live}, {"approvals", approvals_["approvals"]}};
+}
+Json Server::assistantState(const Json &state) const {
+    Json out = Json::object();
+    if (!state.is_object())
+        return out;
+    for (auto &[key, value] : state.items())
+        if (AssistantStateKeys.contains(key))
+            out[key] = value;
+    if (out.contains("live"))
+        boundStrings(out["live"]);
+    return out;
 }
 } // namespace hyprune::ipc

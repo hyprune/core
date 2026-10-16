@@ -1,3 +1,4 @@
+#include <fstream>
 #include "control/Control.hpp"
 #include "ipc/Protocol.hpp"
 #include "ipc/Server.hpp"
@@ -444,6 +445,103 @@ void inheritance(const std::string &runtime) {
     }
 }
 } // namespace
+// IPC 0.33 (RFC-0016): session.pair before hello waits for the user's answer (once, always,
+// deny); the token binds the assistant profile (a fixed allowlist, a filtered state, limits,
+// pause); always-approvals are remembered without a token and revoked; disconnect closes.
+void assistantPairing(const std::string &runtime) {
+    std::string approvals = runtime + "/approvals.json";
+    setenv("HYPRUNE_APPROVALS", approvals.c_str(), 1);
+    auto shellToken = randomId();
+    Server server(runtime, "ipc033", {{shellToken, "org.hyprune.shell", {"state.read", "shell.control"}}},
+                  [](auto &, auto &) { return Json{{"ok", true}}; });
+    server.contextual(true);
+    server.advertise({{"objects.place", "objects.control"}, {"objects.catalog", "state.read"}, {"surface.focus", "surface.control"},
+                      {"camera.set", "movement.control"}, {"data.publish", "data.publish"}, {"input.set", "input.control"}, {"world.load", "world.control"}});
+    server.publish({{"objects", {{"instances", Json::array()}}}, {"surfaces", Json::array({Json{{"title", "secret mail"}}})},
+                    {"live", {{"values", {{"long", std::string(100, 'x')}}}}}, {"builder", nullptr}});
+    auto pump = [&] { for (int i = 0; i < 3; ++i) server.poll(); };
+    auto unread = [](Client &c) { pollfd p{c.fd, POLLIN, 0}; return ::poll(&p, 1, 20) > 0; };
+    auto call = [&](Client &c, Json j) { c.sendJson(j); pump(); return c.receive(); };
+    Client shell(server.path());
+    auto h = hello(shellToken); h["params"]["protocols"] = {"0.33"}; h["params"]["client"]["id"] = "org.hyprune.shell";
+    h["params"]["capabilities"] = {"state.read", "shell.control"};
+    auto shellHello = call(shell, h)["result"];
+    check(std::find(shellHello["methods"].begin(), shellHello["methods"].end(), "connections.answer") != shellHello["methods"].end(), "shell gets connections.*");
+    call(shell, req("sub", "state.subscribe", {{"topics", {"state"}}}));
+    auto connections = [&] { return call(shell, req(randomId().substr(0, 8), "state.snapshot", {{"subscriptionId", "subscription-1"}}))["result"]["snapshot"]["state"]["connections"]; };
+    Json pairing = {{"protocols", {"0.33"}}, {"client", {{"id", "com.hyprune.mcp"}, {"name", "Hyprune MCP server"}}},
+                    {"agent", {{"name", "Example Chat"}, {"version", "1.4"}}}, {"profile", "assistant"}};
+    // Once: the answer waits for the user; the token binds the profile.
+    Client a(server.path());
+    a.sendJson(req("pair", "session.pair", pairing)); pump();
+    check(!unread(a), "pairing answered before the user did");
+    auto pending = connections()["pending"];
+    check(pending.size() == 1 && pending[0]["agent"]["name"] == "Example Chat" && pending[0]["clientId"] == "com.hyprune.mcp", "pending request in state");
+    call(shell, req("answer", "connections.answer", {{"requestId", pending[0]["requestId"]}, {"decision", "once"}}));
+    auto paired = a.receive();
+    check(paired["result"]["profile"] == "assistant" && paired["result"]["remembered"] == false, "pairing result");
+    auto ah = hello(paired["result"]["token"]); ah["params"]["protocols"] = {"0.33"}; ah["params"]["client"]["id"] = "com.hyprune.mcp";
+    ah["params"]["capabilities"] = {"state.read", "surface.control"};
+    auto aHello = call(a, ah)["result"];
+    auto has = [](const Json &list, const char *m) { return std::find(list.begin(), list.end(), m) != list.end(); };
+    check(aHello["profile"] == "assistant" && has(aHello["methods"], "objects.place") && has(aHello["methods"], "assistant.report") &&
+              !has(aHello["methods"], "surface.focus") && !has(aHello["methods"], "hud.subscribe") && !has(aHello["capabilities"], "surface.control") &&
+              aHello["events"] == Json::array({"state.delta"}),
+          "assistant hello: the allowlist, not the request");
+    for (auto m : {"surface.focus", "camera.set", "data.publish", "input.set"}) {
+        auto r = call(a, req(m, m, Json::object()));
+        check(r["error"]["code"] == -32002 && r["error"]["data"]["rule"] == "profile.assistant", "refused outside the profile");
+    }
+    auto seen = call(a, req("s", "state.subscribe", {{"topics", {"state"}}}))["result"]["snapshot"]["state"];
+    check(!seen.contains("surfaces") && seen.contains("objects") && seen["live"]["values"]["long"].get<std::string>().size() <= 64, "filtered state");
+    check(call(a, req("p1", "objects.place", {{"ref", "user/x"}}))["result"]["ok"] == true, "assistant places");
+    auto live = connections()["live"];
+    check(live.size() == 1 && live[0]["changes"] == 1 && live[0]["paused"] == false, "live connection counted");
+    auto actor = live[0]["actor"];
+    call(shell, req("pause", "connections.pause", {{"actor", actor}, {"paused", true}}));
+    auto paused = call(a, req("p2", "objects.place", {{"ref", "user/x"}}));
+    check(paused["error"]["data"]["rule"] == "assistant.paused" && paused["error"]["data"]["retryable"] == true, "pause refuses changes");
+    check(call(a, req("p3", "objects.place", {{"ref", "user/x"}, {"dryRun", true}})).contains("result"), "dry runs pass a pause");
+    call(shell, req("resume", "connections.pause", {{"actor", actor}, {"paused", false}}));
+    int refused = 0;
+    for (int i = 0; i < 25; ++i)
+        refused += call(a, req("burst" + std::to_string(i), "objects.place", {{"ref", "user/x"}})).contains("error");
+    check(refused >= 5, "20 changes a second");
+    auto report = call(a, req("r", "assistant.report", {{"changes", 40}, {"action", "placed the bench"}}))["result"];
+    check(report["changes"] == 40 && report["paused"] == false && connections()["live"][0]["action"] == "placed the bench", "report");
+    // Deny.
+    Client b(server.path());
+    b.sendJson(req("pair", "session.pair", pairing)); pump();
+    call(shell, req("deny", "connections.answer", {{"requestId", connections()["pending"][0]["requestId"]}, {"decision", "deny"}}));
+    check(b.receive()["error"]["data"]["rule"] == "pair.denied", "deny");
+    // Always: remembered by client id and agent label, without a token.
+    auto other = pairing; other["agent"] = {{"name", "Tool X"}};
+    Client c(server.path());
+    c.sendJson(req("pair", "session.pair", other)); pump();
+    call(shell, req("always", "connections.answer", {{"requestId", connections()["pending"][0]["requestId"]}, {"decision", "always"}}));
+    auto token = c.receive()["result"]["token"].get<std::string>();
+    std::ifstream file(approvals);
+    std::string saved((std::istreambuf_iterator<char>(file)), {});
+    check(saved.find("Tool X") != std::string::npos && saved.find(token) == std::string::npos, "approval stored, never the token");
+    Client d(server.path());
+    auto remembered = call(d, req("pair", "session.pair", other))["result"];
+    check(remembered["remembered"] == true && remembered["token"].is_string(), "remembered approval");
+    check(call(shell, req("revoke", "connections.revoke", {{"clientId", "com.hyprune.mcp"}, {"agent", "Tool X"}}))["result"]["removed"] == true, "revoke");
+    check(connections()["approvals"].empty(), "revoked");
+    // A fourth prompt within the minute is refused.
+    Client e(server.path());
+    check(call(e, req("pair", "session.pair", other))["error"]["data"]["rule"] == "pair.limit", "three prompts a minute");
+    // Disconnect closes the assistant's connection.
+    check(call(shell, req("disconnect", "connections.disconnect", {{"actor", actor}}))["result"]["disconnected"] == true, "disconnect");
+    pump();
+    char byte;
+    check(recv(a.fd, &byte, 1, 0) <= 0, "disconnected assistant closed");
+    // Pairing needs 0.33, and an older shell sees no connections.
+    Client f(server.path());
+    auto old = pairing; old["protocols"] = {"0.32"};
+    check(call(f, req("pair", "session.pair", old))["error"]["code"] == -32001, "pairing below 0.33");
+    unsetenv("HYPRUNE_APPROVALS");
+}
 int main() {
     char pattern[] = "/tmp/hn-ipc-XXXXXX";
     char *dir = mkdtemp(pattern);
@@ -457,6 +555,7 @@ int main() {
         workspaceScreens(dir);
         hudStreams(dir);
         renewals(dir);
+        assistantPairing(dir);
         auto token = randomId(), token02 = randomId(), token03 = randomId(), token04 = randomId(), token05 = randomId();
         auto token06 = randomId(), token07 = randomId(), token08 = randomId();
         std::atomic<int> disconnected = 0;
