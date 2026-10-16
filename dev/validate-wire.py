@@ -34,9 +34,14 @@ def validate(item):
         missing=[k for k in error.validator_value if isinstance(error.instance,dict) and k not in error.instance] if error.validator=='required' else []
         raise AssertionError(f'protocol {version} {frame.get("method",method) or "error"} at {where}: {error.validator}'+(f' {missing}' if missing else ''))
 if __name__=='__main__':
+    import time
     for line in sys.stdin.buffer:
+        started=time.monotonic()
         try:validate(json.loads(line))
         except Exception as error:
             print('IPC SCHEMA ASSERTION: '+str(error),file=sys.stderr,flush=True)
             sys.stdout.write('!');sys.stdout.flush();sys.exit(1)
+        took=time.monotonic()-started
+        if took>2:  # core gives each frame 15 s: name the slow ones (method and size only, never payloads)
+            item=json.loads(line);print(f'IPC schema audit: {item["protocol"]} {item["frame"].get("method",item["method"])} took {took:.1f} s ({len(line)} bytes)',file=sys.stderr,flush=True)
         sys.stdout.write('.');sys.stdout.flush()
