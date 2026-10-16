@@ -129,10 +129,11 @@ def blockout():
     box = lambda key, size, pos, mat, **kw: ('place', dict(key=key, shape='box', size=size, position=pos, material=mat, ifExists='update', **kw))
     plan = [box('roof', [20, .3, 16], [0, 0, -8], 'roof-concrete'),
             box('parapet-back', [20, 1, .25], [0, .3, -15.875], 'parapet-stone'),
-            box('parapet-left', [.25, 1, 16], [-9.875, .3, -8], 'parapet-stone'),
-            box('parapet-right', [.25, 1, 16], [9.875, .3, -8], 'parapet-stone'),
-            box('parapet-front-left', [7.75, 1, .25], [-6, .3, -.125], 'parapet-stone'),
-            box('parapet-front-right', [7.75, 1, .25], [6, .3, -.125], 'parapet-stone'),
+            # Walls may touch, never overlap (core refuses a collider inside another).
+            box('parapet-left', [.25, 1, 15.75], [-9.875, .3, -7.875], 'parapet-stone'),
+            box('parapet-right', [.25, 1, 15.75], [9.875, .3, -7.875], 'parapet-stone'),
+            box('parapet-front-left', [7.625, 1, .25], [-5.9375, .3, -.125], 'parapet-stone'),
+            box('parapet-front-right', [7.625, 1, .25], [5.9375, .3, -.125], 'parapet-stone'),
             box('deck', [6, .3, 6], [-6, .3, -12], 'deck-wood'),
             box('bench-deck', [1.8, .45, .5], [-6, .6, -10.2], 'deck-wood')]
     for i, (x, z) in enumerate([(5.5, -14.6), (-1.0, -1.2), (5.0, -1.2)]):
