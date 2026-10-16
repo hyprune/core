@@ -229,6 +229,11 @@ def acceptance(client, children, args, shell_token, socketpath):
 
     def director():
         wait(lambda: s.camera()['active'], 30)
+        # Back to world mode first (a reload or the cinema camera can leave the HUD elsewhere).
+        wait(lambda: not status().get('warp') and status().get('phase') in ('arrived', None), 30)
+        if status().get('mode') not in (None, 'world'):
+            keys('-P', 'Super_L', '-k', 'Tab', '-p', 'Super_L')
+            time.sleep(1)
         # The hold sometimes misses on a loaded host: try a few times, then keep evidence.
         for _ in range(7):
             if status().get('director'):
@@ -305,6 +310,7 @@ def acceptance(client, children, args, shell_token, socketpath):
         for value in [20, 55, 90, 60, 35]:
             api['cpu'] = value
             time.sleep(1.6)
+    cam.stop()  # the cinema camera hands the view back (the Director needs world mode)
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(raw), *cinema.ENCODE, str(out / 'assistant-build.mp4')], check=True)
     build_s = round(time.monotonic() - started, 1)
     api['cpu'] = 80
