@@ -136,7 +136,7 @@ def blockout():
             box('parapet-front-right', [7.625, 1, .25], [5.9375, .3, -.125], 'parapet-stone'),
             box('deck', [6, .3, 6], [-6, .3, -12], 'deck-wood'),
             box('bench-deck', [1.8, .45, .5], [-6, .6, -10.2], 'deck-wood')]
-    for i, (x, z) in enumerate([(5.5, -14.6), (-1.0, -1.2), (5.0, -1.2)]):
+    for i, (x, z) in enumerate([(5.5, -14.6), (-5.0, -1.2), (5.0, -1.2)]):  # the entrance (x -2.1..2.1) stays open
         plan.append(box(f'planter-{i + 1}', [2.6, .6, .8], [x, .3, z], 'planter-clay'))
         plan.append(('place', dict(key=f'shrub-{i + 1}', shape='sphere', size=[1.1], on={'key': f'planter-{i + 1}', 'face': 'top'}, material='foliage', ifExists='update')))
     # Props: a pergola over the deck with string lights, a rug, a second bench by the tower.
@@ -247,6 +247,11 @@ def acceptance(client, children, args, shell_token, socketpath):
             try:
                 wait(lambda: status().get('director'), 6)
             except AssertionError:
+                # Known host flake (bridge): core keeps the overlay visible while the shell shows
+                # no Director, so the world gets no keys. Escape closes the stray overlay.
+                leases = (state().get('shell') or {}).get('leases') or []
+                if any(o.get('visible') for l in leases for o in l.get('overlays', [])):
+                    keys('-k', 'Escape')
                 time.sleep(2)
         if not status().get('director'):
             st, core = status(), state()

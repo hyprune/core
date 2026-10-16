@@ -111,7 +111,8 @@ int main(int argc, char **argv) {
             loaded->objectInstances.push_back(inst);
         }
         render::Renderer renderer;
-        renderer.pacing = false; // every draw renders (an offline owner)
+        renderer.pacing = false;           // every draw renders (an offline owner)
+        renderer.reticle.visible = false;  // a view of the world, not the player's aim
         renderer.prepare(loaded);
         GLuint texture, fbo;
         glGenTextures(1, &texture);
