@@ -405,25 +405,6 @@ def acceptance(client, children, args, shell_token, socketpath):
 
     # E2. The companion (named by the assistant), a prepared release the user presses, a command
     # proposal that never runs until the user allows it on the Data sources page.
-    if (s.STATE / COMPANIONS.name).is_file() and COMPANIONS.name:
-        import hashlib
-        archive = s.STATE / COMPANIONS.name
-        client.call('libraries.install', {'archive': str(archive), 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()})
-        listed = {}
-        wait(lambda: listed.update(mcp.data('companion_list')) or listed.get('characters'), 30)
-        mcp.data('companion_choose', ref=listed['characters'][0]['ref'], name='Ember')
-        mcp.data('companion_mode', mode='follow', pace='walk')
-        wait(lambda: (state().get('companion') or {}).get('name') == 'Ember', 20)
-        companion = state()['companion']
-        check('E2: the assistant chooses a companion, names it Ember and sets it to follow at a walk',
-              companion['name'] == 'Ember' and companion['mode'] == 'follow' and companion['pace'] == 'walk',
-              {k: companion.get(k) for k in ('ref', 'name', 'state', 'mode', 'pace')})
-        # The user dismisses the companion again (the next steps hold Tab for the Director, which
-        # did not open with the companion following close by: kept as a finding).
-        client.call('companion.clear', {})
-        wait(lambda: (state().get('companion') or {}).get('state') == 'none', 20)
-    else:
-        print('SKIP assistant: E2 companion step (no HYPRUNE_COMPANION_LIBRARY)', flush=True)
     made = mcp.data('make_world')
     prepared = mcp.data('release_prepare', version='0.1.0', notes='A cosy rooftop garden at sunset')
     director()
@@ -495,6 +476,25 @@ def acceptance(client, children, args, shell_token, socketpath):
           {'refusals': refusals, 'deny': deny.get('error'), 'methods': len(hello.get('methods', []))})
     raw.sock.close()
 
+    if (s.STATE / COMPANIONS.name).is_file() and COMPANIONS.name:
+        import hashlib
+        archive = s.STATE / COMPANIONS.name
+        client.call('libraries.install', {'archive': str(archive), 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()})
+        listed = {}
+        wait(lambda: listed.update(mcp.data('companion_list')) or listed.get('characters'), 30)
+        mcp.data('companion_choose', ref=listed['characters'][0]['ref'], name='Ember')
+        mcp.data('companion_mode', mode='follow', pace='walk')
+        wait(lambda: (state().get('companion') or {}).get('name') == 'Ember', 20)
+        companion = state()['companion']
+        check('E2: the assistant chooses a companion, names it Ember and sets it to follow at a walk',
+              companion['name'] == 'Ember' and companion['mode'] == 'follow' and companion['pace'] == 'walk',
+              {k: companion.get(k) for k in ('ref', 'name', 'state', 'mode', 'pace')})
+        # The user dismisses the companion again (the next steps hold Tab for the Director, which
+        # did not open with the companion following close by: kept as a finding).
+        client.call('companion.clear', {})
+        wait(lambda: (state().get('companion') or {}).get('state') == 'none', 20)
+    else:
+        print('SKIP assistant: E2 companion step (no HYPRUNE_COMPANION_LIBRARY)', flush=True)
     # 6. Revoke and Disconnect from Connected assistants.
     wait(lambda: len(assistants().get('live') or []) == 1, 10)
     ui('scrollPage', 1)
