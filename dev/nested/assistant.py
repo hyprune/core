@@ -389,9 +389,10 @@ def acceptance(client, children, args, shell_token, socketpath):
         mcp.data(tool, **args_)
     after = instances()
     hedge_keys = sorted(i['key'] for i in after if (i.get('key') or '').startswith('hedge-'))
-    check('a server killed mid-build and run again with the same plan finishes with no duplicates (remembered: no prompt)',
-          not prompted and hedge_keys == ['hedge-1', 'hedge-2', 'hedge-3', 'hedge-4'] and len(after) == len(placed) + 4,
-          {'hedges': hedge_keys, 'placements': len(after), 'prompted': prompted})
+    blocked = [(i.get('key'), i.get('rule')) for i in after if i.get('state') != 'active']
+    check('a server killed mid-build and run again with the same plan finishes with no duplicates (remembered: no prompt); after the reload nothing is blocked (screens on the roof keep it)',
+          not prompted and hedge_keys == ['hedge-1', 'hedge-2', 'hedge-3', 'hedge-4'] and len(after) == len(placed) + 4 and not blocked,
+          {'hedges': hedge_keys, 'placements': len(after), 'prompted': prompted, 'blocked': blocked})
 
     # 4. Save, then undo every later step: the folder equals its last save.
     saved = mcp.data('save', message='Rooftop garden: blockout, screens and the CPU tower')

@@ -642,10 +642,12 @@ interaction::PlacementVerdict Runtime::objectVerdict(int asset, const interactio
     if (self && *self < world->objectInstances.size()) {
         size_t first = world->objectInstances[*self].collisionFirst, count = world->objectInstances[*self].collisionCount;
         scene.ignore = [first, count](unsigned id) { return id >= first && id < first + count; };
-        // A workspace screen's own approach (IPC 0.27) never blocks moving that screen.
+        // A workspace screen's own approach (IPC 0.27) never blocks moving that screen. The
+        // zones keep their floors: a slab that screens stand on (checked again at load) must
+        // not see their approaches reach down through itself.
         auto own = "screen-" + world->objectInstances[*self].id;
         scene.approaches.clear();
-        for (auto &[id, zone] : interaction::namedApproachZones(*world, scene.ignore))
+        for (auto &[id, zone] : interaction::namedApproachZones(*world))
             if (id != own)
                 scene.approaches.push_back(zone);
     }
