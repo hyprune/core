@@ -493,7 +493,7 @@ void assistantPairing(const std::string &runtime) {
         check(r["error"]["code"] == -32002 && r["error"]["data"]["rule"] == "profile.assistant", "refused outside the profile");
     }
     auto seen = call(a, req("s", "state.subscribe", {{"topics", {"state"}}}))["result"]["snapshot"]["state"];
-    check(!seen.contains("surfaces") && seen.contains("objects") && seen["live"]["values"]["long"].get<std::string>().size() <= 64, "filtered state");
+    check(!seen.contains("surfaces") && seen.contains("objects") && seen["live"]["values"]["long"].get<std::string>().size() == 66, "filtered state (64 code points, the last an ellipsis)");
     check(call(a, req("p1", "objects.place", {{"ref", "user/x"}}))["result"]["ok"] == true, "assistant places");
     auto live = connections()["live"];
     check(live.size() == 1 && live[0]["changes"] == 1 && live[0]["paused"] == false, "live connection counted");
