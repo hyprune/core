@@ -454,3 +454,37 @@ starter library 0.3.0 installed:
 - [ ] Director → Objects → Characters: a library character offers walk styles before it is
   spawned; spawn it with a style: it walks with that style; clearing the style returns the
   plain walk at once (no world reload).
+
+## Feel, Settings, shapes and behaviours, the Library, the assistant (core 0.11.0)
+
+With Lumen Reach 0.12.1 and the shell at IPC 0.32. Several items change the cursor, focus or
+the renderer's configuration: watch for a frozen or missing hardware cursor and for a
+compositor stall each time.
+
+- [ ] World mode: Shift sprints, Ctrl goes down at once; Ctrl+R while Ctrl is held starts a
+  recording without leaving the camera lower. The HUD shows the REC dot; Ctrl+R again stops,
+  and the label prompt takes typing (the cursor and keyboard focus come back to the world
+  after Enter or Esc).
+- [ ] Carry a window and turn: it turns toward you and follows the centre ray smoothly
+  (carry easing), no snapping; walking shows the gentle head tilt.
+- [ ] Director → Settings: switch the preset (Auto → Low → Ultra → USB-C): each applies
+  without a stall or a black frame; with offload on, the worker keeps running (no restart
+  flash) when only rendering settings change. Drag a graphics slider: it applies when
+  released, not on every step. An override shows a dot and Reset brings the preset value back.
+- [ ] Director → Builder → New world: the wizard makes an Open Plain world with a preset sky
+  and floor; it loads and you start facing the chosen direction.
+- [ ] Director → Objects → Shapes: make a box at an exact size, place it with tool 5 (the
+  placement ghost and the reticle behave, the cursor stays hidden in the world), resize it
+  from Placed: it rebuilds in place without a hitch.
+- [ ] Placed → Behaviours: give a shape a behaviour on CPU use: it scales or glows with the
+  value; leaving the Director keeps it animating; collision stays at the rest pose.
+- [ ] Director → Library: install the official companions from the extras strip (confirm
+  dialog, progress, done notice), then remove it; Update all with nothing to update finishes
+  at once.
+- [ ] With offload on and a power cap set, a heavy view throttles first
+  (`offload.power.throttled` notice) before offload ends.
+- [ ] An assistant (`hyprune mcp` from an MCP client) asks to connect: the shell's dialog takes
+  the pointer and keys (cursor visible over the dialog, hidden again in the world after Allow
+  once or Deny); with Allow it places a shape: the HUD shows the connection and its change
+  count; Pause stops it (its next change is refused) and Resume lets it go on; Disconnect ends
+  it. Its preview renders arrive while you walk with no hitch (separate process).

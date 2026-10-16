@@ -248,7 +248,7 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   character's skeleton, its styles per role, its dances and the motion packs that give them.
   Older sessions keep the 0.27 shapes (no `style`, `dance`, `motion` or `option`; `dancing`
   reads `idle`).
-- **0.29** (draft) Motion feel (RFC-0008 and RFC-0009 amendments). New method
+- **0.29** Motion feel (RFC-0008 and RFC-0009 amendments). New method
   `recording.label`; no new event or grant.
   - Input version 3: world mode binds `sprint` to `Control_L`, `down` to `Shift_L` and
     `record.toggle` to `Ctrl+r`. A version 2 `input.json` is upgraded once, each binding only
@@ -273,8 +273,8 @@ their frozen state projections and enums. Unknown or unadvertised methods return
   - No wire change, unconditional: ticks that follow a presentation move by the interval
     between presentation timestamps (whole refreshes; the measured interval under VRR),
     and worker frames now include the view bob.
-- **0.30** (draft) Settings presets (RFC-0008 amendment). New methods `settings.get`
-  (`state.read`) and `settings.set` (`input.control`); no new event, grant or state key.
+- **0.30** Settings presets (RFC-0008 amendment). New methods `settings.get`
+  (`state.read`) and `settings.set` (`world.control`); no new event, grant or state key.
   - One global preset over every graphics and player setting: `auto`, `low`, `medium`,
     `high`, `ultra` (each sets `graphics.quality`) and `usb-c` (quality medium, offload on,
     frame pacing even). Saved in `settings.json` (`$HYPRUNE_SETTINGS_FILE`).
@@ -291,11 +291,7 @@ their frozen state projections and enums. Unknown or unadvertised methods return
     `low`, else `auto`) and drops graphics and player values equal to its defaults.
     `graphics.set` and `player.set` keep working at every version.
 
-### Changes without a protocol bump
-
-These are wire-compatible behavior changes that integrators may notice:
-
-- **0.31** (draft) Builder primitives and materials (RFC-0014 amendment). No new method,
+- **0.31** Builder primitives and materials (RFC-0014 amendment). No new method,
   event or grant.
   - Placement keys: `objects.place {key, ifExists: error | update}`; `objects.transform`,
     `objects.configure` and `objects.remove` take `{key}` instead of `{id}`; instances carry
@@ -316,7 +312,7 @@ These are wire-compatible behavior changes that integrators may notice:
     and placement rules keep the rest pose. Both renderers draw them (the offload worker gets
     the display transform, paint and texture offset with the object draw state). Error data
     may carry `hint`, `field`, `id` and `key`.
-- **0.32** (draft) Content, sources and registry over IPC (RFC-0015 amendment). New grant
+- **0.32** Content, sources and registry over IPC (RFC-0015 amendment). New grant
   `content.control`.
   - Methods `content.install`, `.confirm`, `.cancel`, `.update`, `.rollback`, `.pin` and
     `.remove`; `sources.list`, `.add`, `.set`, `.remove` and `.refresh`; `registry.list` and
@@ -333,7 +329,7 @@ These are wire-compatible behavior changes that integrators may notice:
     `content.failed`, `source.added`, `source.failed`.
   - Content sources live in `$XDG_CONFIG_HOME/hyprune/content-sources.json` (the SDK moves them
     out of the data-source helper's `sources.json`).
-- **0.33** (draft) AI-assisted creation (RFC-0016 phase E1). No new grant.
+- **0.33** AI-assisted creation (RFC-0016 phase E1). No new grant.
   - `session.pair {protocols, client, agent {name, version?}, profile: "assistant"}` is allowed
     before `session.hello`; hypruned answers when the user decides (Allow once, Always allow,
     Deny; no answer in 120 s denies) with `{token, profile, remembered}` or `-32002` rule
@@ -360,6 +356,11 @@ These are wire-compatible behavior changes that integrators may notice:
     notes?}`, shown on the live connection for the shell's Release form. The source helper never
     runs a `sources.json` entry with `"confirm": "pending"` (an assistant's command proposal; the
     shell's Allow removes the key), lists it with `pending: true` and refuses it in `test`.
+
+### Changes without a protocol bump
+
+These are wire-compatible behavior changes that integrators may notice:
+
 - **Placements stay after a world folder reloads.** The recheck of user placements at load no
   longer treats the folder's own workspace screens' approaches and spawns as keep-clear space,
   and an approach zone starts above the checked object's own top, so a roof, a screen or an
@@ -464,8 +465,38 @@ These are wire-compatible behavior changes that integrators may notice:
   add world 0.8 objects as targets (`selectedKind` `object`, `objectId`
   `object:<instance id>`) and a universal mode that `editor.submode` reports as `move`.
 
-## Unreleased (no wire change)
+## Core 0.11.0
 
+A minor release with the contract round of @hyprune/schema 0.15.0: **IPC 0.29, 0.30, 0.31,
+0.32 and 0.33** (see their entries above), builder project 0.2, builder materials and generated
+primitives are released. Older protocols and formats are unchanged; object and world formats
+are unchanged.
+
+- **Motion feel (0.29):** ticks move by the time between presentations; even pacing of a
+  rate-capped offload worker on a refresh divisor; the feel player settings (look and movement
+  smoothing, the walking bob's head tilt, carry easing); the view bob in worker frames; VRR
+  read from the output. The debug recording (Ctrl+R) is format 2: live timing, statistics and
+  a label on stop (`recording.label`).
+- **Settings presets (0.30):** one global preset over every graphics and player setting, user
+  overrides on top, `settings.get` and `settings.set`; the Director's Settings page uses them.
+- **Builder shapes and behaviours (0.31):** placement keys, dry runs and asset swaps for the
+  Director's Shapes (primitives at exact sizes in a colour or material, placed with tool 5);
+  world folders hold 512 placements of 256 assets; data-driven behaviours make a placed object
+  scale, move, turn, change colour, glow, show or scroll its texture from live data, drawn by
+  both renderers.
+- **Content over IPC (0.32):** installs, updates, rollbacks, pins, removals and source changes
+  run as jobs in hypruned through the SDK's CLI, so the Director's Library and other clients
+  share them; core still opens no network connection.
+- **AI-assisted creation (0.33, RFC-0016):** an assistant (the SDK's `hyprune mcp` server
+  and its skill) pairs with the user's approval and builds through the assistant profile: a
+  fixed method allowlist, a limited state, rate limits, Pause and the shell's connection
+  controls; `preview.render` renders the world from a pose in `hyprune-preview`, its own
+  process, never the compositor's render pass. Companions can be renamed.
+- **Offload:** live reconfiguration without worker restarts, pacing on the divisor the worker
+  sustains, a power cap that throttles before it ends offload, and about 10 ms less latency
+  (see "Changes without a protocol bump").
+- **World keys:** Shift sprints and Ctrl goes down (the early 0.29 swap is undone); Ctrl+R
+  records; a Ctrl chord never leaves the camera lower.
 - **Reply revisions match state revisions.** The `revision` in a `shell.claim`,
   `shell.release`, `shell.overlay`, `shell.bind`, `ui.open`/`ui.close` (and other lease and
   location method) reply is again the state revision that shows the change, comparable with
@@ -478,12 +509,10 @@ These are wire-compatible behavior changes that integrators may notice:
   connection core ends (send queue over 4 MiB, a stalled frame, no hello, invalid JSON, a send
   error) its reason in the daemon's log. A closed connection's leases always end, also when
   the plugin was busy as it closed.
-
-- **Builder project 0.2 (draft).** `builder/project.json` may be `projectVersion` 0.2: the Open
+- **Builder project 0.2.** `builder/project.json` may be `projectVersion` 0.2: the Open
   Plain starter (`open-plain@0.2`), `sky.preset`, an optional `floor` and up to 512 placements
   (RFC-0014 amendment: the world wizard). Core reads 0.1 and 0.2 and writes back only the
   placements, as before; no IPC change.
-
 - **Seat adaptation.** A character now takes a seat up to 25 cm lower than its own seat height
   (was 3 cm): the root sits lower and both legs bend more, a two-bone solve per leg that keeps
   each ankle where the clip put it relative to the floor (a little forward) with the foot flat;
