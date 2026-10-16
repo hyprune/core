@@ -769,7 +769,7 @@ void Server::frame(Peer &p, const std::string &bytes) {
                 } else {
                     exact(params, method == "connections.pause" ? std::initializer_list<const char *>{"actor", "paused"} : std::initializer_list<const char *>{"actor"});
                     check(params["actor"].is_string(), -32602, "invalid actor");
-                    auto peer = std::find_if(peers_.begin(), peers_.end(), [&](const Peer &q) { return q.actor == params["actor"] && q.profile == "assistant" && !q.closing; });
+                    auto peer = std::find_if(peers_.begin(), peers_.end(), [&](const Peer &q) { return params["actor"] == q.actor && q.profile == "assistant" && !q.closing; });
                     if (method == "connections.disconnect") {
                         if (peer != peers_.end())
                             peer->closing = true, ++revision_;
@@ -1080,7 +1080,7 @@ Json Server::answer(const Json &params) {
     check(params["requestId"].is_string() && params["decision"].is_string(), -32602, "invalid answer");
     auto decision = params["decision"].get<std::string>();
     check(decision == "once" || decision == "always" || decision == "deny", -32602, "decision is once, always or deny");
-    auto it = std::find_if(pairs_.begin(), pairs_.end(), [&](const Pair &q) { return q.requestId == params["requestId"]; });
+    auto it = std::find_if(pairs_.begin(), pairs_.end(), [&](const Pair &q) { return params["requestId"] == q.requestId; });
     check(it != pairs_.end(), -32003, "unknown pairing request");
     Pair request = *it;
     pairs_.erase(it);
