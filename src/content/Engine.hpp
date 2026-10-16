@@ -4,6 +4,7 @@
 // key. Core opens no network connection and keeps no pipeline of its own; listings come from
 // the CLI's no-network commands and are cached here, so reads never spawn a process.
 #include "ipc/Server.hpp"
+#include <array>
 #include <chrono>
 #include <deque>
 #include <filesystem>
@@ -80,6 +81,7 @@ class Engine {
     std::vector<std::vector<std::string>> listingSteps_;
     size_t listingStep_ = 0;
     Json installs_ = Json::array(), sources_ = Json::array(), entries_ = Json::array();
+    std::array<Json, 3> pending_; // a listing refresh in progress: installs, sources, entries
     int64_t revision_ = 0;
     std::map<std::filesystem::path, std::filesystem::file_time_type> stamps_;
     Clock::time_point lastWatch_{};

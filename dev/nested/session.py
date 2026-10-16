@@ -401,7 +401,7 @@ def run(args):
     if getattr(args,'quests',False):grants[0]['capabilities']+=['shell.control','data.publish','input.control','camera.author','quest.control']
     if getattr(args,'catalog',False) or getattr(args,'screens',False) or getattr(args,'screens_shell',False) or getattr(args,'import_shell',False) or getattr(args,'builder_shell',False) or getattr(args,'npcs',False) or getattr(args,'gauges',False) or getattr(args,'data_sources',False) or getattr(args,'companion',False) or getattr(args,'motion',False) or getattr(args,'spawn_spots',False) or getattr(args,'follow_corridor',False) or getattr(args,'route_carry',False) or getattr(args,'haze_depth',False):
         grants[0]['capabilities']+=['shell.control','data.publish','input.control','quest.control','objects.control']
-        grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','input.control','quest.control','objects.control']})
+        grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','input.control','quest.control','objects.control']+(['content.control'] if getattr(args,'content',False) else [])})
     if getattr(args,'quests',False):grants.append({'token':shell_token,'client':'com.hyprune.shell','capabilities':['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','input.control','quest.control']})
     if getattr(args,'long_titles',False):
         from long_titles import grants as extra

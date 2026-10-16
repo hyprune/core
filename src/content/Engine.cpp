@@ -704,6 +704,8 @@ void Engine::startListing() {
     }
 }
 void Engine::finishListing(bool ok) {
+    // The three listings land together: a client that re-reads registry.list when sources or
+    // installs change must find the matching entries.
     Json doc;
     if (ok)
         try {
@@ -712,24 +714,14 @@ void Engine::finishListing(bool ok) {
             ok = false;
         }
     process_.reset();
+    if (listingStep_ == 0)
+        pending_ = {installs_, sources_, entries_};
     if (ok) {
         Json out = Json::array();
-        if (listingStep_ == 0) {
-            for (auto &i : doc.value("installs", Json::array()))
-                out.push_back(installItem(i));
-            if (out != installs_)
-                installs_ = out, bump();
-        } else if (listingStep_ == 1) {
-            for (auto &s : doc.value("sources", Json::array()))
-                out.push_back(sourceItem(s));
-            if (out != sources_)
-                sources_ = out, bump();
-        } else {
-            for (auto &e : doc.value("entries", Json::array()))
-                out.push_back(registryItem(e));
-            if (out != entries_)
-                entries_ = out, bump();
-        }
+        static const char *keys[] = {"installs", "sources", "entries"};
+        for (auto &item : doc.value(keys[listingStep_], Json::array()))
+            out.push_back(listingStep_ == 0 ? installItem(item) : listingStep_ == 1 ? sourceItem(item) : registryItem(item));
+        pending_[listingStep_] = out;
     }
     if (++listingStep_ < listingSteps_.size()) {
         try {
@@ -738,6 +730,12 @@ void Engine::finishListing(bool ok) {
         } catch (...) {
             process_.reset();
         }
+    }
+    if (pending_[0] != installs_ || pending_[1] != sources_ || pending_[2] != entries_) {
+        installs_ = pending_[0];
+        sources_ = pending_[1];
+        entries_ = pending_[2];
+        bump();
     }
     listedOnce_ = true;
     running_.clear();
