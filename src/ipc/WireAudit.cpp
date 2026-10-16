@@ -1,4 +1,5 @@
 #include "WireAudit.hpp"
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <spawn.h>
@@ -92,9 +93,13 @@ void WireAudit::run() {
             item = std::move(pending_.front());
             pending_.pop_front();
         }
+        // A signal for the host process (SIGCHLD when the compositor reaps a child) may
+        // land on this thread: an interrupted send or recv is retried, never a verdict.
         size_t at = 0;
         while (at < item.size()) {
             auto n = send(pair[0], item.data() + at, item.size() - at, MSG_NOSIGNAL);
+            if (n < 0 && errno == EINTR)
+                continue;
             if (n <= 0) {
                 if (killed()) {
                     close(pair[0]);
@@ -105,7 +110,10 @@ void WireAudit::run() {
             at += n;
         }
         char reply;
-        auto got = recv(pair[0], &reply, 1, 0);
+        ssize_t got;
+        do
+            got = recv(pair[0], &reply, 1, 0);
+        while (got < 0 && errno == EINTR);
         if (got != 1 && killed()) {
             close(pair[0]);
             return;
