@@ -71,15 +71,15 @@ class Mcp:
             raise McpError(m['error'])
         return m['result']
 
-    def tool(self, name, **args):
-        r = self.rpc('tools/call', {'name': name, 'arguments': args})
-        print(f'  mcp {name} {json.dumps(args)[:120]}', 'ERROR ' + json.dumps(r.get('structuredContent'))[:300] if r.get('isError') else '', flush=True)
+    def tool(self, tool, /, **args):
+        r = self.rpc('tools/call', {'name': tool, 'arguments': args})
+        print(f'  mcp {tool} {json.dumps(args)[:120]}', 'ERROR ' + json.dumps(r.get('structuredContent'))[:300] if r.get('isError') else '', flush=True)
         if r.get('isError'):
             raise McpError(r['structuredContent']['error'])
         return r
 
-    def data(self, name, **args):
-        return self.tool(name, **args)['structuredContent']
+    def data(self, tool, /, **args):
+        return self.tool(tool, **args)['structuredContent']
 
     def kill(self):
         self.proc.kill()
