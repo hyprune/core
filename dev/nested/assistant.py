@@ -418,6 +418,10 @@ def acceptance(client, children, args, shell_token, socketpath):
         check('E2: the assistant chooses a companion, names it Ember and sets it to follow at a walk',
               companion['name'] == 'Ember' and companion['mode'] == 'follow' and companion['pace'] == 'walk',
               {k: companion.get(k) for k in ('ref', 'name', 'state', 'mode', 'pace')})
+        # The user dismisses the companion again (the next steps hold Tab for the Director, which
+        # did not open with the companion following close by: kept as a finding).
+        client.call('companion.clear', {})
+        wait(lambda: (state().get('companion') or {}).get('state') == 'none', 20)
     else:
         print('SKIP assistant: E2 companion step (no HYPRUNE_COMPANION_LIBRARY)', flush=True)
     made = mcp.data('make_world')
