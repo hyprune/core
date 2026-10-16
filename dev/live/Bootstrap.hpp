@@ -20,7 +20,7 @@ class Environment {
         for (auto &[key, value] : settings.at("environment").items()) {
             if (key != "HYPRUNE_CAPTURE_DIR" && key != "HYPRUNE_WORLD_DIR" && key != "HYPRUNE_INPUT_FILE" && key != "HYPRUNE_EDITOR_FILE" &&
                 key != "HYPRUNE_LAYOUT_FILE" && key != "HYPRUNE_LIVE_ROOT" && key != "HYPRUNE_WORKSPACE_LOCATIONS" &&
-                key != "HYPRUNE_DAEMON" && key != "HYPRUNE_RENDERER")
+                key != "HYPRUNE_DAEMON" && key != "HYPRUNE_RENDERER" && key != "HYPRUNE_CLI")
                 throw std::runtime_error("live bootstrap: unknown setting");
             if (!value.is_null() && !value.is_string())
                 throw std::runtime_error("live bootstrap: invalid setting");

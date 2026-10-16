@@ -4,6 +4,18 @@ from unittest.mock import patch
 spec=importlib.util.spec_from_file_location('live',pathlib.Path(__file__).with_name('live.py'));live=importlib.util.module_from_spec(spec);spec.loader.exec_module(live)
 
 class Tests(unittest.TestCase):
+    def test_cli_command_is_absolute_and_found_outside_path(self):
+        with tempfile.TemporaryDirectory() as d:
+            home=pathlib.Path(d)/'home';(home/'.local/bin').mkdir(parents=True)
+            sdk=pathlib.Path(d)/'sdk';(sdk/'dist/src').mkdir(parents=True);(sdk/'dist/src/cli.js').write_text('')
+            nodebin=pathlib.Path(d)/'bin';nodebin.mkdir();(nodebin/'node').write_text('#!/bin/sh\n');(nodebin/'node').chmod(0o755)
+            self.assertEqual(live.cli_command({'HYPRUNE_CLI':'python3 fake.py','PATH':''},home,sdk),'python3 fake.py')
+            # No CLI on PATH: the SDK checkout, through node found on PATH.
+            self.assertEqual(live.cli_command({'PATH':str(nodebin)},home,sdk),f'{nodebin/"node"} {sdk/"dist/src/cli.js"}')
+            # ~/.local/bin/hyprune although the compositor's PATH lacks it (the Library found no CLI).
+            (home/'.local/bin/hyprune').write_text('#!/bin/sh\n');(home/'.local/bin/hyprune').chmod(0o755)
+            self.assertEqual(live.cli_command({'PATH':str(nodebin)},home,sdk),str(home/'.local/bin/hyprune'))
+            self.assertIsNone(live.cli_command({'PATH':''},pathlib.Path(d)/'nobody',pathlib.Path(d)/'nosdk'))
     def test_replaces_nothing_unless_configured(self):
         with tempfile.TemporaryDirectory() as d,patch.dict(live.os.environ,{'XDG_CONFIG_HOME':d},clear=False):
             for key in ['HYPRUNE_LIVE_REPLACE_PLUGIN','HYPRUNE_LIVE_REPLACE_HUD']:live.os.environ.pop(key,None)

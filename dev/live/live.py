@@ -325,6 +325,7 @@ def up(args, path):
         'HYPRUNE_CAPTURE_DIR':str(path.parent.parent/'captures'), 'HYPRUNE_WORLD_DIR':str(installed), 'HYPRUNE_INPUT_FILE':str(runroot/'input.json'), 'HYPRUNE_EDITOR_FILE':str(runroot/'editor.json'),
         'HYPRUNE_LAYOUT_FILE':str(runroot/'layout.json'), 'HYPRUNE_LIVE_ROOT':str(root), 'HYPRUNE_WORKSPACE_LOCATIONS':None,
         'HYPRUNE_DAEMON':str(HERE/'daemon'), 'HYPRUNE_RENDERER':str(BUILD/'hyprune-renderer')}}
+    if (cli := cli_command(env_for(s))): settings['environment']['HYPRUNE_CLI'] = cli  # hypruned's content engine
     atomic(root/'bootstrap.json', settings)
     try:
         for candidate in candidates:
@@ -388,6 +389,21 @@ class RPC:
             if response.get('id')!=ident:continue
             if 'error' in response:raise RuntimeError(response['error'])
             return response['result']
+
+
+def cli_command(env, home=None, sdk=None):
+    """The hyprune CLI both the shell (Director > Library) and hypruned's content engine run, as an
+    absolute command line: $HYPRUNE_CLI, else `hyprune` on PATH or in ~/.local/bin (a graphical
+    session's PATH often lacks it), else the SDK checkout beside core. None: no CLI found."""
+    if env.get('HYPRUNE_CLI'):
+        return env['HYPRUNE_CLI']
+    home = pathlib.Path(home or env.get('HOME') or pathlib.Path.home())
+    found = shutil.which('hyprune', path=env.get('PATH', '')) or shutil.which('hyprune', path=str(home / '.local/bin'))
+    if found:
+        return found
+    sdk = pathlib.Path(sdk or ROOT.parent / 'sdk') / 'dist/src/cli.js'
+    node = shutil.which('node', path=env.get('PATH', ''))
+    return f'{node} {sdk}' if sdk.is_file() and node else None
 
 
 def sources_config():
@@ -456,10 +472,10 @@ def bootstrap(args,path):
     protocol=shell_protocol(maximum=rpc.hello["protocol"])
     print(f'IPC: launcher {rpc.hello["protocol"]}; shell {protocol}',flush=True)
     env=env_for(s);env.update(HYPRUNE_TOKEN_FD=str(read),HYPRUNE_TOKEN_REFRESH="1",HYPRUNE_PROTOCOL=protocol,HYPRUNE_SOCKET=str(sock))
-    # The Director's Library runs the hyprune CLI: use the SDK checkout beside core when it isn't on PATH.
-    cli=ROOT.parent/'sdk/dist/src/cli.js'
-    if 'HYPRUNE_CLI' not in env and not shutil.which('hyprune',path=env.get('PATH')) and cli.is_file() and shutil.which('node'):
-        env['HYPRUNE_CLI']=f'node {cli}'
+    # The Director's Library runs the hyprune CLI: always an absolute command (QML's Process looks
+    # a bare `hyprune` up on the compositor's PATH, which often lacks ~/.local/bin).
+    if (cli := cli_command(env)): env['HYPRUNE_CLI'] = cli
+    else: print('No hyprune CLI found (PATH, ~/.local/bin, the SDK checkout): the Library is unavailable',flush=True)
     log=open(path.parent/'shell.log','a')
     log_start=log.tell()
     child=subprocess.Popen([sys.executable,str(SHELL/'bridge/launch.py'),'--protocol',protocol,*shell_world_args(state['worlds'])],env=env,pass_fds=(read,),start_new_session=True,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT);recipient.close()
