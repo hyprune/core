@@ -229,6 +229,13 @@ def acceptance(client,children,args,shell_token,socketpath):
     for title in extra:
         s.ctl('eval','hl.dispatch(hl.dsp.window.close({window='+json.dumps('address:'+native(title)['address'])+'}))')
     wait(lambda:not any(c['title'] in extra for c in clients()),20)
+    # Core drops a closed client's record on its next tick, which can run after the
+    # compositor's client list (and a state snapshot) already changed: unpocket only once
+    # core's own state lists none of the closed windows, or a stale id answers -32003.
+    def listed(st):
+        return [w for w in st['surfaces'] if w['kind']=='window' and w['title'] in extra]+\
+               [w for w in st['editor']['unplaced']['windows'] if w.get('title') in extra]
+    wait(lambda:not listed(state()),20)
     for c in list(state()['editor']['unplaced']['windows']):client.call('surface.unpocket',{'surfaceId':c['surfaceId']})
     time.sleep(1)
     audit('closed the pocketed extras, took the rest out')
