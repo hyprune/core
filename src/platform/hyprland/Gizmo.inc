@@ -198,7 +198,7 @@ std::set<std::string> Runtime::waivedRules(const interaction::Transform &t) {
 Json Runtime::objectRecord(const interaction::Transform &t) {
     if (auto *i = selectedInfo())
         return placementRecord(*i, t); // a world object instance: its override or placement record
-    auto b = layout.binding(monitor && monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
+    auto b = layout.binding(monitor && monitor->m_activeWorkspace ? hl::workspaceId(monitor->m_activeWorkspace) : 0, world.get());
     auto scale = instanceIndex(*world, editor.selected) ? Vec3{t.scale.x, t.scale.x, t.scale.x} : t.scale;
     return {{"worldId", world->id},
             {"areaId", b ? b->at("areaId").get<std::string>() : ""},
@@ -277,9 +277,9 @@ Json Runtime::windowPose(const Capture::Entry &e) {
 }
 void Runtime::resizeClient(Capture::Entry &e, surfaces::Surface &next, double width, double height) {
     auto w = e.window.lock();
-    if (!w || !w->m_target)
+    if (!w || !hl::target(w))
         return;
-    auto box = w->m_target->position();
+    auto box = hl::target(w)->position();
     if (auto content = layout.contentFor(e.instance, world.get())) {
         auto sizing = *content;
         sizing["worldSize"] = {next.width, next.height};

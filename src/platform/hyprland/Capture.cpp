@@ -9,7 +9,7 @@
 #include <GLES3/gl3.h>
 #include <algorithm>
 #include <cmath>
-#include <hyprland/src/desktop/Workspace.hpp>
+#include "platform/hyprland/Compat.hpp"
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/Popup.hpp>
@@ -26,17 +26,16 @@ namespace {
 // its own client's window: same process, the one it opens over (the top one), else the nearest.
 // Only when its client has no other window does it follow the focused one.
 PHLWINDOW ownerWindow(const PHLWINDOW &menu) {
-    auto pid = menu->m_xwaylandSurface ? menu->m_xwaylandSurface->m_pid : 0;
+    auto pid = hl::x11Pid(menu);
     if (pid <= 0)
         return nullptr;
-    auto at = menu->m_xwaylandSurface->m_geometry.pos();
+    auto at = hl::x11Geometry(menu).pos();
     PHLWINDOW best;
     double nearest = INFINITY;
     for (auto &other : Desktop::windowState()->windows()) {
-        if (!other || other == menu || !other->m_isMapped || !other->m_isX11 || !other->m_xwaylandSurface ||
-            other->m_xwaylandSurface->m_pid != pid || other->m_xwaylandSurface->m_overrideRedirect || other->m_X11ShouldntFocus)
+        if (!other || other == menu || !hl::mapped(other) || !hl::x11(other) || hl::x11Pid(other) != pid || hl::x11Menu(other))
             continue;
-        auto box = other->m_xwaylandSurface->m_geometry;
+        auto box = hl::x11Geometry(other);
         double dx = std::max({box.x - at.x, 0.0, at.x - (box.x + box.w)}), dy = std::max({box.y - at.y, 0.0, at.y - (box.y + box.h)});
         double distance = std::hypot(dx, dy); // 0 inside the window
         if (distance <= nearest) // on a tie the later-mapped one: the window stacked on top (a dialog over its parent)
@@ -45,11 +44,8 @@ PHLWINDOW ownerWindow(const PHLWINDOW &menu) {
     return best;
 }
 PHLWINDOW attachmentParent(const PHLWINDOW &w) {
-    auto parent = w->parent();
-    if (!parent)
-        parent = w->x11Parent();
-    bool menu =
-        w->m_isX11 && (w->m_X11ShouldntFocus || (w->m_xwaylandSurface && w->m_xwaylandSurface->m_overrideRedirect));
+    auto parent = hl::parent(w);
+    bool menu = hl::x11Menu(w);
     if (!parent && menu)
         parent = ownerWindow(w);
     if (!parent && menu)
@@ -67,7 +63,7 @@ void Capture::forget(surfaces::Layout &layout, const std::string &id) {
 }
 bool Capture::prune(surfaces::Layout *layout) {
     return std::erase_if(entries, [&](Entry &e) {
-        if (e.window && e.window->m_isMapped)
+        if (e.window && hl::mapped(e.window))
             return false;
         if (layout)
             forget(*layout, e.surface.id);
@@ -79,21 +75,21 @@ bool Capture::prune(surfaces::Layout *layout) {
 void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::Layout *layout,
                       const sim::Camera *camera) {
     std::erase_if(entries, [&](Entry &e) {
-        bool remove = !e.window || !e.window->m_isMapped ||
+        bool remove = !e.window || !hl::mapped(e.window) ||
                       (e.window->m_monitor != monitor &&
-                       !(layout && e.window->m_workspace && e.window->m_workspace->m_id != worldWorkspace &&
-                         layout->binding(e.window->m_workspace->m_id, world)));
-        if (!remove && e.parentId.empty() && e.window->m_workspace && e.window->m_workspace->m_id != worldWorkspace &&
+                       !(layout && e.window->m_workspace && hl::workspaceId(e.window->m_workspace) != worldWorkspace &&
+                         layout->binding(hl::workspaceId(e.window->m_workspace), world)));
+        if (!remove && e.parentId.empty() && e.window->m_workspace && hl::workspaceId(e.window->m_workspace) != worldWorkspace &&
             layout) {
             auto identity = e.instance;
-            identity.workspaceId = e.window->m_workspace->m_id;
+            identity.workspaceId = hl::workspaceId(e.window->m_workspace);
             remove = !layout->binding(identity.workspaceId, world) && !layout->hasPlacement(identity, world);
         }
         if (remove && layout)
             forget(*layout, e.surface.id);
-        if (remove && e.window && e.window->m_isMapped) {
+        if (remove && e.window && hl::mapped(e.window)) {
             auto ws = e.window->m_workspace;
-            e.window->setSuspended(ws && !ws->isVisible());
+            e.window->setSuspended(ws && !hl::visible(ws));
         }
         return remove;
     });
@@ -102,13 +98,13 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         layout->windowScale = windowScale;
         layout->roomWorkspace = worldWorkspace;
     }
-    std::erase_if(knownWindows_, [](auto &w) { return !w || !w->m_isMapped; });
-    std::erase_if(adoptedWindows_, [](auto &w) { return !w.window || !w.window->m_isMapped; });
+    std::erase_if(knownWindows_, [](auto &w) { return !w || !hl::mapped(w); });
+    std::erase_if(adoptedWindows_, [](auto &w) { return !w.window || !hl::mapped(w.window); });
     std::set<std::string> refreshed;
     leasedBytes = 0;
     skipped.clear();
     auto skip = [&](const PHLWINDOW &w, const char *why) {
-        skipped.push_back({ipc::boundedText(w->m_title, ipc::TitleLimit), why,
+        skipped.push_back({ipc::boundedText(hl::title(w), ipc::TitleLimit), why,
                            std::format("0x{:x}", reinterpret_cast<uintptr_t>(w.get()))});
     };
     // A room client opening now: ahead of the player, short of walls. Keep the full client
@@ -132,13 +128,13 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         presenting.push_back(w);
     };
     for (auto &w : Desktop::windowState()->windows()) {
-        if (!w->m_isMapped || w->isHidden() || !w->resource())
+        if (!hl::mapped(w) || w->isHidden() || !w->resource())
             continue;
         // A home workspace can live on another output (a window moved there from it); its
         // windows still belong on this world's wall.
         const bool elsewhere = w->m_monitor != monitor;
-        if (elsewhere && !(layout && world && w->m_workspace && w->m_workspace->m_id != worldWorkspace &&
-                           layout->binding(w->m_workspace->m_id, world)))
+        if (elsewhere && !(layout && world && w->m_workspace && hl::workspaceId(w->m_workspace) != worldWorkspace &&
+                           layout->binding(hl::workspaceId(w->m_workspace), world)))
             continue;
         bool attached = bool(attachmentParent(w));
         bool newlyMapped = std::none_of(knownWindows_.begin(), knownWindows_.end(), [&](auto &v) { return v == w; });
@@ -147,9 +143,9 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             knownWindows_.push_back(w);
         auto remembered = std::find_if(adoptedWindows_.begin(), adoptedWindows_.end(),
                                        [&](auto &v) { return v.window == w && world && v.worldId == world->id; });
-        surfaces::Instance identity{"", ipc::boundedText(w->m_class, ipc::ClassLimit),
-                                    ipc::boundedText(w->m_title, ipc::TitleLimit),
-                                    w->m_workspace ? int(w->m_workspace->m_id) : 0};
+        surfaces::Instance identity{"", ipc::boundedText(hl::appClass(w), ipc::ClassLimit),
+                                    ipc::boundedText(hl::title(w), ipc::TitleLimit),
+                                    w->m_workspace ? int(hl::workspaceId(w->m_workspace)) : 0};
         // Only the dedicated room is adopted implicitly. Authored workspace
         // walls/mounts remain available without changing their native layout.
         const bool inRoom = identity.workspaceId == worldWorkspace;
@@ -194,7 +190,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         // Measured, not a gate: these are the clients' own textures (the compositor keeps
         // them anyway), and a budget that skipped clients hid windows that exist.
         leasedBytes += size_t(texture->m_size.x) * size_t(texture->m_size.y) * 4;
-        if (it == entries.end() && spawnNew && !attached && inRoom && !w->m_isFloating &&
+        if (it == entries.end() && spawnNew && !attached && inRoom && !hl::floating(w) &&
             !Fullscreen::controller()->isFullscreen(w)) {
             // Arrived tiled during the session (moved or dragged in): adopted once floating, at
             // its own size, so the spawn search never sees a full-output tile. Clients already
@@ -251,7 +247,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         it->surface.texture = texture->m_texID;
         it->surface.title = identity.title;
         it->instance = {it->surface.id, identity.appClass, identity.title, identity.workspaceId,
-                        w->m_isFloating && !worldFloated.contains(w.get())};
+                        hl::floating(w) && !worldFloated.contains(w.get())};
         it->visible = true;
         it->surface.pixelWidth = std::max(1, int(surface->m_current.size.x));
         it->surface.pixelHeight = std::max(1, int(surface->m_current.size.y));
@@ -284,7 +280,7 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             // A floating room client nothing poses (moved in natively, from a home or another
             // workspace) arrives like a new one: ahead of the player, else in the pocket. It
             // was left floating in the room, neither drawn nor pocketed.
-            if (!placed && inRoom && w->m_isFloating && !layout->unplaced.contains(it->surface.id) &&
+            if (!placed && inRoom && hl::floating(w) && !layout->unplaced.contains(it->surface.id) &&
                 layout->carried != it->surface.id && !Fullscreen::controller()->isFullscreen(w)) {
                 auto s = it->surface;
                 s.logicalSize(s.pixelWidth, s.pixelHeight, windowScale);
@@ -308,9 +304,9 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 Vector2D logical{(*c)["logicalSize"][0].get<double>(), (*c)["logicalSize"][1].get<double>()};
                 if ((std::abs(logical.x - surface->m_current.size.x) > 1 ||
                      std::abs(logical.y - surface->m_current.size.y) > 1) &&
-                    w->m_target &&
-                    (std::abs(w->m_target->position().w - logical.x) > 1 ||
-                     std::abs(w->m_target->position().h - logical.y) > 1))
+                    hl::target(w) &&
+                    (std::abs(hl::target(w)->position().w - logical.x) > 1 ||
+                     std::abs(hl::target(w)->position().h - logical.y) > 1))
                     configureRequests.push_back({w, logical});
             }
         if (elsewhere)
@@ -322,11 +318,11 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
                 worldRequests.push_back(w);
                 if (layout->carried != it->surface.id)
                     it->visible = false;
-            } else if (inRoom && !w->m_isFloating) {
+            } else if (inRoom && !hl::floating(w)) {
                 floatRequests.push_back(w);
                 if (!layout || layout->carried != it->surface.id)
                     it->visible = false; // never posed at its tiled size: shown once floating
-            } else if (!inRoom && w->m_isFloating && worldFloated.contains(w.get()))
+            } else if (!inRoom && hl::floating(w) && worldFloated.contains(w.get()))
                 tileRequests.push_back(w);
         }
         if (attached && layout) {
@@ -335,10 +331,10 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
         }
     }
     for (auto &previous : presenting_)
-        if (auto w = previous.lock(); w && w->m_isMapped &&
+        if (auto w = previous.lock(); w && hl::mapped(w) &&
                                       std::find(presenting.begin(), presenting.end(), previous) == presenting.end()) {
             auto ws = w->m_workspace;
-            w->setSuspended(ws && !ws->isVisible());
+            w->setSuspended(ws && !hl::visible(ws));
         }
     presenting_ = std::move(presenting);
     std::erase_if(entries, [&](Entry &e) {
@@ -346,9 +342,9 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
             return false;
         if (layout)
             layout->forget(e.surface.id);
-        if (e.window && e.window->m_isMapped) {
+        if (e.window && hl::mapped(e.window)) {
             auto ws = e.window->m_workspace;
-            e.window->setSuspended(ws && !ws->isVisible());
+            e.window->setSuspended(ws && !hl::visible(ws));
         }
         return true;
     });
@@ -362,15 +358,15 @@ void Capture::refresh(PHLMONITOR monitor, const world::World *world, surfaces::L
 void Capture::release() {
     configureRequests.clear();
     for (auto &previous : presenting_)
-        if (auto w = previous.lock(); w && w->m_isMapped) {
+        if (auto w = previous.lock(); w && hl::mapped(w)) {
             auto workspace = w->m_workspace;
-            w->setSuspended(workspace && !workspace->isVisible());
+            w->setSuspended(workspace && !hl::visible(workspace));
         }
     presenting_.clear();
     for (auto &e : entries)
-        if (e.window && e.window->m_isMapped) {
+        if (e.window && hl::mapped(e.window)) {
             auto workspace = e.window->m_workspace;
-            e.window->setSuspended(workspace && !workspace->isVisible());
+            e.window->setSuspended(workspace && !hl::visible(workspace));
         }
     entries.clear();
     knownWindows_.clear();
@@ -392,7 +388,7 @@ void Capture::release() {
 }
 Capture::Entry *Capture::find(const std::string &id) {
     for (auto &e : entries)
-        if (e.surface.id == id && e.window && e.window->m_isMapped)
+        if (e.surface.id == id && e.window && hl::mapped(e.window))
             return &e;
     return nullptr;
 }
@@ -513,8 +509,7 @@ void Capture::attach() {
             continue;
         e.parentId.clear();
         auto parent = attachmentParent(w);
-        e.parentKeyboard =
-            w->m_isX11 && (w->m_X11ShouldntFocus || (w->m_xwaylandSurface && w->m_xwaylandSurface->m_overrideRedirect));
+        e.parentKeyboard = hl::x11Menu(w);
         if (parent)
             e.visible = false;
         if (parent)
@@ -542,10 +537,10 @@ void Capture::attach() {
                     add(e, r, off);
             },
             nullptr);
-        if (w->m_popupHead)
-            w->m_popupHead->breadthfirst(
+        if (hl::popupHead(w))
+            hl::popupHead(w)->breadthfirst(
                 [&](SP<Desktop::View::CPopup> p, void *) {
-                    if (!p->m_mapped || !p->resource())
+                    if (!hl::popupMapped(p) || !p->resource())
                         return;
                     auto box = w->surfaceLogicalBox();
                     if (!box)
@@ -568,7 +563,7 @@ void Capture::trackBackdrops(const PHLMONITOR &monitor) {
     for (int level : {0, 1}) // ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND, _BOTTOM
         for (auto &ref : monitor->m_layerSurfaceLayers[level]) {
             auto layer = ref.lock();
-            if (!layer || !layer->m_mapped || !layer->m_layerSurface || !layer->m_layerSurface->m_surface)
+            if (!layer || !hl::layerMapped(layer) || !layer->m_layerSurface || !layer->m_layerSurface->m_surface)
                 continue;
             auto old = std::find_if(backdrops_.begin(), backdrops_.end(), [&](auto &b) { return b.layer == layer; });
             if (old != backdrops_.end()) {
@@ -719,7 +714,7 @@ in vec2 uv;uniform sampler2D image;out vec4 color;void main(){color=texture(imag
         // window to its end), so focus raises change the wall without a client commit.
         const auto &native = Desktop::windowState()->windows();
         auto layer = [](const PHLWINDOW &w) {
-            return Fullscreen::controller()->isFullscreen(w) ? 3 : w->m_pinned ? 2 : w->m_isFloating ? 1 : 0;
+            return Fullscreen::controller()->isFullscreen(w) ? 3 : hl::pinned(w) ? 2 : hl::floating(w) ? 1 : 0;
         };
         std::vector<std::pair<std::pair<int, size_t>, Entry *>> stack;
         for (auto &entry : entries) {

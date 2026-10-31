@@ -76,9 +76,9 @@ Never run bare `hyprctl`, load into the outer desktop session, or manipulate
 that session to make a test pass. The controller supports `env` only after verifying
 the nested display; it never falls back to the caller's display.
 
-The Lua entry point is `hl.plugin.hyprune.toggle([monitorName])`; the registered
-native dispatcher is `hyprune.toggle`. Hyprland 0.56's CLI accepts Lua dispatch
-expressions; use the `eval` form above. Inside world mode, WASD walks, Space jumps,
+The Lua entry point is `hl.plugin.hyprune.toggle([monitorName])`. On Hyprland 0.56
+core also registers the native dispatcher `hyprune.toggle`; 0.57 has Lua entry points
+only. Both CLIs accept Lua dispatch expressions; use the `eval` form above. Inside world mode, WASD walks, Space jumps,
 mouse motion looks, clicking a surface focuses its app, Escape returns to
 navigation, and F12 exits the world independently of the daemon. Super/Alt
 shortcuts retain compositor priority. Outside world mode, Super+F12 toggles it

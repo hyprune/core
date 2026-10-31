@@ -1571,7 +1571,7 @@ std::optional<Json> Runtime::npcsMethod(const std::string &method, const Json &p
         editor.slot = tool = 3;
         auto id = "path-" + std::to_string(editor.deterministicId ? (*editor.deterministicId)++
                                                                   : std::chrono::steady_clock::now().time_since_epoch().count());
-        auto b = layout.binding(monitor && monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
+        auto b = layout.binding(monitor && monitor->m_activeWorkspace ? hl::workspaceId(monitor->m_activeWorkspace) : 0, world.get());
         Json record{{"id", id}, {"worldId", world->id}, {"areaId", b ? b->at("areaId").get<std::string>() : areaAt(camera.position)},
                     {"closed", false}, {"use", use}, {"points", Json::array()}};
         if (params.contains("name"))

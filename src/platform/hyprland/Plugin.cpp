@@ -30,7 +30,7 @@
 #include "world/Spatial.hpp"
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
-#include <hyprland/src/desktop/Workspace.hpp>
+#include "platform/hyprland/Compat.hpp"
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/LayerState.hpp>
 #include <hyprland/src/desktop/state/ViewState.hpp>
@@ -38,7 +38,6 @@
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/layout/target/WindowTarget.hpp>
-#include <hyprland/src/managers/KeybindManager.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
@@ -713,7 +712,7 @@ struct Runtime {
     void restoreFullscreenWindows() {
         for (auto &[w, allowed] : fullscreen.covering)
             if (w)
-                w->m_allowedOverFullscreen = allowed;
+                hl::setAllowedOverFullscreen(w, allowed);
         fullscreen.covering.clear();
     }
     void routePointer(const std::string &, surfaces::Hit, uint32_t = 0);
@@ -1199,7 +1198,7 @@ bool layerKeyboardFocus() {
         return false;
     for (size_t layer : {3, 2})
         for (auto &surface : runtime->monitor->m_layerSurfaceLayers[layer])
-            if (surface && surface->m_mapped &&
+            if (surface && hl::layerMapped(surface) &&
                 surface->wlSurface()->resource() == g_pSeatManager->m_state.keyboardFocus)
                 return true;
     return false;
@@ -1331,16 +1330,16 @@ void Runtime::settleRenderPass() {
 // so unloading leaves nothing to restore.
 void Runtime::settleWorkspaceSwitch(const PHLWORKSPACE &to) {
     auto output = to ? to->m_monitor.lock() : nullptr;
-    if (!output || to->m_isSpecialWorkspace)
+    if (!output || hl::special(to))
         return;
-    int from = std::exchange(shownWorkspaces[output.get()], int(to->m_id));
+    int from = std::exchange(shownWorkspaces[output.get()], hl::workspaceId(to));
     auto owned = surfaces::worldWorkspaces(config["windows"]["world_workspace"].get<int>(), layout.effectiveBindings(),
                                            locations);
-    if (!owned.contains(int(to->m_id)) && !owned.contains(from))
+    if (!owned.contains(hl::workspaceId(to)) && !owned.contains(from))
         return;
     auto settle = [output = PHLMONITORREF{output}] {
         for (auto &workspace : State::workspaceState()->workspaces())
-            if (workspace && !workspace->m_isSpecialWorkspace && workspace->m_monitor == output) {
+            if (workspace && !hl::special(workspace) && workspace->m_monitor == output) {
                 workspace->m_renderOffset->warp();
                 workspace->m_alpha->warp();
             }
@@ -1419,7 +1418,7 @@ std::pair<int, std::string> processIdentity(int pid) {
 }
 SP<CWLSurfaceResource> Runtime::directorSurface() {
     for (auto &layer : Desktop::layerState()->layers()) {
-        if (!layer->m_mapped || layer->m_monitor != monitor || layer->m_namespace != "hyprune-director")
+        if (!hl::layerMapped(layer) || layer->m_monitor != monitor || layer->m_namespace != "hyprune-director")
             continue;
         auto resource = layer->m_layerSurface.lock();
         auto surface = resource ? resource->m_surface.lock() : nullptr;
@@ -1441,7 +1440,7 @@ void Runtime::refresh() {
         capture.worldWorkspace = worldWorkspace;
         capture.refresh(monitor.lock(), world.get(), &layout, &camera);
         std::erase_if(leftHomes, [&](auto &left) {
-            if (!left.first || !left.first->m_isMapped)
+            if (!left.first || !hl::mapped(left.first))
                 return true;
             for (auto &e : capture.entries)
                 if (e.window == left.first) {
@@ -1458,15 +1457,15 @@ void Runtime::refresh() {
             deferInput([window] {
                 // Into the world: natively onto the room workspace, where it floats. Only if it
                 // is still on its way: a return in between keeps it home.
-                if (!runtime->active || !window || !window->m_isMapped || !window->m_workspace ||
-                    window->m_workspace->m_id == runtime->worldWorkspace)
+                if (!runtime->active || !window || !hl::mapped(window) || !window->m_workspace ||
+                    hl::workspaceId(window->m_workspace) == runtime->worldWorkspace)
                     return;
                 auto entry = std::find_if(runtime->capture.entries.begin(), runtime->capture.entries.end(),
                                           [&](auto &e) { return e.window == window; });
                 if (entry == runtime->capture.entries.end())
                     return;
                 auto instance = entry->instance;
-                instance.workspaceId = int(window->m_workspace->m_id);
+                instance.workspaceId = int(hl::workspaceId(window->m_workspace));
                 if (!runtime->layout.pulled(instance, runtime->world.get()))
                     return;
                 runtime->moveWindow(window.lock(), runtime->worldWorkspace, false);
@@ -1474,11 +1473,11 @@ void Runtime::refresh() {
         for (auto window : std::exchange(capture.tileRequests, {}))
             deferInput([window] {
                 // Back on its home wall: restore the tiling it had before the world floated it.
-                if (!runtime->active || !window || !window->m_isMapped || !window->m_isFloating)
+                if (!runtime->active || !window || !hl::mapped(window) || !hl::floating(window))
                     return;
                 auto w = window.lock();
                 runtime->capture.worldFloated.erase(w.get());
-                if (w->m_workspace && w->m_workspace->m_id == runtime->worldWorkspace)
+                if (w->m_workspace && hl::workspaceId(w->m_workspace) == runtime->worldWorkspace)
                     return; // room windows stay floating
                 auto tiled = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_DISABLE, w);
                 if (!tiled)
@@ -1486,21 +1485,21 @@ void Runtime::refresh() {
             });
         for (auto [window, logical] : std::exchange(capture.configureRequests, {}))
             deferInput([window, logical] {
-                if (!runtime->active || !window || !window->m_isMapped || !window->m_target)
+                if (!runtime->active || !window || !hl::mapped(window) || !hl::target(window))
                     return;
                 auto w = window.lock();
                 // A transient relationship may arrive after the first map commit.
-                if (w->parent() || w->x11Parent())
+                if (hl::parent(w))
                     return;
                 for (const auto &entry : runtime->capture.entries)
                     if (entry.window == w && !entry.parentId.empty())
                         return;
-                if (!w->m_workspace || w->m_workspace->m_id != runtime->worldWorkspace || !w->m_isFloating)
+                if (!w->m_workspace || hl::workspaceId(w->m_workspace) != runtime->worldWorkspace || !hl::floating(w))
                     return; // Never resize/float clients on other workspaces.
                 auto resized = Config::Actions::resize(logical, false, w);
                 if (!resized)
                     throw std::runtime_error("spawn resize rejected: " + resized.error().message);
-                w->m_target->rememberFloatingSize(logical);
+                hl::target(w)->rememberFloatingSize(logical);
                 w->sendWindowSize(true);
             });
     }
@@ -1511,15 +1510,13 @@ void Runtime::refresh() {
 void Runtime::moveWindow(const PHLWINDOW &w, int workspace, bool tile) {
     if (renderPass.active())
         throw std::runtime_error("workspace move inside render pass");
-    if (!w || !w->m_isMapped || workspace <= 0)
+    if (!w || !hl::mapped(w) || workspace <= 0)
         return;
-    if (!w->m_workspace || w->m_workspace->m_id != workspace) {
-        auto r = g_pKeybindManager->m_dispatchers.at("movetoworkspacesilent")(
-            std::to_string(workspace) + ",address:" + std::format("0x{:x}", reinterpret_cast<uintptr_t>(w.get())));
-        if (!r.success)
+    if (!w->m_workspace || hl::workspaceId(w->m_workspace) != workspace) {
+        if (!hl::moveToWorkspaceSilent(w, workspace))
             throw std::runtime_error("workspace move failed");
     }
-    if (tile && w->m_isFloating && workspace != config["windows"]["world_workspace"].get<int>()) { // the room floats
+    if (tile && hl::floating(w) && workspace != config["windows"]["world_workspace"].get<int>()) { // the room floats
         capture.worldFloated.erase(w.get());
         auto tiled = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_DISABLE, w);
         if (!tiled)
@@ -1531,15 +1528,15 @@ void Runtime::floatIntoWorld(PHLWINDOWREF window) {
     // recall, carried off a home wall, placed or pocketed) leaves the client tiled where it
     // was; only clients opened in the room float on open. Float it at the size it had
     // before (capped to a sensible share of the output), on this output, before it is posed.
-    if (!active || !window || !window->m_isMapped || !window->m_target || !monitor)
+    if (!active || !window || !hl::mapped(window) || !hl::target(window) || !monitor)
         return;
     auto w = window.lock();
-    if (w->parent() || w->x11Parent() || w->m_isFloating || Fullscreen::controller()->isFullscreen(w) ||
-        (!(w->m_workspace && w->m_workspace->m_id == worldWorkspace && w->m_monitor == monitor) &&
+    if (hl::parent(w) || hl::floating(w) || Fullscreen::controller()->isFullscreen(w) ||
+        (!(w->m_workspace && hl::workspaceId(w->m_workspace) == worldWorkspace && w->m_monitor == monitor) &&
          std::none_of(capture.entries.begin(), capture.entries.end(), [&](auto &e) { return e.window == w; })))
         return; // room arrivals on this output, or windows the world already shows
     auto m = monitor.lock();
-    Vector2D size = w->m_target->position().size();
+    Vector2D size = hl::target(w)->position().size();
     if (auto it = arrivalSizes.find(w.get()); it != arrivalSizes.end()) {
         size = it->second;
         arrivalSizes.erase(it);
@@ -1560,7 +1557,7 @@ void Runtime::floatIntoWorld(PHLWINDOWREF window) {
     auto moved = Config::Actions::move(m->m_position + (m->m_size - size) / 2, false, w);
     if (!moved)
         throw std::runtime_error("world float move rejected: " + moved.error().message);
-    w->m_target->rememberFloatingSize(size);
+    hl::target(w)->rememberFloatingSize(size);
     w->sendWindowSize(true);
     capture.worldFloated.insert(w.get());
 }
@@ -1627,7 +1624,7 @@ void Runtime::workspaceLocation() {
     if (layerCursor) return;
     if (!active || !monitor || !monitor->m_activeWorkspace)
         return;
-    auto id = monitor->m_activeWorkspace->m_id;
+    auto id = hl::workspaceId(monitor->m_activeWorkspace);
     if (!layout.binding(id, nullptr) &&
         std::none_of(locations.begin(), locations.end(), [&](auto &entry) { return entry.at("id") == id; })) {
         // Leaving every home (e.g. back to the room) re-arms travel to the same one.
@@ -2088,15 +2085,15 @@ void Runtime::publish() {
     // Native desktop inventory does not depend on world capture leases, homes,
     // or the launcher having authored workspace mappings.
     for (auto &workspace : State::workspaceState()->workspaces()) {
-        if (workspace->m_id <= 0)
+        if (hl::workspaceId(workspace) <= 0)
             continue;
-        auto id = "workspace-" + std::to_string(workspace->m_id);
+        auto id = "workspace-" + std::to_string(hl::workspaceId(workspace));
         if (std::none_of(surfaces.begin(), surfaces.end(), [&](auto &s) { return s.at("id") == id; }))
             surfaces.push_back({{"id", id},
                                 {"kind", "workspace"},
-                                {"title", ipc::boundedText(workspace->m_name, ipc::TitleLimit)},
+                                {"title", ipc::boundedText(hl::workspaceName(workspace), ipc::TitleLimit)},
                                 {"logicalSize", {1280, 720}},
-                                {"focused", workspace->isVisible()}});
+                                {"focused", hl::visible(workspace)}});
     }
     Json homes = locations;
     for (auto &b : layout.effectiveBindings()) {
@@ -2152,8 +2149,8 @@ void Runtime::publish() {
     for (auto &window : Desktop::windowState()->windows()) {
         if (apps.size() >= 128)
             break;
-        if (!window->m_isMapped || window->isHidden() || !window->m_workspace || window->m_workspace->m_id <= 0 ||
-            window->parent() || window->x11Parent())
+        if (!hl::mapped(window) || window->isHidden() || !window->m_workspace || hl::workspaceId(window->m_workspace) <= 0 ||
+            hl::parent(window))
             continue;
         auto entry =
             std::find_if(capture.entries.begin(), capture.entries.end(), [&](auto &e) { return e.window == window; });
@@ -2163,16 +2160,16 @@ void Runtime::publish() {
         if (entry == capture.entries.end())
             surfaces.push_back({{"id", id},
                                 {"kind", "window"},
-                                {"title", ipc::boundedText(window->m_title, ipc::TitleLimit)},
+                                {"title", ipc::boundedText(hl::title(window), ipc::TitleLimit)},
                                 {"logicalSize",
                                  {std::max(1, int(window->resource() ? window->resource()->m_current.size.x : 1)),
                                   std::max(1, int(window->resource() ? window->resource()->m_current.size.y : 1))}},
                                 {"focused", Desktop::focusState()->window() == window}});
         apps.push_back({{"surfaceId", id},
-                        {"workspaceId", int(window->m_workspace->m_id)},
-                        {"title", ipc::boundedText(window->m_title, ipc::TitleLimit)},
-                        {"appClass", ipc::boundedText(window->m_class, ipc::ClassLimit)},
-                        {"icon", ipc::boundedText(window->m_class, ipc::ClassLimit)}});
+                        {"workspaceId", int(hl::workspaceId(window->m_workspace))},
+                        {"title", ipc::boundedText(hl::title(window), ipc::TitleLimit)},
+                        {"appClass", ipc::boundedText(hl::appClass(window), ipc::ClassLimit)},
+                        {"icon", ipc::boundedText(hl::appClass(window), ipc::ClassLimit)}});
     }
     Json publication = {
         {"interaction",
@@ -2244,8 +2241,8 @@ void Runtime::publish() {
           {"quality", renderer.intelQuality ? "intel" : "high"}}},
         {"spatial", spatial},
         {"workspaces",
-         {{"currentId", monitor && monitor->m_activeWorkspace && monitor->m_activeWorkspace->m_id > 0
-                            ? Json(monitor->m_activeWorkspace->m_id)
+         {{"currentId", monitor && monitor->m_activeWorkspace && hl::workspaceId(monitor->m_activeWorkspace) > 0
+                            ? Json(hl::workspaceId(monitor->m_activeWorkspace))
                             : Json(nullptr)},
           {"locations", homes}}},
         {"runtime",
@@ -2475,9 +2472,9 @@ void Runtime::returnToWorldWorkspace() {
         throw std::runtime_error("workspace switch inside render pass");
     if (!active || !monitor || !worldWorkspace)
         return;
-    auto room = State::workspaceState()->query().id(worldWorkspace).run();
+    auto room = hl::findWorkspace(worldWorkspace);
     if (!room)
-        room = State::workspaceState()->create(worldWorkspace, monitor->m_id);
+        room = hl::createWorkspace(worldWorkspace, monitor.lock());
     if (room->m_monitor != monitor) {
         auto result = Config::Actions::moveToMonitor(room, monitor.lock());
         if (!result)
@@ -2485,6 +2482,7 @@ void Runtime::returnToWorldWorkspace() {
     }
     Desktop::focusState()->rawMonitorFocus(monitor.lock());
     monitor->changeWorkspace(room, false, true);
+    hl::ready(room);
 }
 
 void Runtime::readyNotice() {
@@ -2493,13 +2491,13 @@ void Runtime::readyNotice() {
     if (renderPass.active())
         throw std::runtime_error("ready notification inside render pass");
     std::string chord;
-    for (const auto &b : g_pKeybindManager->m_keybinds) {
-        auto description = b->description;
+    for (const auto &b : hl::binds()) {
+        auto description = b.description;
         std::transform(description.begin(), description.end(), description.begin(), [](unsigned char c) { return std::tolower(c); });
-        if (b->enabled && !b->key.empty() &&
-            (b->arg.find("hyprune.toggle") != std::string::npos ||
+        if (b.enabled && !b.key.empty() &&
+            (b.arg.find("hyprune.toggle") != std::string::npos ||
              (description.find("hyprune") != std::string::npos && description.find("toggle") != std::string::npos))) {
-            chord = interaction::bindingName({b->key, b->modmask, false});
+            chord = interaction::bindingName({b.key, b.mods, false});
             break;
         }
     }
@@ -2624,7 +2622,7 @@ void Runtime::exit() {
     previousWorkspace.reset();
     previousSpecialWorkspace.reset();
     worldWorkspace = 0;
-    if (savedFocus && savedFocus->m_isMapped)
+    if (savedFocus && hl::mapped(savedFocus))
         Desktop::focusState()->rawWindowFocus(savedFocus.lock(), Desktop::FOCUS_REASON_OTHER);
     if (monitor)
         g_pHyprRenderer->damageMonitor(monitor.lock());
@@ -2643,8 +2641,7 @@ void Runtime::focus(const std::string &id, bool keyboard, bool enterUse) {
         if (!handover.animated)
             handover.before = camera;
         Desktop::focusState()->rawMonitorFocus(monitor.lock());
-        auto result = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(frame->workspaceId));
-        if (!result.success)
+        if (!hl::changeWorkspace(std::to_string(frame->workspaceId)))
             throw ipc::Error(-32004, "workspace focus failed");
         control.stop("a desktop workspace took focus");
         layout.desktop = frame->workspaceId;
@@ -2657,17 +2654,16 @@ void Runtime::focus(const std::string &id, bool keyboard, bool enterUse) {
     auto *entry = capture.find(id);
     if (!entry) {
         for (auto &workspace : State::workspaceState()->workspaces())
-            if (id == "workspace-" + std::to_string(workspace->m_id)) {
-                auto target = workspace->m_id;
+            if (id == "workspace-" + std::to_string(hl::workspaceId(workspace))) {
+                auto target = hl::workspaceId(workspace);
                 exit();
-                auto result = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(target));
-                if (!result.success)
+                if (!hl::changeWorkspace(std::to_string(target)))
                     throw ipc::Error(-32004, "desktop workspace focus failed");
                 publish();
                 return;
             }
         for (auto &window : Desktop::windowState()->windows())
-            if (window->m_isMapped &&
+            if (hl::mapped(window) &&
                 id == "desktop-window-" + std::to_string(reinterpret_cast<uintptr_t>(window.get()))) {
                 exit();
                 Desktop::focusState()->fullWindowFocus(window, Desktop::FOCUS_REASON_CLICK);
@@ -2679,9 +2675,9 @@ void Runtime::focus(const std::string &id, bool keyboard, bool enterUse) {
     auto w = entry->window.lock();
     if (keyboard && focused != id)
         cancelGrab();
-    if (keyboard && w->m_workspace && !w->m_workspace->isVisible() && w->m_workspace->m_id == worldWorkspace)
+    if (keyboard && w->m_workspace && !hl::visible(w->m_workspace) && hl::workspaceId(w->m_workspace) == worldWorkspace)
         returnToWorldWorkspace();
-    if (keyboard && w->m_workspace && !w->m_workspace->isVisible()) {
+    if (keyboard && w->m_workspace && !hl::visible(w->m_workspace)) {
         auto b = layout.binding(entry->instance.workspaceId, world.get());
         if (!b || !world || world->areas.empty() || !layout.pulled(entry->instance, world.get()))
             throw ipc::Error(-32007, "hidden workspace keyboard focus is unsupported");
@@ -2691,8 +2687,7 @@ void Runtime::focus(const std::string &id, bool keyboard, bool enterUse) {
         resolvedLocation = std::to_string(entry->instance.workspaceId) + ":" + b->at("worldId").get<std::string>() +
                            ":" + b->at("areaId").get<std::string>();
         Desktop::focusState()->rawMonitorFocus(monitor.lock());
-        auto result = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(entry->instance.workspaceId));
-        if (!result.success) {
+        if (!hl::changeWorkspace(std::to_string(entry->instance.workspaceId))) {
             resolvedLocation = previous;
             throw ipc::Error(-32004, "tool workspace activation failed");
         }
@@ -3117,9 +3112,9 @@ void Runtime::handTick(float dt) {
     if (hands.update(camera, pointerRay(), dt, world->collision, &world->collisionIndex)) {
         layout.freePoses[e->surface.id] = hands.pose;
         if ((hands.gesture == interaction::Gesture::Resize || hands.gesture == interaction::Gesture::CornerResize) &&
-            e->window->m_target) {
+            hl::target(e->window)) {
             auto w = e->window.lock();
-            auto box = w->m_target->position();
+            auto box = hl::target(w)->position();
             double width = interaction::resizeExtent(
                 double(hands.pose.width / hands.start.width * hands.start.pixelWidth), 160., monitor->m_size.x);
             double height = interaction::resizeExtent(
@@ -3131,7 +3126,7 @@ void Runtime::handTick(float dt) {
                 auto result = Config::Actions::resize({width, height}, false, w);
                 if (!result)
                     throw std::runtime_error("client resize rejected: " + result.error().message);
-                w->m_target->rememberFloatingSize({width, height});
+                hl::target(w)->rememberFloatingSize({width, height});
                 w->sendWindowSize(true);
                 if (auto c = layout.contentFor(e->instance, world.get())) {
                     auto sizing = *c;
@@ -3237,8 +3232,8 @@ void Runtime::button(IPointer::SButtonEvent event, bool super) {
                     if (auto w = entry.window.lock())
                         if (auto box = w->logicalBox()) {
                             int layer = Fullscreen::controller()->isFullscreen(w) ? 3
-                                        : w->m_pinned                             ? 2
-                                        : w->m_isFloating                         ? 1
+                                        : hl::pinned(w)                             ? 2
+                                        : hl::floating(w)                         ? 1
                                                                                   : 0;
                             slots.push_back({box->x, box->y, box->w, box->h, layer,
                                              size_t(std::find(native.begin(), native.end(), w) - native.begin())});
@@ -3461,8 +3456,8 @@ void Runtime::transitionTick(float dt) {
                 fullscreen.phase = 2;
                 for (auto &e : capture.entries)
                     if (e.surface.id != fullscreen.id && e.parentId.empty() && e.window) {
-                        fullscreen.covering.push_back({e.window, e.window->m_allowedOverFullscreen});
-                        e.window->m_allowedOverFullscreen = false;
+                        fullscreen.covering.push_back({e.window, hl::allowedOverFullscreen(e.window)});
+                        hl::setAllowedOverFullscreen(e.window, false);
                     }
                 if (auto entry = capture.find(fullscreen.id)) {
                     Desktop::focusState()->fullWindowFocus(entry->window.lock(), Desktop::FOCUS_REASON_OTHER,
@@ -3520,23 +3515,23 @@ Json Runtime::steals(const Json &config) const {
                                      : t.key == "Back"    ? "mouse:275"
                                      : t.key == "Forward" ? "mouse:276"
                                                           : t.key;
-                for (auto &bind : g_pKeybindManager->m_keybinds) {
-                    if (!bind->enabled || (!bind->ignoreMods && bind->modmask != t.mods))
+                for (auto &bind : hl::binds()) {
+                    if (!bind.enabled || (!bind.ignoreMods && bind.mods != t.mods))
                         continue;
-                    auto bs = xkb_keysym_to_lower(xkb_keysym_from_name(bind->key.c_str(), XKB_KEYSYM_CASE_INSENSITIVE));
-                    bool match = bind->key == native || (sym != XKB_KEY_NoSymbol && bs == sym) ||
-                                 (t.key == "Wheel" && (bind->key == "mouse_up" || bind->key == "mouse_down")) ||
-                                 (t.key == "WheelUp" && bind->key == "mouse_up") ||
-                                 (t.key == "WheelDown" && bind->key == "mouse_down");
+                    auto bs = xkb_keysym_to_lower(xkb_keysym_from_name(bind.key.c_str(), XKB_KEYSYM_CASE_INSENSITIVE));
+                    bool match = bind.key == native || (sym != XKB_KEY_NoSymbol && bs == sym) ||
+                                 (t.key == "Wheel" && (bind.key == "mouse_up" || bind.key == "mouse_down")) ||
+                                 (t.key == "WheelUp" && bind.key == "mouse_up") ||
+                                 (t.key == "WheelDown" && bind.key == "mouse_down");
                     if (match)
                         out.push_back({{"mode", mode},
                                        {"action", action},
                                        {"binding", value},
                                        {"description",
-                                        ipc::boundedText(bind->description.empty() ? bind->handler + " " + bind->arg
-                                                                                   : bind->description,
+                                        ipc::boundedText(bind.description.empty() ? bind.handler + " " + bind.arg
+                                                                                   : bind.description,
                                                          ipc::DescriptionLimit)},
-                                       {"submap", ipc::boundedText(bind->submap.name, ipc::SubmapLimit)}});
+                                       {"submap", ipc::boundedText(bind.submap, ipc::SubmapLimit)}});
                 }
             }
     return out;
@@ -3620,8 +3615,7 @@ void Runtime::useAim(bool zoom) {
             resolvedLocation =
                 std::to_string(wall->workspaceId) + ":" + world->id + ":" + b->at("areaId").get<std::string>();
         Desktop::focusState()->rawMonitorFocus(monitor.lock());
-        auto r = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(wall->workspaceId));
-        if (!r.success)
+        if (!hl::changeWorkspace(std::to_string(wall->workspaceId)))
             throw std::runtime_error("workspace use failed");
         typing = true;
         relativeSurface = hit->first;
@@ -3647,9 +3641,9 @@ void Runtime::useAim(bool zoom) {
     if (zoom)
         if (auto e = capture.find(target->parentId)) {
             relativeSurface.clear();
-            if (auto w = e->window.lock(); w && w->m_target) {
-                auto box = w->m_target->position();
-                w->m_target->rememberFloatingSize({box.w, box.h});
+            if (auto w = e->window.lock(); w && hl::target(w)) {
+                auto box = hl::target(w)->position();
+                hl::target(w)->rememberFloatingSize({box.w, box.h});
             }
             Fullscreen::controller()->setFullscreenMode(e->window.lock(), Fullscreen::FSMODE_FULLSCREEN,
                                                         Fullscreen::FSMODE_FULLSCREEN);
@@ -4364,7 +4358,7 @@ void Runtime::contentScale(bool reset, float steps) {
         }
         return;
     }
-    if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance) || !e->window || !e->window->m_target)
+    if (!e || !e->parentId.empty() || editor.locked(world->id, e->instance) || !e->window || !hl::target(e->window))
         return;
     auto w = e->window.lock();
     auto s = e->surface;
@@ -4396,7 +4390,7 @@ void Runtime::contentScale(bool reset, float steps) {
     auto result = Config::Actions::resize({double(dims[0]), double(dims[1])}, false, w);
     if (!result)
         throw std::runtime_error("content scale configure rejected: " + result.error().message);
-    w->m_target->rememberFloatingSize({double(dims[0]), double(dims[1])});
+    hl::target(w)->rememberFloatingSize({double(dims[0]), double(dims[1])});
     w->sendWindowSize(true);
     contentFeedback = {{"surfaceId", e->surface.id},
                        {"scale", sizing["baseSize"][0].get<double>() / dims[0]},
@@ -4570,11 +4564,11 @@ void Runtime::toolClick(const std::string &action) {
         auto floated = Config::Actions::floatWindow(Config::Actions::TOGGLE_ACTION_ENABLE, w);
         if (!floated)
             throw std::runtime_error("placement float rejected: " + floated.error().message);
-        if (w->m_target) {
+        if (hl::target(w)) {
             auto resized = Config::Actions::resize({double(placed.pixelWidth), double(placed.pixelHeight)}, false, w);
             if (!resized)
                 throw std::runtime_error("placement size rejected: " + resized.error().message);
-            w->m_target->rememberFloatingSize({double(placed.pixelWidth), double(placed.pixelHeight)});
+            hl::target(w)->rememberFloatingSize({double(placed.pixelWidth), double(placed.pixelHeight)});
             w->sendWindowSize(true);
         }
         if (snapped)
@@ -4702,7 +4696,7 @@ void Runtime::toolsTick() {
             if (interaction::sweepSafe(e->surface, next, world->collision, &world->collisionIndex)) {
                 layout.freePoses[e->surface.id] = next;
                 layout.carried.clear();
-                if (interaction::isScale(gizmo.active()) && e->window->m_target) {
+                if (interaction::isScale(gizmo.active()) && hl::target(e->window)) {
                     // Configure against the gesture baseline: the world pose
                     // updates before the client acknowledges its new pixels.
                     // Feeding those pending pixels back cancels the resize.
@@ -5550,7 +5544,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
             throw ipc::Error(-32002, "shell must be authenticated peer's direct child with an owned lease");
         wl_client *verified = nullptr;
         for (auto &layer : Desktop::layerState()->layers()) {
-            if (layer->m_monitor != monitor || !layer->m_mapped || layer->m_namespace != "hyprune-hud")
+            if (layer->m_monitor != monitor || !hl::layerMapped(layer) || layer->m_namespace != "hyprune-hud")
                 continue;
             auto resource = layer->m_layerSurface.lock();
             auto surface = resource ? resource->m_surface.lock() : nullptr;
@@ -5580,8 +5574,7 @@ std::optional<Json> Runtime::method(const std::string &method, const Json &wire)
         if (!active || !monitor)
             throw ipc::Error(-32005, "world mode inactive");
         Desktop::focusState()->rawMonitorFocus(monitor.lock());
-        auto result = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(params.at("id").get<int>()));
-        if (!result.success)
+        if (!hl::changeWorkspace(std::to_string(params.at("id").get<int>())))
             throw ipc::Error(-32004, "workspace activation failed");
         workspaceLocation();
         publish();
@@ -6313,13 +6306,12 @@ uint64_t Runtime::frameKey(std::span<const surfaces::Surface> surfaces) {
     frameParts = std::move(parts);
     return h.value;
 }
-class Pass final : public IPassElement {
+class Pass final : public hl::PassElement {
   public:
-    std::vector<UP<IPassElement>> draw() override {
-        safe([] {
+    void run(hl::RenderData &data) override {
+        safe([&data] {
             if (!runtime || !runtime->active || locked())
                 return;
-            auto &data = g_pHyprRenderer->m_renderData;
             auto *fb = dynamic_cast<Render::GL::CGLFramebuffer *>(data.currentFB.get());
             if (!fb)
                 return;
@@ -6380,44 +6372,31 @@ class Pass final : public IPassElement {
             }
             r.externalWorldFbo = 0;
         });
-        return {};
     }
-    bool needsLiveBlur() override { return false; }
-    bool needsPrecomputeBlur() override { return false; }
     const char *passName() override { return "Hyprune"; }
-    ePassElementType type() override { return EK_CUSTOM; }
-    bool undiscardable() override { return true; }
-    bool disableSimplification() override { return true; }
 };
 // The frame export's grab: last in the output's pass, after layers and cursors.
 // Diagnostics: a GPU timestamp at the start (first element) or end (last element) of this
 // output's frame (render::GPUSpan, timestamp queries only: no GL state, never waits).
-class GpuMarkPass final : public IPassElement {
+class GpuMarkPass final : public hl::PassElement {
     bool start;
 
   public:
     explicit GpuMarkPass(bool begin) : start(begin) {}
-    std::vector<UP<IPassElement>> draw() override {
+    void run(hl::RenderData &) override {
         safe([this] {
             if (runtime)
                 start ? runtime->compositorGpu.begin() : runtime->compositorGpu.end();
         });
-        return {};
     }
-    bool needsLiveBlur() override { return false; }
-    bool needsPrecomputeBlur() override { return false; }
     const char *passName() override { return "HypruneGpuMark"; }
-    ePassElementType type() override { return EK_CUSTOM; }
-    bool undiscardable() override { return true; }
-    bool disableSimplification() override { return true; }
 };
-class ExportPass final : public IPassElement {
+class ExportPass final : public hl::PassElement {
   public:
-    std::vector<UP<IPassElement>> draw() override {
-        safe([] {
+    void run(hl::RenderData &data) override {
+        safe([&data] {
             if (!runtime || !(runtime->frameExport.active() || runtime->frameProbe.active()))
                 return;
-            auto &data = g_pHyprRenderer->m_renderData;
             auto *fb = dynamic_cast<Render::GL::CGLFramebuffer *>(data.currentFB.get());
             if (!fb)
                 return;
@@ -6436,14 +6415,8 @@ class ExportPass final : public IPassElement {
                 ++runtime->exportPasses;
             }
         });
-        return {};
     }
-    bool needsLiveBlur() override { return false; }
-    bool needsPrecomputeBlur() override { return false; }
     const char *passName() override { return "HypruneExport"; }
-    ePassElementType type() override { return EK_CUSTOM; }
-    bool undiscardable() override { return true; }
-    bool disableSimplification() override { return true; }
 };
 void deferToggle(std::string output) {
     if (runtime->deferred)
@@ -6667,7 +6640,7 @@ int luaCamera(lua_State *state) {
         {"error", runtime->lastError},
         {"active", runtime->active},
         {"worldWorkspace", runtime->worldWorkspace},
-        {"previousWorkspace", runtime->previousWorkspace ? runtime->previousWorkspace->m_id : 0}};
+        {"previousWorkspace", runtime->previousWorkspace ? hl::workspaceId(runtime->previousWorkspace) : 0}};
     j["childSurfaces"] = Json::array();
     for (auto &child : runtime->capture.children)
         j["childSurfaces"].push_back(
@@ -6681,10 +6654,10 @@ int luaCamera(lua_State *state) {
              {"pixels", {child.surface.pixelWidth, child.surface.pixelHeight}}});
     j["workspaceAnimations"] = Json::array();
     for (auto &workspace : State::workspaceState()->workspaces())
-        if (workspace && !workspace->m_isSpecialWorkspace) {
+        if (workspace && !hl::special(workspace)) {
             auto offset = workspace->m_renderOffset->value();
             j["workspaceAnimations"].push_back(
-                {{"id", workspace->m_id},
+                {{"id", hl::workspaceId(workspace)},
                  {"offset", {offset.x, offset.y}},
                  {"alpha", workspace->m_alpha->value()},
                  {"animating", workspace->m_renderOffset->isBeingAnimated() || workspace->m_alpha->isBeingAnimated()}});
@@ -6700,7 +6673,7 @@ int luaCamera(lua_State *state) {
              {"title", e.surface.title},
              {"address", std::format("0x{:x}", reinterpret_cast<uintptr_t>(e.window.get()))},
              {"parentId", e.parentId},
-             {"floating", e.window && e.window->m_isFloating},
+             {"floating", e.window && hl::floating(e.window)},
              {"commits", *e.commits},
              {"visible", e.visible},
              {"wall", e.wall},
@@ -6912,10 +6885,12 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         safe([] { runtime->migrateSettings(); }); // once: settings.json gets its preset
         safe([] { runtime->migrateKeymap(); }); // once: Shift sprints and Ctrl goes down again
     });
+#if !HYPRUNE_HYPRLAND_AT_LEAST(0, 57) // 0.57 has Lua entry points only (its addDispatcherV2 always fails)
     HyprlandAPI::addDispatcherV2(handle, "hyprune.toggle", [](std::string arg) {
         deferToggle(arg);
         return SDispatchResult{};
     });
+#endif
     HyprlandAPI::addLuaFunction(handle, "hyprune", "toggle", luaToggle);
     HyprlandAPI::addLuaFunction(handle, "hyprune", "camera", luaCamera);
 #ifndef HYPRUNE_LIVE_BUILD
@@ -6950,7 +6925,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     // (RENDER_PRE, then return without RENDER_POST). Not in dev/live builds; anywhere
     // else calling it only exercises the recovery below.
     HyprlandAPI::addLuaFunction(handle, "hyprune", "test_render_fail", [](lua_State *) {
-        Event::bus()->m_events.render.stage.emit(RENDER_PRE);
+        hl::emitLeakedRenderPre();
         return 0;
     });
 #endif
@@ -7026,11 +7001,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
     runtime->listeners.push_back(Event::bus()->m_events.window.moveToWorkspace.listen([](PHLWINDOW window, PHLWORKSPACE workspace) {
         // Synchronous: only remember the size the client had before it reached the room;
         // floatIntoWorld() floats it later, from the tick (never inside this hook).
-        if (runtime && runtime->active && workspace && workspace->m_id == runtime->worldWorkspace && window &&
-            !window->m_isFloating && window->m_target && window->m_workspace != workspace) {
+        if (runtime && runtime->active && workspace && hl::workspaceId(workspace) == runtime->worldWorkspace && window &&
+            !hl::floating(window) && hl::target(window) && window->m_workspace != workspace) {
             if (runtime->arrivalSizes.size() > 64)
                 runtime->arrivalSizes.clear();
-            runtime->arrivalSizes[window.get()] = window->m_target->position().size();
+            runtime->arrivalSizes[window.get()] = hl::target(window)->position().size();
         }
     }));
     runtime->listeners.push_back(Event::bus()->m_events.window.openEarly.listen([](PHLWINDOW window) {
@@ -7040,14 +7015,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
         // A static float rule sees the initial workspace and leaks to clients
         // redirected elsewhere. Test the final workspace and output instead.
         if (runtime->active && window->m_monitor == runtime->monitor && window->m_workspace &&
-            window->m_workspace->m_id == runtime->worldWorkspace) {
-            window->m_isFloating = true;
+            hl::workspaceId(window->m_workspace) == runtime->worldWorkspace) {
+            hl::floatInitially(window);
             runtime->capture.worldFloated.insert(window.get()); // floated by the world, not the user
         }
     }));
-    runtime->listeners.push_back(Event::bus()->m_events.render.stage.listen([](eRenderStage stage) {
+    runtime->listeners.push_back(Event::bus()->m_events.render.stage.listen([](const hl::RenderStageEvent &event) {
         safe([&] {
-            if (stage == RENDER_PRE && runtime->renderPass.begin(g_pHyprRenderer->m_renderData.pMonitor.get()))
+            auto stage = hl::stage(event);
+            if (stage == RENDER_PRE && runtime->renderPass.begin(hl::stageMonitor(event).get()))
                 runtime->renderPassLeaked(); // the previous pass never got RENDER_POST
             if (runtime->frameLog.file && stage == RENDER_PRE)
                 runtime->frameLog.renderStart = Runtime::FrameLog::now();
@@ -7055,15 +7031,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
             // RENDER_POST. The GPU span is two pass elements, so it brackets the frame's GL
             // work in the order the pass runs it, inside the GL context.
             if (stage == RENDER_BEGIN) {
-                runtime->compositorFrame = runtime->active && g_pHyprRenderer->m_renderData.pMonitor == runtime->monitor;
+                runtime->compositorFrame = runtime->active && hl::stageMonitor(event) == runtime->monitor;
                 runtime->gpuMarkFrame =
                     runtime->compositorFrame && (runtime->session.recording || runtime->frameLog.file || runtime->gpuMarksDev);
                 if (runtime->gpuMarkFrame)
-                    g_pHyprRenderer->addPassElement(makeUnique<GpuMarkPass>(true));
+                    hl::addPass(event, makeUnique<GpuMarkPass>(true));
             }
             if (runtime->gpuMarkFrame && stage == RENDER_LAST_MOMENT) {
                 runtime->gpuMarkFrame = false;
-                g_pHyprRenderer->addPassElement(makeUnique<GpuMarkPass>(false));
+                hl::addPass(event, makeUnique<GpuMarkPass>(false));
             }
             if (runtime->compositorFrame && stage == RENDER_POST) {
                 runtime->compositorFrame = false;
@@ -7079,11 +7055,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
             if (stage == RENDER_POST)
                 runtime->renderPass.end();
             if (stage == RENDER_POST_WINDOWS && runtime->active && !locked() &&
-                g_pHyprRenderer->m_renderData.pMonitor == runtime->monitor)
-                g_pHyprRenderer->addPassElement(makeUnique<Pass>());
+                hl::stageMonitor(event) == runtime->monitor)
+                hl::addPass(event, makeUnique<Pass>());
             if (stage == RENDER_LAST_MOMENT && (runtime->frameExport.active() || runtime->frameProbe.active()) &&
-                g_pHyprRenderer->m_renderData.pMonitor == runtime->monitor)
-                g_pHyprRenderer->addPassElement(makeUnique<ExportPass>());
+                hl::stageMonitor(event) == runtime->monitor)
+                hl::addPass(event, makeUnique<ExportPass>());
         });
     }));
     runtime->listeners.push_back(
@@ -7155,7 +7131,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 bool nativeFreeRelease = !down && runtime->freeNativeKeys.erase(event.keycode);
                 if (nativeFreeRelease && !runtime->layerCursor) {
                     info.cancelled = true;
-                    runtime->deferInput([event, kb] { g_pKeybindManager->onKeyEvent(event, kb); });
+                    runtime->deferInput([event, kb] { hl::keybinds()->onKeyEvent(event, kb); });
                     return;
                 }
                 if (owned)
@@ -7210,7 +7186,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                             runtime->freeNativeKeys.insert(event.keycode);
                         }
                         runtime->deferInput([event, kb, target] {
-                            if (!g_pKeybindManager->onKeyEvent(event, kb)) return;
+                            if (!hl::keybinds()->onKeyEvent(event, kb)) return;
                             bool pressed = event.state == WL_KEYBOARD_KEY_STATE_PRESSED;
                             if (!pressed && !runtime->appKeys.erase(event.keycode)) return;
                             if (!runtime->active || !runtime->layerCursor || !target) return;
@@ -7294,7 +7270,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                 if (down)
                     runtime->nativeKeys.insert(event.keycode);
                 runtime->deferInput([event, kb] {
-                    if (!g_pKeybindManager->onKeyEvent(event, kb))
+                    if (!hl::keybinds()->onKeyEvent(event, kb))
                         return;
                     if (!runtime->active || !runtime->typing || runtime->freeCursor || runtime->control.uiVisible())
                         return;
@@ -7418,7 +7394,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
                     runtime->nativeButtons.insert(event.button);
                 auto pointer = runtime->eventPointer.lock();
                 runtime->deferInput([event, pointer] {
-                    if (g_pKeybindManager->onMouseEvent(event, pointer) && runtime->typing)
+                    if (hl::keybinds()->onMouseEvent(event, pointer) && runtime->typing)
                         runtime->button(event, false);
                 });
             });
@@ -7474,15 +7450,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE pluginHandle) {
             info.cancelled = true;
             auto pointer = runtime->eventPointer.lock();
             runtime->deferInput([event, pointer] {
-                if (g_pKeybindManager->onAxisEvent(event, pointer) && runtime->typing)
+                if (hl::keybinds()->onAxisEvent(event, pointer) && runtime->typing)
                     runtime->axis(event);
             });
         });
     }));
     for (auto &workspace : State::workspaceState()->workspaces())
-        if (workspace && workspace->m_visible && !workspace->m_isSpecialWorkspace)
+        if (workspace && hl::visible(workspace) && !hl::special(workspace))
             if (auto output = workspace->m_monitor.lock())
-                runtime->shownWorkspaces[output.get()] = int(workspace->m_id);
+                runtime->shownWorkspaces[output.get()] = hl::workspaceId(workspace);
     runtime->listeners.push_back(Event::bus()->m_events.workspace.active.listen(
         [](PHLWORKSPACE workspace) { safe([&] { runtime->settleWorkspaceSwitch(workspace); }); }));
     runtime->listeners.push_back(Event::bus()->m_events.monitor.removed.listen([](PHLMONITOR monitor) {
@@ -7554,7 +7530,7 @@ APICALL EXPORT void PLUGIN_EXIT() {
         g_pEventLoopManager->removeTimer(runtime->timer);
     runtime->timer.reset();
     if (g_pHyprRenderer)
-        g_pHyprRenderer->m_renderPass.removeAllOfType("Hyprune");
+        hl::removePasses("Hyprune");
     safe([] { runtime->exit(); });
     if (runtime->motionHook)
         HyprlandAPI::removeFunctionHook(handle, runtime->motionHook);
@@ -7576,7 +7552,7 @@ APICALL EXPORT void PLUGIN_EXIT() {
     // gone (SIGSEGV in its renderer deleter, once in a nested shutdown).
     if (g_pHyprRenderer)
         for (auto name : {"Hyprune", "HypruneExport", "HypruneGpuMark"})
-            g_pHyprRenderer->m_renderPass.removeAllOfType(name);
+            hl::removePasses(name);
     if (Render::GL::g_pHyprOpenGL) {
         Render::GL::g_pHyprOpenGL->makeEGLCurrent();
         runtime->captureGPU.destroy();

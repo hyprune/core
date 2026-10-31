@@ -16,7 +16,18 @@ file(READ "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fidelityfx-fsr/ffx_fsr1.h" HY
 configure_file(src/render/Fsr.hpp.in generated/Fsr.hpp @ONLY)
 add_compile_options(-Wall -Wextra -Wpedantic -fno-gnu-unique)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland>=0.56 hyprland<0.57)
+# Supported Hyprland releases: the current one and the one before (docs/hyprland-versions.md).
+# The plugin is ABI-locked to the headers it builds against; API differences between them
+# are compile-time switches on HYPRUNE_HYPRLAND_VERSION (src/platform/hyprland/Compat.hpp).
+set(HYPRUNE_HYPRLAND_SUPPORTED 0.56 0.57)
+pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland)
+string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" HYPRUNE_HYPRLAND_MATCH "${HYPRLAND_VERSION}")
+if(NOT HYPRUNE_HYPRLAND_MATCH OR NOT "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}" IN_LIST HYPRUNE_HYPRLAND_SUPPORTED)
+  string(REPLACE ";" ".x, " HYPRUNE_HYPRLAND_LIST "${HYPRUNE_HYPRLAND_SUPPORTED}")
+  message(FATAL_ERROR "Hyprland ${HYPRLAND_VERSION} headers found; Hyprune core supports Hyprland ${HYPRUNE_HYPRLAND_LIST}.x")
+endif()
+math(EXPR HYPRUNE_HYPRLAND_VERSION "${CMAKE_MATCH_1} * 10000 + ${CMAKE_MATCH_2} * 100 + ${CMAKE_MATCH_3}")
+message(STATUS "Building against Hyprland ${HYPRLAND_VERSION}")
 pkg_check_modules(PLATFORM REQUIRED IMPORTED_TARGET pixman-1 libdrm xkbcommon hyprgraphics pangocairo wayland-server lua)
 pkg_check_modules(SPATIAL REQUIRED IMPORTED_TARGET libxml-2.0 openssl)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS config/input.default.json)
@@ -56,7 +67,10 @@ add_executable(hyprune-preview src/daemon/Preview.cpp src/render/Renderer.cpp sr
 target_link_libraries(hyprune-preview PRIVATE hyprune_runtime GLESv2 EGL)
 target_compile_definitions(hypruned PRIVATE HYPRUNE_PREVIEW_PATH="${CMAKE_CURRENT_BINARY_DIR}/hyprune-preview")
 set(HYPRUNE_DAEMON_EXECUTABLE "${CMAKE_CURRENT_BINARY_DIR}/hypruned" CACHE FILEPATH "Private bridge helper executable")
-target_compile_definitions(hyprune-core PRIVATE HYPRUNE_DAEMON_PATH="${HYPRUNE_DAEMON_EXECUTABLE}" HYPRUNE_CORE_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(hyprune-core PRIVATE HYPRUNE_DAEMON_PATH="${HYPRUNE_DAEMON_EXECUTABLE}" HYPRUNE_CORE_VERSION="${PROJECT_VERSION}"
+  HYPRUNE_HYPRLAND_VERSION=${HYPRUNE_HYPRLAND_VERSION} HYPRUNE_HYPRLAND_VERSION_STRING="${HYPRLAND_VERSION}")
+# The Hyprland release this build is for: dev/nested and dev/live start or expect the matching compositor.
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/hyprland-version "${HYPRLAND_VERSION}\n")
 option(HYPRUNE_LIVE_BUILD "Enable the supervised live launcher bootstrap" OFF)
 if(HYPRUNE_LIVE_BUILD)
   target_compile_definitions(hyprune-core PRIVATE HYPRUNE_LIVE_BUILD=1)

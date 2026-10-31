@@ -35,9 +35,9 @@ void Runtime::questsTick() {
     Json focusFact = nullptr;
     bool worldKeyboard = active && (control.uiVisible() || (ownsInput() && !typing));
     if (!worldKeyboard && !locked())
-        if (auto window = Desktop::focusState()->window(); window && window->m_workspace && window->m_workspace->m_id > 0)
-            focusFact = {{"workspaceId", int(window->m_workspace->m_id)},
-                         {"appClass", ipc::boundedText(window->m_class, 128)}};
+        if (auto window = Desktop::focusState()->window(); window && window->m_workspace && hl::workspaceId(window->m_workspace) > 0)
+            focusFact = {{"workspaceId", int(hl::workspaceId(window->m_workspace))},
+                         {"appClass", ipc::boundedText(hl::appClass(window), 128)}};
     Json inside = Json::array();
     for (auto &key : markers.inside)
         inside.push_back(key);

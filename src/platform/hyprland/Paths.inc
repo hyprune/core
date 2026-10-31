@@ -107,7 +107,7 @@ void Runtime::pathPress() {
             refuseUnwalkable();
             return;
         }
-        auto b = layout.binding(monitor->m_activeWorkspace ? int(monitor->m_activeWorkspace->m_id) : 0, world.get());
+        auto b = layout.binding(monitor->m_activeWorkspace ? hl::workspaceId(monitor->m_activeWorkspace) : 0, world.get());
         auto id = editor.activePath;
         auto before = id.empty() ? Json(nullptr) : editor.path(id);
         editor.point(world->id, b ? b->at("areaId").get<std::string>() : "", *p);

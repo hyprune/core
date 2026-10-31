@@ -30,8 +30,7 @@ void Runtime::toggleFreeCursor() {
             focusWall(saved.wall);
         } else if (saved.use && capture.workspace(saved.relative)) {
             auto wall = capture.workspace(saved.relative);
-            auto result = g_pKeybindManager->m_dispatchers.at("workspace")(std::to_string(wall->workspaceId));
-            if (result.success) {
+            if (hl::changeWorkspace(std::to_string(wall->workspaceId))) {
                 if (!saved.window.empty() && capture.find(saved.window)) focus(saved.window, true);
                 typing = true; relativeSurface = saved.relative;
                 localX = saved.x; localY = saved.y; projectCursor();

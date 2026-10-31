@@ -4,7 +4,7 @@
 #include "surfaces/Surface.hpp"
 #include "world/World.hpp"
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
-#include <hyprland/src/desktop/view/Window.hpp>
+#include "platform/hyprland/Compat.hpp"
 #include <hyprland/src/protocols/core/Compositor.hpp>
 #include <hyprland/src/render/Texture.hpp>
 #include <memory>
