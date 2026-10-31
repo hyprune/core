@@ -454,3 +454,24 @@ starter library 0.3.0 installed:
 - [ ] Director → Objects → Characters: a library character offers walk styles before it is
   spawned; spawn it with a style: it walks with that style; clearing the style returns the
   plain walk at once (no world reload).
+
+## Hyprland 0.57 (first live run on the new release)
+
+Core builds for 0.56 and 0.57 from one tree; on 0.57 the render pass, workspaces and
+keybinds go through new Hyprland APIs, and Hyprland 0.57 changed its own cursor code
+(colour-managed hardware cursor buffer, per-monitor cursor images). Nested runs use a
+software cursor, so these need one supervised pass on a real 0.57 session:
+
+- [ ] Log out and back in after the Hyprland update, then `preflight`: it builds against
+      the 0.57 headers and reports `ABI/version matches: v0.57.0`. Before relogging it must
+      refuse with the "log out and back in" advice, not load.
+- [ ] Desktop → world → desktop three times: native cursor hides/shows after the frame each
+      time, no cursor flash or stuck invisible cursor, no compositor stall.
+- [ ] Free cursor (Back/Super+Tab), E window, F window, E wall, F wall: the same cursor
+      checks as above (items 3 and 6-10 of the main list).
+- [ ] Super+F12 toggles (Lua bind from `hl.plugin.hyprune`); `hyprctl dispatch
+      hyprune.toggle` is expected to fail on 0.57 (Lua entry points only).
+- [ ] Super+1..9 and the area homes travel; a window opened in the room floats there.
+- [ ] Screenshare a window and a workspace (xdg-desktop-portal-hyprland) while in world: the
+      share shows normal content and nothing breaks; the world keeps drawing.
+- [ ] `down` restores the previous plugin/HUD; a second `up`/`down` cycle is clean.
