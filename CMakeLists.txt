@@ -336,6 +336,7 @@ add_test(NAME depth-precision COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOUR
  add_test(NAME devenv COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/devenv.py)
  add_test(NAME npc-check COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/npc-check.py $<TARGET_FILE:hyprune-npc-check>)
  add_test(NAME screen-fixtures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/screen-fixtures.py $<TARGET_FILE:hyprune-object-check>)
+ add_test(NAME hyprland-releases COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/hyprland-releases.py ${CMAKE_CURRENT_SOURCE_DIR} "${HYPRUNE_HYPRLAND_SUPPORTED}" ${HYPRLAND_VERSION})
  add_test(NAME playable-package COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/playable-package.py $<TARGET_FILE:hyprune-world-check> ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/atrium)
  add_test(NAME walk-check COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/walk-check.py $<TARGET_FILE:hyprune-walk-check> ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/atrium)
  add_test(NAME human-driver COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/human-driver.py)

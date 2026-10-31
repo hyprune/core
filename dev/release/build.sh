@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Build the relocatable release archive for one Hyprland ABI.
 #
-#   HYPRLAND_VERSION=0.56.2 dev/release/build.sh OUT_DIR [VERSION]
+#   HYPRLAND_VERSION=0.57.0 dev/release/build.sh OUT_DIR [VERSION]
+#
+# One archive per supported Hyprland release (dev/release/hyprland.json); the
+# archive name carries the Hyprland version.
 #
 # HYPRUNE_REV names the commit when building from a source archive (no .git);
 # JOBS limits parallel compile jobs (default: all cores).

@@ -1,0 +1,7 @@
+{
+  "comment": "One prebuilt per supported Hyprland release (the current one and the one before; CMakeLists.txt HYPRUNE_HYPRLAND_SUPPORTED). Each builds in an Arch container pinned to an Arch Linux Archive snapshot that ships that Hyprland package.",
+  "builds": [
+    {"hyprland": "0.56.2", "archSnapshot": "2026/10/10", "archPackage": "hyprland-0.56.2-4"},
+    {"hyprland": "0.57.0", "archSnapshot": "2026/10/29", "archPackage": "hyprland-0.57.0-1"}
+  ]
+}
