@@ -78,6 +78,17 @@ def update(logs):
     return shas
 
 
+# The second supported Hyprland release's pass: CTest and the suites that cover core's
+# compositor-facing code (workspaces, windows, render pass, keybinds, input).
+HYPRLAND_SUITES = ['ctest', 'smoke', 'workspace-homes', 'placement', 'playable', 'static-world', 'live-findings',
+                   'ipc-warp', 'windows', 'm3b', 'render-fail', 'lock']
+
+
+def hyprland_version(prefix):
+    return subprocess.check_output(['pkg-config', '--modversion', 'hyprland'], text=True,
+                                   env={**os.environ, 'PKG_CONFIG_PATH': f'{prefix}/lib/pkgconfig:{prefix}/share/pkgconfig'}).strip()
+
+
 def suites():
     core = WS / 'core/dev/nested'
     modes = sorted(set(re.findall(r"add_argument\('--([a-z0-9-]+)'", (core / 'session.py').read_text())) - EXCLUDED_MODES)
@@ -253,6 +264,16 @@ def run():
         passes = [('', ['--parallel', str(gpus), '--pinned'], [n for n in names if not n.endswith('.py') and n != 'perf'], {}),
                   ('-scripts', ['--parallel', '1', '--no-build', '--pinned'], [n for n in names if n.endswith('.py')], {}),
                   ('-perf', ['--parallel', '1', '--no-build', '--pinned'], [n for n in names if n == 'perf'], {'HYPRUNE_NESTED_4K': '1'})]
+        # Other supported Hyprland releases (install prefixes, HYPRUNE_NIGHTLY_HYPRLAND): CTest
+        # and the core suites against each, in a worktree of the same commit per release.
+        for old in WS.glob('core-remote-*-hyprland-*'):  # earlier nights' trees (a build each)
+            if not old.name.startswith(f"core-remote-{result['shas']['core'][:10]}-"):
+                subprocess.run(['git', '-C', str(WS / 'core'), 'worktree', 'remove', '--force', str(old)], check=False)
+        for prefix in devenv.get('HYPRUNE_NIGHTLY_HYPRLAND', '').split():
+            version = hyprland_version(prefix)
+            suites_extra = devenv.get('HYPRUNE_NIGHTLY_HYPRLAND_SUITES', ' '.join(HYPRLAND_SUITES)).split()
+            passes.append((f'-hyprland-{version}', ['--parallel', str(gpus), '--pinned', '--hyprland', prefix,
+                                                     '--ref', result['shas']['core']], suites_extra, {}))
         summaries = []
         for suffix, options, chosen, extra in passes:
             if not chosen:
@@ -264,6 +285,9 @@ def run():
                 summaries.append(json.loads(core.stdout))
             except ValueError:
                 summaries.append({'status': 'error', 'error': 'runner printed no JSON', 'results': []})
+            if suffix.startswith('-hyprland-'):  # the same suites again, on another Hyprland release
+                for r in summaries[-1].get('results', []):
+                    r['suite'] += ' @hyprland-' + suffix.removeprefix('-hyprland-')
             # Each suite's output beside the other logs (the run folder keeps state and stills).
             for r in summaries[-1].get('results', []):
                 if r.get('log') and pathlib.Path(r['log']).is_file():

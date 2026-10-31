@@ -117,6 +117,11 @@ Each run (`nightly run`, or `systemctl --user start hyprune-nightly`):
      the same pinned inputs. A script with a required output argument gets a
      directory in its run folder; the cross-GPU offload scripts see every GPU.
      The offload power-wrapped scripts and the walkthrough recorder are left out.
+   - with `HYPRUNE_NIGHTLY_HYPRLAND` set (environment or `dev.env`: install
+     prefixes of the other supported Hyprland releases, space-separated), CTest
+     and the compositor-facing suites (`HYPRUNE_NIGHTLY_HYPRLAND_SUITES`, default
+     smoke, workspace-homes, placement, playable, static-world, live-findings,
+     ipc-warp, windows, m3b, render-fail, lock) against each, with `--hyprland`.
 3. Runs `npm test` in schema and sdk, and the shell unittests.
 4. Worlds:
    - `navmesh-test`;
