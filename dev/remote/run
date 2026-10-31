@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One-command remote test run for a headless work host. See README.md.
 
-  dev/remote/run [--ref REF] [--lumen TAG] [--parallel N] [--detach] [SUITE ...]
+  dev/remote/run [--ref REF] [--hyprland PREFIX] [--lumen TAG] [--parallel N] [--detach] [SUITE ...]
   dev/remote/run --status RUN_ID
 
 stdout carries exactly one JSON document (the summary); progress goes to
@@ -43,18 +43,33 @@ def sh(cmd, cwd=None, **kw):
     return subprocess.run(cmd, cwd=cwd, check=True, **kw)
 
 
-def checkout(ref):
-    """A detached worktree beside core/ (session.py finds ../worlds/dist from there)."""
+def checkout(ref, hyprland=None):
+    """A detached worktree beside core/ (session.py finds ../worlds/dist from there); one per
+    Hyprland release, since a build directory is configured for one set of headers."""
     sh(['git', 'fetch', '--quiet', 'origin'], cwd=CORE)
     sha = subprocess.check_output(['git', 'rev-parse', '--verify', ref + '^{commit}'], cwd=CORE, text=True).strip()
-    tree = WORKSPACE / f'core-remote-{sha[:10]}'
+    tree = WORKSPACE / (f'core-remote-{sha[:10]}' + (f'-hyprland-{hyprland}' if hyprland else ''))
     if not tree.exists():
         sh(['git', 'worktree', 'add', '--detach', '--quiet', str(tree), sha], cwd=CORE)
     return tree, sha
 
 
+def use_hyprland(prefix):
+    """Build and test against the Hyprland installed under PREFIX (its headers, Hyprland and
+    hyprctl) instead of the system one. Returns its version."""
+    prefix = pathlib.Path(prefix).resolve()
+    paths = [str(prefix / 'lib/pkgconfig'), str(prefix / 'share/pkgconfig')] + [p for p in os.environ.get('PKG_CONFIG_PATH', '').split(':') if p]
+    os.environ['PKG_CONFIG_PATH'] = ':'.join(paths)
+    os.environ['HYPRUNE_HYPRLAND'] = str(prefix / 'bin/Hyprland')
+    return subprocess.check_output(['pkg-config', '--modversion', 'hyprland'], text=True).strip()
+
+
 def build(tree):
     jobs = str(max(2, (os.cpu_count() or 4) - 4))
+    built = tree / 'build/hyprland-version'
+    want = subprocess.run(['pkg-config', '--modversion', 'hyprland'], capture_output=True, text=True).stdout.strip()
+    if built.is_file() and built.read_text().strip() != want:
+        raise RuntimeError(f'{tree}/build is configured for Hyprland {built.read_text().strip()}, not {want}: use another tree')
     if not (tree / 'build/build.ninja').exists():
         sh(['cmake', '-S', '.', '-B', 'build', '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=RelWithDebInfo'], cwd=tree, stdout=sys.stderr)
     sh(['cmake', '--build', 'build', '-j', jobs], cwd=tree, stdout=sys.stderr)
@@ -246,10 +261,13 @@ def run(args):
                'artifacts': str(root), 'status': 'running', 'suites': args.suites}
     (root / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     try:
-        tree, sha = checkout(args.ref) if args.ref else (CORE, subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=CORE, text=True).strip())
+        hyprland = use_hyprland(args.hyprland) if args.hyprland else None
+        tree, sha = checkout(args.ref, hyprland) if args.ref else (CORE, subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=CORE, text=True).strip())
         summary.update(tree=str(tree), sha=sha, ref=args.ref or subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=CORE, text=True).strip())
         if not args.no_build:
             build(tree)
+        if (tree / 'build/hyprland-version').is_file():
+            summary['hyprland'] = (tree / 'build/hyprland-version').read_text().strip()
         ensure_schema()
         summary['worlds'] = {'lumen-reach': ensure_world('lumen-reach', args.lumen, args.pinned),
                              'switchyard': ensure_world('switchyard', None, args.pinned)}
@@ -298,7 +316,7 @@ def detach(args):
     (RUNS / run_id).mkdir(parents=True, exist_ok=True)
     argv = [sys.executable, str(pathlib.Path(__file__).resolve()), '--run-id', run_id, '--parallel', str(args.parallel)]
     argv += (['--ref', args.ref] if args.ref else []) + (['--lumen', args.lumen] if args.lumen else []) + (['--no-build'] if args.no_build else [])
-    argv += (['--pinned'] if args.pinned else []) + args.suites
+    argv += (['--hyprland', args.hyprland] if args.hyprland else []) + (['--pinned'] if args.pinned else []) + args.suites
     env = os.environ.copy()
     env.setdefault('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')
     keep = [f'{k}={v}' for k, v in env.items() if k in ('PATH', 'HOME') or k.startswith(('HYPRUNE_', '__GL_', 'GH_'))]
@@ -325,6 +343,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('suites', nargs='*', help=f'ctest, smoke, run.sh modes without "--", or dev/nested/<script>.py names (default: {" ".join(DEFAULT)})')
     parser.add_argument('--ref', help='git ref to test in a detached worktree (fetched from origin); default: this checkout')
+    parser.add_argument('--hyprland', metavar='PREFIX', help='build and test against the Hyprland installed under PREFIX '
+                        '(e.g. a second supported release); default: the system Hyprland')
     parser.add_argument('--lumen', help='hyprune/worlds release tag, e.g. lumen-reach-v0.9.0 (default: installed, else pinned)')
     parser.add_argument('--pinned', action='store_true', help='replace installed worlds with the published releases pinned in hyprune/worlds/releases.json, '
                         'use the pinned starter library even when a local build exists, and build the workspace SDK '

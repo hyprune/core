@@ -113,6 +113,33 @@ def pin_mesa_egl():
         if (pathlib.Path(d)/'50_mesa.json').is_file():
             os.environ['__EGL_VENDOR_LIBRARY_FILENAMES']=str(pathlib.Path(d)/'50_mesa.json');return
 
+def hyprland_version(binary):
+    """'0.57.0' from `Hyprland --version`, or None."""
+    try:out=subprocess.run([binary,'--version'],capture_output=True,text=True,timeout=10,env={**os.environ,'XDG_RUNTIME_DIR':os.environ.get('XDG_RUNTIME_DIR','/tmp')}).stdout
+    except (OSError,subprocess.TimeoutExpired):return None
+    match=re.search(r'^Hyprland (\d+\.\d+\.\d+)',out,re.M)
+    return match.group(1) if match else None
+
+def hyprland_binary(plugin=None):
+    """The nested compositor: the Hyprland release the plugin was built for (hyprland-version
+    beside it, written by CMake). HYPRUNE_HYPRLAND names that release's Hyprland binary, e.g.
+    a second release installed into a prefix; else Hyprland on PATH, which must match."""
+    plugin=pathlib.Path(plugin or os.environ.get('HYPRUNE_NESTED_PLUGIN',str(ROOT/'build/hyprune-core.so')))
+    binary=os.environ.get('HYPRUNE_HYPRLAND') or shutil.which('Hyprland') or 'Hyprland'
+    if os.path.isdir(binary):binary=os.path.join(binary,'bin','Hyprland')
+    wanted=plugin.parent/'hyprland-version'
+    if wanted.is_file():
+        want=wanted.read_text().strip();have=hyprland_version(binary)
+        if have!=want:
+            raise RuntimeError(f'{plugin} is built for Hyprland {want}, but {binary} is {have or "not runnable"}; '
+                               f'set HYPRUNE_HYPRLAND to a Hyprland {want} binary (or its install prefix)')
+    return binary
+
+def hyprctl_for(binary):
+    """The hyprctl of the same Hyprland install (it speaks that release's socket protocol)."""
+    sibling=pathlib.Path(binary).with_name('hyprctl')
+    return str(sibling) if os.sep in binary and sibling.is_file() else 'hyprctl'
+
 def state_dir(name):
     """A harness script's own state directory: it runs an m3b-style session but never shares
     .m3b-state (bindings, editor and graphics files left there broke the next --m3b)."""
@@ -475,7 +502,8 @@ def run(args):
     if args.live: environment.pop('HYPRUNE_LAUNCH_FD',None)
     shim=ROOT/'build/nested-nvidia-headless.so'
     if nvidia_only() and shim.is_file():environment['LD_PRELOAD']=':'.join(filter(None,[str(shim),environment.get('LD_PRELOAD')]))
-    process=subprocess.Popen(['Hyprland','-c',config],env=environment,pass_fds=(read,),stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True);os.close(read)
+    hyprland=hyprland_binary()
+    process=subprocess.Popen([hyprland,'-c',config],env=environment,pass_fds=(read,),stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True);os.close(read)
     children=[];client=None
     try:
         runtime=pathlib.Path(environment['XDG_RUNTIME_DIR']);signature=None
@@ -487,7 +515,7 @@ def run(args):
             if signature:break
             time.sleep(.1)
         if not signature:raise RuntimeError('nested startup timed out')
-        state={'pid':process.pid,'startTime':pathlib.Path(f'/proc/{process.pid}/stat').read_text().split()[21],'config':config,'runtime':str(runtime),'signature':signature,'wayland':wayland,'cacheHome':environment['XDG_CACHE_HOME'],'stateHome':environment['XDG_STATE_HOME'],'outerSignature':environment.get('HYPRLAND_INSTANCE_SIGNATURE',''),'outerWayland':environment.get('WAYLAND_DISPLAY','')}
+        state={'hyprland':hyprland,'hyprctl':hyprctl_for(hyprland),'pid':process.pid,'startTime':pathlib.Path(f'/proc/{process.pid}/stat').read_text().split()[21],'config':config,'runtime':str(runtime),'signature':signature,'wayland':wayland,'cacheHome':environment['XDG_CACHE_HOME'],'stateHome':environment['XDG_STATE_HOME'],'outerSignature':environment.get('HYPRLAND_INSTANCE_SIGNATURE',''),'outerWayland':environment.get('WAYLAND_DISPLAY','')}
         (STATE/'session.json').write_text(json.dumps(state));verified()
         ctl('output','create','headless');time.sleep(.3)
         if os.environ.get('HYPRUNE_NESTED_INSTANCE'):

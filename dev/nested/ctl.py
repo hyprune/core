@@ -24,7 +24,8 @@ def main():
     if not args:raise ValueError('use hyprctl, env, or shot')
     if args[0]=='hyprctl':
         if any(a in ('-i','--instance','instances') or a.startswith('--instance=') for a in args[1:]):raise ValueError('instance override forbidden')
-        os.execvpe('hyprctl',['hyprctl','-i',state['signature'],*args[1:]],env)
+        hyprctl=state.get('hyprctl','hyprctl')  # the nested compositor's own release
+        os.execvpe(hyprctl,[hyprctl,'-i',state['signature'],*args[1:]],env)
     elif args[0]=='env':os.execvpe(args[1],args[1:],env)
     elif args[0]=='shot':os.execvpe('grim',['grim','-o','HEADLESS-1',args[1]],env)
     else:raise ValueError('unknown ctl command')
