@@ -6,6 +6,9 @@ hl.config({
     animations = { enabled = false },
     cursor = { no_hardware_cursors = true },
     misc = { disable_hyprland_logo = true, disable_splash_rendering = true, disable_watchdog_warning = true },
+    -- No update/donation windows: a nested compositor of another release than the
+    -- host's last one would open Hyprland's update news over the test's clients.
+    ecosystem = { no_update_news = true, no_donation_nag = true },
 })
 hl.bind("SUPER + RETURN", hl.dsp.exec_cmd("kitty"))
 hl.bind("SUPER + Q", hl.dsp.window.close())
