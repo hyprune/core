@@ -147,6 +147,12 @@ class Tests(unittest.TestCase):
     def test_ABI_mismatch_refuses(self):
         with patch.object(live,'query',return_value={'commit':'wrong','tag':'v0.56.2','abiHash':'wrong'}),patch.object(live,'run',return_value='{"commit":"right","tag":"v0.56.2","abiHash":"right"}'):
             with self.assertRaisesRegex(RuntimeError,'ABI/version mismatch'):live.abi({})
+
+    def test_ABI_advice_names_supported_releases(self):
+        built={'commit':'right','tag':'v0.56.2','abiHash':'right','supported':['0.56','0.57']}
+        self.assertIn('not supported',live.abi_advice('v0.58.0',built))
+        self.assertIn('0.56.x, 0.57.x',live.abi_advice('v0.58.0',built))
+        self.assertIn('log out and back in',live.abi_advice('v0.57.0',built))
     def test_ambiguous_or_missing_socket_refuses(self):
         with patch.dict(live.os.environ,{'WAYLAND_DISPLAY':'missing'}),patch.object(live,'instances',return_value=[]):
             with self.assertRaises(RuntimeError):live.select(types.SimpleNamespace(instance=None))

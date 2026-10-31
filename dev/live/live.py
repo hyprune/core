@@ -233,8 +233,20 @@ def abi(s):
     actual = query(s, 'version')
     built = json.loads(run([str(BUILD / 'hyprune-live-abi')]))
     if actual.get('commit') != built['commit'] or actual.get('abiHash') != built['abiHash'] or actual.get('tag') != built['tag']:
-        raise RuntimeError(f'ABI/version mismatch: session {actual.get("tag")} {actual.get("abiHash")}; build {built}')
+        raise RuntimeError(f'ABI/version mismatch: session {actual.get("tag")} {actual.get("abiHash")}; build {built}. ' + abi_advice(actual.get('tag'), built))
     return actual
+
+
+def abi_advice(session, built):
+    """What to do when the session's Hyprland differs from the one these binaries were built for."""
+    release = lambda tag: '.'.join(str(tag or '').lstrip('v').split('.')[:2])
+    supported = built.get('supported', [])
+    if supported and release(session) not in supported:
+        return (f'Hyprland {session} is not supported: this Hyprune core supports Hyprland ' +
+                ', '.join(v + '.x' for v in supported) + ' (the current release and the one before).')
+    return (f'These binaries are for Hyprland {built.get("tag")}, the session runs {session}. After a Hyprland update, '
+            'log out and back in first; then run preflight (it builds against the installed headers), '
+            f'or use the core release archive built for Hyprland {session}.')
 
 
 def verify(s, paths=None):
