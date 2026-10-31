@@ -4,8 +4,9 @@
 
 “What if the computer itself were an explorable world?”
 
-Hyprune core integrates a small 3D runtime with Hyprland. It is pinned to **Hyprland 0.56.x** and checked against the exact running
-compositor ABI hash. The shell, worlds, SDK, documentation and schemas live in
+Hyprune core integrates a small 3D runtime with Hyprland. It builds for **Hyprland 0.56.x and 0.57.x** (the
+current release and the one before; one build per release) and is checked against the
+exact running compositor ABI hash. The shell, worlds, SDK, documentation and schemas live in
 separate repositories. This repository contains no proprietary game assets.
 
 ## Build and test
@@ -16,7 +17,13 @@ scanner, libdrm, pixman, xkbcommon, hyprgraphics, pangocairo, Lua, libxml2, Open
 libpng, FreeType, Fontconfig, Vulkan and GBM, and Python 3 (with `jsonschema` and
 `referencing` for the wire tests).
 The `hyprland.pc` include paths must point at the headers for the running build,
-for example the headers installed by `hyprpm`. With Nix, `nix develop
+for example the headers installed by `hyprpm`; CMake stops on a release it does not
+support. To build against a second Hyprland release installed into a prefix, put its
+`lib/pkgconfig` and `share/pkgconfig` first in `PKG_CONFIG_PATH` and use a separate
+build directory; nested runs then need `HYPRUNE_HYPRLAND=<prefix>/bin/Hyprland`
+(`dev/nested/session.py` refuses a compositor of another release than the build's
+`hyprland-version`). API differences are compile-time switches in
+`src/platform/hyprland/Compat.hpp`. With Nix, `nix develop
 github:hyprune/hyprune` provides a shell pinned to Hyprland 0.56.2 and every
 dependency above. cgltf, nlohmann/json, stb_image, meshoptimizer, the Basis
 Universal transcoder (with its zstd decoder) and FidelityFX FSR 1 are vendored with

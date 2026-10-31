@@ -466,6 +466,15 @@ These are wire-compatible behavior changes that integrators may notice:
 
 ## Unreleased (no wire change)
 
+- **Hyprland 0.57.** Core builds for Hyprland 0.57.x as well as 0.56.x, from one source
+  tree (compile-time switches on the headers' version); the plugin is ABI-locked to the
+  release it was built against, as before. Release archives come one per supported
+  Hyprland release (`hyprune-core-<version>-hyprland-<hyprland>-<arch>.tar.gz`), and
+  `abi.json` lists the supported releases. On 0.57 the plugin registers Lua entry points
+  only: Hyprland 0.57 no longer accepts plugin dispatchers, so `hyprctl dispatch
+  hyprune.toggle` is 0.56-only; `hl.plugin.hyprune.toggle()` works on both. No IPC or
+  world-format change.
+
 - **Reply revisions match state revisions.** The `revision` in a `shell.claim`,
   `shell.release`, `shell.overlay`, `shell.bind`, `ui.open`/`ui.close` (and other lease and
   location method) reply is again the state revision that shows the change, comparable with
