@@ -22,6 +22,12 @@ def prepare(installed):
 
 def acceptance(client,children,args,shell_token,socketpath):
     checks=[]
+    # Hyprland 0.57 trims client titles and app IDs to 512 bytes (whole UTF-8 sequences)
+    # itself; core's 512 code point clamp then leaves them as they arrive.
+    native=tuple(map(int,json.loads(s.ctl('version','-j'))['tag'].lstrip('v').split('.')[:2]))>=(0,57)
+    def clamped(title):
+        if native:return 0<len(title)<=512 and len(title.encode('utf-8','replace'))<=3*512 and not title.endswith('\u2026')
+        return len(title)==512 and title.endswith('\u2026') and TITLE.startswith(title[:-1])
     def check(name,ok,data=None):
         assert ok,(name,data)
         checks.append(name);print('PASS long titles:',name,flush=True)
@@ -48,12 +54,13 @@ def acceptance(client,children,args,shell_token,socketpath):
     children.append(s.envrun('kitty','--class','long-wayland','--title','LONG-'+UNIT*150,'bash','--noprofile','--norc',stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
     for cls,limit in [('long-room',4096),('long-home',4096),('long-invalid',4096),('long-wayland',1000)]:
         w=wait(lambda:next((w for w in windows() if w['class'].startswith(cls) and w['title'].startswith('LONG-')),None),20)
-        check(f'{cls} title arrives longer than {limit} code points',len(w['title'])>limit,len(w['title']))
+        if native:check(f'{cls} title arrives trimmed by Hyprland (512 bytes)',0<len(w['title'])<=512,len(w['title']))
+        else:check(f'{cls} title arrives longer than {limit} code points',len(w['title'])>limit,len(w['title']))
     def long(items):return [x for x in items if x['title'].startswith('LONG-')]
     surfaces=wait(lambda:long(state()['surfaces']) if len(long(state()['surfaces']))>=4 else None,20)
-    check('surface titles clamped to 512 code points, prefix kept',all(len(x['title'])==512 and x['title'].endswith('\u2026') and TITLE.startswith(x['title'][:-1]) for x in surfaces),[len(x['title']) for x in surfaces])
+    check('surface titles clamped to 512 code points, prefix kept',all(clamped(x['title']) for x in surfaces),[len(x['title']) for x in surfaces])
     apps=long(state()['apps'])
-    check('apps titles and classes clamped',len(apps)>=4 and all(len(a['title'])==512 and len(a['appClass'])<=256 and len(a['icon'])<=256 for a in apps),[(len(a['title']),len(a['appClass'])) for a in apps])
+    check('apps titles and classes clamped',len(apps)>=4 and all(clamped(a['title']) and len(a['appClass'])<=256 and len(a['icon'])<=256 for a in apps),[(len(a['title']),len(a['appClass'])) for a in apps])
     bad=next(a for a in apps if a['appClass'].startswith('long-invalid'))
     check('malformed client bytes reach the wire only as valid UTF-8',bad['appClass'].isprintable(),repr(bad['appClass'][-4:]))
     homeWindow=next(w for w in windows() if w['class'].startswith('long-home'))
@@ -70,7 +77,7 @@ def acceptance(client,children,args,shell_token,socketpath):
     for old in olds:
         snap=old.call('state.snapshot',{'subscriptionId':old.sub})['snapshot']['state']
         titles=[x['title'] for x in snap.get('surfaces',[]) if x['title'].startswith('LONG-')]
-        check(f'IPC {old.hello["protocol"]} snapshot titles clamped',titles and all(len(t)==512 for t in titles),[len(t) for t in titles])
+        check(f'IPC {old.hello["protocol"]} snapshot titles clamped',titles and all(clamped(t) for t in titles),[len(t) for t in titles])
     s.ctl('eval','hl.unbind("w")')
     time.sleep(.5)
     # Client-side validation of every received frame, per negotiated version.
