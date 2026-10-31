@@ -30,8 +30,8 @@
 #include <vector>
 
 namespace hyprune::platform::hl {
-// Hyprland 0.57 gives special workspaces no number; 0.56 numbered them from -99 up.
-// Callers only need "negative means special", as before.
+// Hyprland 0.57 gives special and named workspaces no number; 0.56 gave them negative
+// ids. Callers only need "not a positive number", as before.
 inline constexpr int SPECIAL_WORKSPACE = -99;
 
 // A keybind as core reads it (the toggle chord, native bind conflicts).
