@@ -78,7 +78,7 @@ def acceptance(client,children,args,shell_token,socketpath):
  stage(surface['id']);before=captured(surface['id']);gesture(272,110,-35,True);after=captured(surface['id']);check('carry_offset_distance',after['position']!=before['position'] and not after['collision'],after)
  # Rotation is Super+Ctrl+Wheel since the IPC 0.15 owner corrections; MMB is the tools' Alternate.
  target(surface['id'],(.25,0));before=captured(surface['id'])
- mod=s.envrun('wtype','-P','Super_L','-P','Control_L','-s','1500','-p','Control_L','-p','Super_L');children.append(mod);time.sleep(.15)
+ mod=s.envrun('wtype','-P','Super_L','-P','Control_L','-s','1500','-p','Control_L','-p','Super_L');children.append(mod);wait(lambda:diag()['modifiers']&68==68)  # Super and Ctrl both held
  for _ in range(3):pointer('scroll',-1);time.sleep(.15)
  mod.wait(timeout=5);time.sleep(.2);after=captured(surface['id']);check('roll',after['rotation']!=before['rotation'],after)
  target(surface['id'],(.2,.2));before=captured(surface['id']);gesture(273,-75,55);after=captured(surface['id']);check('client_resize',after['pixels']!=before['pixels'],after)
