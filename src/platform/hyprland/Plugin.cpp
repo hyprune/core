@@ -6565,6 +6565,7 @@ int luaCamera(lua_State *state) {
         {"selectedScale",
          {runtime->selectedTransform.scale.x, runtime->selectedTransform.scale.y, runtime->selectedTransform.scale.z}},
         {"superHeld", runtime->superHeld},
+        {"modifiers", runtime->modifiers}, // held Shift 1, Ctrl 4, Alt 8, Super 64 (key events seen)
         {"readyNotices", runtime->readyNotices},
         {"ownsInput", ownsInput()},
         {"layerCursor", runtime->layerCursor},
